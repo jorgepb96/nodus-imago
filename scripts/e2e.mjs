@@ -86,6 +86,16 @@ try {
       ) && document.querySelectorAll(".gallery-card img").length === 4,
   );
   await page.screenshot({ path: "test-results/02-gallery.png" });
+  await page
+    .locator(".sidebar nav button")
+    .filter({ hasText: "Bases de datos" })
+    .click();
+  await page.locator(".collection-home").waitFor();
+  await page
+    .locator(".database-cards button")
+    .filter({ hasText: "Archivo" })
+    .click();
+  await page.getByRole("heading", { name: "Archivo", exact: true }).waitFor();
   await page.getByRole("button", { name: "Tabla", exact: true }).click();
   await page.locator(".data-table").waitFor();
   assert.equal(await page.locator(".data-table tbody tr").count(), 4);
@@ -112,6 +122,7 @@ try {
     .getByRole("button", { name: "Abrir registro", exact: true })
     .click();
   await page.locator(".record-panel").waitFor();
+  await page.waitForTimeout(300);
   assert.ok(
     await page
       .locator(".record-panel")
@@ -172,6 +183,14 @@ try {
     .locator(".queue-popover")
     .getByLabel("Mostrar completadas")
     .check();
+  assert.equal(
+    await page
+      .locator(".queue-tabs > button")
+      .first()
+      .locator("span")
+      .innerText(),
+    "1",
+  );
   await page.screenshot({ path: "test-results/07-queues.png" });
   await page
     .locator(".queue-popover")

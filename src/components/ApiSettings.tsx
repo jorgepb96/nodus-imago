@@ -11,6 +11,7 @@ import type { Settings, Status } from "../../shared/imago";
 import { Button } from "./ui";
 import { ModelPicker } from "./ModelPicker";
 import type { Perform } from "./Properties";
+import { useT } from "../i18n";
 export function ApiSettings({
   status,
   perform,
@@ -20,7 +21,8 @@ export function ApiSettings({
   perform: Perform;
   onChanged: () => void;
 }) {
-  const [provider, setProvider] = useState<ApiProvider>("openrouter"),
+  const t = useT(),
+    [provider, setProvider] = useState<ApiProvider>("openrouter"),
     [key, setKey] = useState(""),
     [base, setBase] = useState(""),
     [modelText, setModelText] = useState(""),
@@ -69,15 +71,12 @@ export function ApiSettings({
           <KeyRound size={21} />
         </span>
         <div>
-          <h2>Proveedores de IA y modelos</h2>
-          <p>
-            Las claves y los modelos configurados se comparten entre las bases
-            de datos de Imago.
-          </p>
+          <h2>{t("Proveedores de IA y modelos")}</h2>
+<p>{t("Las claves y los modelos configurados se comparten entre las bases de datos de Imago.")}</p>
         </div>
       </div>
       <div className="provider-favorites">
-        <span>Modelos configurados</span>
+        <span>{t("Modelos configurados")}</span>
         <div>
           {Object.entries(s.apiProfiles).flatMap(([provider, profile]) =>
             (profile?.models ?? []).map((model) => (
@@ -87,19 +86,14 @@ export function ApiSettings({
             )),
           )}
           {!Object.values(s.apiProfiles).some((p) => p?.models.length) && (
-            <small className="muted">
-              Añade tus modelos a los proveedores de abajo.
-            </small>
+<small className="muted">{t("Añade tus modelos a los proveedores de abajo.")}</small>
           )}
         </div>
       </div>
       <label className="setting-row">
         <span>
-          <strong>Permitir APIs remotas</strong>
-          <p className="hint">
-            Solo se envían imágenes y contexto cuando encolas una tarea con un
-            modelo de API. No se usan para indexar ni buscar.
-          </p>
+          <strong>{t("Permitir APIs remotas")}</strong>
+<p className="hint">{t("Solo se envían imágenes y contexto cuando encolas una tarea con un modelo de API. No se usan para indexar ni buscar.")}</p>
         </span>
         <input
           aria-label="Permitir APIs remotas"
@@ -113,13 +107,11 @@ export function ApiSettings({
         <div>
           <strong>
             {keys?.encryptionAvailable
-              ? "Claves cifradas con el almacén del sistema"
-              : "Almacén seguro no disponible"}
+              ? t("Claves cifradas con el almacén del sistema")
+              : t("Almacén seguro no disponible")}
           </strong>
           <p>
-            Las claves nunca se muestran de nuevo ni se guardan en las bases de
-            datos, copias o registros. Imago mantiene sus propias credenciales,
-            independientes de Nodus.
+            {t("Las claves nunca se muestran de nuevo ni se guardan en las bases de datos, copias o registros. Imago mantiene sus propias credenciales, independientes de Nodus.")}
           </p>
         </div>
       </div>
@@ -143,10 +135,10 @@ export function ApiSettings({
                 }
               >
                 {keys?.providers[id]
-                  ? "● clave guardada"
+                  ? t("● clave guardada")
                   : id === "ollama" || id === "lmstudio"
-                    ? "(local)"
-                    : "○ sin clave"}
+                    ? t("(local)")
+                    : t("○ sin clave")}
               </span>
               {(id === "ollama" || id === "lmstudio") && (
                 <code>{p.baseUrl}</code>
@@ -155,7 +147,7 @@ export function ApiSettings({
             {provider === id && (
               <div className="provider-details">
                 <label>
-                  Endpoint
+                  {t("Endpoint")}
                   <input
                     value={base}
                     onChange={(e) => setBase(e.target.value)}
@@ -163,7 +155,7 @@ export function ApiSettings({
                   />
                 </label>
                 <label>
-                  Clave de API
+                  {t("Clave de API")}
                   <div className="row">
                     <KeyRound size={16} />
                     <input
@@ -174,8 +166,8 @@ export function ApiSettings({
                       onChange={(e) => setKey(e.target.value)}
                       placeholder={
                         keys?.providers[provider]
-                          ? "Clave guardada · escribe para sustituirla"
-                          : "Clave del proveedor"
+                          ? t("Clave guardada · escribe para sustituirla")
+                          : t("Clave del proveedor")
                       }
                     />
                     <Button
@@ -191,12 +183,12 @@ export function ApiSettings({
                         })
                       }
                     >
-                      Guardar clave
+                      {t("Guardar clave")}
                     </Button>
                     {keys?.providers[provider] && (
                       <Button
                         icon
-                        aria-label="Eliminar clave"
+                        aria-label={t("Eliminar clave")}
                         onClick={() =>
                           void perform(async () => {
                             await window.imago.call("clearApiKey", {
@@ -212,17 +204,17 @@ export function ApiSettings({
                   </div>
                 </label>
                 <label>
-                  Modelos de visión · uno por línea
+                  {t("Modelos de visión · uno por línea")}
                   <textarea
                     rows={4}
                     value={modelText}
                     onChange={(e) => setModelText(e.target.value)}
-                    placeholder="Identificador exacto del modelo"
+                    placeholder={t("Identificador exacto del modelo")}
                   />
                 </label>
                 <div className="row">
                   <Button primary onClick={() => void perform(save)}>
-                    Guardar proveedor
+                    {t("Guardar proveedor")}
                   </Button>
                   <Button
                     onClick={() =>
@@ -237,12 +229,12 @@ export function ApiSettings({
                     }
                   >
                     <Download size={14} />
-                    Consultar modelos
+                    {t("Consultar modelos")}
                   </Button>
                 </div>
                 {!!catalog.length && (
                   <label>
-                    Catálogo
+                    {t("Catálogo")}
                     <select
                       defaultValue=""
                       onChange={(e) => {
@@ -257,17 +249,14 @@ export function ApiSettings({
                           );
                       }}
                     >
-                      <option value="">Añadir un modelo de visión…</option>
+                      <option value="">{t("Añadir un modelo de visión…")}</option>
                       {catalog.map((m) => (
                         <option key={m} value={m}>
                           {m}
                         </option>
                       ))}
                     </select>
-                    <span className="hint">
-                      El catálogo puede incluir modelos sin visión. Comprueba
-                      que el elegido admite imágenes.
-                    </span>
+                    <span className="hint">{t("El catálogo puede incluir modelos sin visión. Comprueba que el elegido admite imágenes.")}</span>
                   </label>
                 )}
               </div>
@@ -276,7 +265,7 @@ export function ApiSettings({
         ))}
       </div>
       <label className="setting-row">
-        <strong>Intervalo mínimo entre solicitudes</strong>
+        <strong>{t("Intervalo mínimo entre solicitudes")}</strong>
         <div className="row">
           <input
             aria-label="Intervalo API"
@@ -290,11 +279,7 @@ export function ApiSettings({
           ms
         </div>
       </label>
-      <p className="hint">
-        Los trabajos comparten el intervalo de cada proveedor. Las respuestas de
-        límite temporal se reintentan con espera; los errores de acceso detienen
-        la tarea para poder corregirlos y reanudarla.
-      </p>
+      <p className="hint">{t("Los trabajos comparten el intervalo de cada proveedor. Las respuestas de límite temporal se reintentan con espera; los errores de acceso detienen la tarea para poder corregirlos y reanudarla.")}</p>
     </div>
   );
 }

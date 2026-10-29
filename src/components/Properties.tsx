@@ -426,13 +426,17 @@ export function Properties({
                           });
                           onChanged();
                           onClose();
-                        }, "Columna completa añadida a la cola de tareas.")
+                        }, "Celdas vacías añadidas a la cola de tareas.")
                       }
                     >
-                      Encolar columna completa ·{" "}
+                      Encolar celdas vacías ·{" "}
                       {detail.database.rowCount.toLocaleString()} registros
                     </Button>
                   )}
+                  <p className="hint">
+                    Solo se completarán celdas vacías con imagen. Las
+                    anotaciones humanas y las opciones existentes se conservan.
+                  </p>
                 </div>
               )}
               <footer>
@@ -443,15 +447,23 @@ export function Properties({
                   <Button
                     type="button"
                     className="danger"
-                    onClick={() =>
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          t(
+                            "¿Eliminar esta propiedad y todos sus valores? Esta operación no se puede deshacer.",
+                          ),
+                        )
+                      )
+                        return;
                       void perform(async () => {
                         await window.imago.call("deleteColumn", {
                           id: selected.id,
                         });
                         onChanged();
                         setSelected(null);
-                      })
-                    }
+                      });
+                    }}
                   >
                     <Trash2 size={14} />
                     {t("Eliminar")}

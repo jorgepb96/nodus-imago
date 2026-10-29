@@ -287,6 +287,12 @@ export class Engine {
     detailed: boolean;
   }) {
     const settings = this.repo.getSettings();
+    const verifiedModels = new Set(
+      this.models
+        .list()
+        .filter((model) => model.verified)
+        .map((model) => model.id),
+    );
     const rowIds =
       input.rowIds ??
       (input.databaseId
@@ -334,8 +340,19 @@ export class Engine {
           : ["select", "multi_select", "status"].includes(c.type)
             ? settings.classificationModel
             : settings.descriptionModel;
-        if (choice.provider === "local") this.ready(choice.model);
-        else {
+        if (choice.provider === "local") {
+          if (!verifiedModels.has(choice.model))
+            throw new Error(
+              "Instala y verifica el modelo local en Configuración.",
+            );
+          if (
+            this.models.get(choice.model).backend === "llama" &&
+            !verifiedModels.has("llama-runtime")
+          )
+            throw new Error(
+              "Instala y verifica el motor de visión llama.cpp en Ajustes.",
+            );
+        } else {
           if (!Object.hasOwn(PROVIDERS, choice.provider))
             throw new Error("Proveedor de columna no compatible.");
           const base = providerBase(choice.provider, settings.apiProfiles);

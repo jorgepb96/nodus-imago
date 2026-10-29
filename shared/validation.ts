@@ -179,6 +179,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   controlJob: z
     .object({ id, action: z.enum(["pause", "resume", "cancel"]) })
     .strict(),
+  pauseAllJobs: z.undefined(),
   rebuildText: z.undefined(),
   indexImages: z.object({ databaseIds: ids.optional() }).strict(),
   downloadModel: z.object({ id }).strict(),

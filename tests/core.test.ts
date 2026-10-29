@@ -6,7 +6,11 @@ import path from "node:path";
 import { Repository } from "../electron/db/repository";
 import { parseCsv } from "../shared/csvParser";
 import { buildCsvImportPlan } from "../shared/databaseCsv";
-import { databaseToCsv, databaseToJson } from "../shared/databaseExport";
+import {
+  databaseToCsv,
+  databaseToJson,
+  tableToCsv,
+} from "../shared/databaseExport";
 import { decodeMultiSelect } from "../shared/databases";
 import { matchImages } from "../shared/imageMatching";
 import { normalizeVector, fuseRanks } from "../shared/vectors";
@@ -57,6 +61,46 @@ test("Nodus codecs and CSV import preserve typed multi-select options and identi
   } finally {
     f.close();
   }
+});
+test("checkbox CSV accepts 1/0 and yes/no but rejects unknown values instead of silently clearing", () => {
+  const f = fixture();
+  try {
+    const d = f.repo.importCsv(
+      "Checkboxes",
+      ["ID", "Activo"],
+      ["title", "checkbox"],
+      [
+        ["A", "1"],
+        ["B", "0"],
+        ["C", "yes"],
+        ["D", "no"],
+      ],
+    );
+    assert.deepEqual(
+      f.repo.literal({ databaseIds: [d.database.id] }).rows.map(
+        (row) => row.cells[d.columns[1].id],
+      ),
+      ["1", "0", "1", "0"],
+    );
+    assert.throws(
+      () =>
+        f.repo.importCsv(
+          "Bad checkbox",
+          ["ID", "Activo"],
+          ["title", "checkbox"],
+          [["A", "maybe"]],
+        ),
+      /no se puede importar/,
+    );
+    assert.equal(f.repo.list().length, 1);
+  } finally {
+    f.close();
+  }
+});
+test("CSV export neutralises formulas without turning negative numbers into text", () => {
+  assert.equal(tableToCsv(["Valor"], [["-5"]]), "Valor\r\n-5");
+  assert.equal(tableToCsv(["Valor"], [["-5+1"]]), "Valor\r\n'-5+1");
+  assert.equal(tableToCsv(["Valor"], [["=1+1"]]), "Valor\r\n'=1+1");
 });
 test("failed type override leaves no partial database or silently dropped values", () => {
   const f = fixture();
@@ -212,6 +256,123 @@ test("Nodus formula evaluation recomputes dependent values and undo restores the
     f.repo.setCell(row.id, n.id, "9");
     assert.equal(f.repo.undo(), 1);
     assert.equal(f.repo.getRow(row.id).cells[formula.id], "16");
+  } finally {
+    f.close();
+  }
+});
+test("row and column deletion removes orphaned undo history", () => {
+  const f = fixture();
+  try {
+    const d = f.repo.create("A"),
+      row = f.repo.createRow(d.database.id),
+      column = f.repo.addColumn(d.database.id, "Nota", "text");
+    f.repo.db
+      .prepare(
+        "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at) VALUES(?,?,?,?,?,?)",
+      )
+      .run("batch", row.id, column.id, null, "texto", new Date().toISOString());
+    f.repo.deleteRows([row.id]);
+    assert.equal(f.repo.undo(), 0);
+    const row2 = f.repo.createRow(d.database.id);
+    f.repo.db
+      .prepare(
+        "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at) VALUES(?,?,?,?,?,?)",
+      )
+      .run("batch2", row2.id, column.id, null, "texto", new Date().toISOString());
+    f.repo.deleteColumn(column.id);
+    assert.equal(f.repo.undo(), 0);
+  } finally {
+    f.close();
+  }
+});
+test("deleting rows refreshes table-wide formula results", () => {
+  const f = fixture();
+  try {
+    const d = f.repo.create("Fórmulas"),
+      number = f.repo.addColumn(d.database.id, "Número", "number"),
+      percent = f.repo.addColumn(d.database.id, "Porcentaje", "formula", {
+        formula: {
+          kind: "columnStat",
+          fn: "percentOfTotal",
+          columnId: number.id,
+        },
+      }),
+      a = f.repo.createRow(d.database.id),
+      b = f.repo.createRow(d.database.id);
+    f.repo.setCell(a.id, number.id, "10");
+    f.repo.setCell(b.id, number.id, "30");
+    assert.equal(f.repo.getRow(a.id).cells[percent.id], "25");
+    assert.equal(f.repo.getRow(b.id).cells[percent.id], "75");
+    f.repo.deleteRows([a.id]);
+    assert.equal(f.repo.getRow(b.id).cells[percent.id], "100");
+  } finally {
+    f.close();
+  }
+});
+test("a formula column computes existing rows as soon as it is created", () => {
+  const f = fixture();
+  try {
+    const d = f.repo.create("Fórmulas"),
+      number = f.repo.addColumn(d.database.id, "Número", "number"),
+      a = f.repo.createRow(d.database.id),
+      b = f.repo.createRow(d.database.id);
+    f.repo.setCell(a.id, number.id, "10");
+    f.repo.setCell(b.id, number.id, "30");
+    const percent = f.repo.addColumn(d.database.id, "Porcentaje", "formula", {
+      formula: {
+        kind: "columnStat",
+        fn: "percentOfTotal",
+        columnId: number.id,
+      },
+    });
+    assert.equal(f.repo.getRow(a.id).cells[percent.id], "25");
+    assert.equal(f.repo.getRow(b.id).cells[percent.id], "75");
+  } finally {
+    f.close();
+  }
+});
+test("computed unique IDs and timestamps can be filtered and sorted", () => {
+  const f = fixture();
+  try {
+    const d = f.repo.create("Sistema"),
+      unique = f.repo.addColumn(d.database.id, "ID único", "unique_id", {
+        uniqueIdPrefix: "IMG-",
+      }),
+      a = f.repo.createRow(d.database.id),
+      b = f.repo.createRow(d.database.id);
+    const all = f.repo.literal({
+      databaseIds: [d.database.id],
+      filters: [
+        {
+          databaseId: d.database.id,
+          columnId: unique.id,
+          op: "contains",
+          value: "IMG-",
+        },
+      ],
+    });
+    assert.equal(all.total, 2);
+    const exact = f.repo.literal({
+      databaseIds: [d.database.id],
+      filters: [
+        {
+          databaseId: d.database.id,
+          columnId: unique.id,
+          op: "equals",
+          value: "IMG-" + a.id,
+        },
+      ],
+    });
+    assert.equal(exact.total, 1);
+    assert.equal(exact.rows[0].id, a.id);
+    const sorted = f.repo.literal({
+      databaseIds: [d.database.id],
+      sortColumn: unique.id,
+    });
+    assert.deepEqual(
+      sorted.rows.map((row) => row.id),
+      [a.id, b.id].sort((x, y) => ("IMG-" + x).localeCompare("IMG-" + y)),
+    );
   } finally {
     f.close();
   }

@@ -6,6 +6,7 @@ const en: Record<string, string> = {
   Configuración: "Settings",
   "Colección local": "Local collection",
   "Nueva base de datos": "New database",
+  "Renombrar base de datos": "Rename database",
   Importar: "Import",
   Crear: "Create",
   Cancelar: "Cancel",
@@ -227,6 +228,59 @@ const en: Record<string, string> = {
     "Everything stays on this computer. No accounts or telemetry.",
   "Procedencia de las propuestas": "Proposal provenance",
   Instrucciones: "Instructions",
+  "Mostrar menú lateral": "Show sidebar",
+  "Ocultar menú lateral": "Hide sidebar",
+  "Menú lateral": "Sidebar",
+  "Cambiar tema": "Change theme",
+  "Cola de imágenes": "Image queue",
+  "Cola de IA": "AI queue",
+  "Colas y tareas": "Queues and jobs",
+  "en ejecución · hasta": "running · up to",
+  "trabajos simultáneos": "simultaneous jobs",
+  "Pausar todas": "Pause all",
+  "Reanudar todas": "Resume all",
+  Todas: "All",
+  IA: "AI",
+  Descargas: "Downloads",
+  "Mostrar completadas": "Show completed",
+  "El progreso se conserva al cerrar Imago.":
+    "Progress is kept when Imago is closed.",
+  "No hay tareas en esta cola.": "There are no jobs in this queue.",
+  "Proveedores de IA y modelos": "AI providers and models",
+  "Las claves y los modelos configurados se comparten entre las bases de datos de Imago.":
+    "Keys and configured models are shared across Imago databases.",
+  "Modelos configurados": "Configured models",
+  "Añade tus modelos a los proveedores de abajo.":
+    "Add your models to the providers below.",
+  "Permitir APIs remotas": "Allow remote APIs",
+  "Solo se envían imágenes y contexto cuando encolas una tarea con un modelo de API. No se usan para indexar ni buscar.":
+    "Images and context are only sent when you queue a job with an API model. They are not used for indexing or search.",
+  "Claves cifradas con el almacén del sistema":
+    "Keys encrypted with the system key store",
+  "Almacén seguro no disponible": "Secure key store unavailable",
+  "Las claves nunca se muestran de nuevo ni se guardan en las bases de datos, copias o registros. Imago mantiene sus propias credenciales, independientes de Nodus.":
+    "Keys are never shown again and are not stored in databases, backups or records. Imago keeps its own credentials, independent of Nodus.",
+  "● clave guardada": "● key saved",
+  "(local)": "(local)",
+  "○ sin clave": "○ no key",
+  Endpoint: "Endpoint",
+  "Clave de API": "API key",
+  "Clave guardada · escribe para sustituirla":
+    "Key saved · type to replace it",
+  "Clave del proveedor": "Provider key",
+  "Guardar clave": "Save key",
+  "Eliminar clave": "Delete key",
+  "Modelos de visión · uno por línea": "Vision models · one per line",
+  "Identificador exacto del modelo": "Exact model identifier",
+  "Guardar proveedor": "Save provider",
+  "Consultar modelos": "Check models",
+  Catálogo: "Catalogue",
+  "Añadir un modelo de visión…": "Add a vision model…",
+  "El catálogo puede incluir modelos sin visión. Comprueba que el elegido admite imágenes.":
+    "The catalogue may include non-vision models. Check that the chosen one accepts images.",
+  "Intervalo mínimo entre solicitudes": "Minimum interval between requests",
+  "Los trabajos comparten el intervalo de cada proveedor. Las respuestas de límite temporal se reintentan con espera; los errores de acceso detienen la tarea para poder corregirlos y reanudarla.":
+    "Jobs share each provider's interval. Rate-limit responses are retried with a delay; access errors stop the job so they can be fixed and resumed.",
   Ajustes: "Settings",
   "Buscar en ajustes…": "Search settings…",
   "INTELIGENCIA ARTIFICIAL": "ARTIFICIAL INTELLIGENCE",
@@ -235,7 +289,6 @@ const en: Record<string, string> = {
   Proveedores: "Providers",
   "Modelos IA": "AI models",
   "Almacenamiento y copias": "Storage and backups",
-  "Colas y tareas": "Queues and jobs",
   "Modelos de IA por tarea": "AI models by task",
   "Selecciona modelos independientes para descripción, clasificación y recuperación.":
     "Choose independent models for description, classification and retrieval.",
@@ -243,10 +296,27 @@ const en: Record<string, string> = {
   "Clasificación de columnas": "Column classification",
   "EmbeddingGemma 2 · local": "EmbeddingGemma 2 · local",
   Inicio: "Home",
+  Interfaz: "Interface",
   COLECCIONES: "COLLECTIONS",
   EXPLORAR: "EXPLORE",
   "Interfaz · Imago": "Interface · Imago",
   "Quitar del registro": "Remove from record",
+  "cambios deshechos": "changes undone",
+  "No hay cambios de propuestas que deshacer.":
+    "There are no proposal changes to undo.",
+  "APIs opcionales activadas": "Optional APIs enabled",
+  Aceptada: "Accepted",
+  Rechazada: "Rejected",
+  Pendiente: "Pending",
+  "La imagen de consulta no se guarda en la búsqueda. Vuelve a adjuntarla o a elegir la imagen de referencia al recuperarla.":
+    "The query image is not saved with the search. Attach it again or choose the reference image when you reopen it.",
+  "¿Eliminar los archivos descargados de este modelo? Podrás descargarlo de nuevo.":
+    "Delete this model's downloaded files? You can download it again later.",
+  "¿Eliminar esta propiedad y todos sus valores? Esta operación no se puede deshacer.":
+    "Delete this property and all its values? This cannot be undone.",
+  "Encolar celdas vacías ·": "Queue empty cells ·",
+  "Solo se completarán celdas vacías con imagen. Las anotaciones humanas y las opciones existentes se conservan.":
+    "Only empty cells with an image will be filled. Human annotations and existing options are preserved.",
   "¿Quitar esta imagen del registro? El original no se elimina.":
     "Remove this image from the record? The original file is not deleted.",
   "Encuentra conexiones entre tus imágenes, textos y metadatos.":
@@ -260,6 +330,8 @@ const en: Record<string, string> = {
   "para activar la búsqueda multimodal.": "to enable multimodal search.",
   "Texto + imagen: media de vectores normalizados, con el mismo peso.":
     "Text + image: mean of normalised vectors, with equal weight.",
+  "Los filtros y su lógica se aplican al pulsar Buscar.":
+    "Filters and their logic are applied when you press Search.",
 };
 export function useT() {
   const language = useContext(LanguageContext);

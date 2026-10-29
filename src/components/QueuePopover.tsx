@@ -4,6 +4,7 @@ import type { Job } from "../../shared/imago";
 import { Button } from "./ui";
 import { Jobs } from "./Settings";
 import type { Perform } from "./Properties";
+import { useT } from "../i18n";
 export type QueueFilter = "all" | "images" | "analyze" | "index" | "download";
 export function QueuePopover({
   jobs,
@@ -20,7 +21,8 @@ export function QueuePopover({
   onChanged: () => void;
   parallelJobs: number;
 }) {
-  const ref = useRef<HTMLDivElement>(null),
+  const t = useT(),
+    ref = useRef<HTMLDivElement>(null),
     [filter, setFilter] = useState(initialFilter),
     [history, setHistory] = useState(false);
   useEffect(() => setFilter(initialFilter), [initialFilter]);
@@ -53,35 +55,29 @@ export function QueuePopover({
       ref={ref}
       className="queue-popover"
       role="dialog"
-      aria-label="Colas y tareas"
+      aria-label={t("Colas y tareas")}
     >
       <header>
         <div className="row">
           <Clock3 size={17} />
-          <strong>Colas y tareas</strong>
+          <strong>{t("Colas y tareas")}</strong>
         </div>
-        <Button icon aria-label="Cerrar" onClick={onClose}>
+        <Button icon aria-label={t("Cerrar")} onClick={onClose}>
           <X size={16} />
         </Button>
       </header>
       <div className="queue-summary">
         <span>
-          <b>{running}</b> en ejecución · hasta {parallelJobs} trabajos
-          simultáneos
+          <b>{running}</b> {t("en ejecución · hasta")} {parallelJobs}{" "}
+          {t("trabajos simultáneos")}
         </span>
         <div className="row">
           <Button
             icon
-            title="Pausar todas"
+            title={t("Pausar todas")}
             onClick={() =>
               void perform(async () => {
-                for (const j of jobs.filter((j) =>
-                  ["running", "queued"].includes(j.state),
-                ))
-                  await window.imago.call("controlJob", {
-                    id: j.id,
-                    action: "pause",
-                  });
+                await window.imago.call("pauseAllJobs");
                 onChanged();
               })
             }
@@ -90,10 +86,12 @@ export function QueuePopover({
           </Button>
           <Button
             icon
-            title="Reanudar todas"
+            title={t("Reanudar todas")}
             onClick={() =>
               void perform(async () => {
-                for (const j of jobs.filter((j) => j.state === "paused"))
+                for (const j of jobs.filter((j) =>
+                  ["paused", "failed"].includes(j.state),
+                ))
                   await window.imago.call("controlJob", {
                     id: j.id,
                     action: "resume",
@@ -108,11 +106,11 @@ export function QueuePopover({
       </div>
       <div className="queue-tabs">
         {[
-          ["all", "Todas"],
-          ["images", "Imágenes"],
-          ["analyze", "IA"],
-          ["index", "Embeddings"],
-          ["download", "Descargas"],
+          ["all", t("Todas")],
+          ["images", t("Imágenes")],
+          ["analyze", t("IA")],
+          ["index", t("Embeddings")],
+          ["download", t("Descargas")],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -125,7 +123,8 @@ export function QueuePopover({
                 jobs.filter(
                   (j) =>
                     (id === "all" || j.kind === id) &&
-                    ["queued", "running", "paused"].includes(j.state),
+                    (history ||
+                      !["completed", "cancelled"].includes(j.state)),
                 ).length
               }
             </span>
@@ -142,9 +141,9 @@ export function QueuePopover({
             checked={history}
             onChange={(e) => setHistory(e.target.checked)}
           />
-          Mostrar completadas
+          {t("Mostrar completadas")}
         </label>
-        <span className="muted">El progreso se conserva al cerrar Imago.</span>
+        <span className="muted">{t("El progreso se conserva al cerrar Imago.")}</span>
       </footer>
     </div>
   );

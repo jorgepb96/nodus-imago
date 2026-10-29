@@ -37,6 +37,19 @@ import { settingsSchema } from "../../shared/validation";
 
 export const now = () => new Date().toISOString();
 const marks = (xs: unknown[]) => xs.map(() => "?").join(",");
+const sqlText = (value: string) => "'" + value.replace(/'/g, "''") + "'";
+/** System columns are generated in hydrate(), not stored in db_cells. Filters
+ * and sorts must still see them. */
+function systemValueSql(column: DatabaseColumn): string | null {
+  const stored = `(SELECT value_text FROM db_cells sc WHERE sc.row_id=r.id AND sc.column_id=${sqlText(column.id)})`;
+  if (column.type === "unique_id")
+    return `COALESCE(${stored}, ${sqlText(column.config.uniqueIdPrefix ?? "")} || r.id)`;
+  if (column.type === "created_time")
+    return `COALESCE(${stored}, r.created_at)`;
+  if (column.type === "last_edited_time")
+    return `COALESCE(${stored}, r.updated_at)`;
+  return null;
+}
 const parse = (value: string | null) => (value ? JSON.parse(value) : {});
 export class Repository {
   db: Database.Database;
@@ -148,38 +161,53 @@ export class Repository {
       throw new Error("La base ya tiene una propiedad de título.");
     const id = uuid(),
       at = now();
-    this.db
-      .prepare("INSERT INTO db_columns VALUES(?,?,?,?,?,?,?,?)")
-      .run(
-        id,
-        databaseId,
-        name,
-        type,
-        detail.columns.length,
-        JSON.stringify(config),
-        at,
-        at,
-      );
+    this.db.transaction(() => {
+      this.db
+        .prepare("INSERT INTO db_columns VALUES(?,?,?,?,?,?,?,?)")
+        .run(
+          id,
+          databaseId,
+          name,
+          type,
+          detail.columns.length,
+          JSON.stringify(config),
+          at,
+          at,
+        );
+      // A new formula column must show results for rows that already exist.
+      if (type === "formula") {
+        this.recompute(databaseId);
+        this.rebuildText(databaseId);
+      }
+    })();
     return this.column(id);
   }
   updateColumn(id: string, name?: string, config?: DatabaseColumnConfig) {
     const c = this.column(id);
-    this.db
-      .prepare(
-        "UPDATE db_columns SET name=?,config_json=?,updated_at=? WHERE id=?",
-      )
-      .run(name ?? c.name, JSON.stringify(config ?? c.config), now(), id);
-    this.recompute(c.databaseId);
-    this.rebuildText(c.databaseId);
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          "UPDATE db_columns SET name=?,config_json=?,updated_at=? WHERE id=?",
+        )
+        .run(name ?? c.name, JSON.stringify(config ?? c.config), now(), id);
+      this.recompute(c.databaseId);
+      this.rebuildText(c.databaseId);
+    })();
   }
   deleteColumn(id: string) {
     const c = this.column(id);
     if (c.type === "title")
       throw new Error("La propiedad de título es obligatoria.");
     this.db.transaction(() => {
+      this.db.prepare("DELETE FROM history WHERE column_id=?").run(id);
       this.db.prepare("DELETE FROM db_columns WHERE id=?").run(id);
       this.recompute(c.databaseId);
       this.rebuildText(c.databaseId);
+      this.db
+        .prepare(
+          "DELETE FROM embeddings WHERE content_hash NOT IN (SELECT content_hash FROM image_assets)",
+        )
+        .run();
     })();
   }
   saveOptions(
@@ -526,9 +554,29 @@ export class Repository {
     })();
   }
   deleteRows(ids: string[]) {
+    if (!ids.length) return;
+    const databases = new Set(
+      (
+        this.db
+          .prepare(
+            `SELECT DISTINCT database_id FROM db_rows WHERE id IN (${marks(ids)})`,
+          )
+          .all(...ids) as { database_id: string }[]
+      ).map((row) => row.database_id),
+    );
     this.db.transaction(() => {
-      for (const id of ids)
+      for (const id of ids) {
+        this.db.prepare("DELETE FROM history WHERE row_id=?").run(id);
         this.db.prepare("DELETE FROM db_rows WHERE id=?").run(id);
+      }
+      // Table-wide formulas (rank, percent of total, column totals) depend on
+      // the remaining rows; keep the deletion and the recomputation atomic.
+      for (const databaseId of databases) this.recompute(databaseId);
+      this.db
+        .prepare(
+          "DELETE FROM embeddings WHERE content_hash NOT IN (SELECT content_hash FROM image_assets)",
+        )
+        .run();
     })();
   }
   literal(input: SearchInput, candidates?: string[]): Page {
@@ -580,12 +628,27 @@ export class Repository {
         if (f.databaseId && f.databaseId !== column.databaseId)
           throw new Error("Filtro de otra base de datos.");
         const operand = Array.isArray(f.value) ? f.value : [f.value];
+        const system = systemValueSql(column);
         let clause = "";
 
         if (f.op === "empty") {
-          clause +=
-            "NOT EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text IS NOT NULL AND c.value_text<>'')";
-          params.push(f.columnId);
+          if (system) clause = "0";
+          else {
+            clause +=
+              "NOT EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text IS NOT NULL AND c.value_text<>'')";
+            params.push(f.columnId);
+          }
+        } else if (system) {
+          if (f.op === "contains") {
+            clause = `${system} LIKE ? ESCAPE '\\'`;
+            params.push("%" + operand[0].replace(/[\\%_]/g, "\\$&") + "%");
+          } else if (f.op === "equals") {
+            clause = `${system}=?`;
+            params.push(operand[0]);
+          } else {
+            clause = `${system} ${f.op === "gte" ? ">=" : "<="} ?`;
+            params.push(operand[0]);
+          }
         } else {
           clause +=
             "EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND ";
@@ -632,17 +695,21 @@ export class Repository {
         );
       }
     }
+    let orderParams = params;
     if (input.sortColumn) {
-      const c = this.column(input.sortColumn);
-      order = `(SELECT ${c.type === "number" ? "value_number" : "value_text"} FROM db_cells sc WHERE sc.row_id=r.id AND sc.column_id=?) ${input.descending ? "DESC" : "ASC"},r.id`;
+      const c = this.column(input.sortColumn),
+        system = systemValueSql(c);
+      if (system)
+        order = `${system} ${input.descending ? "DESC" : "ASC"},r.id`;
+      else {
+        order = `(SELECT ${c.type === "number" ? "value_number" : "value_text"} FROM db_cells sc WHERE sc.row_id=r.id AND sc.column_id=?) ${input.descending ? "DESC" : "ASC"},r.id`;
+        orderParams = [...params, input.sortColumn];
+      }
     }
     const sql = `FROM db_rows r ${join} ${where.length ? "WHERE " + where.join(" AND ") : ""}`;
     const total = (
       this.db.prepare(`SELECT count(*) n ${sql}`).get(...params) as any
     ).n;
-    const orderParams = input.sortColumn
-      ? [...params, input.sortColumn]
-      : params;
     const found = this.db
       .prepare(`SELECT r.id ${sql} ORDER BY ${order} LIMIT ? OFFSET ?`)
       .all(...orderParams, input.limit ?? 100, input.offset ?? 0) as {
@@ -683,7 +750,7 @@ export class Repository {
       for (let i = 0; i < types.length; i++)
         if (
           row[i]?.trim() &&
-          ["number", "date", "time"].includes(types[i]) &&
+          ["number", "date", "time", "checkbox"].includes(types[i]) &&
           normalizeCsvValue(types[i], row[i]) == null
         )
           throw new Error(
@@ -901,11 +968,29 @@ export class Repository {
     if (!a) throw new Error("Imagen no encontrada.");
     return a;
   }
+  normalizeImagePositions(rowId: string) {
+    const images = this.db
+      .prepare(
+        "SELECT id FROM image_assets WHERE row_id=? ORDER BY position,created_at,id",
+      )
+      .all(rowId) as { id: string }[];
+    images.forEach((image, position) =>
+      this.db
+        .prepare("UPDATE image_assets SET position=? WHERE id=?")
+        .run(position, image.id),
+    );
+  }
   deleteImage(id: string) {
     const asset = this.asset(id);
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM image_assets WHERE id=?").run(id);
+      this.normalizeImagePositions(asset.row_id);
       this.indexRow(asset.row_id);
+      this.db
+        .prepare(
+          "DELETE FROM embeddings WHERE content_hash NOT IN (SELECT content_hash FROM image_assets)",
+        )
+        .run();
     })();
     return asset.row_id;
   }

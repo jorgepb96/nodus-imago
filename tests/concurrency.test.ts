@@ -136,8 +136,10 @@ test("pause all also pauses queued work, not only the running process", async ()
     engine = new Engine(repo, models, host),
     queue = new JobQueue(repo, new Images(repo), models, engine, () => {});
   queue.concurrency = () => 1;
+  let calls = 0;
   try {
     engine.analyzeOne = async () => {
+      calls++;
       await new Promise((resolve) => setTimeout(resolve, 80));
       return "imported";
     };
@@ -159,6 +161,52 @@ test("pause all also pauses queued work, not only the running process", async ()
     queue.pauseAll();
     await queue.task;
     assert.equal(repo.jobs().filter((j) => j.state === "paused").length, 2);
+    assert.equal(calls, 1);
+  } finally {
+    await queue.close();
+    repo.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a job with any failed item is failed and can be resumed", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imago-partial-failure-")),
+    repo = new Repository(root),
+    host = new InferenceHost(repo, "unused"),
+    models = new Models(repo),
+    engine = new Engine(repo, models, host),
+    queue = new JobQueue(repo, new Images(repo), models, engine, () => {});
+  queue.concurrency = () => 1;
+  try {
+    let calls = 0;
+    engine.analyzeOne = async (_payload, index) => {
+      calls++;
+      if (calls === 1) throw new Error("fallo transitorio");
+      return "imported";
+    };
+    const id = repo.newJob(
+      "analyze",
+      {
+        items: [0, 1].map((index) => ({
+          rowId: "A" + index,
+          columnId: "column" + index,
+          choice: { provider: "custom", model: "fixture" },
+        })),
+      },
+      2,
+    );
+    queue.pump();
+    await queue.task;
+    let job = repo.jobs().find((j) => j.id === id)!;
+    assert.equal(job.state, "failed");
+    assert.equal(job.failed, 1);
+    assert.equal(job.done, 2);
+
+    queue.control(id, "resume");
+    await queue.task;
+    job = repo.jobs().find((j) => j.id === id)!;
+    assert.equal(job.state, "completed");
+    assert.equal(job.failed, 0);
   } finally {
     await queue.close();
     repo.close();

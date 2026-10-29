@@ -31,6 +31,7 @@ export function CsvImport({
     [name, setName] = useState(plan.fileName.replace(/\.[^.]+$/, "")),
     [headers, setHeaders] = useState(plan.headers),
     [types, setTypes] = useState(plan.suggestedTypes);
+  const titleCount = types.filter((type) => type === "title").length;
   return (
     <Modal wide title={t("Previsualización de importación")} onClose={onClose}>
       <form
@@ -134,7 +135,7 @@ export function CsvImport({
           <Button type="button" onClick={onClose}>
             {t("Cancelar")}
           </Button>
-          <Button primary type="submit">
+          <Button primary type="submit" disabled={titleCount !== 1}>
             {t("Importar")} {plan.rowCount.toLocaleString()} {t("registros")}
           </Button>
         </footer>

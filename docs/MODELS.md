@@ -16,7 +16,7 @@ El presupuesto visual se fija en 280 tokens y forma parte del contrato. No se ut
 - El procesador visual de EmbeddingGemma 2 requiere **torchvision**; sin él, Transformers falla con `EmbeddingGemma2VideoProcessor requires the Torchvision library`. Se instaló `torchvision==0.29.2` compatible con `torch==2.15.0` y se añadió a `runtime/requirements.txt`. No se carga audio (`config_kwargs={"audio_config": None}`).
 - La inferencia bloquea sockets en el proceso Python y usa `local_files_only=True`, `trust_remote_code=False`.
 
-Mediciones reales: indexación en frío de tres imágenes 26,1 s (incluye carga del modelo); consulta textual en caliente 100 ms; consulta por imagen 3,0 s; texto+imagen/híbrida 3,1 s. La recuperación textual española devolvió el puente como primer resultado y la consulta por imagen devolvió la misma imagen con similitud ~1,0. Son tres imágenes, no un benchmark de calidad.
+Mediciones reales: indexación en frío de tres imágenes 39,1 s (incluye carga del modelo); consulta textual en caliente 152 ms; consulta por imagen 7,3 s; texto+imagen/híbrida 8,4 s. La recuperación textual española devolvió el puente como primer resultado y la consulta por imagen devolvió la misma imagen con similitud ~1,0. Son tres imágenes, no un benchmark de calidad.
 
 ## LFM3-VL-2B
 
@@ -31,7 +31,7 @@ El CLI entra en modo de una sola consulta al recibir imagen y prompt. La plantil
 - La descripción debe quedar como prosa; un JSON suelto o solo razonamiento se rechaza.
 - La clasificación acepta `["Paisaje"]` y `[{"type":"image","name":"GoldenGate.png","category":"Paisaje"}]`, pero valida cada etiqueta contra el vocabulario exacto de la propiedad y el máximo de opciones. Un objeto con `name` de archivo y `category` de etiqueta se interpreta por `category`.
 
-Mediciones reales: descripción 14,5 s y clasificación 10,5 s ejecutadas simultáneamente en dos procesos independientes. Se pausó la descripción, la clasificación terminó, y al reanudar la descripción se generó la propuesta correcta. No se aceptan razonamientos, banners ni JSON inválido como valor de celda.
+Mediciones reales: descripción 24,6 s y clasificación 21,1 s ejecutadas simultáneamente en dos procesos independientes. Se pausó la descripción, la clasificación terminó, y al reanudar la descripción se generó la propuesta correcta. No se aceptan razonamientos, banners ni JSON inválido como valor de celda.
 
 Su licencia es **LFM Open License 1.0**, no Apache ni AGPL. El instalador de la aplicación no incorpora los pesos. El texto de condiciones se conserva con los avisos y en la descarga del modelo.
 

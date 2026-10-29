@@ -281,6 +281,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     notify,
   ]);
   useEffect(() => {
+    // Deleting rows or a changed result set can leave the page beyond the end.
+    if (offset > 0 && offset >= page.total) setOffset(0);
+  }, [offset, page.total]);
+  useEffect(() => {
     if (openRow)
       void api
         .call("getRow", { id: openRow.id })
@@ -355,6 +359,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setSimilarId(id);
     setImageQuery(null);
     setOffset(0);
+    setSelected(new Set());
     setExecuted({
       mode: "semantic",
       databaseIds: scope,
@@ -455,12 +460,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       <header className="nodus-header app-titlebar">
         <button
           className="nodus-header-brand"
-          title={collapsed ? "Mostrar menú lateral" : "Ocultar menú lateral"}
-          aria-label="Menú lateral"
+          title={collapsed ? t("Mostrar menú lateral") : t("Ocultar menú lateral")}
+          aria-label={t("Menú lateral")}
           onClick={() => setCollapsed(!collapsed)}
         >
           <ImagoMark size={28} />
-          <ChevronLeft size={14} className="collapse-chevron" />
+          {collapsed ? (
+            <ChevronRight size={14} className="collapse-chevron" />
+          ) : (
+            <ChevronLeft size={14} className="collapse-chevron" />
+          )}
         </button>
         <button
           className="interface-trigger"
@@ -481,16 +490,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           {!!busy && <Spinner />}
           <Button
             icon
-            title="Búsqueda"
-            aria-label="Búsqueda"
+            title={t("Búsqueda")}
+            aria-label={t("Búsqueda")}
             onClick={() => setArea("search")}
           >
             <Search size={18} />
           </Button>
           <Button
             icon
-            title="Cambiar tema"
-            aria-label="Cambiar tema"
+            title={t("Cambiar tema")}
+            aria-label={t("Cambiar tema")}
             onClick={() =>
               void perform(async () => {
                 await api.call("updateSettings", {
@@ -502,20 +511,26 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               })
             }
           >
-            <Moon size={18} />
+            {document.documentElement.classList.contains("dark") ? (
+              <Sun size={18} />
+            ) : (
+              <Moon size={18} />
+            )}
           </Button>
           {(
             [
-              { filter: "images", label: "Cola de imágenes", Icon: ImageIcon },
-              { filter: "analyze", label: "Cola de IA", Icon: Sparkles },
-              { filter: "all", label: "Colas y tareas", Icon: Clock3 },
+              { filter: "images", label: t("Cola de imágenes"), Icon: ImageIcon },
+              { filter: "analyze", label: t("Cola de IA"), Icon: Sparkles },
+              { filter: "all", label: t("Colas y tareas"), Icon: Clock3 },
             ] as const
           ).map(({ filter, label, Icon }) => {
             const count =
               status?.jobs.filter(
                 (j) =>
                   (filter === "all" || j.kind === filter) &&
-                  ["running", "queued"].includes(j.state),
+                  ["running", "queued", "paused", "failed"].includes(
+                    j.state,
+                  ),
               ).length ?? 0;
             return (
               <span className="header-queue-action" key={filter}>
@@ -537,8 +552,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           <span className="header-divider" />
           <Button
             icon
-            title="Ajustes"
-            aria-label="Ajustes"
+            title={t("Ajustes")}
+            aria-label={t("Ajustes")}
             onClick={() => {
               setSettingsTab("api");
               setArea("settings");
@@ -562,7 +577,14 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             <button
               title="Bases de datos"
               className={area === "databases" ? "active" : ""}
-              onClick={() => setArea("databases")}
+              onClick={() => {
+                setArea("databases");
+                setDatabaseId("");
+                setExecuted({});
+                setQuery("");
+                setFilters([]);
+                setShowFilters(false);
+              }}
             >
               <Database size={18} />
               <span className="nav-title">{t("Bases de datos")}</span>
@@ -626,7 +648,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <ShieldCheck size={14} />
               <span>
                 {status?.settings.remoteEnabled
-                  ? "APIs opcionales activadas"
+                  ? t("APIs opcionales activadas")
                   : t("Local y privado")}
               </span>
             </div>
@@ -855,7 +877,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                   type="button"
                                   disabled={m !== "literal" && !modelReady}
                                   className={mode === m ? "active" : ""}
-                                  onClick={() => setMode(m)}
+                                  onClick={() => {
+                                    setMode(m);
+                                    if (m === "literal") {
+                                      setImageQuery(null);
+                                      setSimilarId(undefined);
+                                    }
+                                  }}
                                 >
                                   {m !== "literal" && <Sparkles size={12} />}{" "}
                                   {t(
@@ -984,7 +1012,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                   setLogic(i.filterLogic ?? "and");
                                   setMatch(i.match ?? "words");
                                   setWeight(i.semanticWeight ?? 0.5);
+                                  setImageQuery(null);
+                                  setSimilarId(i.similarAssetId);
                                   setOffset(0);
+                                  setSelected(new Set());
                                 }}
                               >
                                 {s.name}
@@ -1139,10 +1170,20 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       onChange={(v) => {
                         setFilters(v);
                         setOffset(0);
+                        setSelected(new Set());
                       }}
                       logic={logic}
-                      setLogic={setLogic}
+                      setLogic={(v) => {
+                        setLogic(v);
+                        setOffset(0);
+                        setSelected(new Set());
+                      }}
                     />
+                  )}
+                  {showFilters && area === "search" && (
+                    <p className="hint filter-apply-hint">
+                      {t("Los filtros y su lógica se aplican al pulsar Buscar.")}
+                    </p>
                   )}
                   <div className="result-meta">
                     <span>
@@ -1226,6 +1267,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       <Button
                         onClick={() => {
                           setAnalysisColumns([]);
+                          setAnalysisLanguage(
+                            status?.settings.language === "en"
+                              ? "English"
+                              : "Español",
+                          );
                           setModal("analyze");
                         }}
                       >
@@ -1239,7 +1285,14 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       <Button
                         onClick={() =>
                           void perform(async () => {
-                            await api.call("undo");
+                            const n = await api.call("undo");
+                            notify(
+                              n
+                                ? `${n} ${t("cambios deshechos")}`
+                                : t(
+                                    "No hay cambios de propuestas que deshacer.",
+                                  ),
+                            );
                             refresh();
                           })
                         }
@@ -1559,7 +1612,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </div>
       )}
       {(modal === "create" || modal === "rename") && (
-        <Modal title={t("Nueva base de datos")} onClose={() => setModal(null)}>
+        <Modal
+          title={t(
+            modal === "rename" ? "Renombrar base de datos" : "Nueva base de datos",
+          )}
+          onClose={() => setModal(null)}
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -1586,17 +1644,26 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   onChange={(e) => setName(e.target.value)}
                 />
               </label>
-              <p className="hint">
-                Define tus propias propiedades y clasificaciones. Puedes
-                importar o añadir imágenes en cualquier momento.
-              </p>
+              {modal === "create" && (
+                <p className="hint">
+                  Define tus propias propiedades y clasificaciones. Puedes
+                  importar o añadir imágenes en cualquier momento.
+                </p>
+              )}
+              {(imageQuery || similarId) && (
+                <p className="hint">
+                  {t(
+                    "La imagen de consulta no se guarda en la búsqueda. Vuelve a adjuntarla o a elegir la imagen de referencia al recuperarla.",
+                  )}
+                </p>
+              )}
             </div>
             <footer>
               <Button type="button" onClick={() => setModal(null)}>
                 {t("Cancelar")}
               </Button>
               <Button primary type="submit">
-                {t("Crear")}
+                {modal === "rename" ? t("Guardar") : t("Crear")}
               </Button>
             </footer>
           </form>
@@ -1841,7 +1908,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <Button
                 onClick={() =>
                   void perform(async () => {
-                    await api.call("undo");
+                    const n = await api.call("undo");
+                    notify(
+                      n
+                        ? `${n} ${t("cambios deshechos")}`
+                        : t("No hay cambios de propuestas que deshacer."),
+                    );
                     refresh();
                   })
                 }

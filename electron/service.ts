@@ -3,7 +3,12 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID as uuid } from "node:crypto";
 import { Repository } from "./db/repository";
-import { Images, imagePipeline, hashFile } from "./import/images";
+import {
+  Images,
+  imagePipeline,
+  hashFile,
+  writeAtomicImage,
+} from "./import/images";
 import { Models } from "./ai/models";
 import { InferenceHost } from "./ai/host";
 import { Engine } from "./ai/engine";
@@ -93,9 +98,22 @@ export class Service {
           throw new Error(
             "Termina o cancela las tareas antes de eliminar una base de datos.",
           );
-        return this.repo.db
-          .prepare("DELETE FROM db_databases WHERE id=?")
-          .run(input.id);
+        return this.repo.db.transaction(() => {
+          this.repo.db
+            .prepare(
+              "DELETE FROM history WHERE row_id IN (SELECT id FROM db_rows WHERE database_id=?)",
+            )
+            .run(input.id);
+          const result = this.repo.db
+            .prepare("DELETE FROM db_databases WHERE id=?")
+            .run(input.id);
+          this.repo.db
+            .prepare(
+              "DELETE FROM embeddings WHERE content_hash NOT IN (SELECT content_hash FROM image_assets)",
+            )
+            .run();
+          return result;
+        })();
       case "detail":
         return this.repo.detail(input.id);
       case "addColumn":
@@ -229,6 +247,8 @@ export class Service {
               "UPDATE image_assets SET database_id=?,row_id=?,column_id=? WHERE id=?",
             )
             .run(row.databaseId, row.id, c.id, a.id);
+          this.repo.normalizeImagePositions(a.row_id);
+          this.repo.normalizeImagePositions(row.id);
           this.repo.indexRow(a.row_id);
           this.repo.indexRow(row.id);
         })();
@@ -316,6 +336,9 @@ export class Service {
         return this.repo.jobs();
       case "controlJob":
         return this.queue.control(input.id, input.action);
+      case "pauseAllJobs":
+        this.queue.pauseAll();
+        return;
       case "rebuildText":
         return this.repo.rebuildText();
       case "indexImages": {
@@ -330,7 +353,13 @@ export class Service {
             "SELECT id FROM jobs WHERE kind='download' AND json_extract(payload_json,'$.id')=? AND state IN ('queued','running','paused')",
           )
           .get(m.id) as any;
-        if (existing) return existing.id;
+        if (existing) {
+          this.repo.db
+            .prepare("UPDATE jobs SET state='queued',updated_at=? WHERE id=? AND state='paused'")
+            .run(new Date().toISOString(), existing.id);
+          this.queue.pump();
+          return existing.id;
+        }
         const id = this.repo.newJob("download", { id: m.id }, m.files.length);
         this.queue.pump();
         return id;
@@ -404,15 +433,17 @@ export class Service {
           await fs.access(target);
         } catch {
           const image = await imagePipeline(a.original_path);
-          await image
-            .rotate()
-            .resize(
-              input.variant === "thumb" ? 480 : 2200,
-              input.variant === "thumb" ? 480 : 2200,
-              { fit: "inside", withoutEnlargement: true },
-            )
-            .webp()
-            .toFile(target);
+          await writeAtomicImage(
+            image
+              .rotate()
+              .resize(
+                input.variant === "thumb" ? 480 : 2200,
+                input.variant === "thumb" ? 480 : 2200,
+                { fit: "inside", withoutEnlargement: true },
+              )
+              .webp(),
+            target,
+          );
         }
         return target;
       }

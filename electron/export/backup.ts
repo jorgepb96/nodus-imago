@@ -123,9 +123,14 @@ export async function restoreBackup(
   file: string,
 ): Promise<number> {
   // A restore is deliberate and only accepts an empty collection. It never merges IDs.
-  if (repo.stats().databases || repo.jobs().length)
+  if (
+    repo.stats().databases ||
+    repo.jobs().some((job) =>
+      ["queued", "running", "paused"].includes(job.state),
+    )
+  )
     throw new Error(
-      "Restaura en una instalación vacía para preservar todos los identificadores. Exporta primero tus datos actuales.",
+      "Restaura en una instalación vacía y sin trabajos activos para preservar todos los identificadores. Exporta primero tus datos actuales.",
     );
   const archive = await Archive.open(file),
     staging = path.join(repo.root, "staging", uuid());
@@ -180,6 +185,13 @@ export async function restoreBackup(
           throw new Error("Original existente dañado.");
       } else await fsp.rename(local, dest);
     }
+    // An otherwise empty target can still hold orphaned vectors or saved
+    // searches from deleted databases. Restore replaces them with the backup
+    // instead of failing on a UNIQUE/PRIMARY KEY collision.
+    repo.db.prepare("DELETE FROM embeddings").run();
+    repo.db.prepare("DELETE FROM saved_searches").run();
+    repo.db.prepare("DELETE FROM history").run();
+    repo.db.prepare("DELETE FROM proposals").run();
     repo.db.transaction(() => {
       for (const table of BACKUP_TABLES) {
         if (table === "settings") continue;

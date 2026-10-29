@@ -2024,6 +2024,8 @@ thead th:last-child {
   border-bottom: 1px solid var(--line);
   z-index: 30;
   color: var(--muted);
+  /* macOS uses hiddenInset: the custom header is the window drag handle. */
+  -webkit-app-region: drag;
 }
 .nodus-header :is(button, input, summary) {
   -webkit-app-region: no-drag;
@@ -2852,4 +2854,23 @@ thead th:last-child {
 }
 .provenance-entry details {
   margin-top: 5px;
+}
+.filter-apply-hint {
+  margin: -4px 0 10px;
+  font-size: 10px;
+}
+.badge.accepted {
+  color: #33805b;
+  background: #48ac7910;
+  border-color: #48ac7940;
+}
+.badge.pending {
+  color: #a87728;
+  background: #e8ad4810;
+  border-color: #e8ad4840;
+}
+.badge.rejected {
+  color: #ce4c4c;
+  background: #ce4c4c10;
+  border-color: #ce4c4c40;
 }

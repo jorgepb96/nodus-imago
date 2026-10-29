@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-29T12:20:02.088Z",
+  "date": "2026-10-29T13:07:14.699Z",
   "platform": "darwin",
   "arch": "arm64",
   "cpu": "Apple M2",
@@ -51,14 +51,14 @@
     }
   ],
   "measurements": {
-    "indexThreeImagesMs": 26062,
-    "textQueryMs": 100,
-    "imageQueryMs": 2982,
-    "combinedQueryMs": 3063,
-    "descriptionMs": 14532,
-    "descriptionAfterPauseMs": 14531,
-    "classificationMs": 10528,
-    "restartQueryMs": 6440
+    "indexThreeImagesMs": 39135,
+    "textQueryMs": 152,
+    "imageQueryMs": 7306,
+    "combinedQueryMs": 8403,
+    "descriptionMs": 24569,
+    "descriptionAfterPauseMs": 24568,
+    "classificationMs": 21069,
+    "restartQueryMs": 7674
   },
   "results": {
     "text": [
@@ -112,7 +112,7 @@
     "proposals": [
       {
         "column": "Categorías",
-        "value": "[\"69e33560-6820-44c5-9d24-69e499f95046\"]",
+        "value": "[\"81a6e24b-fc42-496a-98cb-29b1646e5a02\"]",
         "model": "LiquidAI/LFM3-VL-2B-GGUF",
         "revision": "b36554cfd35854b06429900131730cd80f092cdb",
         "prompt": "Classify the visible image for the field \"Categorías\". Choose only from this exact list of labels: [\"Arquitectura\",\"Paisaje\",\"Interiores\",\"Interfaz de software\"]. Return ONLY a JSON array of exact label strings, at most 5. Return [] if none applies. Do not invent labels, do not explain, and do not use any other format.\n\n=== DATOS DE LA FILA ===\nTítulo: Documento A\nImágenes: GoldenGate.png"

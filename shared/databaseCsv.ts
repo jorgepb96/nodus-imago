@@ -14,8 +14,8 @@ const NUMBER_RE = /^-?\d{1,3}(?:[.,]?\d{3})*(?:[.,]\d+)?$|^-?\d+(?:\.\d+)?$/;
 // compact historical values and the structured range representation.
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 const TIME_RE = /^\d{1,2}:\d{2}$/;
-const BOOL_TRUE = new Set(['sí', 'si', 'true', 'yes', 'verdadero', 'x', '✓']);
-const BOOL_FALSE = new Set(['no', 'false', 'falso', '']);
+const BOOL_TRUE = new Set(['sí', 'si', 'true', 'yes', 'verdadero', 'x', '✓', '1']);
+const BOOL_FALSE = new Set(['no', 'false', 'falso', '', '0']);
 
 /**
  * Placeholders that mean "no value" in an exported sheet. They are ignored when inferring a
@@ -212,7 +212,12 @@ export function normalizeCsvValue(type: DatabaseColumnType, raw: string): string
     const n = Number(v.replace(',', '.'));
     return Number.isFinite(n) ? String(n) : null;
   }
-  if (type === 'checkbox') return BOOL_TRUE.has(v.toLowerCase()) ? '1' : '0';
+  if (type === 'checkbox') {
+    const lowered = v.toLowerCase();
+    if (BOOL_TRUE.has(lowered)) return '1';
+    if (BOOL_FALSE.has(lowered)) return '0';
+    return null;
+  }
   if (type === 'date') return ISO_DATE_RE.test(v) ? v : null;
   if (type === 'time') return TIME_RE.test(v) ? v : null;
   return v;

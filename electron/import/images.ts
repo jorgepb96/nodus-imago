@@ -28,6 +28,18 @@ export async function hashFile(file: string) {
   for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
   return hash.digest("hex");
 }
+/** Write a derived image through a temporary file so a crash never leaves a
+ * truncated thumbnail that the UI would treat as valid. */
+export async function writeAtomicImage(image: Sharp, target: string) {
+  const temporary = target + "." + uuid() + ".tmp";
+  try {
+    await image.toFile(temporary);
+    await fsp.rename(temporary, target);
+  } catch (error) {
+    await fsp.rm(temporary, { force: true });
+    throw error;
+  }
+}
 export async function scanImages(roots: string[]): Promise<string[]> {
   const files: string[] = [];
   async function scan(file: string) {
@@ -185,24 +197,28 @@ export class Images {
       throw new Error("No se han podido leer las dimensiones de la imagen.");
     const thumbnail = path.join(this.repo.root, "thumbnails", hash + ".webp");
     if (!fs.existsSync(thumbnail))
-      await image
-        .clone()
-        .rotate()
-        .resize(480, 480, { fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 78 })
-        .toFile(thumbnail);
+      await writeAtomicImage(
+        image
+          .clone()
+          .rotate()
+          .resize(480, 480, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 78 }),
+        thumbnail,
+      );
     const preview = path.join(
       this.repo.root,
       "thumbnails",
       hash + "-preview.webp",
     );
     if (!fs.existsSync(preview))
-      await image
-        .clone()
-        .rotate()
-        .resize(2200, 2200, { fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 88 })
-        .toFile(preview);
+      await writeAtomicImage(
+        image
+          .clone()
+          .rotate()
+          .resize(2200, 2200, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 88 }),
+        preview,
+      );
     let metadata: Record<string, unknown> = {};
     try {
       metadata =

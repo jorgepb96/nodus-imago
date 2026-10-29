@@ -97,7 +97,7 @@ export function exportCellValue(col: DatabaseColumn, row: DatabaseRow): unknown 
  * mitigation; it is not shown as part of the value once the file is opened.
  */
 function neutraliseFormula(s: string): string {
-  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return /^[=+@\t\r]|^-(?!\d+(?:[.,]\d+)?$)/.test(s) ? `'${s}` : s;
 }
 
 function csvCell(s: string): string {

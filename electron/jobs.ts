@@ -34,7 +34,11 @@ export class JobQueue {
       memory,
     );
   }
-  control(id: string, action: "pause" | "resume" | "cancel") {
+  control(
+    id: string,
+    action: "pause" | "resume" | "cancel",
+    pump = true,
+  ) {
     const job = this.repo.db
       .prepare("SELECT state,done,total FROM jobs WHERE id=?")
       .get(id) as { state: string; done: number; total: number } | undefined;
@@ -65,14 +69,15 @@ export class JobQueue {
       );
     this.running.get(id)?.controller.abort();
     this.changed();
-    this.pump();
+    if (pump) this.pump();
   }
   pauseAll() {
-    // Include queued jobs: a job that has not started yet would otherwise keep
-    // running with a provider or model the user has just disabled.
+    // Include queued jobs, and do not pump between pauses: freeing a slot while
+    // later jobs are still queued would start a job we are about to pause (for
+    // example a remote API job after the user has disabled remote APIs).
     for (const job of this.repo.jobs())
       if (["queued", "running"].includes(job.state))
-        this.control(job.id, "pause");
+        this.control(job.id, "pause", false);
   }
   async close() {
     this.closed = true;
@@ -199,13 +204,13 @@ export class JobQueue {
       }
       if (done === job.total && !signal.aborted && !this.closed) {
         if (job.kind === "download") await this.models.verify(payload.id);
+        // Image import can create new rows (and fill their titles), which changes
+        // table-wide formula inputs. Recompute once per import, not per file.
+        if (job.kind === "images" && payload.databaseId)
+          this.repo.recompute(payload.databaseId);
         this.repo.db
           .prepare("UPDATE jobs SET state=?,updated_at=? WHERE id=?")
-          .run(
-            failed === job.total && failed > 0 ? "failed" : "completed",
-            now(),
-            job.id,
-          );
+          .run(failed > 0 ? "failed" : "completed", now(), job.id);
       }
     } catch (error) {
       if (!signal.aborted)

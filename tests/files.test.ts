@@ -127,6 +127,20 @@ test("native backup restores IDs, relations, tags, originals and embeddings, and
       );
     const backup = path.join(f.root, "backup.imago");
     await writeBackup(f.repo, backup);
+    // Completed job history is not user data and must not block restoring into
+    // an otherwise empty collection.
+    const previousJob = target.newJob("analyze", { items: [] }, 0);
+    target.db
+      .prepare("UPDATE jobs SET state='completed' WHERE id=?")
+      .run(previousJob);
+    // Orphaned vectors from deleted databases must not collide with the backup.
+    target.db
+      .prepare("INSERT INTO embeddings VALUES(?,?,?)")
+      .run(
+        f.repo.getRow(row.id).images[0].contentHash,
+        "contract",
+        Buffer.from(new Float32Array(256).fill(0.0625).buffer),
+      );
     assert.equal(await restoreBackup(target, backup), 1);
     assert.deepEqual(
       target.detail(d.database.id).columns.map((c) => c.id),

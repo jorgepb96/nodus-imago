@@ -71,8 +71,8 @@ def load(request):
 
 def run(request):
     if request.get("operation") == "probe":
-        import torch, transformers, sentence_transformers
-        return {"torch": torch.__version__, "transformers": transformers.__version__, "sentence_transformers": sentence_transformers.__version__}
+        import torch, torchvision, transformers, sentence_transformers, PIL
+        return {"torch": torch.__version__, "torchvision": torchvision.__version__, "transformers": transformers.__version__, "sentence_transformers": sentence_transformers.__version__, "pillow": PIL.__version__}
     model = load(request)
     if request["task"] == "embedding":
         from PIL import Image

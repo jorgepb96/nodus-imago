@@ -103,7 +103,7 @@ Comprueba, con los pesos reales:
 7. Cierre y reapertura: registros, imágenes, valores aceptados e índice vectorial.
 8. Que la descripción no contenga razonamiento, cabeceras del prompt ni JSON.
 
-El informe reproducible está en [docs/benchmarks/real-models-macos-arm64.json](docs/benchmarks/real-models-macos-arm64.json). La ejecución de referencia (Apple M2, 16 GB, CPU, 512 dimensiones) midió: indexación en frío de tres imágenes 26,1 s; consulta textual en caliente 100 ms; consulta por imagen 3,0 s; consulta combinada 3,1 s; descripción 14,5 s; clasificación 10,5 s; consulta tras reabrir 6,4 s. Son medidas de un corpus de tres imágenes, no un benchmark de calidad ni de un corpus de 10.000 fotografías.
+El informe reproducible está en [docs/benchmarks/real-models-macos-arm64.json](docs/benchmarks/real-models-macos-arm64.json). La ejecución de referencia (Apple M2, 16 GB, CPU, 512 dimensiones) midió: indexación en frío de tres imágenes 39,1 s; consulta textual en caliente 152 ms; consulta por imagen 7,3 s; consulta combinada 8,4 s; descripción 24,6 s; clasificación 21,1 s; consulta tras reabrir 7,7 s. Los tiempos varían con la carga del equipo y no son extrapolables. Son medidas de un corpus de tres imágenes, no un benchmark de calidad ni de un corpus de 10.000 fotografías.
 
 Si falla, el diagnóstico se escribe en `test-results/real-models-failure.json`. No se sustituyen pesos por mocks para declarar que la inferencia funciona.
 
@@ -122,7 +122,7 @@ JPEG, PNG, WebP, TIFF y BMP tienen rutas reales de decodificación, miniatura y 
 ## Pruebas y mediciones
 
 ```sh
-npm test               # 37 pruebas en Electron
+npm test               # 44 pruebas en Electron
 npm run build
 npm run test:e2e       # requiere entorno gráfico
 npm run benchmark

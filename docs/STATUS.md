@@ -15,7 +15,7 @@ Actualizado el **29 de octubre de 2026** tras ejecutar la suite, la prueba E2E y
 | Comprobación | Resultado | Evidencia |
 | --- | --- | --- |
 | `npm run typecheck` | pasa | compilación TypeScript estricta sin errores |
-| `npm test` | **37/37** | Electron real, `test-results/unit/` |
+| `npm test` | **44/44** | Electron real, `test-results/unit/` |
 | `npm run test:e2e` | pasa | CSV, imágenes, tabla/galería, búsqueda, ficha, exportación, tema y reinicio; capturas `test-results/01..07` |
 | E2E sobre app empaquetada macOS ARM64 | pasa | `IMAGO_E2E_EXECUTABLE` sobre `release/mac-arm64/Nodus Imago.app` |
 | E2E desde el DMG montado | pasa | `release/Nodus-Imago-0.1.0-arm64.dmg` montado en solo lectura |
@@ -26,7 +26,17 @@ Actualizado el **29 de octubre de 2026** tras ejecutar la suite, la prueba E2E y
 | Persistencia real | cierre y reapertura; 3 filas, 3 imágenes, 3 vectores y valores aceptados | `results.persistence` |
 | `npm run benchmark` | pasa | [local.json](benchmarks/local.json), 10.000 registros sintéticos |
 
-Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de tres imágenes): indexación en frío 26,1 s; consulta textual en caliente 100 ms; consulta por imagen 3,0 s; texto+imagen 3,1 s; descripción 14,5 s; clasificación 10,5 s; consulta tras reabrir 6,4 s. No son un benchmark de calidad ni de 10.000 fotografías reales.
+Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de tres imágenes): indexación en frío 39,1 s; consulta textual en caliente 152 ms; consulta por imagen 7,3 s; texto+imagen 8,4 s; descripción 24,6 s; clasificación 21,1 s; consulta tras reabrir 7,7 s (varían con la carga del equipo). No son un benchmark de calidad ni de 10.000 fotografías reales.
+
+## Correcciones de la auditoría del 29 de octubre
+
+- Los filtros y el orden de `unique_id`, `created_time` y `last_edited_time` usan ahora el valor mostrado (celda almacenada o valor calculado), no una celda inexistente.
+- Crear una columna de fórmula calcula las filas existentes; borrar filas recalcula fórmulas de tabla y limpia el historial huérfano.
+- Restaurar una copia admite historial de trabajos completados y sustituye vectores/búsquedas huérfanas sin colisiones de claves.
+- `pauseAll` es atómico: no arranca un trabajo en espera mientras pausa los demás. Un trabajo con algún fallo queda en `failed` y se puede reanudar.
+- CSV: los checkbox aceptan `1/0`, `sí/no`, `true/false`; un valor desconocido detiene la importación en vez de convertirse silenciosamente en falso. La exportación conserva números negativos y neutraliza fórmulas.
+- Las miniaturas y vistas previas se escriben de forma atómica; al borrar o mover imágenes se normalizan las posiciones y la imagen principal.
+- Se corrigieron el título del diálogo de renombrado, la navegación de «Bases de datos» a la lista, el icono de tema, el contador de colas con historial y el acceso a Ajustes en inglés.
 
 ## Fases
 

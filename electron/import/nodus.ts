@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID as uuid, createHash } from "node:crypto";
 import { Repository, now } from "../db/repository";
-import { imagePipeline, isImage } from "./images";
+import { imagePipeline, isImage, writeAtomicImage } from "./images";
 import { isDatabaseColumnType } from "../../shared/databases";
 
 // Read a consistent SQLite backup through a read-only connection. Never migrate Nodus.
@@ -98,18 +98,22 @@ export async function importNodus(repo: Repository, file: string) {
             m = await image.metadata();
           width = m.width ?? 0;
           height = m.height ?? 0;
-          await image
-            .clone()
-            .rotate()
-            .resize(480, 480, { fit: "inside", withoutEnlargement: true })
-            .webp()
-            .toFile(path.join(repo.root, "thumbnails", hash + ".webp"));
-          await image
-            .clone()
-            .rotate()
-            .resize(2200, 2200, { fit: "inside", withoutEnlargement: true })
-            .webp()
-            .toFile(path.join(repo.root, "thumbnails", hash + "-preview.webp"));
+          await writeAtomicImage(
+            image
+              .clone()
+              .rotate()
+              .resize(480, 480, { fit: "inside", withoutEnlargement: true })
+              .webp(),
+            path.join(repo.root, "thumbnails", hash + ".webp"),
+          );
+          await writeAtomicImage(
+            image
+              .clone()
+              .rotate()
+              .resize(2200, 2200, { fit: "inside", withoutEnlargement: true })
+              .webp(),
+            path.join(repo.root, "thumbnails", hash + "-preview.webp"),
+          );
         } catch {
           notices.push("Original conservado sin miniatura: " + a.file_name);
         }
@@ -233,8 +237,21 @@ export async function importNodus(repo: Repository, file: string) {
         throw new Error("Las relaciones importadas son inconsistentes.");
     })();
     // Imported formula configurations must produce current cells, not only the
-    // snapshot values that happened to be stored in the source database.
-    for (const d of databases) repo.recompute(d.id);
+    // snapshot values that happened to be stored in the source database. A
+    // formula unsupported by this version must not turn a completed data import
+    // into a misleading failure with partial data already committed.
+    for (const d of databases) {
+      try {
+        repo.recompute(d.id);
+      } catch (error) {
+        notices.push(
+          "No se pudo recalcular una fórmula de «" +
+            d.name +
+            "»: " +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      }
+    }
     return {
       databases: databases.length,
       attachments: imported.length,

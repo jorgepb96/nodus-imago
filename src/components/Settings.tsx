@@ -133,7 +133,9 @@ export function Jobs({
           )}
         </div>
       ))}
-      {!jobs.length && <p className="muted">No hay tareas en esta cola.</p>}
+      {!jobs.length && (
+        <p className="muted">{t("No hay tareas en esta cola.")}</p>
+      )}
     </div>
   );
 }
@@ -209,7 +211,9 @@ export function Settings({
             <h3>{t(group.group)}</h3>
             {group.items
               .filter((item) =>
-                item.label.toLowerCase().includes(settingsSearch.toLowerCase()),
+                t(item.label)
+                  .toLowerCase()
+                  .includes(settingsSearch.toLowerCase()),
               )
               .map(({ id, label, Icon }) => (
                 <button
@@ -394,12 +398,20 @@ export function Settings({
                     <Button
                       icon
                       aria-label={t("Eliminar")}
-                      onClick={() =>
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            t(
+                              "¿Eliminar los archivos descargados de este modelo? Podrás descargarlo de nuevo.",
+                            ),
+                          )
+                        )
+                          return;
                         void perform(async () => {
                           await window.imago.call("deleteModel", { id: m.id });
                           onChanged();
-                        })
-                      }
+                        });
+                      }}
                     >
                       <Trash2 size={14} />
                     </Button>
@@ -513,7 +525,12 @@ export function Settings({
                 {t("Crear copia completa")}
               </Button>
               <Button
-                disabled={status.databases > 0}
+                disabled={
+                  status.databases > 0 ||
+                  status.jobs.some((job) =>
+                    ["queued", "running", "paused"].includes(job.state),
+                  )
+                }
                 onClick={() =>
                   void perform(async () => {
                     const n = await window.imago.call("restore");
@@ -546,6 +563,18 @@ export function Settings({
                 {t("Reconstruir índice literal")}
               </Button>
               <Button
+                disabled={
+                  !status.models.some(
+                    (m) => m.task === "embedding" && m.verified,
+                  )
+                }
+                title={
+                  status.models.some(
+                    (m) => m.task === "embedding" && m.verified,
+                  )
+                    ? undefined
+                    : "Instala y verifica EmbeddingGemma 2 en Modelos locales."
+                }
                 onClick={() =>
                   void perform(async () => {
                     await window.imago.call("indexImages", {});
@@ -648,10 +677,12 @@ export function Settings({
                 <Button
                   onClick={() =>
                     void perform(async () => {
+                      await window.imago.call("updateSettings", { python });
                       const r = await window.imago.call("probeRuntime");
                       notify(
-                        `Python listo · torch ${r.torch} · transformers ${r.transformers} · sentence-transformers ${r.sentence_transformers}`,
+                        `Python listo · torch ${r.torch} · torchvision ${r.torchvision} · transformers ${r.transformers} · sentence-transformers ${r.sentence_transformers} · Pillow ${r.pillow}`,
                       );
+                      onChanged();
                     })
                   }
                 >

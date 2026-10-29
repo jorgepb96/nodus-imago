@@ -261,8 +261,10 @@ export type Commands = {
     input: void;
     result: {
       torch: string;
+      torchvision: string;
       transformers: string;
       sentence_transformers: string;
+      pillow: string;
     };
   };
   updateSettings: { input: Partial<Settings>; result: Settings };
@@ -271,6 +273,7 @@ export type Commands = {
     input: { id: string; action: "pause" | "resume" | "cancel" };
     result: void;
   };
+  pauseAllJobs: { input: void; result: void };
   rebuildText: { input: void; result: number };
   indexImages: { input: { databaseIds?: string[] }; result: string };
   downloadModel: { input: { id: string }; result: string };

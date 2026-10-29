@@ -402,7 +402,13 @@ export function RecordPanel({
                   <div className="provenance-entry" key={p.id}>
                     <div className="row">
                       <strong>{p.columnName}</strong>
-                      <span className={"badge " + p.state}>{p.state}</span>
+                      <span className={"badge " + p.state}>
+                        {p.state === "accepted"
+                          ? t("Aceptada")
+                          : p.state === "rejected"
+                            ? t("Rechazada")
+                            : t("Pendiente")}
+                      </span>
                     </div>
                     <p>{shown}</p>
                     <small className="muted">

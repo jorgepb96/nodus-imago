@@ -35,7 +35,9 @@ export function Home({
 }) {
   const t = useT(),
     jobs = status?.jobs ?? [],
-    live = jobs.filter((j) => ["running", "queued"].includes(j.state)),
+    live = jobs.filter((j) =>
+      ["running", "queued", "paused"].includes(j.state),
+    ),
     failed = jobs.filter((j) => j.state === "failed"),
     images = status?.images ?? 0,
     indexed = status?.indexed ?? 0;
