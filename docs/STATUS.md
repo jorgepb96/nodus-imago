@@ -78,3 +78,4 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 - El model manager está validado con los archivos ya descargados y verificados; no se ha medido la descarga completa sobre una conexión lenta ni la reanudación tras un corte de red real.
 - No se ha validado Metal/MPS, CUDA, macOS Intel, Windows ni Linux. El motor llama.cpp solo se ha ejecutado en macOS ARM64. SmolVLM2 está integrado pero no se han descargado ni ejecutado sus pesos.
 - La inferencia real se ha probado con tres imágenes de fixtures, no con un corpus fotográfico heterogéneo. No se han inventado métricas de precisión, sesgo o calidad.
+- Cada celda LFM3 lanza un proceso `llama-mtmd-cli` y vuelve a cargar el modelo. La validación mide una celda por columna; procesar una columna completa es funcional, pero no tiene rendimiento medido y necesitará reutilizar el proceso para producción.

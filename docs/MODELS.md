@@ -47,6 +47,8 @@ Las descripciones y clasificaciones tienen selecciones independientes en Ajustes
 
 El modelo se fija en el payload del trabajo. Las celdas se procesan progresivamente. Las columnas distintas pueden tener trabajos simultáneos; dos trabajos sobre la misma propiedad comparten un recurso de exclusión para no generar propuestas competidoras. El runtime Python compartido tiene una sola vía de inferencia; trabajos LFM3 y de APIs pueden avanzar en paralelo hasta el límite de memoria y configuración. La validación real comprobó dos procesos LFM3 simultáneos y la pausa independiente de uno.
 
+**Límite de rendimiento:** cada celda LFM3 arranca un `llama-mtmd-cli` y recarga el GGUF. La validación mide una celda; una columna completa es funcional pero no tiene un benchmark de extremo a extremo. Reutilizar el proceso o usar un servidor local sin exponerlo son líneas de trabajo pendientes, no una capacidad ya medida.
+
 Los proveedores API usan los constructores multimodales de Nodus y almacenan claves cifradas en el proceso principal. Existe un interruptor explícito de APIs remotas y no hay fallback. Los endpoints locales HTTP se limitan al propio equipo. Las llamadas de una misma cuenta/proveedor comparten un intervalo mínimo y la cola conserva cancelación y estado tras reiniciar. No se han probado claves reales ni llamadas facturables.
 
 ## Límites de plataforma
