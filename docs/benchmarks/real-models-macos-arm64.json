@@ -1,0 +1,143 @@
+{
+  "date": "2026-10-29T12:20:02.088Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "cpu": "Apple M2",
+  "memoryGB": 16,
+  "device": "cpu",
+  "dimensions": 512,
+  "models": [
+    {
+      "id": "embeddinggemma2",
+      "label": "EmbeddingGemma 2 · texto + visión",
+      "task": "embedding",
+      "repository": "google/embeddinggemma-2",
+      "revision": "f9972ac22e696a105c482202646979e33e4b5a1e",
+      "license": "Apache-2.0",
+      "estimatedGB": 1.525809326,
+      "installed": true,
+      "verified": true,
+      "status": "integrity-verified",
+      "files": 14,
+      "bytes": 1525809326
+    },
+    {
+      "id": "lfm3-vl-2b",
+      "label": "LFM3-VL-2B · Q4_K_M",
+      "task": "vision",
+      "repository": "LiquidAI/LFM3-VL-2B-GGUF",
+      "revision": "b36554cfd35854b06429900131730cd80f092cdb",
+      "license": "LFM Open License 1.0 · condición comercial ≥ USD 10 M",
+      "estimatedGB": 1.478637954,
+      "installed": true,
+      "verified": true,
+      "status": "integrity-verified",
+      "files": 4,
+      "bytes": 1478637954
+    },
+    {
+      "id": "llama-runtime",
+      "label": "Motor de visión local · llama.cpp",
+      "task": "runtime",
+      "repository": "ggml-org/llama.cpp",
+      "revision": "b11981",
+      "license": "MIT",
+      "estimatedGB": 0.016463687,
+      "installed": true,
+      "verified": true,
+      "status": "integrity-verified",
+      "files": 1,
+      "bytes": 16463687
+    }
+  ],
+  "measurements": {
+    "indexThreeImagesMs": 26062,
+    "textQueryMs": 100,
+    "imageQueryMs": 2982,
+    "combinedQueryMs": 3063,
+    "descriptionMs": 14532,
+    "descriptionAfterPauseMs": 14531,
+    "classificationMs": 10528,
+    "restartQueryMs": 6440
+  },
+  "results": {
+    "text": [
+      {
+        "title": "Documento A",
+        "score": 0.7281757052048753
+      },
+      {
+        "title": "Documento C",
+        "score": 0.5999443825165708
+      },
+      {
+        "title": "Documento B",
+        "score": 0.53982983337615
+      }
+    ],
+    "semanticIndexed": 3,
+    "image": [
+      {
+        "title": "Documento A",
+        "score": 1.0000000205498674
+      },
+      {
+        "title": "Documento B",
+        "score": 0.5802848793189872
+      },
+      {
+        "title": "Documento C",
+        "score": 0.572424072001096
+      }
+    ],
+    "combined": [
+      {
+        "title": "Documento A",
+        "score": 0.926464379929799
+      },
+      {
+        "title": "Documento C",
+        "score": 0.6593594854324034
+      },
+      {
+        "title": "Documento B",
+        "score": 0.6354398002591862
+      }
+    ],
+    "concurrency": {
+      "bothStarted": true,
+      "pausedIndependently": true,
+      "otherCompletedWhilePaused": true
+    },
+    "proposals": [
+      {
+        "column": "Categorías",
+        "value": "[\"69e33560-6820-44c5-9d24-69e499f95046\"]",
+        "model": "LiquidAI/LFM3-VL-2B-GGUF",
+        "revision": "b36554cfd35854b06429900131730cd80f092cdb",
+        "prompt": "Classify the visible image for the field \"Categorías\". Choose only from this exact list of labels: [\"Arquitectura\",\"Paisaje\",\"Interiores\",\"Interfaz de software\"]. Return ONLY a JSON array of exact label strings, at most 5. Return [] if none applies. Do not invent labels, do not explain, and do not use any other format.\n\n=== DATOS DE LA FILA ===\nTítulo: Documento A\nImágenes: GoldenGate.png"
+      },
+      {
+        "column": "Descripción visual",
+        "value": "La fotografía muestra una gran estructura metálica de color rojo con torres y cables suspendidos sobre un cuerpo de agua tranquilo. A la izquierda hay una construcción de muros de tono marrón claro junto a una orilla rocosa donde se aprecian vehículos estacionados, y en el primer plano una roca emergiendo del agua con un ave plegada sobre ella bajo un cielo despejado de color azul claro.",
+        "model": "LiquidAI/LFM3-VL-2B-GGUF",
+        "revision": "b36554cfd35854b06429900131730cd80f092cdb",
+        "prompt": "Describe only directly observable details of this photograph in español. Write one or two brief sentences. Do not guess identities, dates, locations or historical context. State uncertainty explicitly. Return only the description, with no reasoning, labels, JSON or preamble.\n\n=== DATOS DE LA FILA ===\nTítulo: Documento A\nImágenes: GoldenGate.png"
+      }
+    ],
+    "classificationLabels": [
+      "Paisaje"
+    ],
+    "accepted": {
+      "applied": 2,
+      "conflicts": 0
+    },
+    "persistence": {
+      "rows": 3,
+      "images": 3,
+      "indexed": 3,
+      "topMatch": "Documento A"
+    }
+  },
+  "status": "passed"
+}

@@ -1,0 +1,78 @@
+[
+  {
+    "id": "llama-runtime",
+    "platform": "darwin",
+    "arch": "arm64",
+    "repository": "ggml-org/llama.cpp",
+    "revision": "b11981",
+    "label": "Motor de visi\u00f3n local \u00b7 llama.cpp",
+    "task": "runtime",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "llama-b11981-bin-macos-arm64.tar.gz",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11981/llama-b11981-bin-macos-arm64.tar.gz",
+        "size": 16463687,
+        "algorithm": "sha256",
+        "digest": "c5827eba94fe4eb9068a82eab5c25a943dbd2022efe5144d1af817e8b396b45a"
+      }
+    ]
+  },
+  {
+    "id": "llama-runtime",
+    "platform": "darwin",
+    "arch": "x64",
+    "repository": "ggml-org/llama.cpp",
+    "revision": "b11981",
+    "label": "Motor de visi\u00f3n local \u00b7 llama.cpp",
+    "task": "runtime",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "llama-b11981-bin-macos-x64.tar.gz",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11981/llama-b11981-bin-macos-x64.tar.gz",
+        "size": 12208100,
+        "algorithm": "sha256",
+        "digest": "0d9e5c5bbeca9beda692e4a46560e83b2385dc79683bd949126b10e34c2ca7ce"
+      }
+    ]
+  },
+  {
+    "id": "llama-runtime",
+    "platform": "win32",
+    "arch": "x64",
+    "repository": "ggml-org/llama.cpp",
+    "revision": "b11981",
+    "label": "Motor de visi\u00f3n local \u00b7 llama.cpp",
+    "task": "runtime",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "llama-b11981-bin-win-cpu-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11981/llama-b11981-bin-win-cpu-x64.zip",
+        "size": 24408914,
+        "algorithm": "sha256",
+        "digest": "626dd4136947fb9cdf755523fefcad3d414858a4beca06ce424fcd3ee0a948c9"
+      }
+    ]
+  },
+  {
+    "id": "llama-runtime",
+    "platform": "linux",
+    "arch": "x64",
+    "repository": "ggml-org/llama.cpp",
+    "revision": "b11981",
+    "label": "Motor de visi\u00f3n local \u00b7 llama.cpp",
+    "task": "runtime",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "llama-b11981-bin-ubuntu-x64.tar.gz",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11981/llama-b11981-bin-ubuntu-x64.tar.gz",
+        "size": 22691734,
+        "algorithm": "sha256",
+        "digest": "78986f25ddf08ba9b2d81b53ab6a6d68ac9548ad8022c19df75920a55f6d84ac"
+      }
+    ]
+  }
+]

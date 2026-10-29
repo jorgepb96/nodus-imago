@@ -1,0 +1,32 @@
+// EAV tables adapted from Nodus migrations 51–53, with file-backed image assets.
+export const schema = `
+PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS imago_schema(version INTEGER NOT NULL);
+INSERT INTO imago_schema SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM imago_schema);
+CREATE TABLE IF NOT EXISTS db_databases(id TEXT PRIMARY KEY,short_id TEXT UNIQUE NOT NULL,name TEXT NOT NULL,icon TEXT,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS db_columns(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,name TEXT NOT NULL,type TEXT NOT NULL,position INTEGER NOT NULL,config_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS columns_database ON db_columns(database_id,position);
+CREATE TABLE IF NOT EXISTS db_select_options(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,label TEXT NOT NULL,color TEXT,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS options_column ON db_select_options(column_id,position);
+CREATE TABLE IF NOT EXISTS db_rows(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS rows_database ON db_rows(database_id,position,id);
+CREATE TABLE IF NOT EXISTS db_cells(row_id TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,value_text TEXT,value_type TEXT,value_number REAL,value_integer INTEGER,value_date TEXT,value_json TEXT,value_reference TEXT,PRIMARY KEY(row_id,column_id));
+CREATE INDEX IF NOT EXISTS cells_column ON db_cells(column_id,value_text);
+CREATE INDEX IF NOT EXISTS cells_number ON db_cells(column_id,value_number);
+CREATE TABLE IF NOT EXISTS image_assets(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,row_id TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,file_name TEXT NOT NULL,original_path TEXT NOT NULL,managed INTEGER NOT NULL,content_hash TEXT NOT NULL,bytes INTEGER NOT NULL,width INTEGER NOT NULL,height INTEGER NOT NULL,metadata_json TEXT NOT NULL,description TEXT,position INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,UNIQUE(row_id,column_id,content_hash));
+CREATE INDEX IF NOT EXISTS assets_database ON image_assets(database_id,row_id);
+CREATE INDEX IF NOT EXISTS assets_hash ON image_assets(content_hash);
+CREATE TABLE IF NOT EXISTS db_relations(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,row_id TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,target_kind TEXT NOT NULL,target_id TEXT NOT NULL,target_vault_id TEXT,label TEXT,position INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS search_documents(row_id TEXT PRIMARY KEY REFERENCES db_rows(id) ON DELETE CASCADE,database_id TEXT NOT NULL,body TEXT NOT NULL);
+CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(row_id UNINDEXED,database_id UNINDEXED,body,tokenize='unicode61 remove_diacritics 2');
+CREATE TRIGGER IF NOT EXISTS search_insert AFTER INSERT ON search_documents BEGIN INSERT INTO records_fts(row_id,database_id,body) VALUES(new.row_id,new.database_id,new.body); END;
+CREATE TRIGGER IF NOT EXISTS search_delete AFTER DELETE ON search_documents BEGIN DELETE FROM records_fts WHERE row_id=old.row_id; END;
+CREATE TRIGGER IF NOT EXISTS search_update AFTER UPDATE ON search_documents BEGIN DELETE FROM records_fts WHERE row_id=old.row_id; INSERT INTO records_fts(row_id,database_id,body) VALUES(new.row_id,new.database_id,new.body); END;
+CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,state TEXT NOT NULL,payload_json TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,total INTEGER NOT NULL,failed INTEGER NOT NULL DEFAULT 0,skipped INTEGER NOT NULL DEFAULT 0,message TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS job_errors(id INTEGER PRIMARY KEY,job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,item INTEGER NOT NULL,message TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS embeddings(content_hash TEXT NOT NULL,contract TEXT NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(content_hash,contract));
+CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY,row_id TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,before_value TEXT,value TEXT,model TEXT NOT NULL,revision TEXT NOT NULL,prompt TEXT NOT NULL,created_at TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending');
+CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY,batch_id TEXT NOT NULL,row_id TEXT NOT NULL,column_id TEXT NOT NULL,before_value TEXT,after_value TEXT,created_at TEXT NOT NULL,undone INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS saved_searches(id TEXT PRIMARY KEY,name TEXT NOT NULL,input_json TEXT NOT NULL);
+`;

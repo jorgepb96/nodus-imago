@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-29T12:24:10.707Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "cpu": "Apple M2",
+  "totalMemoryGB": 16,
+  "node": "24.22.1",
+  "electron": "43.8.4",
+  "records": 10000,
+  "importCsvAndFtsMs": 3440,
+  "literalPage100MedianMs": 18,
+  "literalPage100P95Ms": 22,
+  "matching10000Ms": 30,
+  "safeMatches": 10000,
+  "vectorDotProducts10000x512Ms": 18,
+  "peakRssMB": 212,
+  "checksum": 6788.224831485884,
+  "scope": "Synthetic structured records and synthetic vectors; no model inference and no real-photo corpus. Vector timing excludes SQL reads, filtering and ranking."
+}

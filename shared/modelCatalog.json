@@ -1,0 +1,307 @@
+[
+  {
+    "id": "embeddinggemma2",
+    "repository": "google/embeddinggemma-2",
+    "revision": "f9972ac22e696a105c482202646979e33e4b5a1e",
+    "label": "EmbeddingGemma 2 \u00b7 texto + visi\u00f3n",
+    "task": "embedding",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "1_Pooling/config.json",
+        "size": 90,
+        "algorithm": "git-sha1",
+        "digest": "2730fc1de168630e474c4066987f46d091de2189"
+      },
+      {
+        "path": "2_Normalize/config.json",
+        "size": 97,
+        "algorithm": "git-sha1",
+        "digest": "8babba92405167e8718211dc51f44fb117e423e4"
+      },
+      {
+        "path": "README.md",
+        "size": 22234,
+        "algorithm": "git-sha1",
+        "digest": "e11bc7d84028b9b7b930884328fa7189907c4994"
+      },
+      {
+        "path": "chat_template.jinja",
+        "size": 1016,
+        "algorithm": "git-sha1",
+        "digest": "8df4ab8961aa08b66b470c5adbdc51374aabb63b"
+      },
+      {
+        "path": "config.json",
+        "size": 4455,
+        "algorithm": "git-sha1",
+        "digest": "dc524b2cbef566d66d8533c67dc68a6a8f5d340a"
+      },
+      {
+        "path": "config_sentence_transformers.json",
+        "size": 1565,
+        "algorithm": "git-sha1",
+        "digest": "ba7dd4d5481cbaf271d5e8d1ad4271c5a45d2fd7"
+      },
+      {
+        "path": "model.safetensors",
+        "size": 1488915288,
+        "algorithm": "sha256",
+        "digest": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79"
+      },
+      {
+        "path": "modules.json",
+        "size": 413,
+        "algorithm": "git-sha1",
+        "digest": "1ab20c8ab29b8338488b415e5c09af14b742fe3d"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "size": 511,
+        "algorithm": "git-sha1",
+        "digest": "4adff307a29874c969eda7edb5d3f07faaef879d"
+      },
+      {
+        "path": "processor_config.json",
+        "size": 1788,
+        "algorithm": "git-sha1",
+        "digest": "63043a5a2fd2e25a2fc5336fcdaf24e515d12289"
+      },
+      {
+        "path": "sentence_bert_config.json",
+        "size": 747,
+        "algorithm": "git-sha1",
+        "digest": "b3b98f8308641875fca1e4ddbfae5f38996bb54f"
+      },
+      {
+        "path": "tokenizer.json",
+        "size": 32170510,
+        "algorithm": "sha256",
+        "digest": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"
+      },
+      {
+        "path": "tokenizer.model",
+        "size": 4689013,
+        "algorithm": "sha256",
+        "digest": "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size": 1599,
+        "algorithm": "git-sha1",
+        "digest": "a9afd12fb3ca2c418fd405320ace85ad46748d03"
+      }
+    ]
+  },
+  {
+    "id": "lfm3-vl-2b",
+    "repository": "LiquidAI/LFM3-VL-2B-GGUF",
+    "revision": "b36554cfd35854b06429900131730cd80f092cdb",
+    "label": "LFM3-VL-2B \u00b7 Q4_K_M",
+    "task": "vision",
+    "license": "LFM Open License 1.0 \u00b7 condici\u00f3n comercial \u2265 USD 10 M",
+    "backend": "llama",
+    "files": [
+      {
+        "path": "LFM3-VL-2B-Q4_K_M.gguf",
+        "size": 1099627808,
+        "algorithm": "sha256",
+        "digest": "56dac2e192ff0d9ab8507f4f1aeb4aed0463449bbbefaac79497f041c95f21eb"
+      },
+      {
+        "path": "LICENSE",
+        "size": 10574,
+        "algorithm": "git-sha1",
+        "digest": "2a513f17eb4b8008fb100349fd2b7551d009fed0"
+      },
+      {
+        "path": "README.md",
+        "size": 3540,
+        "algorithm": "git-sha1",
+        "digest": "b2007694fb0a44fcecb98c585b355861522c61ac"
+      },
+      {
+        "path": "mmproj-LFM3-VL-2B-F16.gguf",
+        "size": 378996032,
+        "algorithm": "sha256",
+        "digest": "1d8e6e58eefc093e09d6332f081516e1ddbd5b35cfca7f35463fb270db230b1e"
+      }
+    ]
+  },
+  {
+    "id": "smolvlm2-256m",
+    "repository": "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
+    "revision": "067788b187b95ebe7b2e040b3e4299e342e5b8fd",
+    "label": "SmolVLM2 \u00b7 256 M",
+    "task": "vision",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "README.md",
+        "size": 10856,
+        "algorithm": "git-sha1",
+        "digest": "769933086ed35f244339acafd5daa76d653a5b62"
+      },
+      {
+        "path": "added_tokens.json",
+        "size": 4739,
+        "algorithm": "git-sha1",
+        "digest": "71dc811700b6aa9274d3697ee7d4fb2d5375e766"
+      },
+      {
+        "path": "chat_template.json",
+        "size": 430,
+        "algorithm": "git-sha1",
+        "digest": "1d342e4f070c962a14ba4ece4e06212bc70d8e36"
+      },
+      {
+        "path": "config.json",
+        "size": 3812,
+        "algorithm": "git-sha1",
+        "digest": "182b1b0f71941ed48c1a8c983b88ad877bcc3f4c"
+      },
+      {
+        "path": "generation_config.json",
+        "size": 136,
+        "algorithm": "git-sha1",
+        "digest": "eace9aa6d392fd94dbe0c90825074c53fd7ecd4a"
+      },
+      {
+        "path": "merges.txt",
+        "size": 466391,
+        "algorithm": "git-sha1",
+        "digest": "69503b13f727ba3812b6803e97442a6de05ef5eb"
+      },
+      {
+        "path": "model.safetensors",
+        "size": 1025998224,
+        "algorithm": "sha256",
+        "digest": "dcc8f4c00d30d70bb3028a1bfc373e1b1972e25919f8788183cae4ae72431ce2"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "size": 599,
+        "algorithm": "git-sha1",
+        "digest": "bf7669a38692ad141d333db3be18bd55cb6e2c59"
+      },
+      {
+        "path": "processor_config.json",
+        "size": 67,
+        "algorithm": "git-sha1",
+        "digest": "83df8c48da1f41e1a9129a4bc2aba000eb2b529f"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "size": 868,
+        "algorithm": "git-sha1",
+        "digest": "2b5aee28d56c0e9d89ff6bc70818fba986a90ca9"
+      },
+      {
+        "path": "tokenizer.json",
+        "size": 3548256,
+        "algorithm": "git-sha1",
+        "digest": "a4005d1cf3170a31600a5c96f95768166cbc2b28"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size": 28626,
+        "algorithm": "git-sha1",
+        "digest": "e4042a1126290fdb96ece2a4ad8dd7108c5de484"
+      },
+      {
+        "path": "vocab.json",
+        "size": 800662,
+        "algorithm": "git-sha1",
+        "digest": "0ad5ecc2035b7031b88afb544ee95e2d49baa484"
+      }
+    ]
+  },
+  {
+    "id": "smolvlm2-500m",
+    "repository": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+    "revision": "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+    "label": "SmolVLM2 \u00b7 500 M",
+    "task": "vision",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "README.md",
+        "size": 10865,
+        "algorithm": "git-sha1",
+        "digest": "6121eec63636b076e23d9e2ceb019d5029cb73fb"
+      },
+      {
+        "path": "added_tokens.json",
+        "size": 4739,
+        "algorithm": "git-sha1",
+        "digest": "71dc811700b6aa9274d3697ee7d4fb2d5375e766"
+      },
+      {
+        "path": "chat_template.json",
+        "size": 430,
+        "algorithm": "git-sha1",
+        "digest": "1d342e4f070c962a14ba4ece4e06212bc70d8e36"
+      },
+      {
+        "path": "config.json",
+        "size": 3767,
+        "algorithm": "git-sha1",
+        "digest": "2463e842695989a207176fdb249327a494b05cfb"
+      },
+      {
+        "path": "generation_config.json",
+        "size": 136,
+        "algorithm": "git-sha1",
+        "digest": "eace9aa6d392fd94dbe0c90825074c53fd7ecd4a"
+      },
+      {
+        "path": "merges.txt",
+        "size": 466391,
+        "algorithm": "git-sha1",
+        "digest": "69503b13f727ba3812b6803e97442a6de05ef5eb"
+      },
+      {
+        "path": "model.safetensors",
+        "size": 2029990624,
+        "algorithm": "sha256",
+        "digest": "b9bfd456c9472c0acd5719d6e514c4b859891af205ee1a736552fd3497b8b0c3"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "size": 599,
+        "algorithm": "git-sha1",
+        "digest": "bf7669a38692ad141d333db3be18bd55cb6e2c59"
+      },
+      {
+        "path": "processor_config.json",
+        "size": 67,
+        "algorithm": "git-sha1",
+        "digest": "83df8c48da1f41e1a9129a4bc2aba000eb2b529f"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "size": 868,
+        "algorithm": "git-sha1",
+        "digest": "2b5aee28d56c0e9d89ff6bc70818fba986a90ca9"
+      },
+      {
+        "path": "tokenizer.json",
+        "size": 3548256,
+        "algorithm": "git-sha1",
+        "digest": "a4005d1cf3170a31600a5c96f95768166cbc2b28"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size": 28626,
+        "algorithm": "git-sha1",
+        "digest": "e4042a1126290fdb96ece2a4ad8dd7108c5de484"
+      },
+      {
+        "path": "vocab.json",
+        "size": 800662,
+        "algorithm": "git-sha1",
+        "digest": "0ad5ecc2035b7031b88afb544ee95e2d49baa484"
+      }
+    ]
+  }
+]
