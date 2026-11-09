@@ -10,7 +10,7 @@ No he encontrado comentarios de Codex accesibles en el repositorio, refs, PRs/Is
 
 ## Comprobaciones ejecutadas
 
-- `npm run verify`: typecheck, ESLint, **55/55 pruebas** y build.
+- `npm run verify`: typecheck, ESLint, **56/56 pruebas** y build.
 - E2E macOS ARM64 sin empaquetar, empaquetado y desde el DMG montado: pasa.
 - E2E macOS x64 bajo Rosetta, empaquetado y desde el DMG: pasa.
 - E2E Linux ARM64 y Linux x64 empaquetados en Docker con Xvfb: pasan.
@@ -41,17 +41,17 @@ No he encontrado comentarios de Codex accesibles en el repositorio, refs, PRs/Is
 
 Todos sin firma ni notarización.
 
-- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `674f55a650f4b517d23f51122775cb582db1414b519ee707854cec2e86785b53`.
-- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `9931174b3e1172296153829f9f9b89f8544b25ec77a6d00db43b00d9b2d8e4c9`.
-- Linux ARM64: AppImage `c1d2f082a5877bf17ee834e5b4941ffa48001d0d278520ddd6e18f785196e908`, DEB `e083c9169e827f4efba5580d08a005920bc4f5ba42f1cb19c3b46c16482cbfdb`, RPM `39e8dab18d5ca1053948e37981c059ea3de77b10fd0197b929a2bb20537001b3`.
-- Linux x64: AppImage `8c3f8a37249dad629b9b12157df303eb99ceec20b408802e26a11c0dbdc818c0`, DEB `ff7438fc1f679eb6e314466eb0044342d026b9c4de87e481a4d1bb93c1e14910`, RPM `728ed29cc37e3933d565f6c633563bbfbc43ac18467049bdf4db661c1d5d97bb`.
-- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `27900cf4898c39f53f426f74e4c5337d18a1f451e13ee83cec3a73ea2925c741`. Construido con ABI 148; smoke bajo Wine 11, no Windows nativo; instalador no ejecutado.
+- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `a354d5bc1e7d04ae32aed815ce49e2f40c9242b4e4855126583558e19a91eb3d`.
+- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `8ec178ab58fda5dd4b1ba40f22361879f74cd4c7ce674e50cfd615a201000811`.
+- Linux ARM64: AppImage `81846d4daffd1a1bd050b1e0e6a390bca45c926b4bdada4c5c3c19fc7c4c17d6`, DEB `1e4f93824c0f373223e1b4ba035ae7c0f0bd5d7f5cdeb4368698615d89d44424`, RPM `d1867a594683cc088ca49d05064de86556bd4e593618101281a8559dad67bfa0`.
+- Linux x64: AppImage `540bf3ba2afa6b8f9c85f10fbf16350d8f5feb484868ec8efa553ade930d8543`, DEB `daa010241743e41df742e64a9d2549621ac2f494cab33b3bfa721f61bbf07471`, RPM `80fa4e01ed62fbbdb6436969c56cf254937a6d211c89aa7b6de8c675e7fa5f52`.
+- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `07c05d04d8229a5e14741c85ee19a21ff6930d4aa541502ada913daa5289b0a8`. Construido con ABI 148; smoke bajo Wine 11, no Windows nativo; instalador no ejecutado.
 
 ## Límites que no deben declararse resueltos
 
 - Windows x64 no se ha ejecutado en Windows nativo en este equipo. Hay un smoke bajo Wine 11 (UI, SQLite/IPC, creación de base y registro); el workflow de CI incluye ahora un E2E sobre la app Windows empaquetada en `windows-latest`, pero no se ha lanzado en un runner desde aquí. El instalador NSIS no se ha probado. macOS x64 sí se ejecutó bajo Rosetta.
 - No se han probado APIs facturables, CUDA, SmolVLM2, un corpus de 10.000 fotografías reales ni una columna LFM3 completa de miles de celdas. EmbeddingGemma 2 sí se probó en Metal/MPS con texto e imagen; LFM3 sigue en CPU.
-- HEIC conserva ahora el EXIF del contenedor; el editor de texto enriquecido no es WYSIWYG; Notion no reconstruye un árbol de bloques ni bases embebidas.
+- HEIC conserva ahora el EXIF del contenedor mediante ExifReader; el editor de texto enriquecido no es WYSIWYG; Notion no reconstruye un árbol de bloques ni bases embebidas.
 - Python, pesos y runtimes nativos son externos; los instaladores no están firmados ni notarizados.
 - E2E Linux se ejecutó en Docker/QEMU con Xvfb, no en hardware Linux nativo.
 - El icono dinámico se limita al Dock de macOS; Windows/Linux usan el icono empaquetado.
