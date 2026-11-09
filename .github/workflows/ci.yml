@@ -45,6 +45,11 @@ jobs:
       - if: runner.os == 'Linux'
         run: xvfb-run -a env IMAGO_E2E_NO_SANDBOX=1 npm run test:e2e
       - run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --config build/electron-builder.cjs --publish never
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:IMAGO_E2E_EXECUTABLE = (Resolve-Path 'release/win-unpacked/Nodus Imago.exe').Path
+          npm run test:e2e
       - uses: actions/upload-artifact@v4
         with:
           name: nodus-imago-${{ matrix.target }}-${{ matrix.arch }}
