@@ -26,7 +26,7 @@ npm start
 
 - Crear, renombrar y eliminar varias bases de datos; añadir propiedades personalizadas.
 - Importar CSV/TSV con previsualización, detección de tipos y corrección del esquema. Los valores incompatibles detienen la importación en lugar de perderse silenciosamente.
-- Editar texto, números, fechas, casillas, selección, selección múltiple, estados, ubicación y relaciones. Las opciones tienen identificadores estables, colores y orden; no se pueden eliminar opciones que aún estén en uso.
+- Editar texto, números, fechas, casillas, selección, selección múltiple, estados, ubicación y relaciones. Las celdas de texto enriquecido incluyen barra Markdown (negrita, cursiva, título, lista, enlace, código) y vista previa segura. Las opciones tienen identificadores estables, colores y orden; no se pueden eliminar opciones que aún estén en uso.
 - Reutilizar fórmulas de Nodus; el editor permite operaciones aritméticas, estadísticas de columna y expresiones seguras, y conserva como solo lectura las recetas importadas que aún no edita.
 - Importar carpetas o archivos de imágenes, también mediante arrastrar y soltar sobre una base abierta. Copiar los originales al almacenamiento gestionado o vincular sus ubicaciones. Crear miniaturas y vistas previas, extraer EXIF y detectar duplicados con SHA-256.
 - Asociar imágenes a filas mediante la columna elegida, nombres, códigos de catálogo o patrones lineales. Las referencias duplicadas se marcan como ambiguas. Las coincidencias parciales requieren revisión.

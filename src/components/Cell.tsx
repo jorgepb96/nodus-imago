@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   decodeMultiSelect,
   encodeMultiSelect,
@@ -11,6 +11,7 @@ import {
 } from "../../shared/databaseProperties";
 import type { DatabaseColumn } from "../../shared/databases";
 import { useT } from "../i18n";
+import { MarkdownView } from "./MarkdownView";
 export function Cell({
   column,
   value,
@@ -27,8 +28,10 @@ export function Cell({
         ? (decodeDatabaseLocation(value)?.name ?? value ?? "")
         : (value ?? ""),
     ),
-    [busy, setBusy] = useState(false);
-  const t = useT();
+    [busy, setBusy] = useState(false),
+    [preview, setPreview] = useState(false);
+  const t = useT(),
+    textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(
     () =>
       setDraft(
@@ -178,9 +181,46 @@ export function Cell({
         (e.target as HTMLInputElement).blur();
     },
   };
-  return !compact && ["text", "rich_text", "ai"].includes(column.type) ? (
-    <textarea {...props} rows={3} />
-  ) : (
+  if (!compact && ["text", "rich_text", "ai"].includes(column.type)) {
+    const wrap = (before: string, after = before) => {
+      const element = textareaRef.current;
+      const start = element?.selectionStart ?? draft.length,
+        end = element?.selectionEnd ?? draft.length,
+        selected = draft.slice(start, end) || t("texto");
+      setDraft(draft.slice(0, start) + before + selected + after + draft.slice(end));
+      requestAnimationFrame(() => {
+        element?.focus();
+        element?.setSelectionRange(start + before.length, start + before.length + selected.length);
+      });
+    };
+    const prefixLine = (prefix: string) => {
+      const element = textareaRef.current,
+        start = element?.selectionStart ?? draft.length,
+        lineStart = draft.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+      setDraft(draft.slice(0, lineStart) + prefix + draft.slice(lineStart));
+      requestAnimationFrame(() => {
+        element?.focus();
+        element?.setSelectionRange(start + prefix.length, start + prefix.length);
+      });
+    };
+    return (
+      <div className="markdown-cell">
+        {column.type === "rich_text" && (
+          <div className="markdown-toolbar" role="toolbar" aria-label={t("Formato")}>
+            <button type="button" aria-label={t("Negrita")} title={t("Negrita")} onMouseDown={(event) => { event.preventDefault(); wrap("**"); }}><b>B</b></button>
+            <button type="button" aria-label={t("Cursiva")} title={t("Cursiva")} onMouseDown={(event) => { event.preventDefault(); wrap("*"); }}><i>I</i></button>
+            <button type="button" aria-label={t("Título")} title={t("Título")} onMouseDown={(event) => { event.preventDefault(); prefixLine("## "); }}>H</button>
+            <button type="button" aria-label={t("Lista")} title={t("Lista")} onMouseDown={(event) => { event.preventDefault(); prefixLine("- "); }}>•</button>
+            <button type="button" aria-label={t("Enlace")} title={t("Enlace")} onMouseDown={(event) => { event.preventDefault(); wrap("[", "](https://)"); }}>↗</button>
+            <button type="button" aria-label={t("Código")} title={t("Código")} onMouseDown={(event) => { event.preventDefault(); wrap("`"); }}>&lt;/&gt;</button>
+            <button type="button" aria-label={preview ? t("Editar") : t("Vista previa")} title={preview ? t("Editar") : t("Vista previa")} onClick={() => setPreview(!preview)}>{preview ? t("Editar") : t("Vista previa")}</button>
+          </div>
+        )}
+        {preview ? <MarkdownView text={draft} /> : <textarea {...props} ref={textareaRef} rows={3} />}
+      </div>
+    );
+  }
+  return (
     <input
       {...props}
       type={

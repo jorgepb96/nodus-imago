@@ -2874,3 +2874,65 @@ thead th:last-child {
   background: #ce4c4c10;
   border-color: #ce4c4c40;
 }
+
+/* Rich-text Markdown cell */
+.markdown-cell {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+.markdown-toolbar button {
+  min-width: 25px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.markdown-toolbar button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.markdown-view {
+  min-height: 62px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.markdown-view p,
+.markdown-view h3,
+.markdown-view h4,
+.markdown-view h5 {
+  margin: 0 0 4px;
+}
+.markdown-view h3 { font-size: 16px; }
+.markdown-view h4 { font-size: 14px; }
+.markdown-view h5 { font-size: 13px; }
+.markdown-view ul {
+  margin: 0 0 4px 18px;
+  padding: 0;
+}
+.markdown-view a { color: var(--accent-ink); text-decoration: underline; }
+.markdown-view code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+.markdown-gap { height: 5px; }

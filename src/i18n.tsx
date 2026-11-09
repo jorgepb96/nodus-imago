@@ -385,6 +385,14 @@ const en: Record<string, string> = {
   "Imagen principal del registro": "Record primary image",
   "Predeterminado de Ajustes": "Settings default",
   "Metadatos · EXIF": "Metadata · EXIF",
+  texto: "text",
+  Formato: "Format",
+  Negrita: "Bold",
+  Cursiva: "Italic",
+  Lista: "List",
+  Enlace: "Link",
+  Código: "Code",
+  Editar: "Edit",
 };
 export function useT() {
   const language = useContext(LanguageContext);

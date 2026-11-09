@@ -62,6 +62,10 @@ try {
     .waitFor();
   await page
     .locator(".preview-table select")
+    .nth(1)
+    .selectOption("rich_text");
+  await page
+    .locator(".preview-table select")
     .nth(2)
     .selectOption("multi_select");
   await page.getByRole("button", { name: "Importar 4 registros" }).click();
@@ -166,6 +170,14 @@ try {
       .innerText()
       .then((t) => t.includes("IMG001")),
   );
+  const markdownToolbar = page
+    .locator(".record-panel .markdown-toolbar")
+    .first();
+  await markdownToolbar.waitFor();
+  await markdownToolbar
+    .getByRole("button", { name: "Vista previa", exact: true })
+    .click();
+  await page.locator(".record-panel .markdown-view").waitFor();
   await page.screenshot({ path: "test-results/04-record.png" });
   await page
     .locator(".record-panel")
