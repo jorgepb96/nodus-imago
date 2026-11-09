@@ -16,11 +16,11 @@ export const IMAGE_EXTENSIONS = [
   "tif",
   "tiff",
   "bmp",
+  "heic",
+  "heif",
 ];
-// HEIC/HEIF are deliberately not listed. The libheif bundled with sharp 0.35.5
-// reads the container but has no HEVC decoder (libde265), so a real HEIC file
-// fails when generating a thumbnail. Offering it would promise an import that
-// cannot complete. See docs/STATUS.md for the measured limitation.
+// sharp's bundled libheif has no HEVC decoder. HEIC/HEIF are decoded by the
+// small libheif WASM bundle in imagePipeline, then fed to sharp as raw RGBA.
 export const isImage = (p: string) =>
   IMAGE_EXTENSIONS.includes(path.extname(p).slice(1).toLowerCase());
 export async function hashFile(file: string) {
@@ -333,6 +333,14 @@ export async function imagePipeline(file: string): Promise<Sharp> {
       rgba[i + 3] = 255;
     }
     return sharp(rgba, {
+      raw: { width: data.width, height: data.height, channels: 4 },
+      limitInputPixels: 100_000_000,
+    });
+  }
+  if ([".heic", ".heif"].includes(path.extname(file).toLowerCase())) {
+    const { default: decode } = await import("heic-decode");
+    const data = await decode({ buffer: await fsp.readFile(file) });
+    return sharp(Buffer.from(data.data), {
       raw: { width: data.width, height: data.height, channels: 4 },
       limitInputPixels: 100_000_000,
     });

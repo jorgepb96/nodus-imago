@@ -26,7 +26,7 @@ La colección se guarda en `userData/collection/` de una aplicación con identif
 
 Se reutiliza la representación de Nodus: texto canónico por celda, IDs para selecciones y JSON de IDs para multi-select. Se mantienen columnas tipadas auxiliares para filtros numéricos y temporales. SQLite usa WAL, claves foráneas y transacciones. Se rechaza una versión de esquema desconocida en vez de migrarla implícitamente.
 
-Los adjuntos genéricos de Nodus se conservan aunque no sea posible generar miniatura. La gestión visual se centra en imágenes. JPEG, PNG, WebP, TIFF y BMP tienen decodificación verificada; HEIC/HEIF no se ofrece porque el libheif de sharp 0.35.5 no incluye el decodificador HEVC necesario para la miniatura. El JSON/CSV/XLSX tabular utiliza el comportamiento de Nodus; la copia nativa es la vía que conserva IDs, estructura y originales.
+Los adjuntos genéricos de Nodus se conservan aunque no sea posible generar miniatura. La gestión visual se centra en imágenes. JPEG, PNG, WebP, TIFF y BMP tienen decodificación verificada; HEIC/HEIF pasan por el WASM de `heic-decode`/`libheif-js` y se convierten a RGBA para sharp. El JSON/CSV/XLSX tabular utiliza el comportamiento de Nodus; la copia nativa es la vía que conserva IDs, estructura y originales.
 
 ## Importación y asociación
 

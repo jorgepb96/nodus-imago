@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-e2e-"));
 await fs.mkdir("test-results", { recursive: true });
 const csv = path.join(root, "Archivo.csv"),
-  out = path.resolve("test-results/e2e-export.csv");
+  out = path.resolve("test-results/e2e-export.csv"),
+  heic = path.resolve("tests/fixtures/synthetic.heic");
 await fs.writeFile(
   csv,
   'ID,Descripción,Categorías,Año\nIMG001,Patio de una vivienda rural,"Paisaje, Patrimonio",1945\nIMG002,Retrato de familia,"Retratos, Costumbres",1950\nIMG003,Arquitectura tradicional,"Paisaje, Patrimonio",1960\nIMG004,Escena cotidiana,"Retratos, Costumbres",1955',
@@ -195,6 +196,42 @@ try {
     await fs.readFile(out, "utf8"),
     /Vivienda rural junto al camino/,
   );
+  // Import a real HEIC through the packaged app: this exercises the WASM
+  // libheif path in the production bundle, not only the source unit test.
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [file],
+    });
+  }, heic);
+  await page.locator(".toolbar-actions .actions-menu summary").click();
+  await page
+    .getByRole("button", { name: "Importar imágenes", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Importar imágenes", exact: true })
+    .waitFor();
+  await page
+    .locator("label")
+    .filter({ hasText: "Columna de destino" })
+    .locator("select")
+    .selectOption({ label: "Archivo adjunto" });
+  await page
+    .getByLabel("Crear registros sin correspondencia", { exact: true })
+    .check();
+  await page
+    .getByRole("button", { name: "Confirmar importación", exact: true })
+    .click();
+  await page.getByRole("heading", { name: "Tareas", exact: true }).waitFor();
+  await page.locator(".job .badge.completed").waitFor({ timeout: 30000 });
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cerrar", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Galería", exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll(".gallery-card img").length === 5,
+  );
   await page
     .locator(".sidebar-bottom")
     .getByRole("button", { name: "Ajustes", exact: true })
@@ -237,7 +274,7 @@ try {
       .first()
       .locator("span")
       .innerText(),
-    "1",
+    "2",
   );
   await page.screenshot({ path: "test-results/07-queues.png" });
   await page
@@ -295,7 +332,7 @@ try {
   assert.ok(savedEquivalences[0].columnIds.length >= 2);
   assert.deepEqual(errors, []);
   console.log(
-    "E2E passed: native desktop, CSV mapping, target attachment, formula editor, image association, gallery/table editing, search, record, export, field equivalences, theme, restart persistence.",
+    "E2E passed: native desktop, CSV mapping, target attachment, formula editor, HEIC import, image association, gallery/table editing, search, record, export, field equivalences, theme, restart persistence.",
   );
 } catch (error) {
   if (app) {

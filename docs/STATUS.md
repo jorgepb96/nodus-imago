@@ -16,12 +16,13 @@ Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la pr
 | --- | --- | --- |
 | `npm run typecheck` | pasa | TypeScript estricto sin errores |
 | `npm run lint` | pasa | ESLint 9, sin errores ni avisos |
-| `npm test` | **53/53** | Electron real, `test-results/unit/` |
-| `npm run test:e2e` | pasa | CSV, columna de destino, fórmula, imágenes, tabla/galería, búsqueda, ficha, exportación, equivalencias, tema y reinicio; capturas `test-results/01..09` |
+| `npm test` | **54/54** | Electron real, `test-results/unit/` |
+| `npm run test:e2e` | pasa | CSV, columna de destino, fórmula, HEIC/HEIF, imágenes, tabla/galería, búsqueda, ficha, exportación, equivalencias, tema y reinicio; capturas `test-results/01..09` |
 | E2E sobre app empaquetada macOS ARM64 | pasa | `IMAGO_E2E_EXECUTABLE` sobre `release/mac-arm64/Nodus Imago.app` |
 | E2E desde el DMG montado | pasa | `release/Nodus-Imago-0.1.0-arm64.dmg` montado en solo lectura |
 | DMG/ZIP macOS Intel (x64) | construidos | `release/Nodus-Imago-0.1.0-x64.dmg` y `.zip`; no ejecutados (sin Rosetta en este equipo) |
 | `node scripts/validate-models.mjs` | **pasa** | [real-models-macos-arm64.json](benchmarks/real-models-macos-arm64.json) |
+| HEIC/HEIF | decodificación WASM y miniatura | fixture sintético 96×64; foto real 5712×4284 |
 | EmbeddingGemma 2 real | 512 dims, CPU FP32, 3 imágenes indexadas, texto/imagen/híbrida | `semanticIndexed: 3`, consultas con el resultado esperado |
 | LFM3-VL-2B real | descripción, clasificación y dos celdas en un mismo pool | propuestas con modelo/revisión/instrucciones; JSON válido y sin razonamiento en el valor |
 | Concurrencia real | 2 trabajos iniciados; pausa de uno; el otro termina; reanudación; dos sesiones de chat LFM3 reutilizadas | `results.concurrency`, `results.multiCell` |
@@ -73,7 +74,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 
 ## Límites explícitos
 
-- **HEIC/HEIF no se admite.** El `libheif` de sharp 0.35.5 abre el contenedor, pero no incluye el decodificador HEVC (`libde265`). Un HEIC real generado con macOS 768×768 falló al generar la miniatura con `Support for this compression format has not been built in: HEVC`. Se retiró de las extensiones aceptadas para no prometer una importación que no puede completarse. JPEG/PNG/WebP/TIFF/BMP sí tienen ruta real.
+- HEIC/HEIF se admite con `heic-decode`/`libheif-js` (WASM) antes de sharp, porque el `libheif` nativo de sharp 0.35.5 no incluye el decodificador HEVC. El WASM añade ~9 MB al paquete y decodifica en CPU; no se ha medido una carpeta completa de HEIC. JPEG/PNG/WebP/TIFF/BMP conservan su ruta nativa.
 - La importación Notion incorpora las páginas Markdown como texto plano con sus imágenes, pero no reconstruye bloques, jerarquía, bases embebidas ni formato enriquecido. Los CSV no contienen IDs de opciones, fórmulas ni relaciones tipadas.
 - Rollups, comparaciones, botones y automatizaciones avanzadas de Nodus se conservan como configuración/datos cuando se importan, pero no se ofrecen como servicios equivalentes activos. Las relaciones externas de otros vaults no se resuelven.
 - El editor de fórmulas permite aritmética, estadísticas de columna y expresiones seguras. Las recetas importadas de condicionales, concatenaciones y otras variantes se conservan sin edición visual; no se ha replicado todo el editor de Nodus.

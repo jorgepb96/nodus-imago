@@ -7,7 +7,13 @@ import sharp from "sharp";
 import AdmZip from "adm-zip";
 import Database from "better-sqlite3";
 import { Repository } from "../electron/db/repository";
-import { Images, hashFile } from "../electron/import/images";
+import {
+  Images,
+  IMAGE_EXTENSIONS,
+  hashFile,
+  imagePipeline,
+  isImage,
+} from "../electron/import/images";
 import { writeBackup, restoreBackup } from "../electron/export/backup";
 import { Archive } from "../electron/import/archive";
 import { importNodus } from "../electron/import/nodus";
@@ -402,6 +408,40 @@ test("Notion ZIP imports Markdown pages as a text database and extracts page ima
     assert.match(String(f.repo.getRow(rows.rows[0].id).cells[contentColumn.id]), /# Página/);
     assert.equal(f.repo.getRow(rows.rows[0].id).images.length, 1);
     assert.ok(result.notices.some((notice) => notice.includes("páginas Markdown")));
+  } finally {
+    await f.close();
+  }
+});
+
+test("HEIC/HEIF images decode through the WASM libheif path and import with a thumbnail", async () => {
+  const f = await fixture();
+  try {
+    const heic = path.resolve("tests/fixtures/synthetic.heic");
+    assert.ok(isImage(heic));
+    assert.ok(IMAGE_EXTENSIONS.includes("heic"));
+    const pipeline = await imagePipeline(heic),
+      meta = await pipeline.metadata();
+    assert.equal(meta.width, 96);
+    assert.equal(meta.height, 64);
+    const d = f.repo.create("HEIC"),
+      column = d.columns.find((c) => c.type === "attachment")!,
+      row = f.repo.createRow(d.database.id),
+      images = new Images(f.repo);
+    await images.importOne(
+      {
+        databaseId: d.database.id,
+        columnId: column.id,
+        storage: "copy",
+        createUnmatched: false,
+        files: [{ path: heic, rowId: row.id }],
+      },
+      0,
+    );
+    const stored = f.repo.getRow(row.id).images;
+    assert.equal(stored.length, 1);
+    assert.match(f.repo.assetPath(stored[0].id), /\.heic$/);
+    assert.ok(await fs.stat(f.repo.assetPath(stored[0].id, true)));
+    assert.equal(f.repo.stats().images, 1);
   } finally {
     await f.close();
   }

@@ -602,6 +602,18 @@
     ]
   },
   {
+    "name": "heic-decode",
+    "version": "2.1.0",
+    "license": "ISC",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/catdad-experiments/heic-decode.git"
+    },
+    "licenseFiles": [
+      "README.md"
+    ]
+  },
+  {
     "name": "ieee754",
     "version": "1.2.1",
     "license": "BSD-3-Clause",
@@ -671,6 +683,18 @@
     "repository": {
       "type": "git",
       "url": "https://github.com/jpommerening/node-lazystream.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "libheif-js",
+    "version": "1.23.5",
+    "license": "LGPL-3.0",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/catdad-experiments/libheif-js.git"
     },
     "licenseFiles": [
       "LICENSE"
