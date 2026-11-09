@@ -41,11 +41,11 @@ No he encontrado comentarios de Codex accesibles en el repositorio, refs, PRs/Is
 
 Todos sin firma ni notarización.
 
-- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `e05c106afb72ff0f8dcc83eddf27542160a338902d77e16cead3cdd098c4492f`.
-- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `406971bee57c5dd1508537cc44680a75e9850e7300ebaa78c6048404ec716f58`.
-- Linux ARM64: AppImage `a271ac3232cc0dc6859968ccee4b6d4fc0932492961f85d434e0260d464b7b31`, DEB `9da500ea8b43c1810c76006d3e59c3e49b1866415bd16458ea1f9f4165c1d642`, RPM `ebb3a147383fab923788ab9b8cce5e945ed19a8ee2fb4b1d040f362e36ab0f57`.
-- Linux x64: AppImage `99a37a16663d3df2a2be01395d90b3fc0aa40e34d9a495dc08ed9db1137af84a`, DEB `8ecfcc21876703c0a549a0b8ff169b91080933ff8e611f42f68ff7770d3899b1`, RPM `b440f80f2f6ef5d468788a092fc6238647c11bfeac13d0352e4f9f1e5062a032`.
-- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `f5baa0fc905499326090ec6fe26d93598cdd1bcbff393a64b2526e172089dc04`. Construido con ABI 148; no ejecutado.
+- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `674f55a650f4b517d23f51122775cb582db1414b519ee707854cec2e86785b53`.
+- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `9931174b3e1172296153829f9f9b89f8544b25ec77a6d00db43b00d9b2d8e4c9`.
+- Linux ARM64: AppImage `c1d2f082a5877bf17ee834e5b4941ffa48001d0d278520ddd6e18f785196e908`, DEB `e083c9169e827f4efba5580d08a005920bc4f5ba42f1cb19c3b46c16482cbfdb`, RPM `39e8dab18d5ca1053948e37981c059ea3de77b10fd0197b929a2bb20537001b3`.
+- Linux x64: AppImage `8c3f8a37249dad629b9b12157df303eb99ceec20b408802e26a11c0dbdc818c0`, DEB `ff7438fc1f679eb6e314466eb0044342d026b9c4de87e481a4d1bb93c1e14910`, RPM `728ed29cc37e3933d565f6c633563bbfbc43ac18467049bdf4db661c1d5d97bb`.
+- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `27900cf4898c39f53f426f74e4c5337d18a1f451e13ee83cec3a73ea2925c741`. Construido con ABI 148; no ejecutado.
 
 ## Límites que no deben declararse resueltos
 
