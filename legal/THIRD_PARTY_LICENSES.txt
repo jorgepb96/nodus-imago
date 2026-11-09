@@ -2352,7 +2352,7 @@ THE SOFTWARE.
 
 
 ========================================================================
-better-sqlite3 12.11.1 — "MIT"
+better-sqlite3 12.12.0 — "MIT"
 {"type":"git","url":"git://github.com/WiseLibs/better-sqlite3.git"}
 
 --- LICENSE ---
