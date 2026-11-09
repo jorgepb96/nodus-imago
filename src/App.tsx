@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Aperture,
   Database,
   Search,
   Settings as SettingsIcon,
@@ -453,7 +452,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   if (!api)
     return (
       <div className="desktop-required">
-        <Aperture size={38} />
+        <ImagoMark size={56} />
         <h1>Nodus Imago</h1>
         <p>
           Abre la aplicación de escritorio para acceder a tu colección local.
@@ -764,7 +763,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         <div />
                         <div />
                         <div>
-                          <Aperture size={42} strokeWidth={1} />
+                          <ImagoMark size={48} />
                         </div>
                       </div>
                       <span className="eyebrow">{t("Iniciar colección")}</span>

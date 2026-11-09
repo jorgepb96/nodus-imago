@@ -1,7 +1,7 @@
 import {
   Database,
-  Image,
   ScanSearch,
+  Image as ImageIcon,
   Layers3,
   ArrowRight,
   Plus,
@@ -14,6 +14,7 @@ import type { Status, Job } from "../../shared/imago";
 import type { DatabaseSummary } from "../../shared/databases";
 import { Button } from "./ui";
 import { useT } from "../i18n";
+import { ImagoMark } from "./ImagoMark";
 export function Home({
   status,
   databases,
@@ -45,7 +46,7 @@ export function Home({
     <div className="nodus-home">
       <section className="home-hero">
         <div className="home-hero-icon">
-          <Image size={29} />
+          <ImagoMark size={29} />
         </div>
         <div>
           <div className="home-kicker">
@@ -128,7 +129,7 @@ export function Home({
             }
           >
             <span>
-              <Image size={14} />
+              <ImageIcon size={14} />
               {t("Imágenes")}
             </span>
             <b>{images.toLocaleString()}</b>
