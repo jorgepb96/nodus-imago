@@ -50,7 +50,7 @@ Todos sin firma ni notarización.
 ## Límites que no deben declararse resueltos
 
 - Windows x64 no se ha ejecutado; solo está construido. macOS x64 sí se ejecutó bajo Rosetta.
-- No se han probado APIs facturables, Metal/CUDA, SmolVLM2, un corpus de 10.000 fotografías reales ni una columna LFM3 completa de miles de celdas.
+- No se han probado APIs facturables, CUDA, SmolVLM2, un corpus de 10.000 fotografías reales ni una columna LFM3 completa de miles de celdas. EmbeddingGemma 2 sí se probó en Metal/MPS con texto e imagen; LFM3 sigue en CPU.
 - HEIC no conserva EXIF; el editor de texto enriquecido no es WYSIWYG; Notion no reconstruye un árbol de bloques ni bases embebidas.
 - Python, pesos y runtimes nativos son externos; los instaladores no están firmados ni notarizados.
 - E2E Linux se ejecutó en Docker/QEMU con Xvfb, no en hardware Linux nativo.
