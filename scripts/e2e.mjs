@@ -362,9 +362,69 @@ try {
   );
   assert.equal(savedEquivalences.length, 1);
   assert.ok(savedEquivalences[0].columnIds.length >= 2);
+  const hierarchyIds = await reopened.evaluate(async () => {
+    const detail = await window.imago.call("createDatabase", {
+        name: "Jerarquía",
+      }),
+      title = detail.columns.find((column) => column.type === "title"),
+      parent = await window.imago.call("createRow", {
+        databaseId: detail.database.id,
+      }),
+      child = await window.imago.call("createRow", {
+        databaseId: detail.database.id,
+      });
+    await window.imago.call("setCell", {
+      rowId: parent.id,
+      columnId: title.id,
+      value: "Padre",
+    });
+    await window.imago.call("setCell", {
+      rowId: child.id,
+      columnId: title.id,
+      value: "Hijo",
+    });
+    const relation = await window.imago.call("addColumn", {
+      databaseId: detail.database.id,
+      name: "Padre",
+      type: "relation",
+      config: {
+        relationTargetKind: "db_row",
+        relationTargetDatabaseId: detail.database.id,
+        relationCardinality: "one",
+      },
+    });
+    await window.imago.call("setCell", {
+      rowId: child.id,
+      columnId: relation.id,
+      value: JSON.stringify([parent.id]),
+    });
+    return { parent: parent.id, child: child.id };
+  });
+  assert.ok(hierarchyIds.parent);
+  await reopened.reload();
+  await reopened
+    .getByRole("heading", { name: "Tu espacio de investigación visual", exact: true })
+    .waitFor();
+  await reopened
+    .locator(".sidebar nav button")
+    .filter({ hasText: "Bases de datos" })
+    .click();
+  await reopened.locator(".collection-home").waitFor();
+  await reopened
+    .locator(".database-cards button")
+    .filter({ hasText: "Jerarquía" })
+    .click();
+  await reopened.getByRole("heading", { name: "Jerarquía", exact: true }).waitFor();
+  await reopened.getByRole("button", { name: "Árbol", exact: true }).click();
+  await reopened.locator(".hierarchy-row").first().waitFor();
+  assert.deepEqual(
+    await reopened.locator(".hierarchy-row").allInnerTexts(),
+    ["Padre", "Hijo"],
+  );
+  await reopened.screenshot({ path: "test-results/09-tree.png" });
   assert.deepEqual(errors, []);
   console.log(
-    "E2E passed: native desktop, CSV mapping, target attachment, formula editor, HEIC import, image association, gallery/table editing, search, record, export, field equivalences, theme, restart persistence.",
+    "E2E passed: native desktop, CSV mapping, target attachment, formula editor, HEIC import, image association, gallery/table editing, search, record, export, field equivalences, theme, restart persistence, hierarchy tree.",
   );
 } catch (error) {
   if (app) {
