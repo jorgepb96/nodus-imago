@@ -256,6 +256,9 @@ const en: Record<string, string> = {
   "Añade tus modelos a los proveedores de abajo.":
     "Add your models to the providers below.",
   "Permitir APIs remotas": "Allow remote APIs",
+  "Intervalo API": "API interval",
+  "Buscar en ajustes": "Search settings",
+  "/ruta/al/entorno/bin/python": "/path/to/environment/bin/python",
   "Solo se envían imágenes y contexto cuando encolas una tarea con un modelo de API. No se usan para indexar ni buscar.":
     "Images and context are only sent when you queue a job with an API model. They are not used for indexing or search.",
   "Claves cifradas con el almacén del sistema":
@@ -396,6 +399,11 @@ const en: Record<string, string> = {
   Árbol: "Tree",
   "Jerarquía según la relación de la base.": "Hierarchy from the database relation.",
   "Sin relaciones todavía.": "No relationships yet.",
+  "Peso semántico": "Semantic weight",
+  "Archivo fotográfico": "Photo archive",
+  "Indica qué observar o cómo clasificar estas imágenes…":
+    "Indicate what to observe or how to classify these images…",
+  "Mostrando solo la página actual.": "Showing only the current page.",
 };
 export function useT() {
   const language = useContext(LanguageContext);

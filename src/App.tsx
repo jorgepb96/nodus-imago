@@ -456,12 +456,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         column.type === "relation" &&
         column.config.relationTargetDatabaseId === detail.database.id,
     ),
+    effectiveView =
+      view === "tree" && (!hierarchyColumn || area !== "databases")
+        ? "table"
+        : view,
     hierarchy = useMemo(
       () =>
-        hierarchyColumn && view === "tree"
+        hierarchyColumn && effectiveView === "tree"
           ? buildHierarchy(page.rows, hierarchyColumn.id)
           : [],
-      [hierarchyColumn, page.rows, view],
+      [hierarchyColumn, page.rows, effectiveView],
     );
   if (!api)
     return (
@@ -614,7 +618,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         <aside className="sidebar">
           <nav>
             <button
-              title="Inicio"
+              title={t("Inicio")}
               className={area === "home" ? "active" : ""}
               onClick={() => setArea("home")}
             >
@@ -622,7 +626,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <span className="nav-title">{t("Inicio")}</span>
             </button>
             <button
-              title="Bases de datos"
+              title={t("Bases de datos")}
               className={area === "databases" ? "active" : ""}
               onClick={() => {
                 setArea("databases");
@@ -639,7 +643,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             </button>
             <div className="nav-group-label">{t("EXPLORAR")}</div>
             <button
-              title="Búsqueda"
+              title={t("Búsqueda")}
               className={area === "search" ? "active" : ""}
               onClick={() => {
                 setArea("search");
@@ -681,7 +685,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           </div>
           <div className="sidebar-bottom">
             <button
-              title="Ajustes"
+              title={t("Ajustes")}
               className={area === "settings" ? "active" : ""}
               onClick={() => {
                 setSettingsTab("api");
@@ -1020,7 +1024,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           <label className="hybrid-weight">
                             Literal{" "}
                             <input
-                              aria-label="Peso semántico"
+                              aria-label={t("Peso semántico")}
                               type="range"
                               min="0"
                               max="1"
@@ -1134,14 +1138,14 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   <div className="data-toolbar">
                     <div className="view-tabs">
                       <button
-                        className={view === "gallery" ? "active" : ""}
+                        className={effectiveView === "gallery" ? "active" : ""}
                         onClick={() => setView("gallery")}
                       >
                         <LayoutGrid size={15} />
                         {t("Galería")}
                       </button>
                       <button
-                        className={view === "table" ? "active" : ""}
+                        className={effectiveView === "table" ? "active" : ""}
                         onClick={() => setView("table")}
                       >
                         <Table2 size={15} />
@@ -1149,7 +1153,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       </button>
                       {area === "databases" && hierarchyColumn && (
                         <button
-                          className={view === "tree" ? "active" : ""}
+                          className={effectiveView === "tree" ? "active" : ""}
                           onClick={() => setView("tree")}
                         >
                           <ListTree size={15} />
@@ -1388,10 +1392,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         </Button>
                       )}
                     </Empty>
-                  ) : view === "tree" && hierarchyColumn ? (
+                  ) : effectiveView === "tree" && hierarchyColumn ? (
                     <div className="hierarchy-view">
                       <p className="muted">
-                        {t("Jerarquía según la relación de la base.")}
+                        {t("Jerarquía según la relación de la base.")}{" "}
+                        {page.total > page.rows.length &&
+                          t("Mostrando solo la página actual.")}
                       </p>
                       {hierarchy.length ? (
                         renderHierarchy(hierarchy)
@@ -1399,7 +1405,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         <p className="muted">{t("Sin relaciones todavía.")}</p>
                       )}
                     </div>
-                  ) : view === "gallery" ? (
+                  ) : effectiveView === "gallery" ? (
                     <div className="gallery">
                       {page.rows.map((row) => (
                         <article
@@ -1709,7 +1715,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   autoFocus
                   required
                   value={name}
-                  placeholder="Archivo fotográfico"
+                  placeholder={t("Archivo fotográfico")}
                   onChange={(e) => setName(e.target.value)}
                 />
               </label>

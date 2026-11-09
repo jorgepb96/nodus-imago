@@ -565,7 +565,7 @@ export function Properties({
                       rows={3}
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder="Indica qué observar o cómo clasificar estas imágenes…"
+                      placeholder={t("Indica qué observar o cómo clasificar estas imágenes…")}
                     />
                   </label>
                   <p className="hint">

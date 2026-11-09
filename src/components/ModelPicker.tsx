@@ -35,7 +35,7 @@ export function ModelPicker({
     choices = modelChoices(settings, models);
   return (
     <select
-      aria-label="Modelo"
+      aria-label={t("Modelo")}
       value={value ? encode(value) : ""}
       onChange={(e) => {
         const v = e.target.value;

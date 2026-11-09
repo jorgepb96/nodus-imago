@@ -212,7 +212,7 @@ export function Settings({
         <div className="settings-search">
           <Search size={16} />
           <input
-            aria-label="Buscar en ajustes"
+            aria-label={t("Buscar en ajustes")}
             placeholder={t("Buscar en ajustes…")}
             value={settingsSearch}
             onChange={(e) => setSettingsSearch(e.target.value)}
@@ -804,7 +804,7 @@ export function Settings({
                 <input
                   value={python}
                   onChange={(e) => setPython(e.target.value)}
-                  placeholder="/ruta/al/entorno/bin/python"
+                  placeholder={t("/ruta/al/entorno/bin/python")}
                 />
                 <Button onClick={() => update({ python })}>
                   {t("Guardar")}

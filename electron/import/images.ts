@@ -234,6 +234,7 @@ export class Images {
         preview,
       );
     let metadata: Record<string, unknown> = {};
+    const heif = [".heic", ".heif"].includes(path.extname(file.path).toLowerCase());
     try {
       metadata =
         (await exifr.parse(file.path, {
@@ -253,31 +254,30 @@ export class Images {
       /* Some formats carry no EXIF. */
     }
     // exifr does not read the HEIF item metadata. ExifReader understands the
-    // Exif item in HEIC/HEIF, so use it when the first pass produced nothing.
-    if (!Object.keys(metadata).length) {
+    // Exif item in HEIC/HEIF, so merge it even when exifr returned a partial
+    // result (for example only Orientation).
+    if (!Object.keys(metadata).length || heif) {
       try {
         const tags = await ExifReader.load(file.path);
         const description = (key: string) =>
           typeof tags[key]?.description === "string"
             ? tags[key].description
             : undefined;
-        const value = (key: string) => tags[key]?.value as unknown;
-        metadata = {
-          Make: description("Make"),
-          Model: description("Model"),
-          DateTimeOriginal: description("DateTimeOriginal"),
-          CreateDate: description("DateTime") ?? description("CreateDate"),
-          Artist: description("Artist"),
-          Copyright: description("Copyright"),
-          GPSLatitude: value("GPSLatitude"),
-          GPSLongitude: value("GPSLongitude"),
-          Orientation: value("Orientation"),
-        };
-        metadata = Object.fromEntries(
-          Object.entries(metadata).filter(
-            ([, entry]) => entry !== undefined && entry !== "",
-          ),
-        );
+        const value = (key: string) => tags[key]?.value as unknown,
+          fallback = Object.fromEntries(
+            Object.entries({
+              Make: description("Make"),
+              Model: description("Model"),
+              DateTimeOriginal: description("DateTimeOriginal"),
+              CreateDate: description("DateTime") ?? description("CreateDate"),
+              Artist: description("Artist"),
+              Copyright: description("Copyright"),
+              GPSLatitude: value("GPSLatitude"),
+              GPSLongitude: value("GPSLongitude"),
+              Orientation: value("Orientation"),
+            }).filter(([, entry]) => entry !== undefined && entry !== ""),
+          );
+        metadata = { ...fallback, ...metadata };
       } catch {
         /* Some formats carry no EXIF. */
       }

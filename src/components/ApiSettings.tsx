@@ -102,7 +102,7 @@ export function ApiSettings({
 <p className="hint">{t("Solo se envían imágenes y contexto cuando encolas una tarea con un modelo de API. No se usan para indexar ni buscar.")}</p>
         </span>
         <input
-          aria-label="Permitir APIs remotas"
+          aria-label={t("Permitir APIs remotas")}
           type="checkbox"
           checked={s.remoteEnabled}
           onChange={(e) => update({ remoteEnabled: e.target.checked })}
@@ -274,7 +274,7 @@ export function ApiSettings({
         <strong>{t("Intervalo mínimo entre solicitudes")}</strong>
         <div className="row">
           <input
-            aria-label="Intervalo API"
+            aria-label={t("Intervalo API")}
             type="number"
             min={0}
             max={60000}
