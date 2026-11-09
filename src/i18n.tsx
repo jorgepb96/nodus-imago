@@ -41,6 +41,7 @@ const en: Record<string, string> = {
   Palabras: "Words",
   "Coincidencia parcial": "Partial match",
   "Guardar búsqueda": "Save search",
+  "Investigar empieza por mirar.": "Research begins by looking.",
   "Búsquedas guardadas": "Saved searches",
   "Sin título": "Untitled",
   "Local y privado": "Local and private",
