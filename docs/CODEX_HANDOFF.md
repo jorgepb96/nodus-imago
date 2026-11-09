@@ -2,11 +2,22 @@
 
 **Repositorio:** `/Users/jorgepb96/Documents/GitHub/nodus-imago`  
 **Rama:** `codex/imago-desktop`  
-**HEAD:** rama `codex/imago-desktop`; commit base `353c43d` (`Guard complete translation coverage`) más este handoff.  
+**HEAD de referencia:** rama `codex/imago-desktop`; último commit funcional `6bce161` (`Validate SmolVLM2 500M runtime`), más los commits de documentación del handoff que vengan después.  
 **Estado de trabajo:** limpio; los instaladores viven en `release/` y están ignorados por Git.  
 **Fecha de la evidencia:** 9 de noviembre de 2026.
 
 No he encontrado comentarios de Codex accesibles en el repositorio, refs, PRs/Issues o estado local. Este documento recoge los puntos abiertos de la auditoría y el estado real; si Codex dejó comentarios en la interfaz, deben cruzarse contra esta lista.
+
+## Estado de cierre
+
+La implementación y las pruebas locales están completas para lo que puede verificarse en este equipo. La validación completa del objetivo sigue **bloqueada por el entorno**, no por una decisión de producto:
+
+- No hay un host ni runner Windows accesible desde esta sesión para ejecutar el instalador NSIS y la app en Windows nativo. Wine 11 solo permitió un smoke de la app, no del instalador.
+- No hay claves/cuentas de APIs facturables ni hardware CUDA para validar esas rutas.
+- No hay un corpus real de 10.000 fotografías ni presupuesto para ejecutar LFM3 sobre una columna completa de miles de celdas.
+- No hay credenciales de firma/notarización macOS/Windows.
+
+No se declara completado lo que depende de esas validaciones externas.
 
 ## Comprobaciones ejecutadas
 
@@ -72,7 +83,7 @@ Para Linux: ejecutar los paquetes en Docker con Xvfb y `IMAGO_E2E_NO_SANDBOX=1`;
 ## Prompt para Codex
 
 ```text
-Revisa Nodus Imago en /Users/jorgepb96/Documents/GitHub/nodus-imago, rama codex/imago-desktop, commit base 353c43d y el commit de este handoff. No crees otra copia, no cambies de rama, no ejecutes git clean/reset --hard y no borres modelos, .venv, test-results ni release.
+Revisa Nodus Imago en /Users/jorgepb96/Documents/GitHub/nodus-imago, rama codex/imago-desktop, HEAD actual; último commit funcional 6bce161. No crees otra copia, no cambies de rama, no ejecutes git clean/reset --hard y no borres modelos, .venv, test-results ni release.
 
 Lee docs/STATUS.md, docs/MODELS.md, docs/CODEX_HANDOFF.md y README.md. Contrasta la implementación real con esas afirmaciones. Revisa especialmente:
 - Pool persistente de llama-mtmd-cli: /clear, /image, prompt por stdin, JSON schema, cierre por inactividad, límites de concurrencia y parser de minimax:tool_call.
