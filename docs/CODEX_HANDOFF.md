@@ -41,11 +41,11 @@ No he encontrado comentarios de Codex accesibles en el repositorio, refs, PRs/Is
 
 Todos sin firma ni notarización.
 
-- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `c4f1b676290b8d1aaa7000616e370272a151f63df27a354a3726871cbdff9759`.
-- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `db646de6e51e9447f720c092fdd14f8ec0542c1fcb1195523b70cc0ea4765c83`.
-- Linux ARM64: AppImage `1fa09f6b3079aa899aad24f8d767a90bd4453c457a53bff70eaaf077c0107a09`, DEB `36c1fa271e31ab7d519f763a3e10c77ed451d33666febe1dab492b19488b3d53`, RPM `43dc5500f488aa14fc78497c4e6531616b4af77ac4724a415b1ea720121ddffe`.
-- Linux x64: AppImage `c97a8e737723eb0e557470c9626d8392ed516eaff1a1c3f5b7b981f7253668df`, DEB `53aff6ce62f0e08740ac91f0d8cde9fb848747e35802738288e7ffd1534bb7f1`, RPM `775eb1669c90d9b69984c4d2eac945efb0f38ef3b18da71fb766f7b8c42a7245`.
-- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `0a0aa399e50ee807c8e74366f68ecbba1040d25e01f968fbe8478a46647048f3`. Construido con ABI 148; smoke bajo Wine 11, no Windows nativo; instalador no ejecutado.
+- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `6568518089d8774d46fcbcfce24aeb584d8a6aa6b198c24b8909796f6ff34d3b`.
+- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `1933c999b46f35e0a0f79445717ec3bdb7c35a5bb45b5fe9ee467375859b8935`.
+- Linux ARM64: AppImage `3114ed3fee8ac176f12ed7367289a14d35b4cef077161601ef2f32238d5f6e59`, DEB `2c74f6aa1bd8f0142195fb6931bec58d7417e6f9a95dbbd02fe53888e1414340`, RPM `9d6705edfd312b6c3fe54a52330dfa6ea8ce0d207da9144f7ba12f289096c712`.
+- Linux x64: AppImage `41262cbc72bb1cc0fd90b0c441d3a693d47e667eb6ca9820d2af56148f9cd098`, DEB `4525413acd73b83a16c0050c8a2a9c0182f204205c3f7ad8ecdf07323c999526`, RPM `455fcb8f422b04b1ba56dd95910c987a1fcc07833e7fb05831a759025250ee0f`.
+- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `78cd388d2d10c7784cae92bc6c91d10246350c4e6f13ec9a7e315edf90b8f572`. Construido con ABI 148; smoke bajo Wine 11, no Windows nativo; instalador no ejecutado.
 
 ## Límites que no deben declararse resueltos
 
