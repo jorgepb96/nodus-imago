@@ -144,7 +144,7 @@ npm run dist:win       # NSIS, x64
 npm run dist:linux     # AppImage, DEB y RPM, arquitectura actual (ARM64 probado)
 ```
 
-Compila en el sistema destino; los módulos nativos requieren el ABI y la arquitectura correctos. La [automatización de CI](.github/workflows/ci.yml) define esa matriz, pero **una configuración de CI no equivale a una plataforma comprobada**. En este entorno se han construido y probado con E2E macOS ARM64, macOS x64, Linux ARM64 y Linux x64; Windows x64 está construido como instalador NSIS pero no ejecutado. Firma, notarización y publicación requieren las credenciales del mantenedor y no se han realizado.
+Compila en el sistema destino; los módulos nativos requieren el ABI y la arquitectura correctos. La [automatización de CI](.github/workflows/ci.yml) define esa matriz, pero **una configuración de CI no equivale a una plataforma comprobada**. En este entorno se han construido y probado con E2E macOS ARM64, macOS x64, Linux ARM64 y Linux x64; Windows x64 está construido como instalador NSIS; la app ha superado un smoke bajo Wine 11, pero no se ha ejecutado en Windows nativo ni se ha probado el instalador. Firma, notarización y publicación requieren las credenciales del mantenedor y no se han realizado.
 
 ## Documentación y licencia
 

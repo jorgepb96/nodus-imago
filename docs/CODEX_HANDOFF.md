@@ -45,11 +45,11 @@ Todos sin firma ni notarización.
 - `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `9931174b3e1172296153829f9f9b89f8544b25ec77a6d00db43b00d9b2d8e4c9`.
 - Linux ARM64: AppImage `c1d2f082a5877bf17ee834e5b4941ffa48001d0d278520ddd6e18f785196e908`, DEB `e083c9169e827f4efba5580d08a005920bc4f5ba42f1cb19c3b46c16482cbfdb`, RPM `39e8dab18d5ca1053948e37981c059ea3de77b10fd0197b929a2bb20537001b3`.
 - Linux x64: AppImage `8c3f8a37249dad629b9b12157df303eb99ceec20b408802e26a11c0dbdc818c0`, DEB `ff7438fc1f679eb6e314466eb0044342d026b9c4de87e481a4d1bb93c1e14910`, RPM `728ed29cc37e3933d565f6c633563bbfbc43ac18467049bdf4db661c1d5d97bb`.
-- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `27900cf4898c39f53f426f74e4c5337d18a1f451e13ee83cec3a73ea2925c741`. Construido con ABI 148; no ejecutado.
+- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `27900cf4898c39f53f426f74e4c5337d18a1f451e13ee83cec3a73ea2925c741`. Construido con ABI 148; smoke bajo Wine 11, no Windows nativo; instalador no ejecutado.
 
 ## Límites que no deben declararse resueltos
 
-- Windows x64 no se ha ejecutado; solo está construido. macOS x64 sí se ejecutó bajo Rosetta.
+- Windows x64 no se ha ejecutado en Windows nativo. Solo hay un smoke bajo Wine 11 (UI, SQLite/IPC, creación de base y registro) y el instalador NSIS no se ha probado. macOS x64 sí se ejecutó bajo Rosetta.
 - No se han probado APIs facturables, CUDA, SmolVLM2, un corpus de 10.000 fotografías reales ni una columna LFM3 completa de miles de celdas. EmbeddingGemma 2 sí se probó en Metal/MPS con texto e imagen; LFM3 sigue en CPU.
 - HEIC no conserva EXIF; el editor de texto enriquecido no es WYSIWYG; Notion no reconstruye un árbol de bloques ni bases embebidas.
 - Python, pesos y runtimes nativos son externos; los instaladores no están firmados ni notarizados.

@@ -23,7 +23,8 @@ Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la pr
 | E2E Linux ARM64 empaquetado | pasa | AppImage/DEB/RPM en Docker arm64 con Xvfb; incluye HEIC |
 | E2E Linux x64 empaquetado | pasa | AppImage/DEB/RPM en Docker amd64 (QEMU) con Xvfb; incluye HEIC |
 | E2E macOS Intel (x64) | pasa | app x64 bajo Rosetta, con sharp-darwin-x64 y better-sqlite3 x64 |
-| Instalador Windows x64 | construido | `release/Nodus-Imago-0.1.0-x64.exe`; NSIS, binario nativo ABI 148; no ejecutado |
+| Windows x64 bajo Wine 11 | smoke pasa | app x64 abre, crea una base y un registro vía UI/IPC; captura `test-results/windows-wine-smoke.png`; **no es Windows nativo** |
+| Instalador Windows x64 | construido | `release/Nodus-Imago-0.1.0-x64.exe`; NSIS, binario nativo ABI 148; instalador no ejecutado |
 | `node scripts/validate-models.mjs` | **pasa** | [real-models-macos-arm64.json](benchmarks/real-models-macos-arm64.json) |
 | HEIC/HEIF | decodificación WASM y miniatura | fixture sintético 96×64; foto real 5712×4284 |
 | EmbeddingGemma 2 real | 512 dims, CPU FP32, 3 imágenes indexadas, texto/imagen/híbrida | `semanticIndexed: 3`, consultas con el resultado esperado |
@@ -64,7 +65,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 
 ## Criterios del encargo original
 
-1. **Instaladores para todos los sistemas:** macOS ARM64 está construido, empaquetado y probado con E2E (incluido el DMG montado). macOS Intel x64 está construido como DMG/ZIP con dependencias x64 aisladas (`npm run dist:mac:x64`) y **probado con E2E bajo Rosetta**. Linux ARM64 y Linux x64 están construidos (AppImage, DEB y RPM) y **probados con E2E empaquetado** en Docker con Xvfb. Windows x64 está construido como NSIS con el binario nativo ABI 148, pero **no ejecutado**. La configuración y matriz de CI existen para las variantes restantes. Firma y notarización pendientes; los artefactos no están firmados ni notarizados.
+1. **Instaladores para todos los sistemas:** macOS ARM64 está construido, empaquetado y probado con E2E (incluido el DMG montado). macOS Intel x64 está construido como DMG/ZIP con dependencias x64 aisladas (`npm run dist:mac:x64`) y **probado con E2E bajo Rosetta**. Linux ARM64 y Linux x64 están construidos (AppImage, DEB y RPM) y **probados con E2E empaquetado** en Docker con Xvfb. Windows x64 está construido como NSIS con el binario nativo ABI 148 y ha superado un smoke bajo Wine 11 (UI, SQLite, IPC, creación de base/registro), pero **no se ha ejecutado en Windows nativo ni se ha probado el instalador**. La configuración y matriz de CI existen para las variantes restantes. Firma y notarización pendientes; los artefactos no están firmados ni notarizados.
 2. **Base con propiedades, multi-select y adjuntos:** probado. El editor de texto enriquecido muestra y conserva el valor textual y Markdown; no incorpora un editor WYSIWYG completo.
 3. **Imágenes y vinculación masiva:** probado con archivos y lotes pequeños, columna de destino y movimiento de todas las imágenes de un registro; el benchmark de 10.000 registros es sintético y no incluye originales fotográficos. Faltan campañas con 10.000 fotografías reales y equipos modestos.
 4. **Tabla y galería:** probadas en Electron. Paginación de 100 evita cargar la colección completa en la UI; no se afirma virtualización infinita.
