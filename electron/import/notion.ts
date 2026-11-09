@@ -128,6 +128,50 @@ export async function importNotion(
       const pageRows = repo.db
         .prepare("SELECT id FROM db_rows WHERE database_id=? ORDER BY position")
         .all(pageDb.database.id) as { id: string }[];
+      // Notion exports a page hierarchy as folders + Markdown files. Preserve
+      // that parent/child relationship as a relation column, while keeping the
+      // original folder path as a plain text column.
+      const pageByLocation = new Map<
+          string,
+          { rowId: string; title: string }
+        >(),
+        cleanFolder = (value: string) =>
+          value
+            .replace(/(?:\s+|_)[0-9a-f]{32}$/i, "")
+            .normalize("NFKC")
+            .trim(),
+        pageParents = new Map<string, string>();
+      pages.forEach((page, index) => {
+        const folder =
+            path.posix.dirname(page.entry) === "."
+              ? ""
+              : path.posix.dirname(page.entry),
+          key = `${folder}\0${page.title}`;
+        if (!pageByLocation.has(key))
+          pageByLocation.set(key, {
+            rowId: pageRows[index].id,
+            title: page.title,
+          });
+      });
+      pages.forEach((page, index) => {
+        let folder =
+          path.posix.dirname(page.entry) === "."
+            ? ""
+            : path.posix.dirname(page.entry);
+        while (folder) {
+          const name = cleanFolder(path.posix.basename(folder)),
+            parentFolder = path.posix.dirname(folder),
+            parentKey = `${parentFolder === "." ? "" : parentFolder}\0${name}`,
+            parent = pageByLocation.get(parentKey);
+          if (parent && parent.rowId !== pageRows[index].id) {
+            pageParents.set(pageRows[index].id, parent.rowId);
+            break;
+          }
+          const next = parentFolder === "." ? "" : parentFolder;
+          if (next === folder) break;
+          folder = next;
+        }
+      });
       let pageAttachments = pageDb.columns.find(
         (column) => column.type === "attachment",
       );
@@ -183,8 +227,22 @@ export async function importNotion(
           attachments++;
         }
       }
+      if (pageParents.size) {
+        const parentColumn = repo.addColumn(
+          pageDb.database.id,
+          "Página padre",
+          "relation",
+          {
+            relationTargetKind: "db_row",
+            relationTargetDatabaseId: pageDb.database.id,
+            relationCardinality: "one",
+          },
+        );
+        for (const [rowId, parentRowId] of pageParents)
+          repo.setCell(rowId, parentColumn.id, JSON.stringify([parentRowId]), false);
+      }
       notices.push(
-        `Se importaron ${markdown.length} páginas Markdown como texto plano en «${pagesName}». No se reproducen bloques, jerarquía ni formato enriquecido.`,
+        `Se importaron ${markdown.length} páginas Markdown como texto plano en «${pagesName}». La relación «Página padre» conserva la jerarquía de carpetas; no se reproducen bloques ni formato enriquecido.`,
       );
     }
     if (!databases) throw new Error("El ZIP no contiene bases de datos CSV ni páginas Markdown.");

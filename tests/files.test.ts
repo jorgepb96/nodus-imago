@@ -385,6 +385,10 @@ test("Notion ZIP imports Markdown pages as a text database and extracts page ima
   try {
     const zip = new AdmZip();
     zip.addFile(
+      "Sección 0123456789abcdef0123456789abcdef.md",
+      Buffer.from("# Sección\n\nContenido de la sección"),
+    );
+    zip.addFile(
       "Sección/Página 0123456789abcdef0123456789abcdef.md",
       Buffer.from("# Página\n\n![Foto](images/IMG001.jpg)\n\nContenido"),
     );
@@ -402,13 +406,22 @@ test("Notion ZIP imports Markdown pages as a text database and extracts page ima
         query: "",
         limit: 10,
       });
-    assert.equal(rows.total, 1);
-    assert.equal(rows.rows[0].title, "Página");
+    assert.equal(rows.total, 2);
+    const page = rows.rows.find((row) => row.title === "Página")!,
+      section = rows.rows.find((row) => row.title === "Sección")!;
+    assert.ok(page);
+    assert.ok(section);
     const contentColumn = detail.columns.find((column) => column.name === "Contenido")!;
-    assert.match(String(f.repo.getRow(rows.rows[0].id).cells[contentColumn.id]), /# Página/);
+    assert.match(String(f.repo.getRow(page.id).cells[contentColumn.id]), /# Página/);
     const folderColumn = detail.columns.find((column) => column.name === "Carpeta")!;
-    assert.equal(f.repo.getRow(rows.rows[0].id).cells[folderColumn.id], "Sección");
-    assert.equal(f.repo.getRow(rows.rows[0].id).images.length, 1);
+    assert.equal(f.repo.getRow(page.id).cells[folderColumn.id], "Sección");
+    assert.equal(f.repo.getRow(page.id).images.length, 1);
+    const parentColumn = detail.columns.find((column) => column.name === "Página padre")!;
+    assert.equal(parentColumn.type, "relation");
+    assert.equal(
+      f.repo.getRow(page.id).cells[parentColumn.id],
+      JSON.stringify([section.id]),
+    );
     assert.ok(result.notices.some((notice) => notice.includes("páginas Markdown")));
   } finally {
     await f.close();

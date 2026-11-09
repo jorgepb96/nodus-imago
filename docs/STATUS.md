@@ -48,7 +48,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 - La importación de imágenes permite elegir una propiedad de adjuntos existente; el registro puede mover todas sus imágenes de una vez y el repositorio borra o reasigna lotes de forma atómica.
 - El editor de fórmulas incorpora operaciones, estadísticas de columna y expresiones validadas; las recetas importadas que aún no se editan se conservan intactas y se muestran como solo lectura.
 - Ajustes permite crear grupos de campos equivalentes entre bases y Búsqueda puede filtrar por el grupo con semántica OR; las columnas no emparejadas conservan su comportamiento.
-- Las páginas Markdown de un ZIP de Notion se importan como texto plano, con su carpeta de origen y sus imágenes referenciadas; no se reconstruye la jerarquía de bloques ni un árbol navegable.
+- Las páginas Markdown de un ZIP de Notion se importan como texto plano, con su carpeta de origen, relación «Página padre» e imágenes referenciadas. La jerarquía de carpetas queda enlazada; no se reconstruye el árbol de bloques ni una vista de árbol dedicada.
 - El paquete macOS x64 incluía por error sharp arm64 y no abría ventana; se reconstruyó con sharp-darwin-x64 y better-sqlite3 ABI 148, y se validó con E2E bajo Rosetta y desde el DMG.
 - El icono de la app usa la N canónica de Nodus dentro de un objetivo fotográfico; hay variantes clara y oscura y el Dock de macOS se actualiza al cambiar el tema. El E2E comprueba que el PNG persistido cambia entre modos.
 
@@ -81,7 +81,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 ## Límites explícitos
 
 - HEIC/HEIF se admite con `heic-decode`/`libheif-js` (WASM) antes de sharp, porque el `libheif` nativo de sharp 0.35.5 no incluye el decodificador HEVC. El EXIF del contenedor se extrae con ExifReader (Make, Model, fechas, GPS y orientación). El WASM añade ~9 MB al paquete y decodifica en CPU; no se ha medido una carpeta completa de HEIC. JPEG/PNG/WebP/TIFF/BMP conservan su ruta nativa.
-- La importación Notion incorpora las páginas Markdown como texto plano con su carpeta de origen y sus imágenes, pero no reconstruye bloques, un árbol navegable, bases embebidas ni formato enriquecido. Los CSV no contienen IDs de opciones, fórmulas ni relaciones tipadas.
+- La importación Notion incorpora las páginas Markdown como texto plano con carpeta, imágenes y relación padre; no reconstruye bloques, una vista de árbol dedicada, bases embebidas ni formato enriquecido. Los CSV no contienen IDs de opciones, fórmulas ni relaciones tipadas.
 - Rollups, comparaciones, botones y automatizaciones avanzadas de Nodus se conservan como configuración/datos cuando se importan, pero no se ofrecen como servicios equivalentes activos. Las relaciones externas de otros vaults no se resuelven.
 - El editor de fórmulas permite aritmética, estadísticas de columna y expresiones seguras. Las recetas importadas de condicionales, concatenaciones y otras variantes se conservan sin edición visual; no se ha replicado todo el editor de Nodus.
 - Las equivalencias de campos se configuran para columnas de texto y se filtran con semántica OR; no se infieren automáticamente ni abarcan opciones tipadas de selección.

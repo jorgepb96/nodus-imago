@@ -114,7 +114,7 @@ Si falla, el diagnóstico se escribe en `test-results/real-models-failure.json`.
 
 Las relaciones hacia Zotero u otros vaults se conservan como referencias externas sin resolver. Páginas, automatizaciones y funciones ajenas a la investigación visual no se importan como servicios activos. La versión de Nodus inspeccionada y los módulos adaptados se documentan en [REUSE.md](docs/REUSE.md).
 
-Notion ZIP admite las tablas CSV, las imágenes referenciadas por rutas relativas y las páginas Markdown. Las páginas se incorporan como una base «Páginas Notion» con título, texto plano, carpeta de origen y las imágenes que referencian; se conserva la ruta de carpetas, pero no se reconstruyen bloques, un árbol navegable ni formato enriquecido. Los CSV de Notion no codifican sus IDs de opciones, fórmulas ni relaciones tipadas; no se afirma una reconstrucción sin pérdida de esos datos. Al importar imágenes se puede elegir la propiedad de adjuntos de destino.
+Notion ZIP admite las tablas CSV, las imágenes referenciadas por rutas relativas y las páginas Markdown. Las páginas se incorporan como una base «Páginas Notion» con título, texto plano, carpeta de origen, relación «Página padre» y las imágenes que referencian. La jerarquía de carpetas queda enlazada; no se reconstruyen bloques, un árbol navegable dedicado ni formato enriquecido. Los CSV de Notion no codifican sus IDs de opciones, fórmulas ni relaciones tipadas; no se afirma una reconstrucción sin pérdida de esos datos. Al importar imágenes se puede elegir la propiedad de adjuntos de destino.
 
 ## Formatos de imagen
 
