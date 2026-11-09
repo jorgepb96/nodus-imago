@@ -25,7 +25,11 @@ const env = { ...process.env, IMAGO_USER_DATA: path.join(root, "profile") };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.IMAGO_DEV_URL;
 const launchOptions = process.env.IMAGO_E2E_EXECUTABLE
-  ? { executablePath: process.env.IMAGO_E2E_EXECUTABLE, args: [], env }
+  ? {
+      executablePath: process.env.IMAGO_E2E_EXECUTABLE,
+      args: process.env.IMAGO_E2E_NO_SANDBOX ? ["--no-sandbox"] : [],
+      env,
+    }
   : { args: ["."], env };
 let app;
 const errors = [];

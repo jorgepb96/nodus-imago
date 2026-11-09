@@ -130,7 +130,7 @@ npm run test:e2e       # requiere entorno gráfico
 npm run benchmark
 ```
 
-La batería cubre celdas, CSV, selección múltiple, filtros, equivalencias de campos, FTS, persistencia, fórmulas aritméticas/estadísticas/expresiones, relaciones, asociación y movimiento masivo de imágenes, deduplicación, copias, restauración, importación Nodus/Notion —incluidas páginas Markdown—, colas, privacidad, credenciales, clasificación por columnas, extracción segura de runtimes y análisis de la salida de visión. La prueba de escritorio usa Electron real y datos de prueba aislados; también se ejecuta sobre la aplicación macOS ARM64 empaquetada y desde el DMG montado en solo lectura.
+La batería cubre celdas, CSV, selección múltiple, filtros, equivalencias de campos, FTS, persistencia, fórmulas aritméticas/estadísticas/expresiones, relaciones, asociación y movimiento masivo de imágenes, deduplicación, copias, restauración, importación Nodus/Notion —incluidas páginas Markdown—, colas, privacidad, credenciales, clasificación por columnas, extracción segura de runtimes y análisis de la salida de visión. La prueba de escritorio usa Electron real y datos de prueba aislados; también se ejecuta sobre la aplicación macOS ARM64 empaquetada, desde el DMG montado en solo lectura y sobre el paquete Linux ARM64 en Docker con Xvfb.
 
 El benchmark de [docs/benchmarks/local.json](docs/benchmarks/local.json) mide **10.000 registros sintéticos**, búsquedas y correspondencias. No representa 10.000 fotografías reales ni un benchmark de inferencia.
 
@@ -139,10 +139,10 @@ El benchmark de [docs/benchmarks/local.json](docs/benchmarks/local.json) mide **
 ```sh
 npm run dist:mac       # DMG y ZIP, ARM64 y x64
 npm run dist:win       # NSIS, x64
-npm run dist:linux     # AppImage, DEB y RPM, x64
+npm run dist:linux     # AppImage, DEB y RPM, arquitectura actual (ARM64 probado)
 ```
 
-Compila en el sistema destino; los módulos nativos requieren el ABI y la arquitectura correctos. La [automatización de CI](.github/workflows/ci.yml) define esa matriz, pero **una configuración de CI no equivale a una plataforma comprobada**. En este entorno se han construido macOS ARM64 y macOS Intel (x64); solo ARM64 se ha ejecutado y probado con E2E. Windows y Linux no se han ejecutado. Firma, notarización y publicación requieren las credenciales del mantenedor y no se han realizado.
+Compila en el sistema destino; los módulos nativos requieren el ABI y la arquitectura correctos. La [automatización de CI](.github/workflows/ci.yml) define esa matriz, pero **una configuración de CI no equivale a una plataforma comprobada**. En este entorno se han construido y probado con E2E macOS ARM64 y Linux ARM64 (AppImage/DEB/RPM); macOS Intel x64 está construido pero no ejecutado. Windows x64 y Linux x64 no se han construido. Firma, notarización y publicación requieren las credenciales del mantenedor y no se han realizado.
 
 ## Documentación y licencia
 
