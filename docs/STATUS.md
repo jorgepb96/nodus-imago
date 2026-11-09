@@ -61,7 +61,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 | 3. Búsqueda literal | FTS5, frases, fragmentos, ámbito de varias bases, filtros por esquema, equivalencias de campos, orden y búsquedas guardadas; probado |
 | 4. Motor multimodal | EmbeddingGemma 2 real, indexación incremental, búsqueda por texto/imagen, texto+imagen y RRF; **validado en macOS ARM64/CPU con tres imágenes** |
 | 5. Descripción/clasificación | LFM3 real con pool persistente y JSON schema, SmolVLM2 integrado sin pesos, APIs por contrato, propiedades con modelo/instrucciones, cola por columnas, revisión y deshacer; **validado localmente con LFM3** |
-| 6. Rendimiento/distribución | Benchmark sintético de 10.000 registros, pruebas, DMG/ZIP macOS ARM64 y x64, AppImage/DEB/RPM Linux ARM64 y x64, NSIS Windows x64. macOS ARM64, macOS x64 y Linux ARM64/x64 ejecutados; Windows construido sin ejecutar |
+| 6. Rendimiento/distribución | Benchmark sintético de 10.000 registros, pruebas, DMG/ZIP macOS ARM64 y x64, AppImage/DEB/RPM Linux ARM64 y x64, NSIS Windows x64. macOS ARM64, macOS x64 y Linux ARM64/x64 ejecutados con E2E; Windows x64 con smoke bajo Wine, sin Windows nativo |
 
 ## Criterios del encargo original
 
@@ -90,6 +90,6 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 - `sqlite-vec` y HNSW aún no tienen un benchmark comparativo; se usa un escaneo vectorial exacto en el worker como línea base.
 - Las APIs se verifican con pruebas de contrato inyectadas. No se han probado llamadas facturables ni claves reales del usuario.
 - El model manager está validado con los archivos ya descargados y verificados; no se ha medido la descarga completa sobre una conexión lenta ni la reanudación tras un corte de red real.
-- Se ha validado macOS ARM64, Linux ARM64 y Linux x64/CPU; EmbeddingGemma 2 también se probó en Metal/MPS con texto e imagen. No CUDA, hardware Intel nativo ni Windows. macOS x64 se ejecutó bajo Rosetta; el binario Windows x64 está construido pero no ejecutado. El motor llama.cpp solo se ha ejecutado en macOS ARM64. SmolVLM2 está integrado pero no se han descargado ni ejecutado sus pesos.
+- Se ha validado macOS ARM64, Linux ARM64 y Linux x64/CPU; EmbeddingGemma 2 también se probó en Metal/MPS con texto e imagen. No CUDA, hardware Intel nativo ni Windows nativo. macOS x64 se ejecutó bajo Rosetta; Windows x64 se ejecutó solo bajo Wine 11 y su instalador no se ha probado. El motor llama.cpp solo se ha ejecutado en macOS ARM64. SmolVLM2 está integrado pero no se han descargado ni ejecutado sus pesos.
 - La inferencia real se ha probado con tres imágenes de fixtures, no con un corpus fotográfico heterogéneo. No se han inventado métricas de precisión, sesgo o calidad.
 - LFM3 usa un pool persistente de `llama-mtmd-cli` en modo chat, con un máximo por perfil y cierre por inactividad. La validación mide dos celdas consecutivas en 12,0 s, pero no una columna completa de miles de celdas ni un corpus de 10.000 fotografías. El tope de 280 tokens visuales puede reducir detalles en imágenes muy densas.
