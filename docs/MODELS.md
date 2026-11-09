@@ -8,7 +8,7 @@ La [ficha oficial](https://huggingface.co/google/embeddinggemma-2) describe una 
 
 Se admiten 768, 512 y 256 dimensiones, truncando antes de normalizar. La [guía oficial multimodal](https://ai.google.dev/gemma/docs/embeddinggemma/multimodal-embeddinggemma-with-sentence-transformers) permite entradas de imagen y texto en un espacio común. Las consultas textuales reciben el prefijo de recuperación oficial; las imágenes no reciben prefijo textual. La mezcla texto+imagen de Imago promedia embeddings normalizados con igual peso; no se presenta como una inferencia intercalada nativa.
 
-El presupuesto visual se fija en 280 tokens y forma parte del contrato. No se utiliza FP16: la documentación oficial advierte que no representa correctamente las activaciones. Metal y CUDA se ofrecen como opciones experimentales, sin promesas de paridad de calidad ni rendimiento.
+El presupuesto visual se fija en 280 tokens y forma parte del contrato. No se utiliza FP16: la documentación oficial advierte que no representa correctamente las activaciones. Metal/MPS se probó con EmbeddingGemma 2 en texto e imagen (512 dimensiones, vectores finitos); no se ha medido su rendimiento ni paridad numérica frente a CPU. CUDA sigue sin ejecutarse. LFM3 continúa usando llama.cpp en CPU.
 
 ### Cambios necesarios para ejecutar
 
