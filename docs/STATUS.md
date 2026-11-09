@@ -48,6 +48,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 - El editor de fórmulas incorpora operaciones, estadísticas de columna y expresiones validadas; las recetas importadas que aún no se editan se conservan intactas y se muestran como solo lectura.
 - Ajustes permite crear grupos de campos equivalentes entre bases y Búsqueda puede filtrar por el grupo con semántica OR; las columnas no emparejadas conservan su comportamiento.
 - Las páginas Markdown de un ZIP de Notion se importan como texto plano, con su carpeta de origen y sus imágenes referenciadas; no se reconstruye la jerarquía de bloques ni un árbol navegable.
+- El paquete macOS x64 incluía por error sharp arm64 y no abría ventana; se reconstruyó con sharp-darwin-x64 y better-sqlite3 ABI 148, y se validó con E2E bajo Rosetta y desde el DMG.
 
 ## Fases
 
