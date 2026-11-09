@@ -1,6 +1,6 @@
 # Estado verificable y trabajo pendiente
 
-Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la prueba E2E y la validación con pesos reales en un Apple M2 (16 GB, macOS ARM64, CPU). El encargo completo **no se declara terminado**: hay capacidades verificadas, capacidades integradas con límites y plataformas sin ejecutar.
+Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la prueba E2E y la validación con pesos reales en un Apple M2 (16 GB, macOS ARM64, CPU), más paquetes Linux ARM64/x64 en Docker. El encargo completo **no se declara terminado**: hay capacidades verificadas, capacidades integradas con límites y plataformas sin ejecutar.
 
 ## Cambios de alcance confirmados
 
@@ -21,6 +21,7 @@ Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la pr
 | E2E sobre app empaquetada macOS ARM64 | pasa | `IMAGO_E2E_EXECUTABLE` sobre `release/mac-arm64/Nodus Imago.app` |
 | E2E desde el DMG montado | pasa | `release/Nodus-Imago-0.1.0-arm64.dmg` montado en solo lectura |
 | E2E Linux ARM64 empaquetado | pasa | AppImage/DEB/RPM en Docker arm64 con Xvfb; incluye HEIC |
+| E2E Linux x64 empaquetado | pasa | AppImage/DEB/RPM en Docker amd64 (QEMU) con Xvfb; incluye HEIC |
 | DMG/ZIP macOS Intel (x64) | construidos | `release/Nodus-Imago-0.1.0-x64.dmg` y `.zip`; no ejecutados |
 | Instalador Windows x64 | construido | `release/Nodus-Imago-0.1.0-x64.exe`; NSIS, binario nativo ABI 148; no ejecutado |
 | `node scripts/validate-models.mjs` | **pasa** | [real-models-macos-arm64.json](benchmarks/real-models-macos-arm64.json) |
@@ -57,11 +58,11 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 | 3. Búsqueda literal | FTS5, frases, fragmentos, ámbito de varias bases, filtros por esquema, equivalencias de campos, orden y búsquedas guardadas; probado |
 | 4. Motor multimodal | EmbeddingGemma 2 real, indexación incremental, búsqueda por texto/imagen, texto+imagen y RRF; **validado en macOS ARM64/CPU con tres imágenes** |
 | 5. Descripción/clasificación | LFM3 real con pool persistente y JSON schema, SmolVLM2 integrado sin pesos, APIs por contrato, propiedades con modelo/instrucciones, cola por columnas, revisión y deshacer; **validado localmente con LFM3** |
-| 6. Rendimiento/distribución | Benchmark sintético de 10.000 registros, pruebas, DMG/ZIP macOS ARM64 y x64, AppImage/DEB/RPM Linux ARM64, NSIS Windows x64. macOS ARM64 y Linux ARM64 ejecutados; macOS x64 y Windows construidos sin ejecutar |
+| 6. Rendimiento/distribución | Benchmark sintético de 10.000 registros, pruebas, DMG/ZIP macOS ARM64 y x64, AppImage/DEB/RPM Linux ARM64 y x64, NSIS Windows x64. macOS ARM64 y Linux ARM64/x64 ejecutados; macOS x64 y Windows construidos sin ejecutar |
 
 ## Criterios del encargo original
 
-1. **Instaladores para todos los sistemas:** macOS ARM64 está construido, empaquetado y probado con E2E (incluido el DMG montado). macOS Intel x64 está construido como DMG/ZIP, pero **no ejecutado** (la app x64 no abrió una ventana bajo Rosetta). Linux ARM64 está construido (AppImage, DEB y RPM) y **probado con E2E empaquetado** en Docker arm64 con Xvfb. Windows x64 está construido como NSIS con el binario nativo ABI 148, pero **no ejecutado**. Linux x64 no se ha construido. La configuración y matriz de CI existen para las variantes restantes. Firma y notarización pendientes; los artefactos no están firmados ni notarizados.
+1. **Instaladores para todos los sistemas:** macOS ARM64 está construido, empaquetado y probado con E2E (incluido el DMG montado). macOS Intel x64 está construido como DMG/ZIP, pero **no ejecutado** (la app x64 no abrió una ventana bajo Rosetta). Linux ARM64 y Linux x64 están construidos (AppImage, DEB y RPM) y **probados con E2E empaquetado** en Docker con Xvfb. Windows x64 está construido como NSIS con el binario nativo ABI 148, pero **no ejecutado**. La configuración y matriz de CI existen para las variantes restantes. Firma y notarización pendientes; los artefactos no están firmados ni notarizados.
 2. **Base con propiedades, multi-select y adjuntos:** probado. El editor de texto enriquecido muestra y conserva el valor textual y Markdown; no incorpora un editor WYSIWYG completo.
 3. **Imágenes y vinculación masiva:** probado con archivos y lotes pequeños, columna de destino y movimiento de todas las imágenes de un registro; el benchmark de 10.000 registros es sintético y no incluye originales fotográficos. Faltan campañas con 10.000 fotografías reales y equipos modestos.
 4. **Tabla y galería:** probadas en Electron. Paginación de 100 evita cargar la colección completa en la UI; no se afirma virtualización infinita.
@@ -86,6 +87,6 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 - `sqlite-vec` y HNSW aún no tienen un benchmark comparativo; se usa un escaneo vectorial exacto en el worker como línea base.
 - Las APIs se verifican con pruebas de contrato inyectadas. No se han probado llamadas facturables ni claves reales del usuario.
 - El model manager está validado con los archivos ya descargados y verificados; no se ha medido la descarga completa sobre una conexión lenta ni la reanudación tras un corte de red real.
-- Se ha validado macOS ARM64 y Linux ARM64/CPU; no Metal/MPS, CUDA, macOS Intel, Windows ni Linux x64. Los binarios macOS x64 y Windows x64 están construidos pero no ejecutados. El motor llama.cpp solo se ha ejecutado en macOS ARM64. SmolVLM2 está integrado pero no se han descargado ni ejecutado sus pesos.
+- Se ha validado macOS ARM64, Linux ARM64 y Linux x64/CPU; no Metal/MPS, CUDA, macOS Intel ni Windows. Los binarios macOS x64 y Windows x64 están construidos pero no ejecutados. El motor llama.cpp solo se ha ejecutado en macOS ARM64. SmolVLM2 está integrado pero no se han descargado ni ejecutado sus pesos.
 - La inferencia real se ha probado con tres imágenes de fixtures, no con un corpus fotográfico heterogéneo. No se han inventado métricas de precisión, sesgo o calidad.
 - LFM3 usa un pool persistente de `llama-mtmd-cli` en modo chat, con un máximo por perfil y cierre por inactividad. La validación mide dos celdas consecutivas en 12,0 s, pero no una columna completa de miles de celdas ni un corpus de 10.000 fotografías. El tope de 280 tokens visuales puede reducir detalles en imágenes muy densas.
