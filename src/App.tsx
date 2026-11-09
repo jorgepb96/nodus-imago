@@ -794,7 +794,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       <Upload size={19} />
                       <span>
                         <strong>{t("CSV o TSV")}</strong>
-                        <small>Columnas, opciones y registros</small>
+                        <small>{t("Columnas, opciones y registros")}</small>
                       </span>
                       <ArrowUpRight size={16} />
                     </button>
@@ -802,7 +802,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       <Database size={19} />
                       <span>
                         <strong>{t("Copiar datos de Nodus")}</strong>
-                        <small>Importación segura desde SQLite</small>
+                        <small>{t("Importación segura desde SQLite")}</small>
                       </span>
                       <ArrowUpRight size={16} />
                     </button>
@@ -810,7 +810,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       <FolderInput size={19} />
                       <span>
                         <strong>{t("ZIP de Notion")}</strong>
-                        <small>Tablas y archivos de imagen</small>
+                        <small>{t("Tablas y archivos de imagen")}</small>
                       </span>
                       <ArrowUpRight size={16} />
                     </button>
@@ -1935,7 +1935,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               </Button>
             </div>
             {!proposals.length && (
-              <p className="muted">No hay propuestas pendientes.</p>
+              <p className="muted">{t("No hay propuestas pendientes.")}</p>
             )}
             {proposals.map((p) => (
               <article className="proposal" key={p.id}>
@@ -1948,7 +1948,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   {new Date(p.createdAt).toLocaleString()}
                 </small>
                 <details>
-                  <summary>Instrucciones</summary>
+                  <summary>{t("Instrucciones")}</summary>
                   <p className="hint">{p.prompt}</p>
                 </details>
                 <div className="row">

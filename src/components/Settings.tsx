@@ -275,7 +275,7 @@ export function Settings({
               />
             </label>
             <label className="setting-row">
-              <strong>Búsqueda multimodal</strong>
+              <strong>{t("Búsqueda multimodal")}</strong>
               <span>{t("EmbeddingGemma 2 · local")}</span>
             </label>
             <p className="hint">
@@ -305,7 +305,7 @@ export function Settings({
             <div className="notice">
               <Cpu size={18} />
               <div>
-                <strong>Runtime local · Python</strong>
+                <strong>{t("Runtime local · Python")}</strong>
                 <p>
                   EmbeddingGemma 2 requiere el entorno Python descrito en el
                   README. LFM3 usa el motor llama.cpp descargable. Ambos se han
@@ -328,7 +328,7 @@ export function Settings({
                     <h3>{m.label}</h3>
                     <span className="muted">
                       {m.task === "embedding"
-                        ? "Búsqueda multimodal · 440 M activos"
+                        ? t("Búsqueda multimodal · 440 M activos")
                         : m.task === "runtime"
                           ? "Motor nativo de LFM3 · CPU / Metal"
                           : "Descripción y clasificación"}{" "}
@@ -743,14 +743,14 @@ export function Settings({
             </label>
             <label className="setting-row">
               <span>
-                <strong>Trabajos simultáneos</strong>
+                <strong>{t("Trabajos simultáneos")}</strong>
                 <p className="hint">
                   Varias columnas pueden procesarse en paralelo. Se limita según
                   el perfil y la memoria del equipo.
                 </p>
               </span>
               <select
-                aria-label="Trabajos simultáneos"
+                aria-label={t("Trabajos simultáneos")}
                 value={s.parallelJobs}
                 onChange={(e) =>
                   update({ parallelJobs: Number(e.target.value) })
@@ -794,8 +794,8 @@ export function Settings({
                 }
               >
                 <option value="cpu">CPU</option>
-                <option value="mps">Metal · experimental</option>
-                <option value="cuda">CUDA · experimental</option>
+                <option value="mps">{t("Metal · experimental")}</option>
+                <option value="cuda">{t("CUDA · experimental")}</option>
               </select>
             </label>
             <label>

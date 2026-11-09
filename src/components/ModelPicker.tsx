@@ -1,5 +1,6 @@
 import type { ModelInfo, Settings } from "../../shared/imago";
 import { PROVIDERS, type ModelChoice } from "../../shared/aiConfig";
+import { useT } from "../i18n";
 export function modelChoices(
   settings: Settings,
   models: ModelInfo[],
@@ -29,7 +30,8 @@ export function ModelPicker({
   models: ModelInfo[];
   inherit?: boolean;
 }) {
-  const encode = (v: ModelChoice) => v.provider + "|" + v.model,
+  const t = useT(),
+    encode = (v: ModelChoice) => v.provider + "|" + v.model,
     choices = modelChoices(settings, models);
   return (
     <select
@@ -48,13 +50,13 @@ export function ModelPicker({
         });
       }}
     >
-      {inherit && <option value="">Predeterminado de Ajustes</option>}
+      {inherit && <option value="">{t("Predeterminado de Ajustes")}</option>}
       {value && !choices.some((c) => encode(c) === encode(value)) && (
         <option value={encode(value)}>
           {value.provider} · {value.model}
         </option>
       )}
-      <optgroup label="Modelos locales">
+      <optgroup label={t("Modelos locales")}>
         {models
           .filter((m) => m.task === "vision")
           .map((m) => (

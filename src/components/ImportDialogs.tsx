@@ -228,7 +228,7 @@ export function ImageImport({
               value={reference}
               onChange={(e) => setReference(e.target.value)}
             >
-              <option value="__record_id__">ID del registro</option>
+              <option value="__record_id__">{t("ID del registro")}</option>
               {detail.columns
                 .filter(
                   (c) => !["attachment", "files", "formula"].includes(c.type),

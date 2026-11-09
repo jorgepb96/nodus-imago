@@ -370,6 +370,21 @@ const en: Record<string, string> = {
     "Text + image: mean of normalised vectors, with equal weight.",
   "Los filtros y su lógica se aplican al pulsar Buscar.":
     "Filters and their logic are applied when you press Search.",
+  "Columnas, opciones y registros": "Columns, options and records",
+  "Importación segura desde SQLite": "Safe import from SQLite",
+  "Tablas y archivos de imagen": "Tables and image files",
+  "No hay propuestas pendientes.": "There are no pending proposals.",
+  "Búsqueda multimodal": "Multimodal search",
+  "Runtime local · Python": "Local runtime · Python",
+  "Búsqueda multimodal · 440 M activos": "Multimodal search · 440 M active",
+  "Trabajos simultáneos": "Simultaneous jobs",
+  "Metal · experimental": "Metal · experimental",
+  "CUDA · experimental": "CUDA · experimental",
+  "ID del registro": "Record ID",
+  "IA de la propiedad": "Property AI",
+  "Imagen principal del registro": "Record primary image",
+  "Predeterminado de Ajustes": "Settings default",
+  "Metadatos · EXIF": "Metadata · EXIF",
 };
 export function useT() {
   const language = useContext(LanguageContext);

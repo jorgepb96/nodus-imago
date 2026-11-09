@@ -397,7 +397,7 @@ export function RecordPanel({
           </div>
           {!!provenance.length && (
             <details className="metadata provenance">
-              <summary>Procedencia de las propuestas</summary>
+              <summary>{t("Procedencia de las propuestas")}</summary>
               {provenance.map((p) => {
                 const column = detail.columns.find((c) => c.id === p.columnId);
                 let shown = p.value ?? "—";
@@ -437,7 +437,7 @@ export function RecordPanel({
                     </small>
                     {p.prompt && (
                       <details>
-                        <summary>Instrucciones</summary>
+                        <summary>{t("Instrucciones")}</summary>
                         <p className="hint">{p.prompt}</p>
                       </details>
                     )}
@@ -448,7 +448,7 @@ export function RecordPanel({
           )}
           {image && (
             <details className="metadata">
-              <summary>Metadatos · EXIF</summary>
+              <summary>{t("Metadatos · EXIF")}</summary>
               {Object.entries(image.metadata)
                 .filter(([, v]) => v != null)
                 .map(([k, v]) => (

@@ -532,7 +532,7 @@ export function Properties({
                 "ai",
               ].includes(type) && (
                 <div className="stack column-ai">
-                  <h3>IA de la propiedad</h3>
+                  <h3>{t("IA de la propiedad")}</h3>
                   <label>
                     {t("Modelo")}
                     <ModelPicker
@@ -549,7 +549,7 @@ export function Properties({
                       value={source}
                       onChange={(e) => setSource(e.target.value)}
                     >
-                      <option value="">Imagen principal del registro</option>
+                      <option value="">{t("Imagen principal del registro")}</option>
                       {detail.columns
                         .filter((c) => ["attachment", "files"].includes(c.type))
                         .map((c) => (
