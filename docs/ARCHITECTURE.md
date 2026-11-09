@@ -4,11 +4,11 @@
 
 `src/` contiene React, vistas y controles; `shared/` contiene dominio, codecs, CSV, exportaciones, fórmulas, filtros, validación y contratos; `electron/` aloja persistencia, servicios y procesos locales; `runtime/` contiene el adaptador Python; `tests/`, `scripts/` y `build/` separan pruebas, automatización y empaquetado.
 
-El proceso principal Electron gestiona ventanas, diálogos y credenciales cifradas. Un worker de Node ejecuta SQLite, importaciones, búsqueda y la cola persistente. No se realiza trabajo de imagen ni escaneo vectorial en el renderer. Python carga un modelo a la vez y libera el proceso tras inactividad. LFM3 se ejecuta con el CLI de llama.cpp y un proyector de visión explícito.
+El proceso principal Electron gestiona ventanas, diálogos y credenciales cifradas. Un worker de Node ejecuta SQLite, importaciones, búsqueda y la cola persistente. No se realiza trabajo de imagen ni escaneo vectorial en el renderer. Python carga un modelo a la vez y libera el proceso tras inactividad. LFM3 se ejecuta con el CLI de llama.cpp en modo chat y un proyector de visión explícito; un pool acotado mantiene las sesiones cargadas entre celdas y las cierra tras un minuto de inactividad.
 
 Las solicitudes de API atraviesan un broker en el proceso principal: el worker transmite el contenido de la solicitud y recibe el resultado, sin recibir claves. La misma cola sirve a modelos locales y APIs, con control de cancelación. El proveedor se fija por tarea/celda; no se sustituye automáticamente.
 
-La salida de los modelos de visión no se guarda tal cual. `shared/visionOutput.ts` elimina razonamiento (`<think>`, `<reasoning>`, cierres huérfanos), cabeceras Markdown iniciales, banners del CLI y tokens especiales. Las descripciones deben quedar como prosa; las clasificaciones se extraen como JSON y se validan contra las opciones exactas de la propiedad. Un valor inválido hace fallar la celda y queda registrado en la tarea, sin propuesta.
+La salida de los modelos de visión no se guarda tal cual. `shared/visionOutput.ts` elimina razonamiento (`<think>`, `<reasoning>`, cierres huérfanos), cabeceras Markdown iniciales, banners del CLI, tokens especiales y el sobre `<minimax:tool_call>` cuando LFM3 lo usa. Las descripciones deben quedar como prosa; las clasificaciones se extraen como JSON, se fuerzan con `--json-schema` y se validan contra las opciones exactas de la propiedad. Un valor inválido hace fallar la celda y queda registrado en la tarea, sin propuesta.
 
 ## Datos y archivos
 
@@ -30,7 +30,7 @@ Los adjuntos genéricos de Nodus se conservan aunque no sea posible generar mini
 
 ## Importación y asociación
 
-CSV se analiza en el worker y el renderer recibe una muestra y un token; no necesita mantener 10.000 filas en memoria. Nodus se abre de solo lectura y se importa desde una instantánea, con escritura transaccional en Imago. Los ZIP se inspeccionan con límites y se leen en streaming; las rutas de sus entradas nunca se usan como destinos de extracción sin validación.
+CSV se analiza en el worker y el renderer recibe una muestra y un token; no necesita mantener 10.000 filas en memoria. Nodus se abre de solo lectura y se importa desde una instantánea, con escritura transaccional en Imago. Los ZIP se inspeccionan con límites y se leen en streaming; las rutas de sus entradas nunca se usan como destinos de extracción sin validación. Un ZIP de Notion se convierte en bases CSV y, además, en una base de páginas Markdown con texto plano e imágenes referenciadas; no se reconstruyen bloques ni jerarquía.
 
 Las correspondencias son primero exactas, después códigos de catálogo. Cada clave mantiene un conjunto de candidatos; más de una fila produce ambigüedad. Los patrones admiten expresiones lineales y plantillas; se rechazan grupos, alternativas y referencias inversas. La similitud parcial es explícita, limitada por número de comparaciones y nunca se confirma sin revisión.
 
@@ -40,7 +40,7 @@ Las importaciones de imágenes se encolan como listas persistentes. Tras una int
 
 FTS5 indexa títulos, propiedades, etiquetas resueltas, nombres de archivo, EXIF y texto/descripciones importados. Se sincroniza mediante `search_documents` y triggers. Las consultas son parametrizadas; las palabras y frases se escapan como términos FTS. Las búsquedas parciales escapan los comodines de SQL.
 
-Los filtros específicos se agrupan por base; no se presupone que dos columnas con el mismo nombre sean equivalentes. Se admite AND/OR dentro de un esquema y any/all para multi-select. El mapeo de equivalencias entre esquemas queda pendiente.
+Los filtros específicos se agrupan por base. Se admite AND/OR dentro de un esquema y any/all para multi-select. Ajustes permite declarar grupos de equivalencia entre columnas de texto de bases distintas; el filtro de grupo combina las columnas con OR y deja pasar las bases no incluidas. No se infieren equivalencias automáticamente.
 
 El índice vectorial inicial usa BLOBs Float32 por hash de original y contrato completo. El contrato incluye modelo, revisión, dimensiones, backend, precisión y presupuesto visual. No se mezclan vectores de distintos contratos. MRL se trunca antes de normalizar. La búsqueda filtra primero y escanea vectores en el worker. El ranking por registro usa la mejor imagen; texto+imagen promedia vectores normalizados con pesos iguales. Híbrida usa Reciprocal Rank Fusion ponderada, con constante 60. Las puntuaciones no son probabilidades.
 
@@ -50,7 +50,7 @@ Esta primera versión usa un escaneo exacto, adecuado para establecer correcció
 
 La cola de IA trabaja celda a celda y solo sobre valores vacíos. Las selecciones se validan contra las opciones de la propiedad; una salida no válida se registra como fallo. Los resultados van a `proposals`, conservando modelo, revisión o endpoint, instrucciones y fecha. La aceptación comprueba que el valor humano no cambió desde la generación. El historial permite deshacer un lote sin sobrescribir cambios posteriores. La ficha del registro consulta `provenance` y muestra las propuestas pendientes y aceptadas de esa fila.
 
-La cola persiste el cursor de cada trabajo. Pausar un trabajo aborta su proceso y deja su estado en `paused`; los demás trabajos independientes siguen. Reanudar vuelve a encolar desde el cursor. La validación real comprobó esta separación con dos procesos LFM3 y comprobó que, tras cerrar y reabrir el servicio, las filas, imágenes, valores aceptados y vectores siguen disponibles.
+La cola persiste el cursor de cada trabajo. Pausar un trabajo aborta su proceso y deja su estado en `paused`; los demás trabajos independientes siguen. Reanudar vuelve a encolar desde el cursor. La validación real comprobó esta separación con dos sesiones LFM3 (texto y JSON) y comprobó que, tras cerrar y reabrir el servicio, las filas, imágenes, valores aceptados y vectores siguen disponibles.
 
 ## Seguridad de modelos y copias
 

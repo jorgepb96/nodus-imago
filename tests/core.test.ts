@@ -449,3 +449,60 @@ test("IPC command validation rejects filesystem paths, unknown operations, inval
     validateCommand("setApiKey", { provider: "../../evil", key: "secret" }),
   );
 });
+
+test("equivalent fields from different schemas filter together with OR semantics", () => {
+  const f = fixture();
+  try {
+    const a = f.repo.importCsv("A", ["Lugar"], ["title"], [["Granada"], ["Sevilla"]]),
+      b = f.repo.importCsv("B", ["Ciudad"], ["title"], [["Granada"], ["Madrid"]]),
+      aColumn = a.columns[0],
+      bColumn = b.columns[0];
+    const result = f.repo.literal({
+      databaseIds: [a.database.id, b.database.id],
+      filters: [
+        {
+          columnId: aColumn.id,
+          columnIds: [aColumn.id, bColumn.id],
+          op: "contains",
+          value: "gran",
+        },
+      ],
+    });
+    assert.equal(result.total, 2);
+    const empty = f.repo.literal({
+      databaseIds: [a.database.id, b.database.id],
+      filters: [
+        {
+          columnId: aColumn.id,
+          columnIds: [aColumn.id, bColumn.id],
+          op: "empty",
+          value: "",
+        },
+      ],
+    });
+    assert.equal(empty.total, 0);
+  } finally {
+    f.close();
+  }
+});
+
+test("deleting a column removes stale field-equivalence groups", () => {
+  const f = fixture();
+  try {
+    const d = f.repo.create("A"),
+      text = f.repo.addColumn(d.database.id, "Notas", "text");
+    f.repo.updateSettings({
+      fieldEquivalences: [
+        {
+          id: "group",
+          name: "Texto",
+          columnIds: [d.columns[0].id, text.id],
+        },
+      ],
+    });
+    f.repo.deleteColumn(text.id);
+    assert.deepEqual(f.repo.getSettings().fieldEquivalences, []);
+  } finally {
+    f.close();
+  }
+});

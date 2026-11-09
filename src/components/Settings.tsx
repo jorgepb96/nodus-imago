@@ -19,8 +19,11 @@ import {
   Clock3,
   Search,
   Info,
+  Link2,
+  Plus,
 } from "lucide-react";
 import type { Status, Settings as SettingsType, Job } from "../../shared/imago";
+import type { DatabaseDetail } from "../../shared/databases";
 import { Button, Modal } from "./ui";
 import type { Perform } from "./Properties";
 import { THEMES } from "../theme/themes.mjs";
@@ -145,17 +148,21 @@ export function Settings({
   perform,
   notify,
   initialTab = "api",
+  details = [],
 }: {
   status: Status;
   onChanged: () => void;
   perform: Perform;
   notify: (s: string) => void;
   initialTab?: string;
+  details?: DatabaseDetail[];
 }) {
   const t = useT(),
     [tab, setTab] = useState(initialTab),
     [settingsSearch, setSettingsSearch] = useState(""),
-    [python, setPython] = useState(status.settings.python);
+    [python, setPython] = useState(status.settings.python),
+    [groupName, setGroupName] = useState(""),
+    [groupColumns, setGroupColumns] = useState<string[]>([]);
   const [license, setLicense] = useState<{
     label: string;
     text: string;
@@ -187,6 +194,11 @@ export function Settings({
     {
       group: "DATOS",
       items: [
+        {
+          id: "equivalences",
+          label: "Equivalencias de campos",
+          Icon: Link2,
+        },
         { id: "storage", label: "Almacenamiento y copias", Icon: HardDrive },
         { id: "jobs", label: "Colas y tareas", Icon: Clock3 },
       ],
@@ -486,6 +498,129 @@ export function Settings({
                 }
               />
             </label>
+          </div>
+        )}
+        {tab === "equivalences" && (
+          <div className="settings-section">
+            <div className="settings-card-heading">
+              <span>
+                <Link2 size={21} />
+              </span>
+              <div>
+                <h2>{t("Equivalencias de campos")}</h2>
+                <p>
+                  {t(
+                    "Agrupa columnas de bases distintas que representan el mismo campo. Después podrás filtrar por el grupo desde Búsqueda.",
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="equivalence-list">
+              {s.fieldEquivalences.map((group) => (
+                <div className="row equivalence-item" key={group.id}>
+                  <strong>{group.name}</strong>
+                  <span className="muted">
+                    {group.columnIds
+                      .map((id) => {
+                        const column = details
+                          .flatMap((database) => database.columns)
+                          .find((candidate) => candidate.id === id);
+                        return column
+                          ? `${column.name}`
+                          : id.slice(0, 8);
+                      })
+                      .join(" · ")}
+                  </span>
+                  <span className="spacer" />
+                  <Button
+                    icon
+                    aria-label={t("Eliminar")}
+                    onClick={() =>
+                      update({
+                        fieldEquivalences: s.fieldEquivalences.filter(
+                          (candidate) => candidate.id !== group.id,
+                        ),
+                      })
+                    }
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              ))}
+              {!s.fieldEquivalences.length && (
+                <p className="muted">{t("Todavía no hay grupos.")}</p>
+              )}
+            </div>
+            <div className="stack equivalence-form">
+              <label>
+                {t("Nombre del grupo")}
+                <input
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder={t("Lugar, Autor, Fecha…")}
+                />
+              </label>
+              <label>
+                {t("Columnas equivalentes")}
+                <select
+                  multiple
+                  value={groupColumns}
+                  onChange={(e) =>
+                    setGroupColumns(
+                      Array.from(e.target.selectedOptions).map(
+                        (option) => option.value,
+                      ),
+                    )
+                  }
+                >
+                  {details.map((database) => (
+                    <optgroup key={database.database.id} label={database.database.name}>
+                      {database.columns
+                        .filter((column) =>
+                          [
+                            "title",
+                            "rich_text",
+                            "text",
+                            "ai",
+                            "url",
+                            "email",
+                            "location",
+                          ].includes(column.type),
+                        )
+                        .map((column) => (
+                          <option key={column.id} value={column.id}>
+                            {column.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              <div className="row">
+                <Button
+                  primary
+                  disabled={!groupName.trim() || groupColumns.length < 2}
+                  onClick={() =>
+                    update({
+                      fieldEquivalences: [
+                        ...s.fieldEquivalences,
+                        {
+                          id: crypto.randomUUID(),
+                          name: groupName.trim(),
+                          columnIds: groupColumns,
+                        },
+                      ],
+                    })
+                  }
+                >
+                  <Plus size={14} />
+                  {t("Añadir grupo")}
+                </Button>
+                <span className="hint">
+                  {t("Selecciona al menos dos columnas.")}
+                </span>
+              </div>
+            </div>
           </div>
         )}
         {tab === "storage" && (

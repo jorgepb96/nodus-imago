@@ -19,7 +19,7 @@ import {
 } from "../../shared/aiConfig";
 import type { CompletionRequest } from "./apiProviders";
 import { imagePipeline } from "../import/images";
-import { LlamaVision } from "./llama";
+import { LlamaPool } from "./llama";
 import { parseClassification, parseDescription } from "../../shared/visionOutput";
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -46,6 +46,7 @@ function targetLanguage(value: string): string {
 }
 
 export class Engine {
+  llama: LlamaPool;
   constructor(
     public repo: Repository,
     public models: Models,
@@ -56,7 +57,12 @@ export class Engine {
     ) => Promise<string> = async () => {
       throw new Error("Las APIs no están disponibles en este proceso.");
     },
-  ) {}
+  ) {
+    this.llama = new LlamaPool(repo, models);
+  }
+  close() {
+    this.llama.close();
+  }
   contract() {
     const s = this.repo.getSettings(),
       m = this.models.get("embeddinggemma2");
@@ -418,7 +424,7 @@ export class Engine {
       (column.config.aiPrompt ? column.config.aiPrompt + "\n\n" : "") +
       (options
         ? `Classify the visible image for the field ${JSON.stringify(column.name)}. Choose only from this exact list of labels: ${JSON.stringify(column.options.map((o) => o.label))}. Return ONLY a JSON array of exact label strings, at most ${column.type === "multi_select" ? "5" : "1"}. Return [] if none applies. Do not invent labels, do not explain, and do not use any other format.`
-        : `Describe only directly observable details of this photograph in ${targetLanguage(payload.language)}. ${payload.detailed ? "Write a detailed paragraph." : "Write one or two brief sentences."} Do not guess identities, dates, locations or historical context. State uncertainty explicitly. Return only the description, with no reasoning, labels, JSON or preamble.`);
+        : `Describe only directly observable details of this photograph in ${targetLanguage(payload.language)}. ${payload.detailed ? "Write a detailed paragraph." : "Write one or two brief sentences."} Answer exclusively in ${targetLanguage(payload.language)}, even if text in the image uses another language. Do not guess identities, dates, locations or historical context. State uncertainty explicitly. Return only the description, with no reasoning, labels, JSON or preamble.`);
     const settings = this.repo.getSettings(),
       language = settings.language;
     const context = buildAiRowContext(
@@ -434,11 +440,12 @@ export class Engine {
       modelName = model.repository;
       revision = model.revision;
       if (model.backend === "llama") {
-        result = await new LlamaVision(this.repo, this.models).describe(
+        result = await this.llama.describe(
           choice.model,
           asset.original_path,
           prompt,
           signal,
+          options ? "json" : "text",
         );
       } else
         result = await this.host.request(
@@ -488,6 +495,8 @@ export class Engine {
     }
     if (typeof result !== "string" || !result.trim())
       throw new Error("El modelo no ha devuelto texto.");
+    if (process.env.IMAGO_DEBUG_AI)
+      console.error("[imago-ai] " + JSON.stringify(result));
     let value: string | null;
     if (options) {
       const labels = parseClassification(

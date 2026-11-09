@@ -30,9 +30,16 @@ export type RecordRow = DatabaseRow & {
   snippet?: string;
   score?: number;
 };
+export type EquivalenceGroup = {
+  id: string;
+  name: string;
+  columnIds: string[];
+};
 export type PropertyFilter = {
   databaseId?: string;
   columnId: string;
+  columnIds?: string[];
+  groupId?: string;
   op: "contains" | "equals" | "gte" | "lte" | "any" | "all" | "empty";
   value: string | string[];
 };
@@ -60,7 +67,12 @@ export type ImageMatch = {
   status: "safe" | "ambiguous" | "unmatched";
   strategy?: string;
 };
-export type ImagePlan = { token: string; files: number; matches: ImageMatch[] };
+export type ImagePlan = {
+  token: string;
+  files: number;
+  columnId?: string;
+  matches: ImageMatch[];
+};
 export type Job = {
   id: string;
   label: string;
@@ -129,6 +141,7 @@ export type Settings = {
   apiProfiles: Partial<Record<ApiProvider, ApiProfile>>;
   apiDelayMs: number;
   parallelJobs: number;
+  fieldEquivalences: EquivalenceGroup[];
 };
 export type Status = {
   root: string;
@@ -216,6 +229,7 @@ export type Commands = {
       token: string;
       storage: "copy" | "link";
       createUnmatched: boolean;
+      columnId?: string;
       assignments: { pathToken: string; rowId: string | null }[];
     };
     result: string;
@@ -226,6 +240,11 @@ export type Commands = {
   };
   setPrimary: { input: { id: string }; result: void };
   deleteImage: { input: { id: string }; result: string };
+  deleteImages: { input: { ids: string[] }; result: number };
+  reassignImages: {
+    input: { ids: string[]; rowId: string; columnId?: string };
+    result: number;
+  };
   reassignImage: {
     input: { id: string; rowId: string; columnId: string };
     result: void;

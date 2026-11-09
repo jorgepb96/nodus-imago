@@ -20,6 +20,28 @@ const REASONING_OPEN = /<reasoning\b[^>]*>/i;
 const REASONING_CLOSE =
   /<\/(?:think|reasoning|analysis)\s*>|<\|(?:reasoning_end|end_of_reasoning|eot_reasoning)\|>/gi;
 
+const TOOL_PARAMETER =
+  /<parameter\s+name\s*=\s*["']([^"']+)["']\s*>([\s\S]*?)<\/parameter\s*>/gi;
+
+/** LFM3's chat template can wrap the answer in a tool-call envelope. The
+ * parameter body is the cell value; the envelope itself is never content. */
+export function unwrapToolCall(raw: string): string {
+  const matches = [...raw.matchAll(TOOL_PARAMETER)];
+  if (matches.length) {
+    const preferred = matches.find((match) =>
+      /^(description|descripcion|descripción|text|answer|labels|categories|categorias|categorías)$/i.test(
+        match[1],
+      ),
+    );
+    return (preferred ?? matches[0])[2].trim();
+  }
+  return raw
+    .replace(/<\/?(?:minimax:)?tool_call\b[^>]*>/gi, " ")
+    .replace(/<\/?invoke\b[^>]*>/gi, " ")
+    .replace(/<\/?parameter\b[^>]*>/gi, " ")
+    .trim();
+}
+
 export function stripReasoning(raw: string): string {
   let text = raw.replace(/\r\n?/g, "\n");
   text = text.replace(THINK_BLOCK, "\n").replace(REASONING_BLOCK, "\n");
@@ -105,9 +127,13 @@ function labelOf(item: unknown): string | null {
   if (typeof item === "string") return item.trim();
   if (item && typeof item === "object" && !Array.isArray(item)) {
     const record = item as Record<string, unknown>;
-    for (const key of LABEL_KEYS)
-      if (typeof record[key] === "string" && record[key].trim())
-        return record[key].trim();
+    for (const key of LABEL_KEYS) {
+      const entry = Object.entries(record).find(
+        ([name]) => name.toLowerCase() === key,
+      );
+      if (entry && typeof entry[1] === "string" && entry[1].trim())
+        return entry[1].trim();
+    }
   }
   return null;
 }
@@ -136,9 +162,11 @@ export function parseClassification(
   allowed: string[],
   max: number,
 ): string[] {
-  const text = cleanVisionText(raw);
+  const text = unwrapToolCall(cleanVisionText(raw));
   for (const value of jsonCandidates(text)) {
-    const items = arrayFromValue(value);
+    const items =
+      arrayFromValue(value) ??
+      (value && typeof value === "object" && labelOf(value) ? [value] : null);
     if (!items) continue;
     const labels: string[] = [];
     for (const item of items) {
@@ -190,7 +218,9 @@ function stripPromptEcho(text: string): string {
  * some providers use it despite the instruction to answer in prose.
  */
 export function parseDescription(raw: string): string {
-  let text = stripPromptEcho(cleanVisionText(raw));
+  let text = stripPromptEcho(
+    unwrapToolCall(cleanVisionText(raw)),
+  );
   // A Markdown heading before the prose is a preamble, not part of the value.
   text = text.replace(/^(?:#{1,6}\s+[^\n]*\n+)+/, "").trim();
   const unfenced = text.replace(/^```[a-zA-Z]*\s*\n?/, "").replace(/\n?```$/, "").trim();

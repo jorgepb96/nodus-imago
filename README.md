@@ -2,7 +2,7 @@
 
 **Research through images.** Gestor de bases de datos para investigación visual, independiente de [Nodus Research](https://github.com/jorgepb96/nodus), gratuito y bajo **AGPL-3.0-only**.
 
-Versión de desarrollo **0.1.0**. La aplicación Electron, SQLite, la importación, la búsqueda literal, la búsqueda multimodal, la descripción y la clasificación por columnas son funcionales. El **29 de octubre de 2026** se validaron con pesos reales EmbeddingGemma 2 y LFM3-VL-2B en macOS ARM64 (CPU), además de la suite automatizada y la prueba de escritorio. La matriz de aceptación y los límites exactos están en [docs/STATUS.md](docs/STATUS.md).
+Versión de desarrollo **0.1.0**. La aplicación Electron, SQLite, la importación, la búsqueda literal, la búsqueda multimodal, la descripción y la clasificación por columnas son funcionales. El **9 de noviembre de 2026** se validaron con pesos reales EmbeddingGemma 2 y LFM3-VL-2B en macOS ARM64 (CPU), además de la suite automatizada y la prueba de escritorio. La matriz de aceptación y los límites exactos están en [docs/STATUS.md](docs/STATUS.md).
 
 ## Empezar
 
@@ -27,7 +27,7 @@ npm start
 - Crear, renombrar y eliminar varias bases de datos; añadir propiedades personalizadas.
 - Importar CSV/TSV con previsualización, detección de tipos y corrección del esquema. Los valores incompatibles detienen la importación en lugar de perderse silenciosamente.
 - Editar texto, números, fechas, casillas, selección, selección múltiple, estados, ubicación y relaciones. Las opciones tienen identificadores estables, colores y orden; no se pueden eliminar opciones que aún estén en uso.
-- Reutilizar fórmulas de Nodus; el editor permite operaciones aritméticas y conserva las configuraciones importadas de otros tipos, con los límites descritos en la matriz.
+- Reutilizar fórmulas de Nodus; el editor permite operaciones aritméticas, estadísticas de columna y expresiones seguras, y conserva como solo lectura las recetas importadas que aún no edita.
 - Importar carpetas o archivos de imágenes, también mediante arrastrar y soltar sobre una base abierta. Copiar los originales al almacenamiento gestionado o vincular sus ubicaciones. Crear miniaturas y vistas previas, extraer EXIF y detectar duplicados con SHA-256.
 - Asociar imágenes a filas mediante la columna elegida, nombres, códigos de catálogo o patrones lineales. Las referencias duplicadas se marcan como ambiguas. Las coincidencias parciales requieren revisión.
 - Ver tabla y galería sobre los mismos registros; editar fichas, elegir imagen principal, reasignar imágenes y volver a vincular originales ausentes verificando su hash.
@@ -72,9 +72,9 @@ En Windows usa `.venv\Scripts\python.exe`. Introduce la ruta absoluta del intér
 
 ### LFM3 y razonamiento
 
-Para LFM3, descarga **Motor de visión local · llama.cpp** y el modelo desde **Ajustes → Modelos locales**. La aplicación usa `llama-mtmd-cli` como proceso de consola, sin abrir un puerto. CPU es la configuración predeterminada; las aceleraciones se ofrecen como experimentales hasta verificarlas en cada plataforma.
+Para LFM3, descarga **Motor de visión local · llama.cpp** y el modelo desde **Ajustes → Modelos locales**. La aplicación usa `llama-mtmd-cli` en su modo de chat persistente, sin abrir un puerto: mantiene el GGUF y el proyector cargados entre celdas y envía `/clear`, `/image` y el prompt por la entrada estándar. El pool se limita por perfil y número de trabajos; las sesiones inactivas se cierran tras un minuto. CPU es la configuración predeterminada; las aceleraciones se ofrecen como experimentales hasta verificarlas en cada plataforma.
 
-El CLI b11981 no admite `--single-turn`, `--simple-io` ni `--no-display-prompt`; esas opciones se han eliminado. Imago usa `--log-verbosity 0` y no aplica la plantilla Jinja con `--jinja`: el modo de una sola consulta recibe la imagen y el prompt directamente. Aun así, LFM3 puede anteponer un bloque de razonamiento terminado en `</think>` o una cabecera Markdown. `shared/visionOutput.ts` lo elimina antes de validar el valor; si solo queda razonamiento, el trabajo falla y no se crea ninguna propuesta. Una clasificación debe ser un JSON de etiquetas del vocabulario exacto de la propiedad; se aceptan tanto cadenas como objetos con `label`/`category`.
+El CLI b11981 no admite `--single-turn`, `--simple-io` ni `--no-display-prompt`. Imago usa `--log-verbosity 0`, `--image-max-tokens 280` para acotar el coste visual y, en clasificación, `--json-schema` para exigir un array de cadenas. LFM3 puede anteponer un bloque de razonamiento terminado en `</think>`, una cabecera Markdown o un sobre `<minimax:tool_call>`; `shared/visionOutput.ts` extrae el cuerpo útil y elimina el resto antes de validar. Si solo queda razonamiento o JSON inválido, el trabajo falla y no se crea ninguna propuesta. Una clasificación debe pertenecer al vocabulario exacto de la propiedad; se aceptan etiquetas en objetos con claves como `label`, `Label` o `category`.
 
 ### APIs opcionales
 
@@ -103,7 +103,7 @@ Comprueba, con los pesos reales:
 7. Cierre y reapertura: registros, imágenes, valores aceptados e índice vectorial.
 8. Que la descripción no contenga razonamiento, cabeceras del prompt ni JSON.
 
-El informe reproducible está en [docs/benchmarks/real-models-macos-arm64.json](docs/benchmarks/real-models-macos-arm64.json). La ejecución de referencia (Apple M2, 16 GB, CPU, 512 dimensiones) midió: indexación en frío de tres imágenes 39,1 s; consulta textual en caliente 152 ms; consulta por imagen 7,3 s; consulta combinada 8,4 s; descripción 24,6 s; clasificación 21,1 s; consulta tras reabrir 7,7 s. Los tiempos varían con la carga del equipo y no son extrapolables. Son medidas de un corpus de tres imágenes, no un benchmark de calidad ni de un corpus de 10.000 fotografías.
+El informe reproducible está en [docs/benchmarks/real-models-macos-arm64.json](docs/benchmarks/real-models-macos-arm64.json). La ejecución de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, 9 de noviembre de 2026) midió: indexación en frío de tres imágenes 19,6 s; consulta textual en caliente 93 ms; consulta por imagen 3,0 s; consulta combinada 3,4 s; descripción 9,6 s; clasificación 8,5 s; dos celdas de descripción seguidas 12,0 s; consulta tras reabrir 7,0 s. Los tiempos varían con la carga del equipo y no son extrapolables. Son medidas de un corpus de tres imágenes, no un benchmark de calidad ni de un corpus de 10.000 fotografías.
 
 Si falla, el diagnóstico se escribe en `test-results/real-models-failure.json`. No se sustituyen pesos por mocks para declarar que la inferencia funciona.
 
@@ -113,7 +113,7 @@ Si falla, el diagnóstico se escribe en `test-results/real-models-failure.json`.
 
 Las relaciones hacia Zotero u otros vaults se conservan como referencias externas sin resolver. Páginas, automatizaciones y funciones ajenas a la investigación visual no se importan como servicios activos. La versión de Nodus inspeccionada y los módulos adaptados se documentan en [REUSE.md](docs/REUSE.md).
 
-Notion ZIP admite las tablas CSV e imágenes referenciadas por rutas relativas. Los CSV de Notion no codifican sus IDs de opciones, fórmulas ni relaciones tipadas; no se afirma una reconstrucción sin pérdida de esos datos. Los documentos de página Markdown aún no se incorporan.
+Notion ZIP admite las tablas CSV, las imágenes referenciadas por rutas relativas y las páginas Markdown. Las páginas se incorporan como una base «Páginas Notion» con título, texto plano y las imágenes que referencian; no se reconstruyen bloques, jerarquía ni formato enriquecido. Los CSV de Notion no codifican sus IDs de opciones, fórmulas ni relaciones tipadas; no se afirma una reconstrucción sin pérdida de esos datos. Al importar imágenes se puede elegir la propiedad de adjuntos de destino.
 
 ## Formatos de imagen
 
@@ -122,13 +122,15 @@ JPEG, PNG, WebP, TIFF y BMP tienen rutas reales de decodificación, miniatura y 
 ## Pruebas y mediciones
 
 ```sh
-npm test               # 44 pruebas en Electron
+npm run lint           # ESLint sin errores
+npm test               # 53 pruebas en Electron
+npm run verify         # typecheck + lint + pruebas + build
 npm run build
 npm run test:e2e       # requiere entorno gráfico
 npm run benchmark
 ```
 
-La batería cubre celdas, CSV, selección múltiple, filtros, FTS, persistencia, fórmulas, relaciones, asociación de imágenes, deduplicación, copias, restauración, importación Nodus/Notion, colas, privacidad, credenciales, clasificación por columnas, extracción segura de runtimes y análisis de la salida de visión. La prueba de escritorio usa Electron real y datos de prueba aislados; también se ejecuta sobre la aplicación macOS ARM64 empaquetada y desde el DMG montado en solo lectura.
+La batería cubre celdas, CSV, selección múltiple, filtros, equivalencias de campos, FTS, persistencia, fórmulas aritméticas/estadísticas/expresiones, relaciones, asociación y movimiento masivo de imágenes, deduplicación, copias, restauración, importación Nodus/Notion —incluidas páginas Markdown—, colas, privacidad, credenciales, clasificación por columnas, extracción segura de runtimes y análisis de la salida de visión. La prueba de escritorio usa Electron real y datos de prueba aislados; también se ejecuta sobre la aplicación macOS ARM64 empaquetada y desde el DMG montado en solo lectura.
 
 El benchmark de [docs/benchmarks/local.json](docs/benchmarks/local.json) mide **10.000 registros sintéticos**, búsquedas y correspondencias. No representa 10.000 fotografías reales ni un benchmark de inferencia.
 
@@ -140,7 +142,7 @@ npm run dist:win       # NSIS, x64
 npm run dist:linux     # AppImage, DEB y RPM, x64
 ```
 
-Compila en el sistema destino; los módulos nativos requieren el ABI y la arquitectura correctos. La [automatización de CI](.github/workflows/ci.yml) define esa matriz, pero **una configuración de CI no equivale a una plataforma comprobada**. En este entorno solo se ha construido y ejecutado macOS ARM64; macOS Intel, Windows y Linux no se han ejecutado. Firma, notarización y publicación requieren las credenciales del mantenedor y no se han realizado.
+Compila en el sistema destino; los módulos nativos requieren el ABI y la arquitectura correctos. La [automatización de CI](.github/workflows/ci.yml) define esa matriz, pero **una configuración de CI no equivale a una plataforma comprobada**. En este entorno se han construido macOS ARM64 y macOS Intel (x64); solo ARM64 se ha ejecutado y probado con E2E. Windows y Linux no se han ejecutado. Firma, notarización y publicación requieren las credenciales del mantenedor y no se han realizado.
 
 ## Documentación y licencia
 

@@ -6,6 +6,16 @@ import type {
   DatabaseDetail,
 } from "../../shared/databases";
 import { COLUMN_TYPES, columnTypeHasOptions } from "../../shared/databases";
+import {
+  COLUMN_STAT_FNS,
+  isNumericSource,
+  type FormulaSpec,
+} from "../../shared/databaseFormula";
+import {
+  formulaExpressionResultKind,
+  parseFormulaExpression,
+  validateFormulaExpression,
+} from "../../shared/databaseFormulaExpression";
 import { Modal, Button } from "./ui";
 import { useT } from "../i18n";
 import type { Status } from "../../shared/imago";
@@ -61,7 +71,13 @@ export function Properties({
     [databases, setDatabases] = useState<{ id: string; name: string }[]>([]);
   const [operand, setOperand] = useState(""),
     [operation, setOperation] = useState("add"),
-    [constant, setConstant] = useState(1);
+    [constant, setConstant] = useState(1),
+    [formulaKind, setFormulaKind] = useState<
+      "arithmetic" | "columnStat" | "expression"
+    >("arithmetic"),
+    [statFn, setStatFn] = useState("percentOfTotal"),
+    [formulaSource, setFormulaSource] = useState(""),
+    [formulaImported, setFormulaImported] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice | null>(null),
     [prompt, setPrompt] = useState(""),
     [source, setSource] = useState("");
@@ -75,12 +91,72 @@ export function Properties({
     aiPrompt: prompt,
     aiSourceColumnId: source || undefined,
   });
+  const formulaConfig = (): FormulaSpec | undefined => {
+    if (type !== "formula" || formulaImported) return undefined;
+    if (!operand) throw new Error("Selecciona una propiedad para la fórmula.");
+    if (formulaKind === "columnStat")
+      return {
+        kind: "columnStat",
+        fn: statFn as "percentOfTotal",
+        columnId: operand,
+      };
+    if (formulaKind === "expression") {
+      const source = formulaSource.trim();
+      if (!source) throw new Error("Escribe una expresión.");
+      const ast = parseFormulaExpression(source);
+      const problem = validateFormulaExpression(ast, detail.columns);
+      if (problem) throw new Error(problem);
+      return {
+        kind: "expression",
+        source,
+        ast,
+        resultKind: formulaExpressionResultKind(ast, detail.columns),
+      };
+    }
+    return {
+      kind: "arithmetic",
+      op: operation as "add",
+      operands: [
+        { kind: "column", columnId: operand },
+        { kind: "number", value: constant },
+      ],
+    };
+  };
   const edit = (c: DatabaseColumn) => {
     setSelected(c);
     setName(c.name);
     setType(c.type);
     setOptions(c.options);
     setCreating(false);
+    setFormulaImported(null);
+    setFormulaKind("arithmetic");
+    setFormulaSource("");
+    setOperand("");
+    setStatFn("percentOfTotal");
+    const spec = c.config.formula as FormulaSpec | undefined;
+    if (spec?.kind === "columnStat") {
+      setFormulaKind("columnStat");
+      setStatFn(spec.fn);
+      setOperand(spec.columnId);
+    } else if (spec?.kind === "expression") {
+      setFormulaKind("expression");
+      setFormulaSource(spec.source);
+    } else if (spec?.kind === "arithmetic") {
+      const column = spec.operands.find((operand) => operand.kind === "column");
+      const number = spec.operands.find((operand) => operand.kind === "number");
+      if (
+        !["add", "subtract", "multiply", "divide"].includes(spec.op) ||
+        spec.operands.length !== 2 ||
+        !column ||
+        !number
+      ) {
+        setFormulaImported("arithmetic");
+      } else {
+        setOperand(column.columnId);
+        setOperation(spec.op);
+        setConstant(number.value);
+      }
+    } else if (spec) setFormulaImported(spec.kind);
     setPrompt(c.config.aiPrompt ?? "");
     setSource(c.config.aiSourceColumnId ?? "");
     setChoice(
@@ -103,6 +179,11 @@ export function Properties({
     setChoice(null);
     setPrompt("");
     setSource("");
+    setFormulaImported(null);
+    setFormulaKind("arithmetic");
+    setFormulaSource("");
+    setOperand("");
+    setStatFn("percentOfTotal");
     void perform(async () =>
       setDatabases(await window.imago.call("listDatabases")),
     );
@@ -135,10 +216,16 @@ export function Properties({
             e.preventDefault();
             void perform(async () => {
               if (selected) {
+                const formula =
+                  selected.type === "formula" ? formulaConfig() : undefined;
                 await window.imago.call("updateColumn", {
                   id: selected.id,
                   name,
-                  config: { ...selected.config, ...aiConfig() },
+                  config: {
+                    ...selected.config,
+                    ...aiConfig(),
+                    ...(formula ? { formula } : {}),
+                  },
                 });
                 if (columnTypeHasOptions(type))
                   await window.imago.call("saveOptions", {
@@ -153,16 +240,7 @@ export function Properties({
                         relationTargetKind: "db_row" as const,
                       }
                     : type === "formula"
-                      ? {
-                          formula: {
-                            kind: "arithmetic" as const,
-                            op: operation as "add",
-                            operands: [
-                              { kind: "column" as const, columnId: operand },
-                              { kind: "number" as const, value: constant },
-                            ],
-                          },
-                        }
+                      ? { formula: formulaConfig() }
                       : aiConfig();
                 const c = await window.imago.call("addColumn", {
                   databaseId: detail.database.id,
@@ -236,43 +314,135 @@ export function Properties({
                   </select>
                 </label>
               )}
-              {type === "formula" && !selected && (
+              {type === "formula" && (
                 <div className="stack">
-                  <label>
-                    {t("Propiedades")}
-                    <select
-                      required
-                      value={operand}
-                      onChange={(e) => setOperand(e.target.value)}
-                    >
-                      <option value="">—</option>
-                      {detail.columns
-                        .filter((c) => c.type === "number")
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
+                  {formulaImported ? (
+                    <p className="hint">
+                      {t("Fórmula importada de Nodus")} · {formulaImported}.{" "}
+                      {t(
+                        "Se conserva su configuración original; este editor solo modifica operaciones, estadísticas y expresiones.",
+                      )}
+                    </p>
+                  ) : (
+                    <>
+                      <label>
+                        {t("Receta")}
+                        <select
+                          value={formulaKind}
+                          onChange={(e) =>
+                            setFormulaKind(
+                              e.target.value as
+                                | "arithmetic"
+                                | "columnStat"
+                                | "expression",
+                            )
+                          }
+                        >
+                          <option value="arithmetic">{t("Operación")}</option>
+                          <option value="columnStat">
+                            {t("Estadística de columna")}
                           </option>
-                        ))}
-                    </select>
-                  </label>
-                  <div className="row">
-                    <select
-                      aria-label={t("Fórmula")}
-                      value={operation}
-                      onChange={(e) => setOperation(e.target.value)}
-                    >
-                      <option value="add">+</option>
-                      <option value="subtract">−</option>
-                      <option value="multiply">×</option>
-                      <option value="divide">÷</option>
-                    </select>
-                    <input
-                      aria-label={t("Número")}
-                      type="number"
-                      value={constant}
-                      onChange={(e) => setConstant(Number(e.target.value))}
-                    />
-                  </div>
+                          <option value="expression">{t("Expresión")}</option>
+                        </select>
+                      </label>
+                      {formulaKind !== "expression" && (
+                        <label>
+                          {t("Propiedades")}
+                          <select
+                            required
+                            value={operand}
+                            onChange={(e) => setOperand(e.target.value)}
+                          >
+                            <option value="">—</option>
+                            {detail.columns
+                              .filter(isNumericSource)
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                      )}
+                      {formulaKind === "arithmetic" && (
+                        <div className="row">
+                          <select
+                            aria-label={t("Fórmula")}
+                            value={operation}
+                            onChange={(e) => setOperation(e.target.value)}
+                          >
+                            <option value="add">+</option>
+                            <option value="subtract">−</option>
+                            <option value="multiply">×</option>
+                            <option value="divide">÷</option>
+                          </select>
+                          <input
+                            aria-label={t("Número")}
+                            type="number"
+                            value={constant}
+                            onChange={(e) =>
+                              setConstant(Number(e.target.value))
+                            }
+                          />
+                        </div>
+                      )}
+                      {formulaKind === "columnStat" && (
+                        <label>
+                          {t("Función")}
+                          <select
+                            value={statFn}
+                            onChange={(e) => setStatFn(e.target.value)}
+                          >
+                            {COLUMN_STAT_FNS.map((fn) => (
+                              <option key={fn.id} value={fn.id}>
+                                {t(fn.label)} · {t(fn.hint)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {formulaKind === "expression" && (
+                        <>
+                          <label>
+                            {t("Expresión")}
+                            <textarea
+                              rows={4}
+                              required
+                              value={formulaSource}
+                              onChange={(e) =>
+                                setFormulaSource(e.target.value)
+                              }
+                              placeholder={'property("id-columna") * 2'}
+                            />
+                          </label>
+                          <label>
+                            {t("Insertar propiedad")}
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (!e.target.value) return;
+                                setFormulaSource((previous) =>
+                                  `${previous}${previous ? " " : ""}property("${e.target.value}")`,
+                                );
+                              }}
+                            >
+                              <option value="">—</option>
+                              {detail.columns.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <p className="hint">
+                            {t(
+                              'Usa property("id"), operadores + − * / % y funciones como if(), dateAdd(), concat() o sum(). Se valida antes de guardar.',
+                            )}
+                          </p>
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
               {columnTypeHasOptions(type) && (

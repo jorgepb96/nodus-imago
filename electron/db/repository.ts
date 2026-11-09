@@ -194,6 +194,21 @@ export class Repository {
       this.rebuildText(c.databaseId);
     })();
   }
+  pruneEquivalences(removedColumnIds: string[]) {
+    if (!removedColumnIds.length) return;
+    const removed = new Set(removedColumnIds),
+      settings = this.getSettings(),
+      groups = settings.fieldEquivalences
+        .map((group) => ({
+          ...group,
+          columnIds: group.columnIds.filter((id) => !removed.has(id)),
+        }))
+        .filter((group) => group.columnIds.length >= 2);
+    if (
+      JSON.stringify(groups) !== JSON.stringify(settings.fieldEquivalences)
+    )
+      this.updateSettings({ fieldEquivalences: groups });
+  }
   deleteColumn(id: string) {
     const c = this.column(id);
     if (c.type === "title")
@@ -201,6 +216,7 @@ export class Repository {
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM history WHERE column_id=?").run(id);
       this.db.prepare("DELETE FROM db_columns WHERE id=?").run(id);
+      this.pruneEquivalences([id]);
       this.recompute(c.databaseId);
       this.rebuildText(c.databaseId);
       this.db
@@ -628,6 +644,73 @@ export class Repository {
         if (f.databaseId && f.databaseId !== column.databaseId)
           throw new Error("Filtro de otra base de datos.");
         const operand = Array.isArray(f.value) ? f.value : [f.value];
+        if (f.columnIds?.length) {
+          const columns = f.columnIds.flatMap((columnId) => {
+            try {
+              return [this.column(columnId)];
+            } catch {
+              return [];
+            }
+          });
+          if (!columns.length) {
+            clauses.push("0");
+            continue;
+          }
+          const databaseIds = [...new Set(columns.map((c) => c.databaseId))];
+          const parts = columns.map((groupColumn) => {
+            if (f.op === "empty")
+              return {
+                sql: "NOT EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text IS NOT NULL AND c.value_text<>'')",
+                params: [groupColumn.id],
+              };
+            if (f.op === "contains")
+              return {
+                sql: "EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text LIKE ? ESCAPE '\\')",
+                params: [
+                  groupColumn.id,
+                  "%" +
+                    String(operand[0] ?? "").replace(/[\\%_]/g, "\\$&") +
+                    "%",
+                ],
+              };
+            if (f.op === "equals")
+              return {
+                sql: "EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text=?)",
+                params: [groupColumn.id, String(operand[0] ?? "")],
+              };
+            if (f.op === "any" || f.op === "all") {
+              if (!operand.length)
+                return { sql: "0", params: [] as unknown[] };
+              return {
+                sql:
+                  "EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND (" +
+                  operand
+                    .map(
+                      () =>
+                        "EXISTS(SELECT 1 FROM json_each(CASE WHEN json_valid(c.value_text) THEN c.value_text ELSE '[]' END) j WHERE j.value=?)",
+                    )
+                    .join(f.op === "all" ? " AND " : " OR ") +
+                  "))",
+                params: [groupColumn.id, ...operand],
+              };
+            }
+            const numeric = groupColumn.type === "number",
+              value = numeric ? Number(operand[0]) : String(operand[0] ?? "");
+            if (numeric && !Number.isFinite(value))
+              throw new Error("Filtro numérico no válido.");
+            return {
+              sql: `EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND ${numeric ? "c.value_number" : "coalesce(json_extract(CASE WHEN json_valid(c.value_text) THEN c.value_text ELSE '{}' END,'$.start'),c.value_text)"} ${f.op === "gte" ? ">=" : "<="} ?)`,
+              params: [groupColumn.id, value],
+            };
+          });
+          const combined = `(${parts.map((part) => part.sql).join(f.op === "empty" ? " AND " : " OR ")})`;
+          const guard = databaseIds.length
+            ? `(r.database_id NOT IN (${marks(databaseIds)}) OR ${combined})`
+            : combined;
+          clauses.push(guard);
+          params.push(...databaseIds, ...parts.flatMap((part) => part.params));
+          continue;
+        }
         const system = systemValueSql(column);
         let clause = "";
 
@@ -838,6 +921,7 @@ export class Repository {
       apiProfiles: {},
       apiDelayMs: 1000,
       parallelJobs: os.totalmem() >= 12 * 2 ** 30 ? 2 : 1,
+      fieldEquivalences: [],
       ...parse(saved?.value ?? null),
     });
   }
@@ -993,6 +1077,65 @@ export class Repository {
         .run();
     })();
     return asset.row_id;
+  }
+  deleteImages(ids: string[]) {
+    if (!ids.length) return 0;
+    const assets = ids.map((id) => this.asset(id));
+    this.db.transaction(() => {
+      for (const asset of assets)
+        this.db.prepare("DELETE FROM image_assets WHERE id=?").run(asset.id);
+      for (const rowId of new Set(assets.map((asset) => asset.row_id))) {
+        this.normalizeImagePositions(rowId);
+        this.indexRow(rowId);
+      }
+      this.db
+        .prepare(
+          "DELETE FROM embeddings WHERE content_hash NOT IN (SELECT content_hash FROM image_assets)",
+        )
+        .run();
+    })();
+    return assets.length;
+  }
+  reassignImages(
+    ids: string[],
+    rowId: string,
+    columnId?: string,
+  ) {
+    if (!ids.length) return 0;
+    const row = this.getRow(rowId),
+      assets = ids.map((id) => this.asset(id));
+    const column = columnId ? this.column(columnId) : null;
+    if (
+      column &&
+      (column.databaseId !== row.databaseId ||
+        !["attachment", "files"].includes(column.type))
+    )
+      throw new Error("Destino de imagen incompatible.");
+    for (const asset of assets) {
+      if (asset.database_id !== row.databaseId)
+        throw new Error("Las imágenes pertenecen a otra base de datos.");
+      const targetColumn = column ?? this.column(asset.column_id);
+      if (
+        targetColumn.databaseId !== row.databaseId ||
+        !["attachment", "files"].includes(targetColumn.type)
+      )
+        throw new Error("Columna de imagen incompatible.");
+    }
+    this.db.transaction(() => {
+      for (const asset of assets) {
+        const targetColumn = column ?? this.column(asset.column_id);
+        this.db
+          .prepare(
+            "UPDATE image_assets SET database_id=?,row_id=?,column_id=? WHERE id=?",
+          )
+          .run(row.databaseId, row.id, targetColumn.id, asset.id);
+        this.normalizeImagePositions(asset.row_id);
+        this.indexRow(asset.row_id);
+      }
+      this.normalizeImagePositions(row.id);
+      this.indexRow(row.id);
+    })();
+    return assets.length;
   }
   assetPath(id: string, thumbnail = false): string {
     const a = this.asset(id);

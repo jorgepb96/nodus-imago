@@ -25,6 +25,8 @@ const filter = z
   .object({
     databaseId: id.optional(),
     columnId: id,
+    columnIds: z.array(id).min(1).max(100).optional(),
+    groupId: id.optional(),
     op: z.enum(["contains", "equals", "gte", "lte", "any", "all", "empty"]),
     value: z.union([z.string().max(10000), z.array(z.string()).max(1000)]),
   })
@@ -71,6 +73,17 @@ export const settingsSchema = z
     ),
     apiDelayMs: z.number().int().min(0).max(60000),
     parallelJobs: z.number().int().min(1).max(4),
+    fieldEquivalences: z
+      .array(
+        z
+          .object({
+            id,
+            name,
+            columnIds: z.array(id).min(1).max(100),
+          })
+          .strict(),
+      )
+      .max(100),
   })
   .strict();
 export const schemas: Record<string, z.ZodTypeAny> = {
@@ -152,6 +165,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       token: id,
       storage: z.enum(["copy", "link"]),
       createUnmatched: z.boolean(),
+      columnId: id.optional(),
       assignments: z
         .array(z.object({ pathToken: id, rowId: id.nullable() }).strict())
         .max(100000),
@@ -161,6 +175,10 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   setPrimary: z.object({ id }).strict(),
   deleteImage: z.object({ id }).strict(),
   reassignImage: z.object({ id, rowId: id, columnId: id }).strict(),
+  deleteImages: z.object({ ids }).strict(),
+  reassignImages: z
+    .object({ ids, rowId: id, columnId: id.optional() })
+    .strict(),
   relinkImage: z.object({ id }).strict(),
   export: z
     .object({

@@ -58,6 +58,22 @@ try {
     .selectOption("multi_select");
   await page.getByRole("button", { name: "Importar 4 registros" }).click();
   await page.getByRole("heading", { name: "Archivo", exact: true }).waitFor();
+  // Property editor: an attachment target chosen by the user and a formula
+  // created with the new arithmetic/expression recipe editor.
+  await page.getByRole("button", { name: "Propiedades", exact: true }).click();
+  const properties = page.getByRole("dialog");
+  await properties.getByRole("button", { name: "Añadir propiedad" }).click();
+  await properties.getByLabel("Nombre", { exact: true }).fill("Archivo adjunto");
+  await properties.locator("select").nth(0).selectOption("attachment");
+  await properties.getByRole("button", { name: "Guardar", exact: true }).click();
+  await properties.getByRole("button", { name: "Añadir propiedad" }).click();
+  await properties.getByLabel("Nombre", { exact: true }).fill("Doble año");
+  await properties.locator("select").nth(0).selectOption("formula");
+  await properties.locator("select").nth(2).selectOption({ label: "Año" });
+  await properties.locator("select").nth(3).selectOption("multiply");
+  await properties.locator('input[type="number"]').fill("2");
+  await properties.getByRole("button", { name: "Guardar", exact: true }).click();
+  await properties.getByRole("button", { name: "Cerrar", exact: true }).click();
   await page.locator(".gallery-card").nth(3).waitFor();
   await app.evaluate(({ dialog }, files) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: files });
@@ -69,6 +85,11 @@ try {
   await page
     .getByRole("heading", { name: "Importar imágenes", exact: true })
     .waitFor();
+  await page
+    .locator("label")
+    .filter({ hasText: "Columna de destino" })
+    .locator("select")
+    .selectOption({ label: "Archivo adjunto" });
   assert.equal(await page.locator(".matching-table .badge.safe").count(), 4);
   await page
     .getByRole("button", { name: "Confirmar importación", exact: true })
@@ -99,6 +120,14 @@ try {
   await page.getByRole("button", { name: "Tabla", exact: true }).click();
   await page.locator(".data-table").waitFor();
   assert.equal(await page.locator(".data-table tbody tr").count(), 4);
+  await page
+    .locator(".data-table thead")
+    .getByText("Doble año", { exact: true })
+    .waitFor();
+  assert.match(
+    await page.locator(".data-table tbody tr").first().innerText(),
+    /3890/,
+  );
   const firstDescription = page
     .locator('.data-table input[aria-label="Descripción"]')
     .first();
@@ -175,6 +204,25 @@ try {
     .waitFor();
   await page.screenshot({ path: "test-results/06-providers.png" });
   await page
+    .getByRole("button", { name: "Equivalencias de campos", exact: true })
+    .first()
+    .click();
+  await page
+    .getByRole("heading", { name: "Equivalencias de campos", exact: true })
+    .waitFor();
+  await page
+    .getByPlaceholder("Lugar, Autor, Fecha…")
+    .fill("Campos de texto");
+  await page
+    .locator(".equivalence-form select")
+    .selectOption([{ label: "ID" }, { label: "Descripción" }]);
+  await page.getByRole("button", { name: "Añadir grupo", exact: true }).click();
+  await page
+    .locator(".equivalence-item")
+    .filter({ hasText: "Campos de texto" })
+    .waitFor();
+  await page.screenshot({ path: "test-results/09-equivalences.png" });
+  await page
     .getByRole("button", { name: "Colas y tareas", exact: true })
     .first()
     .click();
@@ -240,9 +288,14 @@ try {
   );
   assert.equal(stored.total, 1);
   assert.equal(stored.rows[0].images.length, 1);
+  const savedEquivalences = await reopened.evaluate(async () =>
+    (await window.imago.call("status")).settings.fieldEquivalences,
+  );
+  assert.equal(savedEquivalences.length, 1);
+  assert.ok(savedEquivalences[0].columnIds.length >= 2);
   assert.deepEqual(errors, []);
   console.log(
-    "E2E passed: native desktop, CSV mapping, image association, gallery/table editing, search, record, export, theme, restart persistence.",
+    "E2E passed: native desktop, CSV mapping, target attachment, formula editor, image association, gallery/table editing, search, record, export, field equivalences, theme, restart persistence.",
   );
 } catch (error) {
   if (app) {

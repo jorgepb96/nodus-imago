@@ -38,7 +38,9 @@ export function Modal({
   const ref = useRef<HTMLDialogElement>(null),
     t = useT();
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();

@@ -16,6 +16,10 @@ module.exports = {
     { from: "legal", to: "legal/dependencies" },
   ],
   mac: {
+    // Development build: signing/notarization are deliberately out of scope.
+    // Disable signing entirely: this is a development build, and an accidental
+    // partial Developer ID signature would be worse than an unsigned artifact.
+    identity: null,
     category: "public.app-category.education",
     target: [
       { target: "dmg", arch: ["arm64", "x64"] },

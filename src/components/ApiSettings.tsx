@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   KeyRound,
   ShieldCheck,
@@ -32,19 +32,25 @@ export function ApiSettings({
     } | null>(null),
     [catalog, setCatalog] = useState<string[]>([]);
   const s = status.settings;
-  const refreshKeys = () =>
-    void perform(async () =>
-      setKeys(await window.imago.call("credentialsStatus")),
-    );
+  const refreshKeys = useCallback(
+    () =>
+      void perform(async () =>
+        setKeys(await window.imago.call("credentialsStatus")),
+      ),
+    [perform],
+  );
   useEffect(() => {
     refreshKeys();
-  }, []);
+  }, [refreshKeys]);
+  const profileSignature = JSON.stringify(s.apiProfiles[provider] ?? null);
   useEffect(() => {
     setBase(s.apiProfiles[provider]?.baseUrl ?? PROVIDERS[provider].baseUrl);
     setModelText(s.apiProfiles[provider]?.models.join("\n") ?? "");
     setKey("");
     setCatalog([]);
-  }, [provider, JSON.stringify(s.apiProfiles[provider])]);
+    // profileSignature is the serialised provider profile used for comparison.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, profileSignature]);
   const update = (patch: Partial<Settings>) =>
     void perform(async () => {
       await window.imago.call("updateSettings", patch);

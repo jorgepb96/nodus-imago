@@ -138,11 +138,14 @@ export function RecordPanel({
     [imageIndex, setImageIndex] = useState(0),
     [provenance, setProvenance] = useState<Provenance[]>([]),
     [moving, setMoving] = useState(false),
+    [bulkMove, setBulkMove] = useState(false),
     [query, setQuery] = useState(""),
     [targets, setTargets] = useState<RecordRow[]>([]);
   const dialog = useRef<HTMLDialogElement>(null),
     closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
   useEffect(() => setImageIndex(0), [row.id]);
   useEffect(() => {
     let cancelled = false;
@@ -315,6 +318,15 @@ export function RecordPanel({
                       {t("Buscar")}
                     </Button>
                   </div>
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={bulkMove}
+                      onChange={(e) => setBulkMove(e.target.checked)}
+                    />
+                    {t("Mover todas las imágenes del registro")} ·{" "}
+                    {row.images.length}
+                  </label>
                   {targets
                     .filter((r) => r.id !== row.id)
                     .map((r) => (
@@ -322,12 +334,20 @@ export function RecordPanel({
                         key={r.id}
                         onClick={() =>
                           void perform(async () => {
-                            await window.imago.call("reassignImage", {
-                              id: image.id,
-                              rowId: r.id,
-                              columnId: image.columnId,
-                            });
+                            if (bulkMove)
+                              await window.imago.call("reassignImages", {
+                                ids: row.images.map((item) => item.id),
+                                rowId: r.id,
+                              });
+                            else
+                              await window.imago.call("reassignImage", {
+                                id: image.id,
+                                rowId: r.id,
+                                columnId: image.columnId,
+                              });
+                            setBulkMove(false);
                             setMoving(false);
+                            setImageIndex(0);
                             onChanged();
                           })
                         }

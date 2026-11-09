@@ -75,6 +75,76 @@ test("image import hashes originals, creates external thumbnails, associates mul
     await f.close();
   }
 });
+test("image import can target a chosen attachment column instead of the first one", async () => {
+  const f = await fixture();
+  try {
+    const d = f.repo.create("A"),
+      first = d.columns.find((c) => c.type === "attachment")!,
+      second = f.repo.addColumn(d.database.id, "Otra carpeta", "attachment"),
+      images = new Images(f.repo),
+      row = f.repo.createRow(d.database.id),
+      plan = await images.preview(d.database.id, [f.image]);
+    const id = images.enqueue(
+      plan.token,
+      "copy",
+      false,
+      plan.matches.map((m) => ({ pathToken: m.pathToken, rowId: row.id })),
+      second.id,
+    );
+    const payload = JSON.parse(
+      (f.repo.db.prepare("SELECT payload_json FROM jobs WHERE id=?").get(id) as any)
+        .payload_json,
+    );
+    await images.importOne(payload, 0);
+    assert.equal(f.repo.getRow(row.id).images[0].columnId, second.id);
+    assert.notEqual(f.repo.getRow(row.id).images[0].columnId, first.id);
+  } finally {
+    await f.close();
+  }
+});
+test("bulk image reassignment and deletion keep both records consistent", async () => {
+  const f = await fixture();
+  try {
+    const d = f.repo.create("A"),
+      first = d.columns.find((c) => c.type === "attachment")!,
+      second = f.repo.addColumn(d.database.id, "Segunda carpeta", "attachment"),
+      images = new Images(f.repo),
+      from = f.repo.createRow(d.database.id),
+      to = f.repo.createRow(d.database.id);
+    for (const columnId of [first.id, second.id])
+      await images.importOne(
+        {
+          databaseId: d.database.id,
+          columnId,
+          storage: "copy",
+          createUnmatched: false,
+          files: [{ path: f.image, rowId: from.id }],
+        },
+        0,
+      );
+    const assets = f.repo.getRow(from.id).images;
+    assert.equal(assets.length, 2);
+    assert.equal(
+      f.repo.reassignImages(
+        assets.map((asset) => asset.id),
+        to.id,
+      ),
+      2,
+    );
+    assert.equal(f.repo.getRow(from.id).images.length, 0);
+    assert.equal(f.repo.getRow(to.id).images.length, 2);
+    assert.equal(
+      f.repo.deleteImages(
+        f.repo.getRow(to.id).images.map((asset) => asset.id),
+      ),
+      2,
+    );
+    assert.equal(f.repo.getRow(to.id).images.length, 0);
+    assert.equal(f.repo.stats().images, 0);
+  } finally {
+    await f.close();
+  }
+});
 test("unmatched duplicate image never creates a second record, including after interrupted-job replay", async () => {
   const f = await fixture();
   try {
@@ -301,6 +371,38 @@ test("persistent paused tasks survive service restart and resume import from the
     service = undefined;
   } finally {
     if (service) await service.run("_close");
+    await f.close();
+  }
+});
+test("Notion ZIP imports Markdown pages as a text database and extracts page images", async () => {
+  const f = await fixture();
+  try {
+    const zip = new AdmZip();
+    zip.addFile(
+      "Página 0123456789abcdef0123456789abcdef.md",
+      Buffer.from("# Página\n\n![Foto](images/IMG001.jpg)\n\nContenido"),
+    );
+    zip.addFile("images/IMG001.jpg", await fs.readFile(f.image));
+    const file = path.join(f.root, "notion-pages.zip");
+    zip.writeZip(file);
+    const result = await importNotion(f.repo, new Images(f.repo), file);
+    assert.equal(result.databases, 1);
+    assert.equal(result.attachments, 1);
+    const database = f.repo.list()[0];
+    assert.equal(database.name, "Páginas Notion");
+    const detail = f.repo.detail(database.id),
+      rows = f.repo.literal({
+        databaseIds: [database.id],
+        query: "",
+        limit: 10,
+      });
+    assert.equal(rows.total, 1);
+    assert.equal(rows.rows[0].title, "Página");
+    const contentColumn = detail.columns.find((column) => column.name === "Contenido")!;
+    assert.match(String(f.repo.getRow(rows.rows[0].id).cells[contentColumn.id]), /# Página/);
+    assert.equal(f.repo.getRow(rows.rows[0].id).images.length, 1);
+    assert.ok(result.notices.some((notice) => notice.includes("páginas Markdown")));
+  } finally {
     await f.close();
   }
 });

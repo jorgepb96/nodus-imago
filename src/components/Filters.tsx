@@ -1,7 +1,7 @@
 import { Plus, X } from "lucide-react";
 import { Button } from "./ui";
 import type { DatabaseDetail } from "../../shared/databases";
-import type { PropertyFilter } from "../../shared/imago";
+import type { EquivalenceGroup, PropertyFilter } from "../../shared/imago";
 import { useT } from "../i18n";
 export function Filters({
   details,
@@ -9,12 +9,14 @@ export function Filters({
   onChange,
   logic,
   setLogic,
+  equivalences = [],
 }: {
   details: DatabaseDetail[];
   filters: PropertyFilter[];
   onChange: (v: PropertyFilter[]) => void;
   logic: "and" | "or";
   setLogic: (v: "and" | "or") => void;
+  equivalences?: EquivalenceGroup[];
 }) {
   const t = useT(),
     columns = details
@@ -60,10 +62,27 @@ export function Filters({
           <div className="row filter-rule" key={i}>
             <select
               aria-label={t("Propiedades")}
-              value={f.columnId}
+              value={f.groupId ? "eq:" + f.groupId : f.columnId}
               onChange={(e) => {
+                if (e.target.value.startsWith("eq:")) {
+                  const group = equivalences.find(
+                    (item) => item.id === e.target.value.slice(3),
+                  );
+                  if (!group) return;
+                  update(i, {
+                    groupId: group.id,
+                    columnId: group.columnIds[0],
+                    columnIds: group.columnIds,
+                    databaseId: undefined,
+                    op: "contains",
+                    value: "",
+                  });
+                  return;
+                }
                 const col = columns.find((c) => c.id === e.target.value)!;
                 update(i, {
+                  groupId: undefined,
+                  columnIds: undefined,
                   columnId: col.id,
                   databaseId: col.databaseId,
                   op: col.type === "multi_select" ? "any" : "contains",
@@ -77,6 +96,16 @@ export function Filters({
                   {c.name}
                 </option>
               ))}
+              {!!equivalences.length && (
+                <optgroup label={t("Campos equivalentes")}>
+                  {equivalences.map((group) => (
+                    <option key={group.id} value={"eq:" + group.id}>
+                      {group.name} ·{" "}
+                      {group.columnIds.length} {t("propiedades")}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             <select
               aria-label={t("Tipo")}
@@ -93,9 +122,13 @@ export function Filters({
             >
               <option value="contains">{t("Contiene")}</option>
               <option value="equals">{t("Es igual a")}</option>
-              <option value="gte">{t("Desde")}</option>
-              <option value="lte">{t("Hasta")}</option>
-              {c?.type === "multi_select" && (
+              {!f.groupId && (
+                <>
+                  <option value="gte">{t("Desde")}</option>
+                  <option value="lte">{t("Hasta")}</option>
+                </>
+              )}
+              {!f.groupId && c?.type === "multi_select" && (
                 <>
                   <option value="any">{t("Cualquiera de")}</option>
                   <option value="all">{t("Todas las opciones")}</option>
@@ -104,7 +137,7 @@ export function Filters({
               <option value="empty">{t("Está vacío")}</option>
             </select>
             {f.op !== "empty" &&
-              (c?.options.length ? (
+              (c?.options.length && !f.groupId ? (
                 <select
                   aria-label={t("Opciones")}
                   multiple={f.op === "any" || f.op === "all"}

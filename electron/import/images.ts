@@ -133,6 +133,7 @@ export class Images {
     return {
       token,
       files: plan.files.length,
+      columnId: plan.columnId || undefined,
       matches: matchImages(plan.files, rows, pattern, partial),
     };
   }
@@ -141,6 +142,7 @@ export class Images {
     storage: "copy" | "link",
     createUnmatched: boolean,
     assignments: { pathToken: string; rowId: string | null }[],
+    requestedColumnId?: string,
   ) {
     const plan = this.plans.get(token);
     if (!plan) throw new Error("La previsualización caducó.");
@@ -157,9 +159,20 @@ export class Images {
         return { path: file.path, rowId: a.rowId };
       })
       .filter((f) => f.rowId || createUnmatched);
-    const columnId =
-      plan.columnId ||
-      this.repo.addColumn(plan.databaseId, "Imágenes", "attachment").id;
+    let columnId = requestedColumnId || plan.columnId;
+    if (columnId) {
+      const column = this.repo
+        .detail(plan.databaseId)
+        .columns.find((candidate) => candidate.id === columnId);
+      if (!column || !["attachment", "files"].includes(column.type))
+        throw new Error("Selecciona una propiedad de archivos de esta base.");
+    } else {
+      columnId = this.repo.addColumn(
+        plan.databaseId,
+        "Imágenes",
+        "attachment",
+      ).id;
+    }
     const payload: ImageImportPayload = {
       databaseId: plan.databaseId,
       columnId,

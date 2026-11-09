@@ -90,11 +90,98 @@ export async function importNotion(
           }
         }
     }
-    if (!databases) throw new Error("El ZIP no contiene bases de datos CSV.");
-    if ([...zip.entries.keys()].some((n) => n.endsWith(".md")))
-      notices.push(
-        "Los documentos Markdown de páginas se conservan en el ZIP original; esta importación incorpora tablas CSV e imágenes referenciadas.",
+    const markdown = [...zip.entries.keys()]
+      .filter((entry) => entry.toLowerCase().endsWith(".md"))
+      .sort();
+    if (markdown.length) {
+      const pagesName = repo.list().some((d) => d.name === "Páginas Notion")
+        ? "Páginas Notion (importadas)"
+        : "Páginas Notion";
+      const pages = await Promise.all(
+        markdown.map(async (entry) => {
+          const text = (await zip.read(entry, 10 * 2 ** 20)).toString("utf8");
+          return {
+            entry,
+            title:
+              path.posix
+                .basename(entry, path.posix.extname(entry))
+                .replace(/(?:\s+|_)[0-9a-f]{32}$/i, "")
+                .trim() || "Página sin título",
+            text: text.replace(/\0/g, ""),
+          };
+        }),
       );
+      const pageDb = repo.importCsv(
+        pagesName,
+        ["Título", "Contenido"],
+        ["title", "rich_text"],
+        pages.map((page) => [page.title, page.text]),
+      );
+      created.push(pageDb.database.id);
+      databases++;
+      const pageRows = repo.db
+        .prepare("SELECT id FROM db_rows WHERE database_id=? ORDER BY position")
+        .all(pageDb.database.id) as { id: string }[];
+      let pageAttachments = pageDb.columns.find(
+        (column) => column.type === "attachment",
+      );
+      for (let index = 0; index < pages.length; index++) {
+        const references = new Set<string>();
+        for (const pattern of [
+          /!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g,
+          /<img[^>]+src=["']([^"']+)["']/gi,
+        ])
+          for (const match of pages[index].text.matchAll(pattern))
+            references.add(match[1].replace(/^<|>$/g, ""));
+        for (const reference of references) {
+          let decoded: string;
+          try {
+            decoded = decodeURIComponent(reference);
+          } catch {
+            continue;
+          }
+          if (/^(?:https?:|data:|file:|#|mailto:)/i.test(decoded)) continue;
+          const candidates = [
+            path.posix.normalize(
+              path.posix.join(path.posix.dirname(pages[index].entry), decoded),
+            ),
+            path.posix.normalize(decoded),
+          ];
+          const resolved = candidates.find(
+            (candidate) =>
+              !candidate.startsWith("../") &&
+              zip.entries.has(candidate) &&
+              isImage(candidate),
+          );
+          if (!resolved) continue;
+          pageAttachments ??= repo.addColumn(
+            pageDb.database.id,
+            "Imágenes",
+            "attachment",
+          );
+          const target = path.join(
+            staging,
+            uuid() + path.posix.extname(resolved),
+          );
+          await zip.extract(resolved, target);
+          await images.importOne(
+            {
+              databaseId: pageDb.database.id,
+              columnId: pageAttachments.id,
+              storage: "copy",
+              createUnmatched: false,
+              files: [{ path: target, rowId: pageRows[index].id }],
+            },
+            0,
+          );
+          attachments++;
+        }
+      }
+      notices.push(
+        `Se importaron ${markdown.length} páginas Markdown como texto plano en «${pagesName}». No se reproducen bloques, jerarquía ni formato enriquecido.`,
+      );
+    }
+    if (!databases) throw new Error("El ZIP no contiene bases de datos CSV ni páginas Markdown.");
     notices.push(
       "CSV de Notion no conserva IDs originales de opciones, fórmulas ni relaciones tipadas. Revisa los tipos detectados después de importar.",
     );

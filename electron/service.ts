@@ -93,11 +93,14 @@ export class Service {
         return this.repo.db
           .prepare("UPDATE db_databases SET name=? WHERE id=?")
           .run(input.name, input.id);
-      case "deleteDatabase":
+      case "deleteDatabase": {
         if (this.unfinishedJobs())
           throw new Error(
             "Termina o cancela las tareas antes de eliminar una base de datos.",
           );
+        const removedColumns = this.repo
+          .detail(input.id)
+          .columns.map((column) => column.id);
         return this.repo.db.transaction(() => {
           this.repo.db
             .prepare(
@@ -107,6 +110,7 @@ export class Service {
           const result = this.repo.db
             .prepare("DELETE FROM db_databases WHERE id=?")
             .run(input.id);
+          this.repo.pruneEquivalences(removedColumns);
           this.repo.db
             .prepare(
               "DELETE FROM embeddings WHERE content_hash NOT IN (SELECT content_hash FROM image_assets)",
@@ -114,6 +118,7 @@ export class Service {
             .run();
           return result;
         })();
+      }
       case "detail":
         return this.repo.detail(input.id);
       case "addColumn":
@@ -204,6 +209,7 @@ export class Service {
           input.storage,
           input.createUnmatched,
           input.assignments,
+          input.columnId,
         );
         this.queue.pump();
         return id;
@@ -254,6 +260,10 @@ export class Service {
         })();
         return;
       }
+      case "deleteImages":
+        return this.repo.deleteImages(input.ids);
+      case "reassignImages":
+        return this.repo.reassignImages(input.ids, input.rowId, input.columnId);
       case "relinkImage": {
         const a = this.repo.asset(input.id);
         if ((await hashFile(input.file)) !== a.content_hash)
@@ -453,6 +463,7 @@ export class Service {
         return this.models.get(input.id);
       case "_close":
         await this.queue.close();
+        this.engine.close();
         this.repo.close();
         return;
       default:

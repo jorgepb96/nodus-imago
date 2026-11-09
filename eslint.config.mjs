@@ -1,0 +1,78 @@
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
+
+export default tseslint.config(
+  {
+    ignores: [
+      "node_modules/**",
+      ".venv/**",
+      "dist/**",
+      "dist-electron/**",
+      "release/**",
+      "test-results/**",
+      "legal/**",
+      "runtime/**",
+    ],
+  },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ["**/*.{ts,tsx,mjs,js,cjs}"],
+    plugins: { "react-hooks": reactHooks },
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: {
+        window: "readonly",
+        document: "readonly",
+        navigator: "readonly",
+        localStorage: "readonly",
+        matchMedia: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        console: "readonly",
+        module: "readonly",
+        require: "readonly",
+        __dirname: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+        structuredClone: "readonly",
+        fetch: "readonly",
+        Response: "readonly",
+        Request: "readonly",
+        Headers: "readonly",
+        AbortController: "readonly",
+        AbortSignal: "readonly",
+        crypto: "readonly",
+        performance: "readonly",
+      },
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      "no-empty": "off",
+      "no-control-regex": "off",
+      "no-useless-escape": "off",
+      "no-undef": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-require-imports": "off",
+      "@typescript-eslint/no-unused-expressions": "off",
+      "@typescript-eslint/ban-ts-comment": "off",
+      "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
+  {
+    files: ["scripts/**/*.mjs", "scripts/**/*.ts", "tests/**/*.ts"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
+      "react-hooks/exhaustive-deps": "off",
+    },
+  },
+);

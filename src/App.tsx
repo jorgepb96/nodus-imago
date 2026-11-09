@@ -284,13 +284,14 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     // Deleting rows or a changed result set can leave the page beyond the end.
     if (offset > 0 && offset >= page.total) setOffset(0);
   }, [offset, page.total]);
+  const openRowId = openRow?.id;
   useEffect(() => {
-    if (openRow)
+    if (openRowId)
       void api
-        .call("getRow", { id: openRow.id })
+        .call("getRow", { id: openRowId })
         .then(setOpenRow)
         .catch(() => setOpenRow(null));
-  }, [tick]);
+  }, [api, openRowId, tick]);
   const navigate = (id: string) => {
     setArea("databases");
     setDatabaseId(id);
@@ -689,6 +690,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 onChanged={refresh}
                 perform={perform}
                 notify={notify}
+                details={allDetails}
               />
             )
           ) : (
@@ -1178,6 +1180,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         setOffset(0);
                         setSelected(new Set());
                       }}
+                      equivalences={status?.settings.fieldEquivalences ?? []}
                     />
                   )}
                   {showFilters && area === "search" && (

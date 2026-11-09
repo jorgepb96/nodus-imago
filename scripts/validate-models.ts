@@ -60,6 +60,16 @@ try{
   const accepted=service.repo.reviewProposals(proposals.map(p=>p.id),'accept');assert.equal(accepted.applied,2);report.results.accepted=accepted;
   assert.equal(JSON.parse(service.repo.getRow(ids[0]).cells[categories.id]??'[]').length,1);
   assert.ok((service.repo.getRow(ids[0]).cells[description.id]?.length??0)>=20);
+  // A single LFM3 chat session must serve several cells without reloading the
+  // GGUF. This exercises the persistent pool with one job and two records.
+  const multiAt=performance.now();
+  const multi=await service.run('analyze',{rowIds:[ids[1],ids[2]],columnIds:[description.id],language:'es',detailed:false});
+  report.measurements.twoCellDescriptionMs=Math.round(await waitJob(multi));
+  const multiProposals=service.repo.proposals();
+  assert.equal(multiProposals.length,2);
+  report.results.multiCell={elapsedMs:Math.round(performance.now()-multiAt),values:multiProposals.map(p=>({column:p.columnName,value:p.value}))};
+  const multiAccepted=service.repo.reviewProposals(multiProposals.map(p=>p.id),'accept');
+  assert.equal(multiAccepted.applied,2);
   // Criterion 11: close and reopen without losing rows, accepted values or vectors.
   const beforeRestart=service.repo.stats();
   await service.run('_close');

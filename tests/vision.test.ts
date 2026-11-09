@@ -5,6 +5,7 @@ import {
   parseClassification,
   parseDescription,
 } from "../shared/visionOutput";
+import { cleanChatOutput, extractChatAnswer } from "../electron/ai/llama";
 
 test("reasoning blocks and llama.cpp console noise never become cell values", () => {
   const raw =
@@ -54,6 +55,22 @@ test("classification accepts label strings and objects, enforces vocabulary and 
   );
   assert.deepEqual(
     parseClassification(
+      '[{"U":0,"V":0,"W":0,"Title":"Categorías","Image":"GoldenGate.png","Label":"Paisaje"}]',
+      ["Paisaje", "Interiores"],
+      5,
+    ),
+    ["Paisaje"],
+  );
+  assert.deepEqual(
+    parseClassification(
+      '{"U":0,"V":0,"Title":"Categorías","Label":"Paisaje"}',
+      ["Paisaje", "Interiores"],
+      5,
+    ),
+    ["Paisaje"],
+  );
+  assert.deepEqual(
+    parseClassification(
       '<think>I will choose one</think>{"labels":["paisaje"]}',
       ["Paisaje", "Interiores"],
       5,
@@ -95,5 +112,44 @@ test("description rejects bare JSON and unwraps explicit description fields", ()
       "=== DATOS DE LA FILA ===\nTítulo: Documento A\nImágenes: GoldenGate.png\nUn puente rojo sobre el agua.",
     ),
     "Un puente rojo sobre el agua.",
+  );
+  assert.equal(
+    parseDescription(
+      '<minimax:tool_call>\n<invoke>\n<parameter name="description">Se observa un puente rojo.</parameter>\n</invoke>\n</minimax:tool_call>',
+    ),
+    "Se observa un puente rojo.",
+  );
+  assert.deepEqual(
+    parseClassification(
+      '<minimax:tool_call><invoke><parameter name="labels">["Paisaje"]</parameter></invoke></minimax:tool_call>',
+      ["Paisaje"],
+      5,
+    ),
+    ["Paisaje"],
+  );
+});
+
+test("persistent llama chat output separates prompt echo from the answer", () => {
+  assert.equal(
+    extractChatAnswer(
+      "Describe the photograph.\n\nA red bridge crosses the water.\n\n",
+      "Describe the photograph.",
+    ),
+    "A red bridge crosses the water.",
+  );
+  assert.equal(
+    extractChatAnswer(
+      "/image /tmp/a.png image loaded\nDescribe the photograph.\n\nA red bridge.\n",
+      "Describe the photograph.",
+    ),
+    "A red bridge.",
+  );
+  assert.equal(
+    cleanChatOutput("\u001b[32mAnswer\u001b[0m\b\b"),
+    "Answer",
+  );
+  assert.throws(
+    () => extractChatAnswer("Describe the photograph.\n\n", "Describe the photograph."),
+    /no devolvió texto/,
   );
 });

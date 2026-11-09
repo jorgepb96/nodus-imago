@@ -34,7 +34,7 @@ test("PNG, WebP, TIFF and BMP have real decoding and thumbnail paths", async () 
           bmp.encode({ width: 16, height: 12, data }).data,
         );
       } else {
-        let image = sharp({
+        const image = sharp({
           create: { width: 16, height: 12, channels: 3, background: "#994477" },
         });
         await image.toFormat(format as "png").toFile(file);

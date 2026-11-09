@@ -20,7 +20,7 @@ Fuente inspeccionada en el checkout local `../nodus`, revisión **393fb7b23ca893
 | `electron/secrets/secretStore.ts` | `electron/secrets/store.ts` | Patrón de secretos por proveedor, cifrado del sistema y escrituras atómicas; sin migración ni lectura del perfil de Nodus |
 | `shared/providers.ts`, `electron/ai/providers.ts` | `shared/aiConfig.ts`, `electron/ai/apiProviders.ts` | Identificadores y endpoints de proveedores; transporte reducido a inferencia visual y consulta explícita del catálogo |
 | `electron/ai/databaseAiColumn.ts` | `electron/ai/engine.ts` | Orquestación por propiedad y fuente de imagen; cola persistente, propuestas y protección de anotaciones añadidas |
-| — (nuevo) | `shared/visionOutput.ts` | Parser estricto para la salida real de LFM3: razonamiento, cabeceras y vocabulario de clasificación. No se copia de Nodus; se añade tras la validación con pesos |
+| — (nuevo) | `shared/visionOutput.ts` | Parser estricto para la salida real de LFM3: razonamiento, cabeceras, sobres `minimax:tool_call` y vocabulario de clasificación. No se copia de Nodus; se añade tras la validación con pesos |
 
 ## Rutas estudiadas que no se copiaron completas
 

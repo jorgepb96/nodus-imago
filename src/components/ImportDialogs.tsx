@@ -164,6 +164,13 @@ export function ImageImport({
     [pattern, setPattern] = useState(""),
     [partial, setPartial] = useState(false),
     [storage, setStorage] = useState<"copy" | "link">("copy"),
+    [targetColumn, setTargetColumn] = useState(
+      initialPlan.columnId ??
+        detail.columns.find(
+          (column) => column.type === "attachment" || column.type === "files",
+        )?.id ??
+        "",
+    ),
     [create, setCreate] = useState(true),
     [assignments, setAssignments] = useState<Record<string, string | null>>({}),
     [rowChoices, setRowChoices] = useState<{ id: string; title: string }[]>([]),
@@ -351,6 +358,24 @@ export function ImageImport({
             {t("Siguiente")}
           </Button>
         </div>
+        <label>
+          {t("Columna de destino")}
+          <select
+            value={targetColumn}
+            onChange={(e) => setTargetColumn(e.target.value)}
+          >
+            <option value="">{t("Crear columna Imágenes")}</option>
+            {detail.columns
+              .filter((column) =>
+                ["attachment", "files"].includes(column.type),
+              )
+              .map((column) => (
+                <option key={column.id} value={column.id}>
+                  {column.name}
+                </option>
+              ))}
+          </select>
+        </label>
         <div className="row">
           <label className="check-label">
             <input
@@ -393,6 +418,7 @@ export function ImageImport({
                 token: plan.token,
                 storage,
                 createUnmatched: create,
+                columnId: targetColumn || undefined,
                 assignments: plan.matches
                   .filter(
                     (m) =>
