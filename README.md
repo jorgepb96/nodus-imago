@@ -124,7 +124,7 @@ JPEG, PNG, WebP, TIFF, BMP, HEIC y HEIF tienen rutas reales de decodificación y
 
 ```sh
 npm run lint           # ESLint sin errores
-npm test               # 54 pruebas en Electron
+npm test               # 55 pruebas en Electron
 npm run verify         # typecheck + lint + pruebas + build
 npm run build
 npm run test:e2e       # requiere entorno gráfico

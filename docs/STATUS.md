@@ -16,7 +16,7 @@ Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la pr
 | --- | --- | --- |
 | `npm run typecheck` | pasa | TypeScript estricto sin errores |
 | `npm run lint` | pasa | ESLint 9, sin errores ni avisos |
-| `npm test` | **54/54** | Electron real, `test-results/unit/` |
+| `npm test` | **55/55** | Electron real, `test-results/unit/` |
 | `npm run test:e2e` | pasa | CSV, columna de destino, fórmula, HEIC/HEIF, icono adaptativo, imágenes, tabla/galería, búsqueda, ficha, exportación, equivalencias, tema y reinicio; capturas `test-results/01..09` |
 | E2E sobre app empaquetada macOS ARM64 | pasa | `IMAGO_E2E_EXECUTABLE` sobre `release/mac-arm64/Nodus Imago.app` |
 | E2E desde el DMG montado | pasa | `release/Nodus-Imago-0.1.0-arm64.dmg` montado en solo lectura |
