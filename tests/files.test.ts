@@ -448,3 +448,35 @@ test("HEIC/HEIF images decode through the WASM libheif path and import with a th
     await f.close();
   }
 });
+
+test("HEIC EXIF item is extracted for a real iPhone image", async (t) => {
+  const real = path.resolve("test-results/model-fixtures/real.heic");
+  if (!(await fs.stat(real).catch(() => null))) {
+    t.skip("real HEIC fixture not available");
+    return;
+  }
+  const f = await fixture();
+  try {
+    const d = f.repo.create("HEIC EXIF"),
+      column = d.columns.find((c) => c.type === "attachment")!,
+      row = f.repo.createRow(d.database.id),
+      images = new Images(f.repo);
+    await images.importOne(
+      {
+        databaseId: d.database.id,
+        columnId: column.id,
+        storage: "copy",
+        createUnmatched: false,
+        files: [{ path: real, rowId: row.id }],
+      },
+      0,
+    );
+    const asset = f.repo.getRow(row.id).images[0];
+    assert.equal(asset.metadata.Make, "Apple");
+    assert.equal(asset.metadata.Model, "iPhone 16 Pro Max");
+    assert.ok(asset.metadata.DateTimeOriginal);
+    assert.ok(asset.metadata.GPSLatitude);
+  } finally {
+    await f.close();
+  }
+});

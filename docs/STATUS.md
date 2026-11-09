@@ -16,7 +16,7 @@ Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la pr
 | --- | --- | --- |
 | `npm run typecheck` | pasa | TypeScript estricto sin errores |
 | `npm run lint` | pasa | ESLint 9, sin errores ni avisos |
-| `npm test` | **55/55** | Electron real, `test-results/unit/` |
+| `npm test` | **56/56** | Electron real, `test-results/unit/` |
 | `npm run test:e2e` | pasa | CSV, columna de destino, fórmula, HEIC/HEIF, icono adaptativo, imágenes, tabla/galería, búsqueda, ficha, exportación, equivalencias, tema y reinicio; capturas `test-results/01..09` |
 | E2E sobre app empaquetada macOS ARM64 | pasa | `IMAGO_E2E_EXECUTABLE` sobre `release/mac-arm64/Nodus Imago.app` |
 | E2E desde el DMG montado | pasa | `release/Nodus-Imago-0.1.0-arm64.dmg` montado en solo lectura |
@@ -80,7 +80,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 
 ## Límites explícitos
 
-- HEIC/HEIF se admite con `heic-decode`/`libheif-js` (WASM) antes de sharp, porque el `libheif` nativo de sharp 0.35.5 no incluye el decodificador HEVC. El WASM añade ~9 MB al paquete y decodifica en CPU; no se ha medido una carpeta completa de HEIC. JPEG/PNG/WebP/TIFF/BMP conservan su ruta nativa.
+- HEIC/HEIF se admite con `heic-decode`/`libheif-js` (WASM) antes de sharp, porque el `libheif` nativo de sharp 0.35.5 no incluye el decodificador HEVC. El EXIF del contenedor se extrae con ExifReader (Make, Model, fechas, GPS y orientación). El WASM añade ~9 MB al paquete y decodifica en CPU; no se ha medido una carpeta completa de HEIC. JPEG/PNG/WebP/TIFF/BMP conservan su ruta nativa.
 - La importación Notion incorpora las páginas Markdown como texto plano con su carpeta de origen y sus imágenes, pero no reconstruye bloques, un árbol navegable, bases embebidas ni formato enriquecido. Los CSV no contienen IDs de opciones, fórmulas ni relaciones tipadas.
 - Rollups, comparaciones, botones y automatizaciones avanzadas de Nodus se conservan como configuración/datos cuando se importan, pero no se ofrecen como servicios equivalentes activos. Las relaciones externas de otros vaults no se resuelven.
 - El editor de fórmulas permite aritmética, estadísticas de columna y expresiones seguras. Las recetas importadas de condicionales, concatenaciones y otras variantes se conservan sin edición visual; no se ha replicado todo el editor de Nodus.

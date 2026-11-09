@@ -4,6 +4,7 @@ import path from "node:path";
 import { createHash, randomUUID as uuid } from "node:crypto";
 import sharp, { type Sharp } from "sharp";
 import exifr from "exifr";
+import ExifReader from "exifreader";
 import { Repository, now } from "../db/repository";
 import { matchImages } from "../../shared/imageMatching";
 import type { ImagePlan } from "../../shared/imago";
@@ -250,6 +251,36 @@ export class Images {
         })) ?? {};
     } catch {
       /* Some formats carry no EXIF. */
+    }
+    // exifr does not read the HEIF item metadata. ExifReader understands the
+    // Exif item in HEIC/HEIF, so use it when the first pass produced nothing.
+    if (!Object.keys(metadata).length) {
+      try {
+        const tags = await ExifReader.load(file.path);
+        const description = (key: string) =>
+          typeof tags[key]?.description === "string"
+            ? tags[key].description
+            : undefined;
+        const value = (key: string) => tags[key]?.value as unknown;
+        metadata = {
+          Make: description("Make"),
+          Model: description("Model"),
+          DateTimeOriginal: description("DateTimeOriginal"),
+          CreateDate: description("DateTime") ?? description("CreateDate"),
+          Artist: description("Artist"),
+          Copyright: description("Copyright"),
+          GPSLatitude: value("GPSLatitude"),
+          GPSLongitude: value("GPSLongitude"),
+          Orientation: value("Orientation"),
+        };
+        metadata = Object.fromEntries(
+          Object.entries(metadata).filter(
+            ([, entry]) => entry !== undefined && entry !== "",
+          ),
+        );
+      } catch {
+        /* Some formats carry no EXIF. */
+      }
     }
     let original = file.path;
     if (payload.storage === "copy") {

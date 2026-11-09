@@ -118,13 +118,13 @@ Notion ZIP admite las tablas CSV, las imágenes referenciadas por rutas relativa
 
 ## Formatos de imagen
 
-JPEG, PNG, WebP, TIFF, BMP, HEIC y HEIF tienen rutas reales de decodificación y miniatura; el EXIF se extrae de los formatos que exifr reconoce y todavía no de HEIC/HEIF. El `libheif` incluido en sharp 0.35.5 no incorpora el decodificador HEVC, así que HEIC/HEIF se decodifican con el WASM de `heic-decode`/`libheif-js` y se entregan a sharp como RGBA. La prueba usa un HEIC sintético y se ha comprobado también con una foto real de 5712×4284. Consulta [docs/STATUS.md](docs/STATUS.md).
+JPEG, PNG, WebP, TIFF, BMP, HEIC y HEIF tienen rutas reales de decodificación, miniatura y extracción EXIF; los HEIC usan ExifReader para leer el elemento Exif del contenedor. El `libheif` incluido en sharp 0.35.5 no incorpora el decodificador HEVC, así que HEIC/HEIF se decodifican con el WASM de `heic-decode`/`libheif-js` y se entregan a sharp como RGBA. La prueba usa un HEIC sintético y se ha comprobado también con una foto real de 5712×4284. Consulta [docs/STATUS.md](docs/STATUS.md).
 
 ## Pruebas y mediciones
 
 ```sh
 npm run lint           # ESLint sin errores
-npm test               # 55 pruebas en Electron
+npm test               # 56 pruebas en Electron
 npm run verify         # typecheck + lint + pruebas + build
 npm run build
 npm run test:e2e       # requiere entorno gráfico

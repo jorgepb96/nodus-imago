@@ -8,7 +8,7 @@ Nodus Imago adapta código de Nodus Research, © Jorge Pérez Burgueño, bajo **
 
 El inventario reproducible de producción está en `legal/dependency-inventory.json`; las licencias y avisos de los paquetes instalados se incluyen en `legal/THIRD_PARTY_LICENSES.txt`. Se generan desde `package-lock.json` con `npm run licenses`. Los paquetes opcionales específicos de otra arquitectura se resuelven y sus avisos se regeneran en esa plataforma antes de empaquetar.
 
-Componentes principales: React y React DOM (MIT), Lucide (ISC y los avisos derivados de Feather), better-sqlite3 (MIT; SQLite es dominio público), Vite (MIT), Electron (MIT, con avisos de Chromium incluidos en su distribución), exifr (MIT), bmp-js (MIT), adm-zip (MIT), yauzl (MIT), archiver (MIT), Zod (MIT), sharp (Apache-2.0).
+Componentes principales: React y React DOM (MIT), Lucide (ISC y los avisos derivados de Feather), better-sqlite3 (MIT; SQLite es dominio público), Vite (MIT), Electron (MIT, con avisos de Chromium incluidos en su distribución), exifr (MIT), ExifReader (MIT), bmp-js (MIT), adm-zip (MIT), yauzl (MIT), archiver (MIT), Zod (MIT), sharp (Apache-2.0).
 
 sharp se distribuye con libvips y otras bibliotecas nativas. El paquete precompilado `@img/sharp-libvips` usa LGPL-3.0-or-later para las bibliotecas con cláusula de versión posterior. Se incluyen los textos LGPL-3.0 y GPL-3.0 y el listado de versiones y fuentes. Sus bibliotecas compartidas quedan fuera de ASAR y pueden sustituirse; sus avisos se conservan en los paquetes `@img`. Las fuentes y scripts de construcción correspondientes se publican en [libvips](https://github.com/libvips/libvips) y [sharp-libvips](https://github.com/lovell/sharp-libvips), en las versiones identificadas por los paquetes instalados.
 
