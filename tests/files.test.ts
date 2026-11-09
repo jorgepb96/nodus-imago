@@ -385,10 +385,10 @@ test("Notion ZIP imports Markdown pages as a text database and extracts page ima
   try {
     const zip = new AdmZip();
     zip.addFile(
-      "Página 0123456789abcdef0123456789abcdef.md",
+      "Sección/Página 0123456789abcdef0123456789abcdef.md",
       Buffer.from("# Página\n\n![Foto](images/IMG001.jpg)\n\nContenido"),
     );
-    zip.addFile("images/IMG001.jpg", await fs.readFile(f.image));
+    zip.addFile("Sección/images/IMG001.jpg", await fs.readFile(f.image));
     const file = path.join(f.root, "notion-pages.zip");
     zip.writeZip(file);
     const result = await importNotion(f.repo, new Images(f.repo), file);
@@ -406,6 +406,8 @@ test("Notion ZIP imports Markdown pages as a text database and extracts page ima
     assert.equal(rows.rows[0].title, "Página");
     const contentColumn = detail.columns.find((column) => column.name === "Contenido")!;
     assert.match(String(f.repo.getRow(rows.rows[0].id).cells[contentColumn.id]), /# Página/);
+    const folderColumn = detail.columns.find((column) => column.name === "Carpeta")!;
+    assert.equal(f.repo.getRow(rows.rows[0].id).cells[folderColumn.id], "Sección");
     assert.equal(f.repo.getRow(rows.rows[0].id).images.length, 1);
     assert.ok(result.notices.some((notice) => notice.includes("páginas Markdown")));
   } finally {

@@ -30,7 +30,7 @@ Los adjuntos genéricos de Nodus se conservan aunque no sea posible generar mini
 
 ## Importación y asociación
 
-CSV se analiza en el worker y el renderer recibe una muestra y un token; no necesita mantener 10.000 filas en memoria. Nodus se abre de solo lectura y se importa desde una instantánea, con escritura transaccional en Imago. Los ZIP se inspeccionan con límites y se leen en streaming; las rutas de sus entradas nunca se usan como destinos de extracción sin validación. Un ZIP de Notion se convierte en bases CSV y, además, en una base de páginas Markdown con texto plano e imágenes referenciadas; no se reconstruyen bloques ni jerarquía.
+CSV se analiza en el worker y el renderer recibe una muestra y un token; no necesita mantener 10.000 filas en memoria. Nodus se abre de solo lectura y se importa desde una instantánea, con escritura transaccional en Imago. Los ZIP se inspeccionan con límites y se leen en streaming; las rutas de sus entradas nunca se usan como destinos de extracción sin validación. Un ZIP de Notion se convierte en bases CSV y, además, en una base de páginas Markdown con texto plano, carpeta de origen e imágenes referenciadas; no se reconstruyen bloques ni un árbol navegable.
 
 Las correspondencias son primero exactas, después códigos de catálogo. Cada clave mantiene un conjunto de candidatos; más de una fila produce ambigüedad. Los patrones admiten expresiones lineales y plantillas; se rechazan grupos, alternativas y referencias inversas. La similitud parcial es explícita, limitada por número de comparaciones y nunca se confirma sin revisión.
 

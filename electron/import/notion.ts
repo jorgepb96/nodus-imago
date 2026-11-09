@@ -113,9 +113,15 @@ export async function importNotion(
       );
       const pageDb = repo.importCsv(
         pagesName,
-        ["Título", "Contenido"],
-        ["title", "rich_text"],
-        pages.map((page) => [page.title, page.text]),
+        ["Título", "Contenido", "Carpeta"],
+        ["title", "rich_text", "text"],
+        pages.map((page) => [
+          page.title,
+          page.text,
+          path.posix.dirname(page.entry) === "."
+            ? ""
+            : path.posix.dirname(page.entry),
+        ]),
       );
       created.push(pageDb.database.id);
       databases++;
