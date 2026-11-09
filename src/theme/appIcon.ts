@@ -4,7 +4,7 @@ import darkIcon from "../../build/icon-dark.png";
 let lastMode: boolean | null = null;
 
 /**
- * macOS Dock (and Windows/Linux window icon) follows the resolved app theme.
+ * The macOS Dock follows the resolved app theme.
  * The renderer rasterises the approved light/dark artwork at 512 px and gives
  * the main process a PNG data URL, so no native SVG rasteriser is needed.
  */
