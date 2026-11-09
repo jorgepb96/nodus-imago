@@ -10,10 +10,10 @@ No he encontrado comentarios de Codex accesibles en el repositorio, refs, PRs/Is
 
 ## Comprobaciones ejecutadas
 
-- `npm run verify`: typecheck, ESLint, **56/57 pruebas** y build.
-- E2E macOS ARM64 sin empaquetar, empaquetado y desde el DMG montado: pasa.
+- `npm run verify`: typecheck, ESLint, **57/57 pruebas** y build.
+- E2E macOS ARM64 sin empaquetar, empaquetado y desde el DMG montado: pasa, incluida la vista Árbol.
 - E2E macOS x64 bajo Rosetta, empaquetado y desde el DMG: pasa.
-- E2E Linux ARM64 y Linux x64 empaquetados en Docker con Xvfb: pasan.
+- E2E Linux ARM64 y Linux x64 empaquetados en Docker con Xvfb: pasan, incluida la vista Árbol.
 - Validación real con LFM3/EmbeddingGemma: `node scripts/validate-models.mjs` pasa; informe en `docs/benchmarks/real-models-macos-arm64.json`.
 - Benchmark sintético de 10.000 registros: `npm run benchmark` pasa; no es un corpus real.
 - El E2E comprueba el cambio persistido del icono claro/oscuro en macOS.
