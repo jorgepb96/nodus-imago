@@ -148,6 +148,6 @@ Compila en el sistema destino; los módulos nativos requieren el ABI y la arquit
 
 ## Documentación y licencia
 
-[Arquitectura](docs/ARCHITECTURE.md) · [Estado y fases](docs/STATUS.md) · [Reutilización de Nodus](docs/REUSE.md) · [Modelos](docs/MODELS.md) · [Privacidad](PRIVACY.md) · [Dependencias y atribuciones](THIRD_PARTY_NOTICES.md) · [Código fuente](SOURCE_CODE.md).
+[Arquitectura](docs/ARCHITECTURE.md) · [Estado y fases](docs/STATUS.md) · [Handoff para Codex](docs/CODEX_HANDOFF.md) · [Reutilización de Nodus](docs/REUSE.md) · [Modelos](docs/MODELS.md) · [Privacidad](PRIVACY.md) · [Dependencias y atribuciones](THIRD_PARTY_NOTICES.md) · [Código fuente](SOURCE_CODE.md).
 
 Nodus Imago: © Jorge Pérez Burgueño, [AGPL-3.0-only](LICENSE). Las dependencias y los modelos conservan sus licencias. EmbeddingGemma 2 y SmolVLM2 se ofrecen bajo Apache-2.0. LFM3 usa [LFM Open License 1.0](legal/LFM-Open-License-1.0.txt), que incluye condiciones comerciales; no se presenta como un modelo con licencia AGPL ni se redistribuyen sus pesos dentro del programa.
