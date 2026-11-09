@@ -30,7 +30,10 @@ const launchOptions = process.env.IMAGO_E2E_EXECUTABLE
       args: process.env.IMAGO_E2E_NO_SANDBOX ? ["--no-sandbox"] : [],
       env,
     }
-  : { args: ["."], env };
+  : {
+      args: process.env.IMAGO_E2E_NO_SANDBOX ? [".", "--no-sandbox"] : ["."],
+      env,
+    };
 let app;
 const errors = [];
 try {

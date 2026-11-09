@@ -39,7 +39,11 @@ jobs:
       - if: runner.os != 'Linux'
         run: npm run test:e2e
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y rpm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm xvfb libnspr4 libnss3 libgtk-3-0t64 libgbm1 libasound2t64 libxss1 libxtst6 libatspi2.0-0 libx11-xcb1 libxdamage1 libxrandr2
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a env IMAGO_E2E_NO_SANDBOX=1 npm run test:e2e
       - run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --config build/electron-builder.cjs --publish never
       - uses: actions/upload-artifact@v4
         with:
