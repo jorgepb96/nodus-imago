@@ -50,7 +50,7 @@ Todos sin firma ni notarización.
 ## Límites que no deben declararse resueltos
 
 - Windows x64 no se ha ejecutado en Windows nativo en este equipo. Hay un smoke bajo Wine 11 (UI, SQLite/IPC, creación de base y registro); el workflow de CI incluye ahora un E2E sobre la app Windows empaquetada en `windows-latest`, pero no se ha lanzado en un runner desde aquí. El instalador NSIS no se ha probado. macOS x64 sí se ejecutó bajo Rosetta.
-- No se han probado APIs facturables, CUDA, SmolVLM2, un corpus de 10.000 fotografías reales ni una columna LFM3 completa de miles de celdas. EmbeddingGemma 2 sí se probó en Metal/MPS con texto e imagen; LFM3 sigue en CPU.
+- No se han probado APIs facturables, CUDA, SmolVLM2 500M, un corpus de 10.000 fotografías reales ni una columna LFM3 completa de miles de celdas. SmolVLM2 256M sí se ejecutó en CPU para una descripción real. EmbeddingGemma 2 sí se probó en Metal/MPS con texto e imagen; LFM3 sigue en CPU.
 - HEIC conserva ahora el EXIF del contenedor mediante ExifReader; el editor de texto enriquecido no es WYSIWYG; Notion no reconstruye un árbol de bloques ni bases embebidas.
 - Python, pesos y runtimes nativos son externos; los instaladores no están firmados ni notarizados.
 - E2E Linux se ejecutó en Docker/QEMU con Xvfb, no en hardware Linux nativo.
