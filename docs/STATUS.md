@@ -16,7 +16,7 @@ Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la pr
 | --- | --- | --- |
 | `npm run typecheck` | pasa | TypeScript estricto sin errores |
 | `npm run lint` | pasa | ESLint 9, sin errores ni avisos |
-| `npm test` | **56/56** | Electron real, `test-results/unit/` |
+| `npm test` | **57/57** | Electron real, `test-results/unit/` |
 | `npm run test:e2e` | pasa | CSV, columna de destino, fórmula, HEIC/HEIF, icono adaptativo, imágenes, tabla/galería, búsqueda, ficha, exportación, equivalencias, tema y reinicio; capturas `test-results/01..09` |
 | E2E sobre app empaquetada macOS ARM64 | pasa | `IMAGO_E2E_EXECUTABLE` sobre `release/mac-arm64/Nodus Imago.app` |
 | E2E desde el DMG montado | pasa | `release/Nodus-Imago-0.1.0-arm64.dmg` montado en solo lectura |
@@ -48,7 +48,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 - La importación de imágenes permite elegir una propiedad de adjuntos existente; el registro puede mover todas sus imágenes de una vez y el repositorio borra o reasigna lotes de forma atómica.
 - El editor de fórmulas incorpora operaciones, estadísticas de columna y expresiones validadas; las recetas importadas que aún no se editan se conservan intactas y se muestran como solo lectura.
 - Ajustes permite crear grupos de campos equivalentes entre bases y Búsqueda puede filtrar por el grupo con semántica OR; las columnas no emparejadas conservan su comportamiento.
-- Las páginas Markdown de un ZIP de Notion se importan como texto plano, con su carpeta de origen, relación «Página padre» e imágenes referenciadas. La jerarquía de carpetas queda enlazada; no se reconstruye el árbol de bloques ni una vista de árbol dedicada.
+- Las páginas Markdown de un ZIP de Notion se importan como texto plano, con su carpeta de origen, relación «Página padre» e imágenes referenciadas. La jerarquía de carpetas queda enlazada y las bases con relación a sí mismas muestran una vista «Árbol»; no se reconstruye el árbol de bloques.
 - El paquete macOS x64 incluía por error sharp arm64 y no abría ventana; se reconstruyó con sharp-darwin-x64 y better-sqlite3 ABI 148, y se validó con E2E bajo Rosetta y desde el DMG.
 - El icono de la app usa la N canónica de Nodus dentro de un objetivo fotográfico; hay variantes clara y oscura y el Dock de macOS se actualiza al cambiar el tema. El E2E comprueba que el PNG persistido cambia entre modos.
 

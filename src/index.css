@@ -2936,3 +2936,48 @@ thead th:last-child {
   font-size: 11px;
 }
 .markdown-gap { height: 5px; }
+
+/* Self-relation hierarchy */
+.hierarchy-view {
+  overflow: auto;
+  padding: 4px 2px 30px;
+}
+.hierarchy-level {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hierarchy-level .hierarchy-level {
+  margin-left: 24px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+.hierarchy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.hierarchy-row:hover {
+  border-color: var(--line);
+  background: var(--hover);
+}
+.hierarchy-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.hierarchy-row small {
+  margin-left: auto;
+  color: var(--muted);
+}

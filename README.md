@@ -114,7 +114,7 @@ Si falla, el diagnóstico se escribe en `test-results/real-models-failure.json`.
 
 Las relaciones hacia Zotero u otros vaults se conservan como referencias externas sin resolver. Páginas, automatizaciones y funciones ajenas a la investigación visual no se importan como servicios activos. La versión de Nodus inspeccionada y los módulos adaptados se documentan en [REUSE.md](docs/REUSE.md).
 
-Notion ZIP admite las tablas CSV, las imágenes referenciadas por rutas relativas y las páginas Markdown. Las páginas se incorporan como una base «Páginas Notion» con título, texto plano, carpeta de origen, relación «Página padre» y las imágenes que referencian. La jerarquía de carpetas queda enlazada; no se reconstruyen bloques, un árbol navegable dedicado ni formato enriquecido. Los CSV de Notion no codifican sus IDs de opciones, fórmulas ni relaciones tipadas; no se afirma una reconstrucción sin pérdida de esos datos. Al importar imágenes se puede elegir la propiedad de adjuntos de destino.
+Notion ZIP admite las tablas CSV, las imágenes referenciadas por rutas relativas y las páginas Markdown. Las páginas se incorporan como una base «Páginas Notion» con título, texto plano, carpeta de origen, relación «Página padre» y las imágenes que referencian. La jerarquía de carpetas queda enlazada y las bases con una relación a sí mismas ofrecen una vista «Árbol» navegable; no se reconstruyen bloques ni formato enriquecido. Los CSV de Notion no codifican sus IDs de opciones, fórmulas ni relaciones tipadas; no se afirma una reconstrucción sin pérdida de esos datos. Al importar imágenes se puede elegir la propiedad de adjuntos de destino.
 
 ## Formatos de imagen
 
@@ -124,7 +124,7 @@ JPEG, PNG, WebP, TIFF, BMP, HEIC y HEIF tienen rutas reales de decodificación, 
 
 ```sh
 npm run lint           # ESLint sin errores
-npm test               # 56 pruebas en Electron
+npm test               # 57 pruebas en Electron
 npm run verify         # typecheck + lint + pruebas + build
 npm run build
 npm run test:e2e       # requiere entorno gráfico

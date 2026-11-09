@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   LayoutGrid,
   Table2,
+  ListTree,
   SlidersHorizontal,
   FolderInput,
   ImagePlus,
@@ -59,6 +60,7 @@ import { RecordPanel } from "./components/RecordPanel";
 import { Settings, Jobs } from "./components/Settings";
 import { Home } from "./components/Home";
 import { ImagoMark } from "./components/ImagoMark";
+import { buildHierarchy, type HierarchyNode } from "../shared/hierarchy";
 import { QueuePopover, type QueueFilter } from "./components/QueuePopover";
 
 export default function App() {
@@ -89,7 +91,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   const [page, setPage] = useState<Page>({ rows: [], total: 0 }),
     [loading, setLoading] = useState(false),
-    [view, setView] = useState<"gallery" | "table">("gallery"),
+    [view, setView] = useState<"gallery" | "table" | "tree">("gallery"),
     [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(""),
     [mode, setMode] = useState<"literal" | "semantic" | "hybrid">("literal"),
@@ -449,6 +451,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         .slice(0, 4) ?? []
     );
   };
+  const hierarchyColumn = detail?.columns.find(
+      (column) =>
+        column.type === "relation" &&
+        column.config.relationTargetDatabaseId === detail.database.id,
+    ),
+    hierarchy = useMemo(
+      () =>
+        hierarchyColumn && view === "tree"
+          ? buildHierarchy(page.rows, hierarchyColumn.id)
+          : [],
+      [hierarchyColumn, page.rows, view],
+    );
   if (!api)
     return (
       <div className="desktop-required">
@@ -460,6 +474,30 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         <code>npm run dev</code>
       </div>
     );
+  const renderHierarchy = (
+    nodes: HierarchyNode<Page["rows"][number]>[],
+    depth = 0,
+  ) => (
+    <ul className="hierarchy-level">
+      {nodes.map((node) => (
+        <li key={node.row.id}>
+          <button
+            type="button"
+            className="hierarchy-row"
+            style={{ "--depth": depth } as React.CSSProperties}
+            onClick={() => void perform(() => open(node.row))}
+          >
+            <span className="hierarchy-dot" />
+            <span>{node.row.title}</span>
+            {node.row.images.length > 0 && (
+              <small>{node.row.images.length}</small>
+            )}
+          </button>
+          {node.children.length > 0 && renderHierarchy(node.children, depth + 1)}
+        </li>
+      ))}
+    </ul>
+  );
   return (
     <div
       className={
@@ -1109,6 +1147,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         <Table2 size={15} />
                         {t("Tabla")}
                       </button>
+                      {area === "databases" && hierarchyColumn && (
+                        <button
+                          className={view === "tree" ? "active" : ""}
+                          onClick={() => setView("tree")}
+                        >
+                          <ListTree size={15} />
+                          {t("Árbol")}
+                        </button>
+                      )}
                     </div>
                     <div className="row toolbar-actions">
                       <Button
@@ -1341,6 +1388,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         </Button>
                       )}
                     </Empty>
+                  ) : view === "tree" && hierarchyColumn ? (
+                    <div className="hierarchy-view">
+                      <p className="muted">
+                        {t("Jerarquía según la relación de la base.")}
+                      </p>
+                      {hierarchy.length ? (
+                        renderHierarchy(hierarchy)
+                      ) : (
+                        <p className="muted">{t("Sin relaciones todavía.")}</p>
+                      )}
+                    </div>
                   ) : view === "gallery" ? (
                     <div className="gallery">
                       {page.rows.map((row) => (

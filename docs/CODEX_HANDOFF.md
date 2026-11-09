@@ -10,7 +10,7 @@ No he encontrado comentarios de Codex accesibles en el repositorio, refs, PRs/Is
 
 ## Comprobaciones ejecutadas
 
-- `npm run verify`: typecheck, ESLint, **56/56 pruebas** y build.
+- `npm run verify`: typecheck, ESLint, **56/57 pruebas** y build.
 - E2E macOS ARM64 sin empaquetar, empaquetado y desde el DMG montado: pasa.
 - E2E macOS x64 bajo Rosetta, empaquetado y desde el DMG: pasa.
 - E2E Linux ARM64 y Linux x64 empaquetados en Docker con Xvfb: pasan.

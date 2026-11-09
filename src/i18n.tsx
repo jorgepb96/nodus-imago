@@ -393,6 +393,9 @@ const en: Record<string, string> = {
   Enlace: "Link",
   Código: "Code",
   Editar: "Edit",
+  Árbol: "Tree",
+  "Jerarquía según la relación de la base.": "Hierarchy from the database relation.",
+  "Sin relaciones todavía.": "No relationships yet.",
 };
 export function useT() {
   const language = useContext(LanguageContext);
