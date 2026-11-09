@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  nativeImage,
   protocol,
   session,
   safeStorage,
@@ -44,6 +45,40 @@ function call(command: string, input?: unknown): Promise<any> {
     worker.postMessage({ id, command, input });
   });
 }
+const appIconPath = () => path.join(app.getPath("userData"), "last-app-icon.png");
+let currentAppIcon: ReturnType<typeof nativeImage.createFromBuffer> | null = null;
+
+function applyAppIcon(image: ReturnType<typeof nativeImage.createFromBuffer>) {
+  if (image.isEmpty()) return;
+  currentAppIcon = image;
+  // The running app icon is a macOS Dock feature in Nodus. The packaged
+  // window icon remains static on Windows/Linux, where setIcon can crash some
+  // Electron builds under Linux/X11.
+  if (process.platform === "darwin" && app.dock) app.dock.setIcon(image);
+}
+
+async function restoreAppIcon() {
+  try {
+    const image = nativeImage.createFromBuffer(await fs.readFile(appIconPath()));
+    if (!image.isEmpty()) applyAppIcon(image);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      console.warn("[app-icon] No se pudo restaurar el icono:", error);
+  }
+}
+
+async function persistAppIcon(image: ReturnType<typeof nativeImage.createFromBuffer>) {
+  const file = appIconPath(),
+    temporary = `${file}.${process.pid}.tmp`;
+  try {
+    await fs.writeFile(temporary, image.toPNG());
+    await fs.rename(temporary, file);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    console.warn("[app-icon] No se pudo guardar el icono:", error);
+  }
+}
+
 function internalFileRequest(command: string) {
   return [
     "csvPreview",
@@ -54,6 +89,7 @@ function internalFileRequest(command: string) {
   ].includes(command);
 }
 app.whenReady().then(async () => {
+  await restoreAppIcon();
   const root = path.join(app.getPath("userData"), "collection");
   await fs.mkdir(root, { recursive: true });
   const secrets = new Secrets(path.join(app.getPath("userData"), "secrets"), {
@@ -166,6 +202,25 @@ app.whenReady().then(async () => {
     } catch {
       return new Response(null, { status: 404 });
     }
+  });
+  ipcMain.handle("imago:app-icon", async (event, dataUrl: unknown) => {
+    if (
+      !window ||
+      event.sender !== window.webContents ||
+      event.senderFrame !== window.webContents.mainFrame
+    )
+      throw new Error("Origen IPC no autorizado.");
+    if (
+      typeof dataUrl !== "string" ||
+      !dataUrl.startsWith("data:image/png;base64,") ||
+      dataUrl.length > 8_000_000
+    )
+      throw new Error("Icono de aplicación no válido.");
+    const image = nativeImage.createFromDataURL(dataUrl);
+    if (image.isEmpty()) throw new Error("Icono de aplicación no válido.");
+    applyAppIcon(image);
+    await persistAppIcon(image);
+    return true;
   });
   ipcMain.on("imago:drop", async (event, input) => {
     if (

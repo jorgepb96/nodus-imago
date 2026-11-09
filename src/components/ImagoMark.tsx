@@ -1,5 +1,6 @@
 import { useId } from "react";
-// Follows NodusHeaderLogo's theme-aware gradient and connected-node geometry.
+// Compact version of the objective mark. The N uses the same canonical
+// geometry, stroke and four nodes as Nodus Research, scaled uniformly.
 export function ImagoMark({ size = 28 }: { size?: number }) {
   const id = useId();
   return (
@@ -7,10 +8,10 @@ export function ImagoMark({ size = 28 }: { size?: number }) {
       <defs>
         <linearGradient
           id={id}
-          x1="12"
+          x1="14"
           y1="10"
-          x2="52"
-          y2="56"
+          x2="50"
+          y2="54"
           gradientUnits="userSpaceOnUse"
         >
           <stop stopColor="var(--a-200)" />
@@ -18,35 +19,20 @@ export function ImagoMark({ size = 28 }: { size?: number }) {
           <stop offset="1" stopColor="var(--a-600)" />
         </linearGradient>
       </defs>
-      <g
-        stroke={`url(#${id})`}
-        strokeWidth="4"
+      <circle cx="32" cy="32" r="28.5" fill="none" stroke={`url(#${id})`} strokeWidth="2.4" />
+      <circle cx="32" cy="32" r="24.5" fill="none" stroke="var(--a-300)" strokeOpacity=".38" strokeWidth="1.2" />
+      <path
+        d="M18 48V16L46 48V16"
         fill="none"
+        stroke={`url(#${id})`}
+        strokeWidth="6.5"
         strokeLinecap="round"
         strokeLinejoin="round"
-      >
-        <path d="M32 9 52 21 52 43 32 55 12 43 12 21Z" />
-        <path
-          d="m32 9 13 26-26 0 13-26m20 12H25l13 23 14-23M12 21l13 23 13-23H12"
-          strokeWidth="2.7"
-        />
-      </g>
-      {[
-        [32, 9],
-        [52, 21],
-        [52, 43],
-        [32, 55],
-        [12, 43],
-        [12, 21],
-      ].map(([x, y], i) => (
-        <circle
-          key={i}
-          cx={x}
-          cy={y}
-          r="3.7"
-          fill={`var(--a-${[200, 300, 400, 600, 500, 300][i]})`}
-        />
-      ))}
+      />
+      <circle cx="18" cy="16" r="6.5" fill="var(--a-200)" />
+      <circle cx="18" cy="48" r="6.5" fill="var(--a-400)" />
+      <circle cx="46" cy="48" r="6.5" fill="var(--a-500)" />
+      <circle cx="46" cy="16" r="6.5" fill="var(--a-600)" />
     </svg>
   );
 }

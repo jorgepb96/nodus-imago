@@ -38,6 +38,7 @@ npm start
 - Revisar y aceptar/rechazar propuestas individuales o en lote. Se conservan modelo, revisión, instrucciones y fecha; la ficha del registro muestra su procedencia. No se sustituyen anotaciones humanas y se pueden deshacer los cambios aceptados.
 - Pausar, reanudar y cancelar trabajos individuales. Dos columnas distintas pueden procesarse a la vez dentro de los límites de memoria y perfil.
 - Elegir temas y modos claro/oscuro/sistema con el motor de paletas original de Nodus.
+- Icono de objetivo fotográfico con la N canónica de Nodus: variante clara y oscura, con el icono del Dock de macOS adaptándose al tema resuelto.
 
 ## IA local y APIs opcionales
 
@@ -137,7 +138,8 @@ El benchmark de [docs/benchmarks/local.json](docs/benchmarks/local.json) mide **
 ## Compilar instaladores
 
 ```sh
-npm run dist:mac       # DMG y ZIP, ARM64 y x64
+npm run dist:mac       # DMG y ZIP, ARM64
+npm run dist:mac:x64   # DMG y ZIP, Intel x64 (dependencias x64 aisladas)
 npm run dist:win       # NSIS, x64
 npm run dist:linux     # AppImage, DEB y RPM, arquitectura actual (ARM64 probado)
 ```

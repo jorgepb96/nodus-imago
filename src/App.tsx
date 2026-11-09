@@ -50,6 +50,7 @@ import type {
 } from "../shared/imago";
 import { LanguageContext, useT } from "./i18n";
 import { applyTheme } from "./theme/apply";
+import { applyAppIcon } from "./theme/appIcon";
 import { Button, Empty, Modal, Spinner, Thumbnail } from "./components/ui";
 import { Cell } from "./components/Cell";
 import { Properties, type Perform } from "./components/Properties";
@@ -193,6 +194,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         setSaved(ss);
         onLanguage(s.settings.language);
         applyTheme(s.settings);
+        void applyAppIcon(
+          document.documentElement.classList.contains("dark"),
+        ).catch(() => {});
       })
       .catch((e) => notify(e.message, true));
     return () => {
@@ -208,7 +212,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   useEffect(() => {
     if (!status) return;
     const media = matchMedia("(prefers-color-scheme: dark)"),
-      listener = () => applyTheme(status.settings);
+      listener = () => {
+        applyTheme(status.settings);
+        void applyAppIcon(
+          document.documentElement.classList.contains("dark"),
+        ).catch(() => {});
+      };
     media.addEventListener("change", listener);
     return () => media.removeEventListener("change", listener);
   }, [status]);

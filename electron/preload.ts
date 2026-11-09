@@ -8,6 +8,7 @@ const api: ImagoApi = {
     ipcRenderer.on("imago:changed", handler);
     return () => ipcRenderer.removeListener("imago:changed", handler);
   },
+  setAppIcon: (dataUrl) => ipcRenderer.invoke("imago:app-icon", dataUrl),
   onDrop: (listener) => {
     const handler = (
       _event: Electron.IpcRendererEvent,

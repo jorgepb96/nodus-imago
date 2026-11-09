@@ -340,6 +340,7 @@ export interface ImagoApi {
     ...args: Commands[K]["input"] extends void ? [] : [Commands[K]["input"]]
   ): Promise<Commands[K]["result"]>;
   onChange(listener: () => void): () => void;
+  setAppIcon(dataUrl: string): Promise<void>;
   onDrop(
     listener: (payload: {
       plan?: ImagePlan;

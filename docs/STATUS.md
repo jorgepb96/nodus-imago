@@ -17,7 +17,7 @@ Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la pr
 | `npm run typecheck` | pasa | TypeScript estricto sin errores |
 | `npm run lint` | pasa | ESLint 9, sin errores ni avisos |
 | `npm test` | **54/54** | Electron real, `test-results/unit/` |
-| `npm run test:e2e` | pasa | CSV, columna de destino, fórmula, HEIC/HEIF, imágenes, tabla/galería, búsqueda, ficha, exportación, equivalencias, tema y reinicio; capturas `test-results/01..09` |
+| `npm run test:e2e` | pasa | CSV, columna de destino, fórmula, HEIC/HEIF, icono adaptativo, imágenes, tabla/galería, búsqueda, ficha, exportación, equivalencias, tema y reinicio; capturas `test-results/01..09` |
 | E2E sobre app empaquetada macOS ARM64 | pasa | `IMAGO_E2E_EXECUTABLE` sobre `release/mac-arm64/Nodus Imago.app` |
 | E2E desde el DMG montado | pasa | `release/Nodus-Imago-0.1.0-arm64.dmg` montado en solo lectura |
 | E2E Linux ARM64 empaquetado | pasa | AppImage/DEB/RPM en Docker arm64 con Xvfb; incluye HEIC |
@@ -49,6 +49,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 - Ajustes permite crear grupos de campos equivalentes entre bases y Búsqueda puede filtrar por el grupo con semántica OR; las columnas no emparejadas conservan su comportamiento.
 - Las páginas Markdown de un ZIP de Notion se importan como texto plano, con su carpeta de origen y sus imágenes referenciadas; no se reconstruye la jerarquía de bloques ni un árbol navegable.
 - El paquete macOS x64 incluía por error sharp arm64 y no abría ventana; se reconstruyó con sharp-darwin-x64 y better-sqlite3 ABI 148, y se validó con E2E bajo Rosetta y desde el DMG.
+- El icono de la app usa la N canónica de Nodus dentro de un objetivo fotográfico; hay variantes clara y oscura y el Dock de macOS se actualiza al cambiar el tema. El E2E comprueba que el PNG persistido cambia entre modos.
 
 ## Fases
 
@@ -63,7 +64,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 
 ## Criterios del encargo original
 
-1. **Instaladores para todos los sistemas:** macOS ARM64 está construido, empaquetado y probado con E2E (incluido el DMG montado). macOS Intel x64 está construido como DMG/ZIP y **probado con E2E bajo Rosetta**. Linux ARM64 y Linux x64 están construidos (AppImage, DEB y RPM) y **probados con E2E empaquetado** en Docker con Xvfb. Windows x64 está construido como NSIS con el binario nativo ABI 148, pero **no ejecutado**. La configuración y matriz de CI existen para las variantes restantes. Firma y notarización pendientes; los artefactos no están firmados ni notarizados.
+1. **Instaladores para todos los sistemas:** macOS ARM64 está construido, empaquetado y probado con E2E (incluido el DMG montado). macOS Intel x64 está construido como DMG/ZIP con dependencias x64 aisladas (`npm run dist:mac:x64`) y **probado con E2E bajo Rosetta**. Linux ARM64 y Linux x64 están construidos (AppImage, DEB y RPM) y **probados con E2E empaquetado** en Docker con Xvfb. Windows x64 está construido como NSIS con el binario nativo ABI 148, pero **no ejecutado**. La configuración y matriz de CI existen para las variantes restantes. Firma y notarización pendientes; los artefactos no están firmados ni notarizados.
 2. **Base con propiedades, multi-select y adjuntos:** probado. El editor de texto enriquecido muestra y conserva el valor textual y Markdown; no incorpora un editor WYSIWYG completo.
 3. **Imágenes y vinculación masiva:** probado con archivos y lotes pequeños, columna de destino y movimiento de todas las imágenes de un registro; el benchmark de 10.000 registros es sintético y no incluye originales fotográficos. Faltan campañas con 10.000 fotografías reales y equipos modestos.
 4. **Tabla y galería:** probadas en Electron. Paginación de 100 evita cargar la colección completa en la UI; no se afirma virtualización infinita.

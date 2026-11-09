@@ -285,11 +285,24 @@ try {
     .locator(".queue-popover")
     .getByRole("button", { name: "Cerrar", exact: true })
     .click();
+  const appIconFile = path.join(root, "profile", "last-app-icon.png");
+  let lightIcon = null;
+  if (process.platform === "darwin") {
+    await page.waitForTimeout(400);
+    lightIcon = await fs.readFile(appIconFile);
+    assert.equal((await sharp(lightIcon).metadata()).width, 512);
+  }
   await page.getByRole("button", { name: "Interfaz", exact: true }).click();
   await page.getByRole("combobox").first().selectOption("dark");
   await page.waitForFunction(() =>
     document.documentElement.classList.contains("dark"),
   );
+  if (process.platform === "darwin") {
+    await page.waitForTimeout(500);
+    const darkIcon = await fs.readFile(appIconFile);
+    assert.equal((await sharp(darkIcon).metadata()).width, 512);
+    assert.notDeepEqual(darkIcon, lightIcon);
+  }
   await page.screenshot({ path: "test-results/05-settings-dark.png" });
   await page.evaluate(() => window.imago.call("updateSettings", { language: "en" }));
   await page.reload();

@@ -20,7 +20,7 @@
     "test:e2e": "node scripts/e2e.mjs",
     "benchmark": "node scripts/benchmark.mjs",
     "dist": "npm run build && electron-builder --config build/electron-builder.cjs",
-    "dist:mac": "npm run build && electron-builder --mac --config build/electron-builder.cjs",
+    "dist:mac": "npm run build && electron-builder --mac --arm64 --config build/electron-builder.cjs",
     "dist:win": "npm run build && electron-builder --win --config build/electron-builder.cjs",
     "dist:linux": "npm run build && electron-builder --linux --config build/electron-builder.cjs",
     "postinstall": "electron-builder install-app-deps",
@@ -28,7 +28,8 @@
     "icons": "node scripts/icons.mjs",
     "prebuild": "npm run licenses && npm run icons",
     "lint": "eslint .",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm test && npm run build",
+    "dist:mac:x64": "npm run build && node scripts/package-mac-x64.mjs"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
