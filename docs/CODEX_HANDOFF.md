@@ -52,11 +52,11 @@ No se declara completado lo que depende de esas validaciones externas.
 
 Todos sin firma ni notarización.
 
-- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `9172a98435e661f5e27b5410dd4dddb9d463d69c64789200a3d531f4ebcbc33f`.
-- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `1483a6c6d5e6f78a96a5b1543886e3ede62b0ba9e3bb4e1c3cde2a98ffcd9115`.
-- Linux ARM64: AppImage `4fab85ad307a55f5f7128a0dbcab079c09c7f2522992b3cc10b4feb992e1d094`, DEB `5c6337214f26edc3b21213b679cf7ce2229b46b429ee17f0d180bbc4da5c9833`, RPM `6ce22e47b64d3827c54ee48a70e8500e41f6acce48fc4ed6936e9c75c5c9fea8`.
-- Linux x64: AppImage `72712fc3557c8b5ad860882fac74481c44ea8429c836aeae13a84b6e597d4bb5`, DEB `a1b4b39a8be5cc94421d550a92daeeaed47bf03e890c1e23639d770e5f5006e6`, RPM `c03c072dc22cb2eba0d294d759ab9d782c16b341d7da5158eae725310ffa8426`.
-- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `b67921d8ccee0cade6963446208df258a5566029f69e9fc96e498ffe8e06e034`. Construido con ABI 148; smoke bajo Wine 11, no Windows nativo; instalador no ejecutado.
+- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `36c58408670520699f7044e462e0fdf07037269d071a74ebef89861bf3e48388`.
+- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `8d1e185b121e57c94c163f3d8d4c5ae7b4026def69c3b57ec71466bbf92c8699`.
+- Linux ARM64: AppImage `686bb7805a880827af8706bf0d132cd62b3363249cad7f37c02e66ad4cc22165`, DEB `33291718eda559cd695d4782f11dc8e5394fd2b78db96e579d62e8a8275edda8`, RPM `1411b6ca32300fa1cfe773a98e71ec560f980e4c43e122d62b2cba679fa03074`.
+- Linux x64: AppImage `e378b1446337c40b2ca7f2b0289a663742196df7dfc704c5ad05fa45500edd61`, DEB `b8a620a3eb19231c4a45b8ba4d619a52eb9e7d4d44754a4e7b1e99518e347a50`, RPM `a1bb8449fb653ad8d2ca8845a453f2c74264ef52a5133284e55b17975a20f5b6`.
+- Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `5734339015c8f7a50ca8d1d16ac63e938d5fb613a053d40c3fe910697ef854b3`. Construido con ABI 148; smoke bajo Wine 11, no Windows nativo; instalador no ejecutado.
 
 ## Límites que no deben declararse resueltos
 
