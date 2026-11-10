@@ -318,7 +318,7 @@ try {
     .locator(".queue-popover")
     .getByRole("button", { name: "Cerrar", exact: true })
     .click();
-  const appIconFile = path.join(root, "profile", "last-app-icon.png");
+  const appIconFile = path.join(root, "profile", "last-app-icon-camera-lens-v2.png");
   let lightIcon = null;
   if (process.platform === "darwin") {
     await page.waitForTimeout(400);

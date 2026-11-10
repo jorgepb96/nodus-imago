@@ -45,7 +45,10 @@ function call(command: string, input?: unknown): Promise<any> {
     worker.postMessage({ id, command, input });
   });
 }
-const appIconPath = () => path.join(app.getPath("userData"), "last-app-icon.png");
+// The artwork revision is part of the filename so a persisted icon from an
+// older logo design can never override the current packaged app icon.
+const appIconPath = () =>
+  path.join(app.getPath("userData"), "last-app-icon-camera-lens-v2.png");
 let currentAppIcon: ReturnType<typeof nativeImage.createFromBuffer> | null = null;
 
 function applyAppIcon(image: ReturnType<typeof nativeImage.createFromBuffer>) {

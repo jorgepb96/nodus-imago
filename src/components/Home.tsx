@@ -46,7 +46,7 @@ export function Home({
     <div className="nodus-home">
       <section className="home-hero">
         <div className="home-hero-icon">
-          <ImagoMark size={29} />
+          <ImagoMark size={58} />
         </div>
         <div>
           <div className="home-kicker">
