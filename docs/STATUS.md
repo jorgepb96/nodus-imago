@@ -16,7 +16,7 @@ Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la pr
 | --- | --- | --- |
 | `npm run typecheck` | pasa | TypeScript estricto sin errores |
 | `npm run lint` | pasa | ESLint 9, sin errores ni avisos |
-| `npm test` | **57/57** | Electron real, `test-results/unit/` |
+| `npm test` | **58/58** | Electron real, `test-results/unit/` |
 | `npm run test:e2e` | pasa | CSV, columna de destino, fórmula, HEIC/HEIF, icono adaptativo, imágenes, tabla/galería, búsqueda, ficha, exportación, equivalencias, tema y reinicio; capturas `test-results/01..09` |
 | E2E sobre app empaquetada macOS ARM64 | pasa | `IMAGO_E2E_EXECUTABLE` sobre `release/mac-arm64/Nodus Imago.app` |
 | E2E desde el DMG montado | pasa | `release/Nodus-Imago-0.1.0-arm64.dmg` montado en solo lectura |
@@ -66,8 +66,8 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 ## Criterios del encargo original
 
 1. **Instaladores para todos los sistemas:** macOS ARM64 está construido, empaquetado y probado con E2E (incluido el DMG montado). macOS Intel x64 está construido como DMG/ZIP con dependencias x64 aisladas (`npm run dist:mac:x64`) y **probado con E2E bajo Rosetta**. Linux ARM64 y Linux x64 están construidos (AppImage, DEB y RPM) y **probados con E2E empaquetado** en Docker con Xvfb. Windows x64 está construido como NSIS con el binario nativo ABI 148 y ha superado un smoke bajo Wine 11 (UI, SQLite, IPC, creación de base/registro), pero **no se ha ejecutado en Windows nativo ni se ha probado el instalador**. La configuración y matriz de CI existen para las variantes restantes. Firma y notarización pendientes; los artefactos no están firmados ni notarizados.
-2. **Base con propiedades, multi-select y adjuntos:** probado. El editor de texto enriquecido conserva Markdown, ofrece barra de formato y vista previa segura; no es un editor WYSIWYG completo.
-3. **Imágenes y vinculación masiva:** probado con archivos y lotes pequeños, columna de destino y movimiento de todas las imágenes de un registro; el benchmark de 10.000 registros es sintético y no incluye originales fotográficos. Faltan campañas con 10.000 fotografías reales y equipos modestos.
+2. **Base con propiedades, multi-select y adjuntos:** probado. Alta masiva de hasta 1.000 registros vacíos desde la UI. El editor de texto enriquecido conserva Markdown, ofrece barra de formato y vista previa segura; no es un editor WYSIWYG completo.
+3. **Imágenes y vinculación masiva:** probado con archivos y lotes pequeños, importación directa a un registro desde tabla/galería, columna de destino y movimiento de todas las imágenes de un registro; el benchmark de 10.000 registros es sintético y no incluye originales fotográficos. Faltan campañas con 10.000 fotografías reales y equipos modestos.
 4. **Tabla y galería:** probadas en Electron. Paginación de 100 evita cargar la colección completa en la UI; no se afirma virtualización infinita.
 5. **Descargar y ejecutar EmbeddingGemma 2:** descarga verificada y ejecución real en macOS ARM64/CPU con Sentence Transformers 6.2 y `torchvision` 0.29.2. El entorno Python es externo al instalador.
 6. **Indexar y recuperar semánticamente:** probado con tres imágenes y consultas españolas; la calidad y el rendimiento con corpus grandes no están medidos.

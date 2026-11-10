@@ -493,3 +493,21 @@ test("HEIC EXIF item is extracted for a real iPhone image", async (t) => {
     await f.close();
   }
 });
+
+test("bulk row creation inserts the requested rows atomically", async () => {
+  const f = await fixture();
+  try {
+    const d = f.repo.create("Bulk");
+    const ids = f.repo.createRows(d.database.id, 25);
+    assert.equal(ids.length, 25);
+    assert.equal(
+      f.repo.literal({ databaseIds: [d.database.id], query: "", limit: 100 })
+        .total,
+      25,
+    );
+    assert.throws(() => f.repo.createRows(d.database.id, 0));
+    assert.throws(() => f.repo.createRows(d.database.id, 1001));
+  } finally {
+    await f.close();
+  }
+});

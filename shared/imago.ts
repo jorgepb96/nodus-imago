@@ -187,6 +187,10 @@ export type Commands = {
     result: void;
   };
   createRow: { input: { databaseId: string }; result: RecordRow };
+  createRows: {
+    input: { databaseId: string; count: number };
+    result: string[];
+  };
   getRow: { input: { id: string }; result: RecordRow };
   setCell: {
     input: { rowId: string; columnId: string; value: string | null };

@@ -21,6 +21,17 @@ for (let i = 1; i <= 4; i++) {
   await sharp(Buffer.from(svg)).jpeg().toFile(file);
   images.push(file);
 }
+const rowImage = path.join(root, "row-add.jpg");
+await sharp({
+  create: {
+    width: 420,
+    height: 300,
+    channels: 3,
+    background: { r: 86, g: 113, b: 172 },
+  },
+})
+  .jpeg()
+  .toFile(rowImage);
 const env = { ...process.env, IMAGO_USER_DATA: path.join(root, "profile") };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.IMAGO_DEV_URL;
@@ -251,6 +262,24 @@ try {
   await page.waitForFunction(
     () => document.querySelectorAll(".gallery-card img").length === 5,
   );
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [file],
+    });
+  }, rowImage);
+  await page.locator(".gallery-card .image-add").first().click();
+  await page.waitForFunction(
+    async () => {
+      const rows = await window.imago.call("search", {
+        query: "IMG001",
+        limit: 1,
+      });
+      return rows.rows[0]?.images.some((image) => image.fileName === "row-add.jpg");
+    },
+    null,
+    { timeout: 30000 },
+  );
   await page
     .locator(".sidebar-bottom")
     .getByRole("button", { name: "Ajustes", exact: true })
@@ -311,7 +340,7 @@ try {
       .first()
       .locator("span")
       .innerText(),
-    "2",
+    "3",
   );
   await page.screenshot({ path: "test-results/07-queues.png" });
   await page
@@ -374,7 +403,7 @@ try {
     window.imago.call("search", { query: "camino" }),
   );
   assert.equal(stored.total, 1);
-  assert.equal(stored.rows[0].images.length, 1);
+  assert.equal(stored.rows[0].images.length, 2);
   const savedEquivalences = await reopened.evaluate(async () =>
     (await window.imago.call("status")).settings.fieldEquivalences,
   );
@@ -440,9 +469,27 @@ try {
     ["Padre", "Hijo"],
   );
   await reopened.screenshot({ path: "test-results/09-tree.png" });
+  const rowsBeforeBulk = (
+    await reopened.evaluate(() => window.imago.call("status"))
+  ).rows;
+  await reopened
+    .getByRole("button", { name: "Añadir registros", exact: true })
+    .click();
+  const bulkDialog = reopened.getByRole("dialog");
+  await bulkDialog.getByLabel("Número de registros", { exact: true }).fill("3");
+  await bulkDialog.getByRole("button", { name: /^Crear/ }).click();
+  await reopened.waitForFunction(
+    async (expected) => (await window.imago.call("status")).rows === expected,
+    rowsBeforeBulk + 3,
+    { timeout: 30000 },
+  );
+  assert.equal(
+    (await reopened.evaluate(() => window.imago.call("status"))).rows,
+    rowsBeforeBulk + 3,
+  );
   assert.deepEqual(errors, []);
   console.log(
-    "E2E passed: native desktop, CSV mapping, target attachment, formula editor, HEIC import, image association, gallery/table editing, search, record, export, field equivalences, theme, restart persistence, hierarchy tree.",
+    "E2E passed: native desktop, CSV mapping, target attachment, formula editor, HEIC import, image association, gallery/table editing, search, record, export, field equivalences, theme, restart persistence, hierarchy tree, bulk rows, per-row image import.",
   );
 } catch (error) {
   if (app) {

@@ -306,6 +306,28 @@ export class Repository {
     if (index) this.indexRow(id);
     return this.getRow(id);
   }
+  createRows(databaseId: string, count: number): string[] {
+    if (!Number.isInteger(count) || count < 1 || count > 1000)
+      throw new Error("Indica entre 1 y 1.000 registros.");
+    this.detail(databaseId);
+    const at = now(),
+      start = (
+        this.db
+          .prepare(
+            "SELECT coalesce(max(position),-1)+1 n FROM db_rows WHERE database_id=?",
+          )
+          .get(databaseId) as any
+      ).n as number,
+      ids = Array.from({ length: count }, () => uuid()),
+      insert = this.db.prepare(
+        "INSERT INTO db_rows VALUES(?,?,?,?,?)",
+      );
+    this.db.transaction(() => {
+      ids.forEach((id, index) => insert.run(id, databaseId, start + index, at, at));
+    })();
+    for (const id of ids) this.indexRow(id);
+    return ids;
+  }
   rawCell(
     rowId: string,
     columnId: string,

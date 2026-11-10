@@ -21,7 +21,7 @@ No se declara completado lo que depende de esas validaciones externas.
 
 ## Comprobaciones ejecutadas
 
-- `npm run verify`: typecheck, ESLint, **57/57 pruebas** y build.
+- `npm run verify`: typecheck, ESLint, **57/58 pruebas** y build.
 - E2E macOS ARM64 sin empaquetar, empaquetado y desde el DMG montado: pasa, incluida la vista Árbol.
 - E2E macOS x64 bajo Rosetta, empaquetado y desde el DMG: pasa.
 - E2E Linux ARM64 y Linux x64 empaquetados en Docker con Xvfb: pasan, incluida la vista Árbol.

@@ -136,6 +136,8 @@ export class Service {
         return this.repo.saveOptions(input.columnId, input.options);
       case "createRow":
         return this.repo.createRow(input.databaseId);
+      case "createRows":
+        return this.repo.createRows(input.databaseId, input.count);
       case "getRow":
         return this.repo.getRow(input.id);
       case "setCell":

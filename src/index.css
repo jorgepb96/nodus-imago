@@ -2995,3 +2995,30 @@ thead th:last-child {
 .imago-mark-dark { display: none !important; }
 .dark .imago-mark-light { display: none !important; }
 .dark .imago-mark-dark { display: block !important; }
+
+.gallery-image .image-add {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  color: var(--accent-ink);
+  cursor: pointer;
+  box-shadow: 0 2px 7px #00000018;
+}
+.gallery-image .image-add:hover {
+  background: var(--panel);
+  border-color: var(--accent);
+}
+.row-actions {
+  white-space: nowrap;
+}
+.row-actions .button + .button {
+  margin-left: 2px;
+}

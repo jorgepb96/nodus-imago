@@ -35,6 +35,7 @@ npm start
 - Exportar CSV/JSON/XLSX. Crear copias nativas `.imago` con originales, estructura, opciones, relaciones, propuestas, historial y vectores. Restaurarlas en una colección vacía con comprobaciones de integridad.
 - Gestionar modelos con revisión fijada y verificaciones por archivo. Las descargas son opcionales, explícitas, reanudables y cancelables.
 - Encolar descripciones y clasificaciones para registros seleccionados o **columnas completas**. Cada propiedad puede configurar modelo, instrucciones e imágenes de origen. Se reutilizan los constructores de contexto y mensajes multimodales de Nodus.
+- Añadir **varios registros vacíos a la vez** (hasta 1.000) y adjuntar una imagen a un registro directamente desde la tabla o la galería.
 - Revisar y aceptar/rechazar propuestas individuales o en lote. Se conservan modelo, revisión, instrucciones y fecha; la ficha del registro muestra su procedencia. No se sustituyen anotaciones humanas y se pueden deshacer los cambios aceptados.
 - Pausar, reanudar y cancelar trabajos individuales. Dos columnas distintas pueden procesarse a la vez dentro de los límites de memoria y perfil.
 - Elegir temas y modos claro/oscuro/sistema con el motor de paletas original de Nodus.
@@ -124,7 +125,7 @@ JPEG, PNG, WebP, TIFF, BMP, HEIC y HEIF tienen rutas reales de decodificación, 
 
 ```sh
 npm run lint           # ESLint sin errores
-npm test               # 57 pruebas en Electron
+npm test               # 58 pruebas en Electron
 npm run verify         # typecheck + lint + pruebas + build
 npm run build
 npm run test:e2e       # requiere entorno gráfico

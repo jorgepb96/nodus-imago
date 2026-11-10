@@ -121,9 +121,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "analyze"
       | "proposals"
       | "jobs"
+      | "bulkAdd"
       | null
     >(null),
     [name, setName] = useState(""),
+    [bulkCount, setBulkCount] = useState(5),
     [csv, setCsv] = useState<CsvImportPlanData | null>(null),
     [imagePlan, setImagePlan] = useState<ImagePlan | null>(null),
     [openRow, setOpenRow] = useState<RecordRow | null>(null),
@@ -334,6 +336,43 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         source,
       });
       if (plan) setImagePlan(plan);
+    });
+  };
+  const attachImage = (row: RecordRow) => {
+    const target =
+      allDetails.find((entry) => entry.database.id === row.databaseId) ??
+      (detail?.database.id === row.databaseId ? detail : undefined);
+    if (!target) return;
+    const imageColumn = target.columns.find(
+      (column) => column.type === "attachment" || column.type === "files",
+    );
+    void perform(async () => {
+      const plan = await api.call("imagePreview", {
+        databaseId: target.database.id,
+        columnId: imageColumn?.id,
+        source: "files",
+      });
+      if (!plan) return;
+      if (!plan.matches.length) {
+        notify(t("No hay imágenes válidas."), true);
+        return;
+      }
+      await api.call("importImages", {
+        token: plan.token,
+        storage: "copy",
+        createUnmatched: true,
+        columnId: imageColumn?.id,
+        assignments: plan.matches.map((match) => ({
+          pathToken: match.pathToken,
+          rowId: row.id,
+        })),
+      });
+      refresh();
+      notify(
+        `${plan.matches.length.toLocaleString()} ${t(
+          plan.matches.length === 1 ? "imagen en cola" : "imágenes en cola",
+        )}`,
+      );
     });
   };
   const importExternal = (command: "nodusImport" | "notionImport") =>
@@ -1190,18 +1229,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           </details>
                           <Button
                             primary
-                            onClick={() =>
-                              void perform(async () => {
-                                const row = await api.call("createRow", {
-                                  databaseId,
-                                });
-                                refresh();
-                                await open(row);
-                              })
-                            }
+                            onClick={() => {
+                              setBulkCount(5);
+                              setModal("bulkAdd");
+                            }}
                           >
                             <Plus size={15} />
-                            {t("Añadir registro")}
+                            {t("Añadir registros")}
                           </Button>
                         </>
                       )}
@@ -1415,6 +1449,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               checked={selected.has(row.id)}
                               onChange={() => select(row.id)}
                             />
+                            <button
+                              type="button"
+                              className="image-add"
+                              aria-label={t("Añadir imagen")}
+                              title={t("Añadir imagen")}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                attachImage(row);
+                              }}
+                            >
+                              <ImagePlus size={13} />
+                            </button>
                             {row.images.length > 1 && (
                               <span className="image-count">
                                 <ImagePlus size={11} />
@@ -1592,7 +1638,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                   </td>
                                 ))
                               )}
-                              <td>
+                              <td className="row-actions">
+                                <Button
+                                  icon
+                                  aria-label={t("Añadir imagen")}
+                                  title={t("Añadir imagen")}
+                                  onClick={() => attachImage(row)}
+                                >
+                                  <ImagePlus size={14} />
+                                </Button>
                                 <Button
                                   icon
                                   aria-label={t("Abrir registro")}
@@ -1668,6 +1722,57 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             <X size={14} />
           </Button>
         </div>
+      )}
+      {modal === "bulkAdd" && detail && (
+        <Modal title={t("Añadir registros")} onClose={() => setModal(null)}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void perform(async () => {
+                const count = Number(bulkCount);
+                const ids = await api.call("createRows", {
+                  databaseId: detail.database.id,
+                  count,
+                });
+                setModal(null);
+                refresh();
+                if (ids.length === 1) {
+                  await open(await api.call("getRow", { id: ids[0] }));
+                } else {
+                  notify(
+                    `${ids.length} ${t("registros creados")}`,
+                  );
+                }
+              });
+            }}
+          >
+            <div className="modal-body stack">
+              <label>
+                {t("Número de registros")}
+                <input
+                  autoFocus
+                  type="number"
+                  min={1}
+                  max={1000}
+                  required
+                  value={bulkCount}
+                  onChange={(event) => setBulkCount(Number(event.target.value))}
+                />
+              </label>
+              <p className="hint">
+                {t("Puedes crear hasta 1.000 registros vacíos de una vez.")}
+              </p>
+            </div>
+            <footer>
+              <Button type="button" onClick={() => setModal(null)}>
+                {t("Cancelar")}
+              </Button>
+              <Button primary type="submit">
+                {t("Crear")} {Number(bulkCount) || ""}
+              </Button>
+            </footer>
+          </form>
+        </Modal>
       )}
       {(modal === "create" || modal === "rename") && (
         <Modal

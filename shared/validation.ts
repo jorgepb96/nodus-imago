@@ -129,6 +129,12 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   createRow: z.object({ databaseId: id }).strict(),
+  createRows: z
+    .object({
+      databaseId: id,
+      count: z.number().int().min(1).max(1000),
+    })
+    .strict(),
   getRow: z.object({ id }).strict(),
   setCell: z.object({ rowId: id, columnId: id, value }).strict(),
   deleteRows: z.object({ ids }).strict(),
