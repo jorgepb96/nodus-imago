@@ -31,7 +31,6 @@ import {
   Moon,
   Sun,
   Clock3,
-  Image as ImageIcon,
   KeyRound,
 } from "lucide-react";
 import type { DatabaseDetail, DatabaseSummary } from "../shared/databases";
@@ -466,7 +465,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           ? buildHierarchy(page.rows, hierarchyColumn.id)
           : [],
       [hierarchyColumn, page.rows, effectiveView],
-    );
+    ),
+    activeJobs =
+      status?.jobs.filter((job) =>
+        ["running", "queued", "paused", "failed"].includes(job.state),
+      ).length ?? 0;
   if (!api)
     return (
       <div className="desktop-required">
@@ -568,38 +571,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <Moon size={18} />
             )}
           </Button>
-          {(
-            [
-              { filter: "images", label: t("Cola de imágenes"), Icon: ImageIcon },
-              { filter: "analyze", label: t("Cola de IA"), Icon: Sparkles },
-              { filter: "all", label: t("Colas y tareas"), Icon: Clock3 },
-            ] as const
-          ).map(({ filter, label, Icon }) => {
-            const count =
-              status?.jobs.filter(
-                (j) =>
-                  (filter === "all" || j.kind === filter) &&
-                  ["running", "queued", "paused", "failed"].includes(
-                    j.state,
-                  ),
-              ).length ?? 0;
-            return (
-              <span className="header-queue-action" key={filter}>
-                <Button
-                  icon
-                  data-queue-trigger
-                  aria-label={label}
-                  title={label}
-                  onClick={() =>
-                    setQueueFilter(queueFilter === filter ? null : filter)
-                  }
-                >
-                  <Icon size={18} />
-                </Button>
-                {count > 0 && <small>{count}</small>}
-              </span>
-            );
-          })}
+          <span className="header-queue-action">
+            <Button
+              icon
+              data-queue-trigger
+              aria-label={t("Colas y tareas")}
+              title={t("Colas y tareas")}
+              onClick={() => setQueueFilter(queueFilter ? null : "all")}
+            >
+              <Clock3 size={18} />
+            </Button>
+            {activeJobs > 0 && <small>{activeJobs}</small>}
+          </span>
           <span className="header-divider" />
           <Button
             icon

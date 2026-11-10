@@ -278,11 +278,29 @@ try {
     .filter({ hasText: "Campos de texto" })
     .waitFor();
   await page.screenshot({ path: "test-results/09-equivalences.png" });
-  await page
-    .getByRole("button", { name: "Colas y tareas", exact: true })
-    .first()
-    .click();
+  const queueTrigger = page.locator("[data-queue-trigger]");
+  assert.equal(await queueTrigger.count(), 1);
+  await queueTrigger.click();
   await page.locator(".queue-popover").waitFor();
+  await page
+    .locator(".queue-tabs > button")
+    .filter({ hasText: "Imágenes" })
+    .click();
+  await page
+    .locator(".queue-tabs > button")
+    .filter({ hasText: "Imágenes" })
+    .waitFor();
+  assert.match(
+    await page
+      .locator(".queue-tabs > button")
+      .filter({ hasText: "Imágenes" })
+      .getAttribute("class"),
+    /active/,
+  );
+  await page
+    .locator(".queue-tabs > button")
+    .filter({ hasText: "Todas" })
+    .click();
   await page
     .locator(".queue-popover")
     .getByLabel("Mostrar completadas")
