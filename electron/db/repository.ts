@@ -45,6 +45,7 @@ import {
 import { settingsSchema } from "../../shared/validation";
 import { defaultEmbeddingModel } from "../../shared/embeddingBackends";
 import {markdownBlocks, type PageDocument} from '../../shared/pageBlocks';
+import {recomputeRollups,validateRollup} from './rollups';
 
 export const now = () => new Date().toISOString();
 const marks = (xs: unknown[]) => xs.map(() => "?").join(",");
@@ -171,6 +172,7 @@ export class Repository {
   ): DatabaseColumn {
     if (!isDatabaseColumnType(type)) throw new Error("Tipo desconocido.");
     const detail = this.detail(databaseId);
+    if(type==='rollup')validateRollup(this,databaseId,config);
     if (type === "title" && detail.columns.some((c) => c.type === "title"))
       throw new Error("La base ya tiene una propiedad de título.");
     const id = uuid(),
@@ -189,7 +191,7 @@ export class Repository {
           at,
         );
       // A new formula column must show results for rows that already exist.
-      if (type === "formula") {
+      if (type === "formula"||type==='rollup') {
         this.recompute(databaseId);
         this.rebuildText(databaseId);
       }
@@ -198,6 +200,7 @@ export class Repository {
   }
   updateColumn(id: string, name?: string, config?: DatabaseColumnConfig) {
     const c = this.column(id);
+    if(c.type==='rollup'&&config)validateRollup(this,c.databaseId,config);
     this.db.transaction(() => {
       this.db
         .prepare(
@@ -293,6 +296,7 @@ export class Repository {
             now(),
           ),
       );
+      this.recompute(column.databaseId);
       this.rebuildText(column.databaseId);
     })();
   }
@@ -478,6 +482,7 @@ export class Repository {
     return {format:'imago.blocks/1',sourceMarkdown,importedMarkdown:saved?.imported_markdown??null,blocks:saved&&saved.source_markdown===sourceMarkdown?JSON.parse(saved.tree_json):markdownBlocks(sourceMarkdown)};
   }
   recompute(databaseId: string) {
+    if(this.db.prepare("SELECT 1 FROM db_columns WHERE type='rollup' LIMIT 1").get()){recomputeRollups(this,databaseId);return;}
     const columns = this.detail(databaseId).columns;
     if (!columns.some((c) => c.type === "formula")) return;
     const ids = (
