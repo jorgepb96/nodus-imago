@@ -29,8 +29,7 @@ if(process.platform==='darwin') {
  await run('sudo',['dpkg','-i',pick('.deb')]);
  await exercise('/opt/Nodus Imago/nodus-imago');evidence.push('DEB installed: all desktop flows');
  const rpm=path.join(temporary,'rpm');await fs.mkdir(rpm);
- await run('rpm2archive',['--format=tar','--nocompression',pick('.rpm')]);
- await run('tar',['-xf',pick('.rpm')+'.tar','-C',rpm]);
+ await new Promise((resolve,reject)=>{const source=spawn('rpm2cpio',[pick('.rpm')],{stdio:['ignore','pipe','inherit']}),unpack=spawn('cpio',['-idmu'],{cwd:rpm,stdio:['pipe','inherit','inherit']});source.stdout.pipe(unpack.stdin);source.on('error',reject);unpack.on('error',reject);let sourceCode=null,unpackCode=null;const check=()=>{if(sourceCode!==null&&unpackCode!==null)(sourceCode===0&&unpackCode===0)?resolve():reject(Error('RPM extraction failed'));};source.on('exit',code=>{sourceCode=code??1;check();});unpack.on('exit',code=>{unpackCode=code??1;check();});});
  await exercise(path.join(rpm,'opt','Nodus Imago','nodus-imago'));evidence.push('RPM extracted: all desktop flows on Ubuntu host');
 }
 await fs.mkdir('test-results',{recursive:true});

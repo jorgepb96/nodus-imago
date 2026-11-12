@@ -6,7 +6,7 @@ export async function launchNative(profile) {
  const isolation=JSON.parse(await fs.readFile(path.join(profile,'isolation.json'),'utf8'));
  if(isolation.format!=='nodus.imago.native-qa/1'||isolation.root!==path.resolve(profile)||!path.resolve(profile).startsWith(path.resolve('test-results')+path.sep))throw Error('Refusing a non-isolated native test profile.');
  const env={...process.env,IMAGO_USER_DATA:path.resolve(profile)};delete env.ELECTRON_RUN_AS_NODE;delete env.IMAGO_DEV_URL;
- const app=await electron.launch(process.env.IMAGO_E2E_EXECUTABLE?{executablePath:process.env.IMAGO_E2E_EXECUTABLE,env}:{args:['.'],env});
+ const app=await electron.launch(process.env.IMAGO_E2E_EXECUTABLE?{executablePath:process.env.IMAGO_E2E_EXECUTABLE,args:process.env.IMAGO_E2E_NO_SANDBOX?['--no-sandbox']:[],env}:{args:['.',...(process.env.IMAGO_E2E_NO_SANDBOX?['--no-sandbox']:[])],env});
  const page=await app.firstWindow();page.setDefaultTimeout(30000);
  await page.getByRole('heading',{name:'Tu espacio de investigación visual',exact:true}).waitFor();
  return {app,page,call:(command,input)=>page.evaluate(({command,input})=>window.imago.call(command,input),{command,input})};

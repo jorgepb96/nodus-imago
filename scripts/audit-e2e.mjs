@@ -768,6 +768,7 @@ try {
         await record.getByLabel(name, { exact: true }).press("Tab");
       }
       await record.getByLabel("Revisado", { exact: true }).click();
+      await record.getByRole("button",{name:"Markdown",exact:true}).click();
       await record
         .getByLabel("Descripción", { exact: true })
         .fill("**Anotación humana** de archivo. [Fuente](https://example.org/source) [No abrir](javascript:alert)");

@@ -15,7 +15,7 @@ export function embeddingBackendContract(model: string, dimensions: number, visi
     provider: "imago", model, dim: embeddingDimensions(model, dimensions),
     protocol: model === HARRIER_ID ? "imago.harrier-local-caption/1" : "imago.embeddinggemma2-multimodal/1",
     task: model === HARRIER_ID ? { query: HARRIER_QUERY_PREFIX, document: "" } : { query: "task: search result | query: ", document: "title: {title|none} | text: " },
-    preprocessing: model === HARRIER_ID ? { weights: HARRIER_REVISION, pooling: "last", maxTokens: 8192, inputCharacters: 8000, visionRevision, imagePrompt: HARRIER_IMAGE_PROMPT, imagePreparation: "oriented-srgb-png-2200-v1" } : { weights: EMBEDDING_GEMMA2_REVISION, tokenizer: EMBEDDING_GEMMA2_REVISION, maxTokens: 8192, specialTokens: true, truncation: false, output: "sentence_embedding", projection: "onnx-model", reduction: "matryoshka-prefix", titleFallback: "none", visionTokens: 280, audio: false, imagePreparation: "oriented-srgb-png-2200-v1" },
+    preprocessing: model === HARRIER_ID ? { weights: HARRIER_REVISION, runtime: "llama.cpp-b11981", pooling: "last", maxTokens: 8192, inputCharacters: 8000, visionRevision, imagePrompt: HARRIER_IMAGE_PROMPT, imagePreparation: "oriented-srgb-png-2200-v1" } : { weights: EMBEDDING_GEMMA2_REVISION, runtime: "onnxruntime-node-1.30.0", transformers: "4.3.1", tokenizer: EMBEDDING_GEMMA2_REVISION, maxTokens: 8192, specialTokens: true, truncation: false, output: "sentence_embedding", projection: "onnx-model", reduction: "matryoshka-prefix", titleFallback: "none", visionTokens: 280, audio: false, imagePreparation: "oriented-srgb-png-2200-v1" },
     normalization: "l2-after-reduction", quantization: model === HARRIER_ID ? "Q8_0" : "onnx-q8", configVersion: 1,
   }));
 }

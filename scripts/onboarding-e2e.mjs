@@ -2,6 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import {launchNative,pollNative,waitNativeJob,seedNativeImages} from './native-test-support.mjs';
 const profile=path.resolve(process.env.IMAGO_ONBOARDING_PROFILE||'test-results/v1-onboarding-'+Date.now());
 if(!profile.startsWith(path.resolve('test-results')+path.sep))throw Error('The onboarding profile must be isolated under test-results.');
@@ -39,7 +40,8 @@ try{
   await waitNativeJob(call,await call('prepareModels',{consent:true}));assert.equal((await call('modelPreparation')).ready,true);
   report.checks.push('Same-size corrupted file rejected and genuinely repaired');
  }
- const before=performance.now();await waitNativeJob(call,await call('indexImages',{databaseIds:[fixture.database.id]}));report.indexMs=performance.now()-before;
+ const memory=[];let sampling=false;const sampler=setInterval(async()=>{if(sampling)return;sampling=true;try{const d=await call('inferenceDiagnostics');if(d.processId){let rss=0;if(process.platform==='darwin')rss=Number(execFileSync('ps',['-o','rss=','-p',String(d.processId)],{encoding:'utf8'}).trim())*1024;else if(process.platform==='linux'){const stat=await fs.readFile('/proc/'+d.processId+'/status','utf8');rss=Number(stat.match(/^VmRSS:\s+(\d+)/m)?.[1]??0)*1024;}else rss=Number(execFileSync('powershell',['-NoProfile','-Command',`(Get-Process -Id ${d.processId}).WorkingSet64`],{encoding:'utf8'}).trim());if(rss)memory.push({at:Date.now(),rssBytes:rss});}}catch{}finally{sampling=false;}},1000);
+ const before=performance.now();try{await waitNativeJob(call,await call('indexImages',{databaseIds:[fixture.database.id]}));report.indexMs=performance.now()-before;}finally{clearInterval(sampler);}report.memory={sampledPeakRssBytes:Math.max(0,...memory.map(m=>m.rssBytes)),samples:memory.length,method:'RSS sampled every second during indexing; may miss shorter peaks'};
  const result=await call('search',{databaseIds:[fixture.database.id],query:'a red geometric shape',mode:'semantic'});assert.equal(result.rows.length,2);
  const row=await call('getRow',{id:fixture.rows[0]});const similar=await call('search',{databaseIds:[fixture.database.id],similarAssetId:row.images[0].id,mode:'semantic'});assert.equal(similar.rows[0].id,row.id);
  const diagnostics=await call('inferenceDiagnostics');report.diagnostics=diagnostics;
