@@ -6,27 +6,27 @@
   "artifacts": [
     {
       "file": "release/Nodus-Imago-0.1.0-arm64.dmg",
-      "bytes": 152914924,
-      "sha256": "b8a360143fca078881db870c86fc6085c423a9cc2f368058ee6e76815e64c994",
-      "notes": "Reconstruido y probado tras la revisión conjunta del 12 de noviembre de 2026 (filtros/ordenamientos, mapa, lugares y concordancia)."
+      "bytes": 152915066,
+      "sha256": "05fbc92140e6c77c664398aec481842e93cf55a71f967f8f554b4732e9f0b9c8",
+      "notes": "Reconstruido y probado tras el pulido final de filtros/ordenamientos del 12 de noviembre de 2026."
     },
     {
       "file": "release/Nodus-Imago-0.1.0-arm64.zip",
-      "bytes": 146960174,
-      "sha256": "f45e67c917a29fd801001d9634e69a61b4ad4529f1c921863643de5dbc55c0d1",
-      "notes": "Reconstruido con el árbol final del 12 de noviembre de 2026 (filtros/ordenamientos, mapa, lugares y concordancia)."
+      "bytes": 146960365,
+      "sha256": "49abc44da30d468b7baca56079ac85289c62396f1f7cb64f128db98a7762480f",
+      "notes": "Reconstruido y probado tras el pulido final de filtros/ordenamientos del 12 de noviembre de 2026."
     },
     {
       "file": "release/Nodus-Imago-0.1.0-x64.dmg",
-      "bytes": 157906827,
-      "sha256": "29ba1694d253ac7fc1d89d218298220f3ce59cc0b07a5798fd14a3f9cf139cf6",
-      "notes": "Reconstruido y probado tras la revisión conjunta del 12 de noviembre de 2026 (filtros/ordenamientos, mapa, lugares y concordancia)."
+      "bytes": 157907105,
+      "sha256": "48d5980bff71d9430b279a82f3efca45e685870cfe1d78bd1d31dbbcdcd92b8a",
+      "notes": "Reconstruido y probado tras el pulido final de filtros/ordenamientos del 12 de noviembre de 2026."
     },
     {
       "file": "release/Nodus-Imago-0.1.0-x64.zip",
-      "bytes": 151913194,
-      "sha256": "3c55f6a61e6ef147ac2ff89dcc82209fa7341ff52297b310232dbe723f3679be",
-      "notes": "Reconstruido con el árbol final del 12 de noviembre de 2026 (filtros/ordenamientos, mapa, lugares y concordancia)."
+      "bytes": 151913391,
+      "sha256": "16449342e869f4c05ce6bde9aad0499696bfba25ed5285bc916b64b69772c09b",
+      "notes": "Reconstruido y probado tras el pulido final de filtros/ordenamientos del 12 de noviembre de 2026."
     },
     {
       "file": "release/Nodus-Imago-0.1.0-arm64.AppImage",
