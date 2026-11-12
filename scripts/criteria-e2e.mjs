@@ -49,6 +49,7 @@ try {
  await chooseCriteria(page,'Condición del filtro','Es igual a',text);
  await text.getByRole('textbox', { name:'Valor del filtro',exact:true }).fill('P003');
  await poll(async () => await page.locator('.data-table tbody tr').count() === 6);
+ await page.screenshot({ path:'test-results/final-criteria-filters.png' });
  await controls.getByRole('button', { name:/Ordenamientos/ }).click();
  await chooseCriteria(page,'Añadir ordenamiento','Número');
  await chooseCriteria(page,'Dirección del ordenamiento','Mayor a menor');

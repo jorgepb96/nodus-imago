@@ -23,11 +23,11 @@
 .criteria-select-trigger {
   display: flex;
   width: 100%;
-  min-height: 32px;
+  height: 32px;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 9px;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
@@ -44,7 +44,11 @@
 }
 .criteria-select-trigger[aria-expanded="true"] {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: none;
+}
+.criteria-select-trigger:focus-visible {
+  outline: 2px solid var(--a-400);
+  outline-offset: 1px;
 }
 .criteria-menu-search {
   display: flex;
@@ -212,16 +216,25 @@
   font-size: 10px;
 }
 .criteria-group-heading {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px auto;
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
   color: var(--muted);
   font-size: 11px;
 }
+.criteria-group-heading > span {
+  line-height: 1.35;
+}
 .criteria-group-heading .criteria-select {
-  width: 230px;
+  width: 100%;
+}
+.criteria-group-heading > .button {
+  justify-self: end;
+  width: 31px;
+  min-height: 30px;
+  padding: 5px;
 }
 .criteria-filter-row {
   border: 1px solid var(--line);
@@ -234,18 +247,22 @@
   opacity: 0.6;
 }
 .criteria-rule-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 31px 31px;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 .criteria-rule-heading > .criteria-select {
-  flex: 1;
+  width: 100%;
 }
 .criteria-rule-heading > input {
-  flex: none;
+  justify-self: center;
 }
 .criteria-rule-heading .button {
-  flex: none;
+  width: 31px;
+  min-height: 32px;
+  padding: 0;
+  justify-self: end;
 }
 .criteria-rule-value {
   display: grid;
@@ -281,26 +298,28 @@
 .criteria-add-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
 }
 .criteria-add-row > .criteria-select {
   min-width: 160px;
 }
+.criteria-add-row > .button {
+  min-height: 32px;
+}
 .criteria-subgroup {
   border-left: 2px solid var(--a-300);
-  padding: 10px;
+  padding: 12px;
   margin: 10px 0;
-  border-radius: 5px;
-  background: var(--surface);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface) 72%, var(--panel));
 }
-.criteria-subgroup-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--muted);
-  font-size: 10px;
-  margin-bottom: 8px;
+.criteria-subgroup .criteria-filter-row {
+  margin: 6px 0;
+}
+.criteria-subgroup .criteria-add-row {
+  margin-top: 10px;
 }
 .criteria-sort-editor {
   display: grid;
@@ -310,7 +329,7 @@
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   border: 1px solid var(--line);
   background: var(--panel);
   padding: 9px;
@@ -325,9 +344,17 @@
 }
 .criteria-sort-actions {
   display: flex;
+  align-items: center;
+  gap: 1px;
+  justify-self: end;
 }
 .criteria-sort-actions .button {
-  padding: 5px;
+  width: 29px;
+  min-height: 32px;
+  padding: 0;
+}
+.criteria-sort-editor > .criteria-select {
+  width: 100%;
 }
 .criteria-operand {
   min-width: 0;
@@ -4070,4 +4097,20 @@ thead th:last-child {
 }
 .row-actions .button + .button {
   margin-left: 2px;
+}
+
+/* Sort editor: destructive-ish reset reads as a quiet action, not a wide button. */
+.criteria-sort-editor > .button:last-child {
+  justify-self: start;
+  min-height: 28px;
+  padding: 4px 2px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 450;
+}
+.criteria-sort-editor > .button:last-child:hover {
+  color: var(--text);
+  background: var(--hover);
 }

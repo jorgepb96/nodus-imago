@@ -252,6 +252,7 @@ function FilterEditor({
   equivalences,
   depth = 0,
   total,
+  onRemove,
 }: {
   filters: PropertyFilter[];
   groups: PropertyFilterGroup[];
@@ -265,6 +266,7 @@ function FilterEditor({
   equivalences: EquivalenceGroup[];
   depth?: number;
   total: number;
+  onRemove?: () => void;
 }) {
   const t = useT();
   const options: CriteriaOption[] = [
@@ -338,6 +340,15 @@ function FilterEditor({
             onChange(filters, groups, values[0] === "or" ? "or" : "and")
           }
         />
+        {onRemove && (
+          <Button
+            icon
+            aria-label={t("Eliminar grupo")}
+            onClick={onRemove}
+          >
+            <Trash2 size={13} />
+          </Button>
+        )}
       </div>
       {filters.map((filter, index) => {
         const selected = resolve(filter),
@@ -461,22 +472,6 @@ function FilterEditor({
       })}
       {groups.map((group, index) => (
         <div className="criteria-subgroup" key={group.id}>
-          <div className="criteria-subgroup-toolbar">
-            <span>{t("Grupo de condiciones")}</span>
-            <Button
-              icon
-              aria-label={t("Eliminar grupo")}
-              onClick={() =>
-                onChange(
-                  filters,
-                  groups.filter((_, i) => i !== index),
-                  logic,
-                )
-              }
-            >
-              <Trash2 size={13} />
-            </Button>
-          </div>
           <FilterEditor
             filters={group.filters}
             groups={group.groups ?? []}
@@ -485,6 +480,13 @@ function FilterEditor({
             columns={columns}
             equivalences={equivalences}
             total={total}
+            onRemove={() =>
+              onChange(
+                filters,
+                groups.filter((_, i) => i !== index),
+                logic,
+              )
+            }
             onChange={(nextFilters, nextGroups, nextLogic) =>
               onChange(
                 filters,
