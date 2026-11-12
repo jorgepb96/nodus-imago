@@ -93,7 +93,8 @@ export function Properties({
   });
   const formulaConfig = (): FormulaSpec | undefined => {
     if (type !== "formula" || formulaImported) return undefined;
-    if (!operand) throw new Error("Selecciona una propiedad para la fórmula.");
+    if (formulaKind !== "expression" && !operand)
+      throw new Error("Selecciona una propiedad para la fórmula.");
     if (formulaKind === "columnStat")
       return {
         kind: "columnStat",
@@ -126,7 +127,7 @@ export function Properties({
     setSelected(c);
     setName(c.name);
     setType(c.type);
-    setOptions(c.options);
+    setOptions(c.options.map(({ id, label, color }) => ({ id, label, color })));
     setCreating(false);
     setFormulaImported(null);
     setFormulaKind("arithmetic");
@@ -278,6 +279,7 @@ export function Properties({
               <label>
                 {t("Tipo")}
                 <select
+                  aria-label={t("Tipo")}
                   value={type}
                   disabled={!!selected}
                   onChange={(e) =>
@@ -328,13 +330,12 @@ export function Properties({
                       <label>
                         {t("Receta")}
                         <select
+                          aria-label={t("Receta")}
                           value={formulaKind}
                           onChange={(e) =>
                             setFormulaKind(
                               e.target.value as
-                                | "arithmetic"
-                                | "columnStat"
-                                | "expression",
+                                "arithmetic" | "columnStat" | "expression",
                             )
                           }
                         >
@@ -354,13 +355,11 @@ export function Properties({
                             onChange={(e) => setOperand(e.target.value)}
                           >
                             <option value="">—</option>
-                            {detail.columns
-                              .filter(isNumericSource)
-                              .map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.name}
-                                </option>
-                              ))}
+                            {detail.columns.filter(isNumericSource).map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
                           </select>
                         </label>
                       )}
@@ -409,9 +408,7 @@ export function Properties({
                               rows={4}
                               required
                               value={formulaSource}
-                              onChange={(e) =>
-                                setFormulaSource(e.target.value)
-                              }
+                              onChange={(e) => setFormulaSource(e.target.value)}
                               placeholder={'property("id-columna") * 2'}
                             />
                           </label>
@@ -421,8 +418,9 @@ export function Properties({
                               value=""
                               onChange={(e) => {
                                 if (!e.target.value) return;
-                                setFormulaSource((previous) =>
-                                  `${previous}${previous ? " " : ""}property("${e.target.value}")`,
+                                setFormulaSource(
+                                  (previous) =>
+                                    `${previous}${previous ? " " : ""}property("${e.target.value}")`,
                                 );
                               }}
                             >
@@ -549,7 +547,9 @@ export function Properties({
                       value={source}
                       onChange={(e) => setSource(e.target.value)}
                     >
-                      <option value="">{t("Imagen principal del registro")}</option>
+                      <option value="">
+                        {t("Imagen principal del registro")}
+                      </option>
                       {detail.columns
                         .filter((c) => ["attachment", "files"].includes(c.type))
                         .map((c) => (
@@ -565,7 +565,9 @@ export function Properties({
                       rows={3}
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder={t("Indica qué observar o cómo clasificar estas imágenes…")}
+                      placeholder={t(
+                        "Indica qué observar o cómo clasificar estas imágenes…",
+                      )}
                     />
                   </label>
                   <p className="hint">

@@ -2,7 +2,7 @@
 
 **Research through images.** Gestor de bases de datos para investigación visual, independiente de [Nodus Research](https://github.com/jorgepb96/nodus), gratuito y bajo **AGPL-3.0-only**.
 
-Versión de desarrollo **0.1.0**. La aplicación Electron, SQLite, la importación, la búsqueda literal, la búsqueda multimodal, la descripción y la clasificación por columnas son funcionales. El **9 de noviembre de 2026** se validaron con pesos reales EmbeddingGemma 2 y LFM3-VL-2B en macOS ARM64 (CPU), además de la suite automatizada y la prueba de escritorio. La matriz de aceptación y los límites exactos están en [docs/STATUS.md](docs/STATUS.md).
+Versión de desarrollo **0.1.0**. La aplicación Electron, SQLite, la importación, la búsqueda literal, la búsqueda multimodal, la descripción y la clasificación por columnas son funcionales. La [revisión independiente del 12 de noviembre de 2026](docs/VERIFICATION.md) amplía las pruebas y corrige fallos de la implementación anterior; incluye EmbeddingGemma 2 y LFM3-VL-2B reales en macOS ARM64 (CPU), también desde la interfaz empaquetada. La matriz de aceptación y los límites exactos están en [docs/STATUS.md](docs/STATUS.md).
 
 ## Empezar
 
@@ -24,7 +24,13 @@ npm start
 
 ## Qué se puede hacer
 
+- Comparar clasificaciones de varios modelos y del investigador desde **Concordancia**: porcentajes de acuerdo, kappa, alfa nominal, multietiqueta, categorías y discrepancias; ensayos reproducibles y exportación CSV/JSON. [Método y límites](docs/CONCORDANCE.md). Implementado en código fuente, pendiente de la revisión conjunta.
+
+La ampliación más reciente de filtros y ordenamientos está implementada en el código y pendiente de la revisión conjunta solicitada por el usuario: [cambios y comprobaciones pendientes](docs/PENDING_REVIEW.md).
+
 - Crear, renombrar y eliminar varias bases de datos; añadir propiedades personalizadas.
+- Buscar lugares con el catálogo local GeoNames usado en la genealogía de Nodus, incluso sin conexión; elegir una sugerencia o escribir un lugar propio. La ficha muestra un mapa cuadrado de OpenStreetMap ampliable cuando hay coordenadas y conexión. También se admiten coordenadas manuales.
+- Abrir la vista **Mapa** de cada base de datos: todos los registros con coordenadas que cumplen los filtros, agrupación de imágenes cercanas, miniaturas y acceso a las fichas. Se puede elegir la propiedad de ubicación y consultar los registros sin coordenadas. Los puntos y la lista permanecen disponibles sin conexión; el fondo cartográfico requiere conexión o teselas ya almacenadas en caché.
 - Importar CSV/TSV con previsualización, detección de tipos y corrección del esquema. Los valores incompatibles detienen la importación en lugar de perderse silenciosamente.
 - Editar texto, números, fechas, casillas, selección, selección múltiple, estados, ubicación y relaciones. Las celdas de texto enriquecido incluyen barra Markdown (negrita, cursiva, título, lista, enlace, código) y vista previa segura. Las opciones tienen identificadores estables, colores y orden; no se pueden eliminar opciones que aún estén en uso.
 - Reutilizar fórmulas de Nodus; el editor permite operaciones aritméticas, estadísticas de columna y expresiones seguras, y conserva como solo lectura las recetas importadas que aún no edita.
@@ -125,10 +131,12 @@ JPEG, PNG, WebP, TIFF, BMP, HEIC y HEIF tienen rutas reales de decodificación, 
 
 ```sh
 npm run lint           # ESLint sin errores
-npm test               # 58 pruebas en Electron
+npm test               # 86 pruebas en Electron (un fixture HEIC externo es optativo)
 npm run verify         # typecheck + lint + pruebas + build
 npm run build
 npm run test:e2e       # requiere entorno gráfico
+npm run test:audit     # flujos ampliados de UI, IPC, API local, copias y recuperación
+npm run test:ai:e2e    # optativo: IA real desde Electron con los pesos ya instalados
 npm run benchmark
 ```
 

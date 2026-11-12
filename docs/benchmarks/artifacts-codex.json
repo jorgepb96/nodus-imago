@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-12T20:33:37Z",
+  "baseCommit": "24e2df2",
+  "branch": "codex/imago-desktop",
+  "signed": false,
+  "artifacts": [
+    {
+      "file": "release/Nodus-Imago-0.1.0-arm64.dmg",
+      "bytes": 152914924,
+      "sha256": "b8a360143fca078881db870c86fc6085c423a9cc2f368058ee6e76815e64c994",
+      "notes": "Reconstruido y probado tras la revisión conjunta del 12 de noviembre de 2026 (filtros/ordenamientos, mapa, lugares y concordancia)."
+    },
+    {
+      "file": "release/Nodus-Imago-0.1.0-arm64.zip",
+      "bytes": 146898599,
+      "sha256": "b63471e60754fed5b400db351fff47badfeae839c816c6472fd00dd1f6ad69f1",
+      "notes": "Incluye selector local GeoNames y vista Mapa de todos los registros por base de datos."
+    },
+    {
+      "file": "release/Nodus-Imago-0.1.0-x64.dmg",
+      "bytes": 157906827,
+      "sha256": "29ba1694d253ac7fc1d89d218298220f3ce59cc0b07a5798fd14a3f9cf139cf6",
+      "notes": "Reconstruido y probado tras la revisión conjunta del 12 de noviembre de 2026 (filtros/ordenamientos, mapa, lugares y concordancia)."
+    },
+    {
+      "file": "release/Nodus-Imago-0.1.0-x64.zip",
+      "bytes": 151851622,
+      "sha256": "f443aa1e9f15d99252415071f831a153495132eeabef75e1f37aa71e7890464d",
+      "notes": "Incluye selector local GeoNames y vista Mapa de todos los registros por base de datos."
+    },
+    {
+      "file": "release/Nodus-Imago-0.1.0-arm64.AppImage",
+      "bytes": 164688405,
+      "sha256": "31dd6831c918f2bdd31ce1d2b139aedfedecf10619ccd2f5d9cc0beb3ff87b48",
+      "notes": "Compilación anterior al nuevo selector de lugares del 12 de noviembre de 2026."
+    },
+    {
+      "file": "release/Nodus-Imago-0.1.0-arm64.deb",
+      "bytes": 122855360,
+      "sha256": "8920647899abe1dfea3cc1a36d9b043682f4a7bf1037b757a250515f1b833202",
+      "notes": "Compilación anterior al nuevo selector de lugares del 12 de noviembre de 2026."
+    },
+    {
+      "file": "release/Nodus-Imago-0.1.0-aarch64.rpm",
+      "bytes": 103791965,
+      "sha256": "d1c722c3a64cb75a9c3ee545736f364207f9c64e3a94dcb11c57c9f030bfbd5d",
+      "notes": "Compilación anterior al nuevo selector de lugares del 12 de noviembre de 2026."
+    }
+  ]
+}

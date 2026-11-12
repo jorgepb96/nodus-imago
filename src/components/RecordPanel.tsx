@@ -195,6 +195,7 @@ export function RecordPanel({
         <div className="record-body">
           <Thumbnail
             id={image?.width ? image.id : undefined}
+            revision={image?.revision}
             large
             alt={row.title}
           />
@@ -407,7 +408,8 @@ export function RecordPanel({
                       (JSON.parse(p.value ?? "[]") as string[])
                         .map(
                           (id) =>
-                            column.options.find((o) => o.id === id)?.label ?? id,
+                            column.options.find((o) => o.id === id)?.label ??
+                            id,
                         )
                         .join(", ") || "—";
                   } catch {

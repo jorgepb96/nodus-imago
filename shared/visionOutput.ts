@@ -175,12 +175,16 @@ export function parseClassification(
         throw new Error(
           "El modelo devolvió una clasificación no válida (elemento sin etiqueta).",
         );
-      const canonical = allowed.find((option) => foldLabel(option) === foldLabel(label));
+      const canonical = allowed.find(
+        (option) => foldLabel(option) === foldLabel(label),
+      );
       if (!canonical)
         throw new Error(
           `El modelo propuso una opción fuera del vocabulario permitido: ${JSON.stringify(label)}.`,
         );
-      if (!labels.some((existing) => foldLabel(existing) === foldLabel(canonical)))
+      if (
+        !labels.some((existing) => foldLabel(existing) === foldLabel(canonical))
+      )
         labels.push(canonical);
     }
     if (labels.length > max)
@@ -205,8 +209,12 @@ function stripPromptEcho(text: string): string {
   while (start < lines.length && !lines[start].trim()) start++;
   // Only remove metadata lines when the model also echoed a context header;
   // otherwise a legitimate description could begin with "Autor: ...".
-  if (start > 0 || text.split("\n").some((line) => CONTEXT_HEADER.test(line.trim()))) {
-    while (start < lines.length && ECHOED_FIELD.test(lines[start].trim())) start++;
+  if (
+    start > 0 ||
+    text.split("\n").some((line) => CONTEXT_HEADER.test(line.trim()))
+  ) {
+    while (start < lines.length && ECHOED_FIELD.test(lines[start].trim()))
+      start++;
   }
   return lines.slice(start).join("\n").trim();
 }
@@ -218,12 +226,13 @@ function stripPromptEcho(text: string): string {
  * some providers use it despite the instruction to answer in prose.
  */
 export function parseDescription(raw: string): string {
-  let text = stripPromptEcho(
-    unwrapToolCall(cleanVisionText(raw)),
-  );
+  let text = stripPromptEcho(unwrapToolCall(cleanVisionText(raw)));
   // A Markdown heading before the prose is a preamble, not part of the value.
   text = text.replace(/^(?:#{1,6}\s+[^\n]*\n+)+/, "").trim();
-  const unfenced = text.replace(/^```[a-zA-Z]*\s*\n?/, "").replace(/\n?```$/, "").trim();
+  const unfenced = text
+    .replace(/^```[a-zA-Z]*\s*\n?/, "")
+    .replace(/\n?```$/, "")
+    .trim();
   if (unfenced && !unfenced.includes("```")) text = unfenced;
   for (const value of jsonCandidates(text)) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
@@ -240,6 +249,16 @@ export function parseDescription(raw: string): string {
   const withoutJson = text.replace(/```[\s\S]*?```/g, "").trim();
   if (/^[[{]/.test(withoutJson) && jsonCandidates(withoutJson).length)
     throw new Error("El modelo devolvió JSON en lugar de una descripción.");
+  // Reject malformed/incomplete tool envelopes instead of saving their schema
+  // fragments as prose. Seen in a real LFM3 response to a low-information image.
+  if (
+    /<\/?(?:arg(?:etype|ument|_key|_value)|tool_call|invoke|parameter)\b/i.test(
+      text,
+    )
+  )
+    throw new Error(
+      "El modelo devolvió un sobre de herramienta incompleto en lugar de una descripción.",
+    );
   if (!text || text.length < 2)
     throw new Error("El modelo no devolvió una descripción utilizable.");
   return text;

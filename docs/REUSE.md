@@ -2,6 +2,8 @@
 
 Fuente inspeccionada en el checkout local `../nodus`, revisión **393fb7b23ca893cdafceb5dac7e614c23a2072fe** (Nodus 5.16.1). No es una dependencia en tiempo de ejecución ni se ha modificado ese repositorio.
 
+La integración posterior de lugares se consultó en la revisión **db026617457e95d757ea877641479e46682e7e11** del mismo checkout. El catálogo GeoNames se copia sin cambios; no se leen datos personales del vault de genealogía.
+
 ## Código adaptado o reutilizado
 
 | Nodus | Imago | Adaptación |
@@ -17,6 +19,7 @@ Fuente inspeccionada en el checkout local `../nodus`, revisión **393fb7b23ca893
 | `shared/databaseAi.ts` | misma ruta | Construcción de contexto, instrucciones por celda y presets; tipo de idiomas aislado |
 | `shared/imageAnalysis.ts` | `shared/visionContent.ts` | Mensajes multimodales OpenAI compatibles y Anthropic |
 | `src/theme/themes.mjs`, `tokens.css` | mismas rutas | Paletas, rampas, contraste y tokens; aplicación al renderer especializado |
+| `electron/geo/gazetteer.ts`, `electron/assets/gazetteer/cities.tsv.gz`, `scripts/build-gazetteer.mjs`; `PlacePicker.tsx`, `PlacesMap.tsx` como referencia | `electron/geo/gazetteer.ts`, mismo catálogo y generador, `LocationCell.tsx`, `LocationMap.tsx` | Catálogo GeoNames idéntico, búsqueda local con desambiguación por país, selección o texto manual; mapa Leaflet/OSM reducido a una ubicación, vista previa y ampliación. No depende del perfil de Nodus. |
 | `electron/secrets/secretStore.ts` | `electron/secrets/store.ts` | Patrón de secretos por proveedor, cifrado del sistema y escrituras atómicas; sin migración ni lectura del perfil de Nodus |
 | `shared/providers.ts`, `electron/ai/providers.ts` | `shared/aiConfig.ts`, `electron/ai/apiProviders.ts` | Identificadores y endpoints de proveedores; transporte reducido a inferencia visual y consulta explícita del catálogo |
 | `electron/ai/databaseAiColumn.ts` | `electron/ai/engine.ts` | Orquestación por propiedad y fuente de imagen; cola persistente, propuestas y protección de anotaciones añadidas |

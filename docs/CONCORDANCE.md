@@ -1,0 +1,46 @@
+# Concordancia entre modelos y revisión humana
+
+Implementación del 12 de noviembre de 2026. La revisión conjunta se ha ejecutado: tests unitarios, TypeScript, lint, build, E2E de concordancia y referencia estadística independiente pasan. Los instaladores se tratan por separado en [VERIFICATION.md](VERIFICATION.md).
+
+## Flujo de investigación
+
+1. Conserva una columna categórica por modelo, versión o variante de instrucciones. Usa otra columna independiente para la revisión del investigador. Las nueve categorías de una taxonomía se configuran como opciones de las propiedades; no hay una taxonomía temática inventada por la aplicación.
+2. Genera las clasificaciones mediante los ajustes y las colas de **Analizar**, o importa clasificaciones ya existentes. El formulario de concordancia documenta modelos e instrucciones; no ejecuta inferencia ni modifica los resultados de las columnas.
+3. Abre **Concordancia** desde la barra de herramientas de la base de datos, en Tabla, Galería o Mapa. Selecciona hasta ocho columnas evaluadoras y una referencia humana opcional. Para comparar dos investigadores, pueden actuar como dos columnas evaluadoras; el rol estadístico no obliga a que una columna proceda de una IA.
+4. Elige categoría única o multietiqueta, cómo tratar datos incompletos, equivalencias entre categorías y, únicamente si procede, una escala ordinal explícita. Los filtros de la base definen la muestra completa, sin limitarse a la página de registros visible. La unidad es **un registro**, aunque tenga varias imágenes.
+5. Explora acuerdos, índices, cobertura, confusiones y diferencias por categoría. Abre los registros con desacuerdo para revisarlos. El ensayo conserva su instantánea; una edición posterior requiere una nueva ejecución para obtener resultados actualizados.
+6. Guarda el ensayo con un nombre y compara hasta cuatro instantáneas. Reutilizar una configuración y recalcular con los filtros actuales produce un nuevo resultado. Exporta CSV o JSON mediante el diálogo nativo. Los ensayos se incluyen en las copias de seguridad; las copias antiguas sin esta tabla siguen siendo restaurables.
+
+## Denominadores y métricas
+
+- **Unanimidad:** coincidencia exacta entre todas las columnas de modelos, en registros completos para ese grupo. Con la política de casos completos para todos, también se exige el dato humano cuando se ha seleccionado.
+- **Al menos un modelo / todos frente al investigador:** los dos porcentajes usan registros con todos los modelos y referencia válidos. Así un dato ausente no altera de forma encubierta el número de oportunidades de coincidir.
+- **Mayoría estricta:** más de la mitad de los modelos debe emitir exactamente la misma clasificación. Se informa el número sin mayoría; su porcentaje frente al humano usa solo los casos con mayoría.
+- **Cohen nominal:** acuerdo observado corregido por el acuerdo esperado a partir de los marginales de cada evaluador. Cada pareja muestra su n. Los casos disponibles por pareja y los casos completos para todos son políticas explícitas. El ponderado admite distancias lineales o cuadráticas sobre el orden declarado; las categorías temáticas no reciben un orden arbitrario. [Definición y tratamiento de casos indefinidos en scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.cohen_kappa_score.html).
+- **Fleiss:** acuerdo de un grupo con número fijo de evaluadores, usando sus casos completos y marginales agrupados. Se ofrece para modelos y para modelos más referencia humana por separado. [Documentación de statsmodels](https://www.statsmodels.org/stable/generated/statsmodels.stats.inter_rater.fleiss_kappa.html).
+- **Alfa nominal de Krippendorff:** usa las unidades con al menos dos juicios válidos. Las coincidencias de cada unidad se ponderan por `1 / (m − 1)`, siendo m su número de juicios; los marginales esperados usan únicamente juicios emparejables, con corrección finita `n × (n − 1)`. Se muestran unidades y juicios utilizados. [Krippendorff, Computing Alpha-Reliability](https://www.asc.upenn.edu/sites/default/files/2021-03/Computing%20Krippendorff%27s%20Alpha-Reliability.pdf).
+- **Multietiqueta:** exactitud de conjuntos sin orden y Jaccard medio por registro. Dos conjuntos vacíos explícitamente válidos tienen Jaccard 1; es una convención documentada de Imago. Se ofrece kappa binario por categoría, sin presentar las etiquetas de una imagen como observaciones independientes de un kappa nominal global. [Jaccard en scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.jaccard_score.html).
+- **Categorías:** en una pareja, A es la referencia y B el evaluador comparado; si hay humano, A siempre es su columna. Precisión = intersección/B; sensibilidad = intersección/A; F1 = dos veces intersección/(A+B). Micro agrega recuentos y macro promedia categorías observadas en la pareja. Las categorías ausentes en ambos no se introducen artificialmente. B−A permite detectar sobreasignación e infraasignación. El humano es una referencia documentada, no una garantía de verdad histórica. [Precisión, sensibilidad y F1 en scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_fscore_support.html).
+- **Incertidumbre:** el acuerdo exacto lleva un intervalo de Wilson al 95 %. Presupone registros independientes; no representa incertidumbre de kappa ni una prueba de superioridad entre modelos. Las dependencias entre fotografías del mismo libro o serie requieren un diseño muestral adecuado. [Intervalos de proporciones en statsmodels](https://www.statsmodels.org/stable/generated/statsmodels.stats.proportion.proportion_confint.html).
+
+No se imponen etiquetas automáticas como «acuerdo excelente». Sin dos registros comparables o sin variación suficiente, los índices afectados devuelven un valor nulo y el motivo, en lugar de inventar 0 o 1. Los porcentajes descriptivos pueden existir con un solo registro, con su denominador e intervalo visibles.
+
+## Normalización, vacíos y trazabilidad
+
+Las opciones se comparan por **etiqueta**, no por identificadores de opciones, que son diferentes entre columnas. Normalización Unicode NFKC, espacios recortados y repetidos colapsados; mayúsculas opcionales; tildes conservadas. Las equivalencias son específicas por columna, explícitas y de una sola pasada. Los datos originales permanecen intactos.
+
+Los valores nulos y ausentes no cuentan como coincidencias. Un identificador de opción desconocido, un conjunto incompatible con categoría única, más de 1.000 etiquetas o una categoría de más de 500 caracteres se marca inválido. No se pretende clasificar descripciones largas como categorías: las celdas de más de 10.000 caracteres también son inválidas. La cobertura permite localizar estos problemas.
+
+La selección múltiple usa sus opciones JSON. Solo se admite un conjunto vacío como dato válido mediante una opción expresa; los nulos siguen siendo datos ausentes. El editor habitual normaliza selecciones vacías a NULL: la opción de `[]` solo afecta a valores explícitos conservados en el origen. Las columnas de texto multietiqueta usan el separador configurado, sin inferir automáticamente delimitadores en descripciones.
+
+La instantánea guarda fecha, base, esquema y opciones de las columnas, filtros, filas originales y su modificación, configuración del análisis, identificación manual de modelos e instrucciones y procedencia agrupada de propuestas de IA. La procedencia histórica puede contener más de un modelo o prompt en una columna; no se presenta como una atribución inequívoca de cada valor actual. Se contabilizan también propuestas aceptadas cuyo valor guardado coincide literalmente con la celda actual.
+
+Las comparaciones avisan si cambian registros, referencia humana, categorías o reglas de cálculo. Aun con la misma muestra deben revisarse cobertura, equivalencias, instrucciones, número de evaluadores y homogeneidad de la columna. No se ejecutan pruebas de significación ni se declara automáticamente un modelo «mejor».
+
+JSON contiene la instantánea y los resultados completos. CSV utiliza formato largo con secciones `metadata`, `coverage`, `metrics`, `category`, `confusion`, `record` y `raw_record`, denominadores y motivos de valores nulos; protege textos interpretables como fórmulas en hojas de cálculo. JSON conserva los textos sin ese escape. Las imágenes no se copian en estas exportaciones.
+
+## Integración y validación pendiente
+
+Motor puro: `shared/agreement.ts`; extracción transaccional y persistencia local: `electron/research/agreement.ts`; interfaz: `src/components/AgreementWorkbench.tsx`. El cálculo se ejecuta en el worker de servicio, sin Python, modelos, credenciales ni conexiones externas.
+
+Las pruebas preparadas en `tests/agreement.test.ts` se han ejecutado: ejemplo publicado de Cohen; Fleiss y alfa con resultados calculables a mano; datos incompletos y unidades singleton; porcentajes humanos y mayorías; opciones con UUID distintos; equivalencias; tildes; multietiqueta; kappa ponderado; casos degenerados; exportación; más de 200 registros; aislamiento de bases; persistencia tras editar o eliminar una propiedad; contratos IPC. El E2E de concordancia y la referencia independiente también pasan. El listado completo se mantiene en [PENDING_REVIEW.md](PENDING_REVIEW.md).

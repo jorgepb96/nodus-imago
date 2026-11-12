@@ -32,24 +32,20 @@ import type {
   RecordRow,
   SearchInput,
   Settings,
+  MapRecord,
+  MapRecordsInput,
 } from "../../shared/imago";
+import { decodeDatabaseLocation } from "../../shared/databaseProperties";
+import {
+  installViewFunctions,
+  compileViewFilters,
+  compileViewSorts,
+  propertyChoices,
+} from "./viewQuery";
 import { settingsSchema } from "../../shared/validation";
 
 export const now = () => new Date().toISOString();
 const marks = (xs: unknown[]) => xs.map(() => "?").join(",");
-const sqlText = (value: string) => "'" + value.replace(/'/g, "''") + "'";
-/** System columns are generated in hydrate(), not stored in db_cells. Filters
- * and sorts must still see them. */
-function systemValueSql(column: DatabaseColumn): string | null {
-  const stored = `(SELECT value_text FROM db_cells sc WHERE sc.row_id=r.id AND sc.column_id=${sqlText(column.id)})`;
-  if (column.type === "unique_id")
-    return `COALESCE(${stored}, ${sqlText(column.config.uniqueIdPrefix ?? "")} || r.id)`;
-  if (column.type === "created_time")
-    return `COALESCE(${stored}, r.created_at)`;
-  if (column.type === "last_edited_time")
-    return `COALESCE(${stored}, r.updated_at)`;
-  return null;
-}
 const parse = (value: string | null) => (value ? JSON.parse(value) : {});
 export class Repository {
   db: Database.Database;
@@ -58,6 +54,7 @@ export class Repository {
     for (const folder of ["originals", "thumbnails", "models", "staging"])
       fs.mkdirSync(path.join(root, folder), { recursive: true });
     this.db = new Database(path.join(root, "imago.sqlite"));
+    installViewFunctions(this.db);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("busy_timeout = 5000");
     const version = this.db
@@ -80,6 +77,21 @@ export class Repository {
   }
   close() {
     this.db.close();
+  }
+  touchRows(ids: string[]) {
+    if (!ids.length) return;
+    const at = now(),
+      serialized = JSON.stringify([...new Set(ids)]);
+    this.db
+      .prepare(
+        "UPDATE db_rows SET updated_at=? WHERE id IN(SELECT value FROM json_each(?))",
+      )
+      .run(at, serialized);
+    this.db
+      .prepare(
+        "UPDATE db_databases SET updated_at=? WHERE id IN(SELECT database_id FROM db_rows WHERE id IN(SELECT value FROM json_each(?)))",
+      )
+      .run(at, serialized);
   }
   list(): DatabaseSummary[] {
     return this.db
@@ -204,9 +216,7 @@ export class Repository {
           columnIds: group.columnIds.filter((id) => !removed.has(id)),
         }))
         .filter((group) => group.columnIds.length >= 2);
-    if (
-      JSON.stringify(groups) !== JSON.stringify(settings.fieldEquivalences)
-    )
+    if (JSON.stringify(groups) !== JSON.stringify(settings.fieldEquivalences))
       this.updateSettings({ fieldEquivalences: groups });
   }
   deleteColumn(id: string) {
@@ -303,7 +313,10 @@ export class Repository {
         at,
         at,
       );
-    if (index) this.indexRow(id);
+    if (index) {
+      this.recompute(databaseId);
+      this.indexRow(id);
+    }
     return this.getRow(id);
   }
   createRows(databaseId: string, count: number): string[] {
@@ -319,13 +332,14 @@ export class Repository {
           .get(databaseId) as any
       ).n as number,
       ids = Array.from({ length: count }, () => uuid()),
-      insert = this.db.prepare(
-        "INSERT INTO db_rows VALUES(?,?,?,?,?)",
-      );
+      insert = this.db.prepare("INSERT INTO db_rows VALUES(?,?,?,?,?)");
     this.db.transaction(() => {
-      ids.forEach((id, index) => insert.run(id, databaseId, start + index, at, at));
+      ids.forEach((id, index) =>
+        insert.run(id, databaseId, start + index, at, at),
+      );
+      this.recompute(databaseId);
+      for (const id of ids) this.indexRow(id);
     })();
-    for (const id of ids) this.indexRow(id);
     return ids;
   }
   rawCell(
@@ -511,11 +525,15 @@ export class Repository {
               : row.updatedAt;
       row.images = assets
         .filter((a) => a.rowId === row.id)
-        .map((a) => ({
-          ...a,
-          metadata: parse(a.metadata_json),
-          missing: false,
-        }));
+        .map((a) => {
+          const metadata = parse(a.metadata_json);
+          return {
+            ...a,
+            metadata,
+            revision: metadata.imagoRelinkRevision,
+            missing: false,
+          };
+        });
       row.title =
         row.cells[
           titleCols.find((c) => c.database_id === row.databaseId)?.id
@@ -628,8 +646,8 @@ export class Repository {
     if (scope && !scope.length) return { rows: [], total: 0 };
     if (candidates) {
       if (!candidates.length) return { rows: [], total: 0 };
-      where.push(`r.id IN (${marks(candidates)})`);
-      params.push(...candidates);
+      where.push("r.id IN (SELECT value FROM json_each(?))");
+      params.push(JSON.stringify(candidates));
     }
     const query = input.query?.trim();
     let order = "r.position,r.id",
@@ -652,165 +670,25 @@ export class Repository {
         order = "records_fts.rank,r.id";
       }
     }
-    const filterGroups = new Map<string, NonNullable<SearchInput["filters"]>>();
-    for (const f of input.filters ?? []) {
-      const key = f.databaseId ?? "";
-      if (!filterGroups.has(key)) filterGroups.set(key, []);
-      filterGroups.get(key)!.push(f);
+    const criteria = compileViewFilters(input, (id) => this.column(id));
+    if (criteria.sql) {
+      where.push(criteria.sql);
+      params.push(...criteria.params);
     }
-    for (const [databaseScope, group] of filterGroups) {
-      const clauses: string[] = [];
-      if (databaseScope) params.push(databaseScope);
-      for (const f of group) {
-        const column = this.column(f.columnId);
-        if (f.databaseId && f.databaseId !== column.databaseId)
-          throw new Error("Filtro de otra base de datos.");
-        const operand = Array.isArray(f.value) ? f.value : [f.value];
-        if (f.columnIds?.length) {
-          const columns = f.columnIds.flatMap((columnId) => {
-            try {
-              return [this.column(columnId)];
-            } catch {
-              return [];
-            }
-          });
-          if (!columns.length) {
-            clauses.push("0");
-            continue;
-          }
-          const databaseIds = [...new Set(columns.map((c) => c.databaseId))];
-          const parts = columns.map((groupColumn) => {
-            if (f.op === "empty")
-              return {
-                sql: "NOT EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text IS NOT NULL AND c.value_text<>'')",
-                params: [groupColumn.id],
-              };
-            if (f.op === "contains")
-              return {
-                sql: "EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text LIKE ? ESCAPE '\\')",
-                params: [
-                  groupColumn.id,
-                  "%" +
-                    String(operand[0] ?? "").replace(/[\\%_]/g, "\\$&") +
-                    "%",
-                ],
-              };
-            if (f.op === "equals")
-              return {
-                sql: "EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text=?)",
-                params: [groupColumn.id, String(operand[0] ?? "")],
-              };
-            if (f.op === "any" || f.op === "all") {
-              if (!operand.length)
-                return { sql: "0", params: [] as unknown[] };
-              return {
-                sql:
-                  "EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND (" +
-                  operand
-                    .map(
-                      () =>
-                        "EXISTS(SELECT 1 FROM json_each(CASE WHEN json_valid(c.value_text) THEN c.value_text ELSE '[]' END) j WHERE j.value=?)",
-                    )
-                    .join(f.op === "all" ? " AND " : " OR ") +
-                  "))",
-                params: [groupColumn.id, ...operand],
-              };
-            }
-            const numeric = groupColumn.type === "number",
-              value = numeric ? Number(operand[0]) : String(operand[0] ?? "");
-            if (numeric && !Number.isFinite(value))
-              throw new Error("Filtro numérico no válido.");
-            return {
-              sql: `EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND ${numeric ? "c.value_number" : "coalesce(json_extract(CASE WHEN json_valid(c.value_text) THEN c.value_text ELSE '{}' END,'$.start'),c.value_text)"} ${f.op === "gte" ? ">=" : "<="} ?)`,
-              params: [groupColumn.id, value],
-            };
-          });
-          const combined = `(${parts.map((part) => part.sql).join(f.op === "empty" ? " AND " : " OR ")})`;
-          const guard = databaseIds.length
-            ? `(r.database_id NOT IN (${marks(databaseIds)}) OR ${combined})`
-            : combined;
-          clauses.push(guard);
-          params.push(...databaseIds, ...parts.flatMap((part) => part.params));
-          continue;
-        }
-        const system = systemValueSql(column);
-        let clause = "";
-
-        if (f.op === "empty") {
-          if (system) clause = "0";
-          else {
-            clause +=
-              "NOT EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND c.value_text IS NOT NULL AND c.value_text<>'')";
-            params.push(f.columnId);
-          }
-        } else if (system) {
-          if (f.op === "contains") {
-            clause = `${system} LIKE ? ESCAPE '\\'`;
-            params.push("%" + operand[0].replace(/[\\%_]/g, "\\$&") + "%");
-          } else if (f.op === "equals") {
-            clause = `${system}=?`;
-            params.push(operand[0]);
-          } else {
-            clause = `${system} ${f.op === "gte" ? ">=" : "<="} ?`;
-            params.push(operand[0]);
-          }
-        } else {
-          clause +=
-            "EXISTS(SELECT 1 FROM db_cells c WHERE c.row_id=r.id AND c.column_id=? AND ";
-          params.push(f.columnId);
-          if (f.op === "any" || f.op === "all") {
-            if (!operand.length) clause += "0";
-            else {
-              clause +=
-                "(" +
-                operand
-                  .map(
-                    () =>
-                      "EXISTS(SELECT 1 FROM json_each(CASE WHEN json_valid(c.value_text) THEN c.value_text ELSE '[]' END) j WHERE j.value=?)",
-                  )
-                  .join(f.op === "all" ? " AND " : " OR ") +
-                ")";
-              params.push(...operand);
-            }
-          } else if (f.op === "contains") {
-            clause += "c.value_text LIKE ? ESCAPE '\\'";
-            params.push("%" + operand[0].replace(/[\\%_]/g, "\\$&") + "%");
-          } else if (f.op === "equals") {
-            clause += "c.value_text=?";
-            params.push(operand[0]);
-          } else {
-            const numeric = column.type === "number";
-            const v = numeric ? Number(operand[0]) : operand[0];
-            if (numeric && !Number.isFinite(v))
-              throw new Error("Filtro numérico no válido.");
-            clause += `${numeric ? "c.value_number" : "coalesce(json_extract(CASE WHEN json_valid(c.value_text) THEN c.value_text ELSE '{}' END,'$.start'),c.value_text)"} ${f.op === "gte" ? ">=" : "<="} ?`;
-            params.push(v);
-          }
-          clause += ")";
-        }
-        clauses.push(clause);
-      }
-      if (clauses.length) {
-        const combined =
-          "(" +
-          clauses.join(input.filterLogic === "or" ? " OR " : " AND ") +
-          ")";
-        where.push(
-          databaseScope ? "(r.database_id<>? OR " + combined + ")" : combined,
-        );
-      }
-    }
-    let orderParams = params;
-    if (input.sortColumn) {
-      const c = this.column(input.sortColumn),
-        system = systemValueSql(c);
-      if (system)
-        order = `${system} ${input.descending ? "DESC" : "ASC"},r.id`;
-      else {
-        order = `(SELECT ${c.type === "number" ? "value_number" : "value_text"} FROM db_cells sc WHERE sc.row_id=r.id AND sc.column_id=?) ${input.descending ? "DESC" : "ASC"},r.id`;
-        orderParams = [...params, input.sortColumn];
-      }
-    }
+    const sorts = input.sorts?.length
+      ? input.sorts
+      : input.sortColumn
+        ? [
+            {
+              columnId: input.sortColumn,
+              direction: input.descending
+                ? ("desc" as const)
+                : ("asc" as const),
+            },
+          ]
+        : [];
+    if (sorts.length) order = compileViewSorts(sorts, (id) => this.column(id));
+    const orderParams = params;
     const sql = `FROM db_rows r ${join} ${where.length ? "WHERE " + where.join(" AND ") : ""}`;
     const total = (
       this.db.prepare(`SELECT count(*) n ${sql}`).get(...params) as any
@@ -837,6 +715,58 @@ export class Repository {
       }
     }
     return { rows, total };
+  }
+  propertyChoices(input: {
+    columnIds: string[];
+    query?: string;
+    offset?: number;
+    selected?: string[];
+  }) {
+    return propertyChoices(
+      this.db,
+      input.columnIds,
+      input.query ?? "",
+      input.offset ?? 0,
+      (id) => this.column(id),
+      input.selected,
+    );
+  }
+  mapRecords(input: MapRecordsInput): { records: MapRecord[]; total: number } {
+    const column = this.column(input.columnId);
+    if (column.databaseId !== input.databaseId || column.type !== "location")
+      throw new Error(
+        "Elige una propiedad de ubicación de esta base de datos.",
+      );
+    // Read every matching row in one consistent snapshot. A map is not a page
+    // of the grid; only the compact presentation fields cross the IPC boundary.
+    return this.db.transaction(() => {
+      const records: MapRecord[] = [];
+      let total = 0;
+      do {
+        const page = this.literal({
+          databaseIds: [input.databaseId],
+          filters: input.filters,
+          filterLogic: input.filterLogic,
+          filterGroups: input.filterGroups,
+          sorts: input.sorts,
+          offset: records.length,
+          limit: 200,
+        });
+        total = page.total;
+        for (const row of page.rows) {
+          const image = row.images.find((asset) => asset.width > 0);
+          records.push({
+            id: row.id,
+            title: row.title,
+            location: decodeDatabaseLocation(row.cells[column.id] ?? null),
+            image: image ? { id: image.id, revision: image.revision } : null,
+            imageCount: row.images.length,
+          });
+        }
+        if (!page.rows.length) break;
+      } while (records.length < total);
+      return { records, total };
+    })();
   }
   importCsv(
     name: string,
@@ -1027,11 +957,15 @@ export class Repository {
           continue;
         }
         this.setCell(p.row_id, p.column_id, p.value, false);
-        this.db
-          .prepare(
-            "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at) VALUES(?,?,?,?,?,?)",
-          )
-          .run(batch, p.row_id, p.column_id, p.before_value, p.value, now());
+        // Store the normalized value actually written. In particular [] for an
+        // empty multi-select becomes NULL; a no-op must not poison batch undo.
+        const after = this.getRow(p.row_id).cells[p.column_id] ?? null;
+        if (after !== p.before_value)
+          this.db
+            .prepare(
+              "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at) VALUES(?,?,?,?,?,?)",
+            )
+            .run(batch, p.row_id, p.column_id, p.before_value, after, now());
         this.db
           .prepare("UPDATE proposals SET state='accepted' WHERE id=?")
           .run(id);
@@ -1108,6 +1042,7 @@ export class Repository {
         this.db.prepare("DELETE FROM image_assets WHERE id=?").run(asset.id);
       for (const rowId of new Set(assets.map((asset) => asset.row_id))) {
         this.normalizeImagePositions(rowId);
+        this.touchRows([rowId]);
         this.indexRow(rowId);
       }
       this.db
@@ -1118,11 +1053,7 @@ export class Repository {
     })();
     return assets.length;
   }
-  reassignImages(
-    ids: string[],
-    rowId: string,
-    columnId?: string,
-  ) {
+  reassignImages(ids: string[], rowId: string, columnId?: string) {
     if (!ids.length) return 0;
     const row = this.getRow(rowId),
       assets = ids.map((id) => this.asset(id));
@@ -1152,9 +1083,11 @@ export class Repository {
           )
           .run(row.databaseId, row.id, targetColumn.id, asset.id);
         this.normalizeImagePositions(asset.row_id);
+        this.touchRows([asset.row_id]);
         this.indexRow(asset.row_id);
       }
       this.normalizeImagePositions(row.id);
+      this.touchRows([row.id]);
       this.indexRow(row.id);
     })();
     return assets.length;

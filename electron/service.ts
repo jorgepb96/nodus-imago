@@ -25,8 +25,10 @@ import { writeBackup, restoreBackup } from "./export/backup";
 import { importNodus } from "./import/nodus";
 import { importNotion } from "./import/notion";
 import type { CompletionRequest } from "./ai/apiProviders";
+import { AgreementResearch } from "./research/agreement";
 
 export class Service {
+  research: AgreementResearch;
   repo: Repository;
   images: Images;
   models: Models;
@@ -45,6 +47,7 @@ export class Service {
     ) => Promise<string>,
   ) {
     this.repo = new Repository(root);
+    this.research = new AgreementResearch(this.repo);
     this.images = new Images(this.repo);
     this.models = new Models(this.repo);
     this.host = new InferenceHost(this.repo, script);
@@ -59,12 +62,24 @@ export class Service {
     this.queue.pump();
   }
   private unfinishedJobs() {
-    return this.repo.jobs().some((job) =>
-      ["queued", "running", "paused"].includes(job.state),
-    );
+    return this.repo
+      .jobs()
+      .some((job) => ["queued", "running", "paused"].includes(job.state));
   }
   async run(command: string, input: any = undefined): Promise<any> {
     switch (command) {
+      case "agreementRun":
+        return this.research.run(input);
+      case "agreementList":
+        return this.research.list(input.databaseId);
+      case "agreementSave":
+        return this.research.save(input.token, input.name);
+      case "agreementLoad":
+        return this.research.load(input.id);
+      case "agreementDelete":
+        return this.research.delete(input.id);
+      case "agreementExport":
+        return this.research.export(input.token, input.format, input.file);
       case "status":
         return {
           root: this.repo.root,
@@ -152,6 +167,10 @@ export class Service {
           input.imageToken ? this.queryImages.get(input.imageToken) : undefined,
         );
       }
+      case "mapRecords":
+        return this.repo.mapRecords(input);
+      case "propertyChoices":
+        return this.repo.propertyChoices(input);
       case "csvPreview": {
         const file = input.file,
           stat = await fs.stat(file);
@@ -237,6 +256,8 @@ export class Service {
           this.repo.db
             .prepare("UPDATE image_assets SET position=0 WHERE id=?")
             .run(a.id);
+          this.repo.touchRows([a.row_id]);
+          this.repo.indexRow(a.row_id);
         })();
         return;
       }
@@ -257,6 +278,7 @@ export class Service {
             .run(row.databaseId, row.id, c.id, a.id);
           this.repo.normalizeImagePositions(a.row_id);
           this.repo.normalizeImagePositions(row.id);
+          this.repo.touchRows([a.row_id, row.id]);
           this.repo.indexRow(a.row_id);
           this.repo.indexRow(row.id);
         })();
@@ -274,9 +296,11 @@ export class Service {
           );
         this.repo.db
           .prepare(
-            "UPDATE image_assets SET original_path=?,managed=0 WHERE id=?",
+            "UPDATE image_assets SET original_path=?,managed=0,metadata_json=json_set(metadata_json,'$.imagoRelinkRevision',?) WHERE id=?",
           )
-          .run(input.file, input.id);
+          .run(input.file, uuid(), input.id);
+        this.repo.touchRows([a.row_id]);
+        this.repo.indexRow(a.row_id);
         return true;
       }
       case "export": {
@@ -333,7 +357,11 @@ export class Service {
           )
         )
           return this.repo.updateSettings(input);
-        if (this.unfinishedJobs()) {
+        if (
+          this.repo
+            .jobs()
+            .some((job) => ["queued", "running"].includes(job.state))
+        ) {
           if (input.remoteEnabled === false && Object.keys(input).length === 1)
             this.queue.pauseAll();
           else
@@ -341,6 +369,9 @@ export class Service {
               "Pausa o cancela las tareas antes de cambiar la configuración.",
             );
         }
+        // Pausing must actually allow reconfiguration. Wait for cancelled
+        // in-flight requests to settle before replacing their runtime settings.
+        await this.queue.task;
         this.host.close();
         return this.repo.updateSettings(input);
       }
@@ -367,7 +398,9 @@ export class Service {
           .get(m.id) as any;
         if (existing) {
           this.repo.db
-            .prepare("UPDATE jobs SET state='queued',updated_at=? WHERE id=? AND state='paused'")
+            .prepare(
+              "UPDATE jobs SET state='queued',updated_at=? WHERE id=? AND state='paused'",
+            )
             .run(new Date().toISOString(), existing.id);
           this.queue.pump();
           return existing.id;
@@ -378,16 +411,22 @@ export class Service {
       }
       case "importModel":
         if (this.unfinishedJobs())
-          throw new Error("Pausa o cancela las tareas antes de importar un modelo.");
+          throw new Error(
+            "Pausa o cancela las tareas antes de importar un modelo.",
+          );
         return this.models.importDirectory(input.id, input.directory);
       case "verifyModel":
         if (this.unfinishedJobs())
-          throw new Error("Pausa o cancela las tareas antes de verificar un modelo.");
+          throw new Error(
+            "Pausa o cancela las tareas antes de verificar un modelo.",
+          );
         this.host.close();
         return this.models.verify(input.id);
       case "deleteModel":
         if (this.unfinishedJobs())
-          throw new Error("Pausa o cancela las tareas antes de eliminar un modelo.");
+          throw new Error(
+            "Pausa o cancela las tareas antes de eliminar un modelo.",
+          );
         this.host.close();
         await fs.rm(this.models.directory(input.id), {
           recursive: true,

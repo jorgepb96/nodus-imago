@@ -14,6 +14,12 @@ sharp se distribuye con libvips y otras bibliotecas nativas. El paquete precompi
 
 HEIC/HEIF se decodifican con `heic-decode` 2.1.0 (ISC; texto en `legal/ISC-heic-decode.txt`) y `libheif-js` 1.23.x (LGPL-3.0, WASM de libheif/libde265; texto LGPL-3.0 en `legal/LGPL-3.0.txt`). La biblioteca WASM se incluye como dependencia separable; sus fuentes están en [heic-decode](https://github.com/catdad-experiments/heic-decode) y [libheif-js](https://github.com/strukturag/libheif-js). El usuario puede sustituirla por otra implementación compatible. La licencia del conjunto de Imago sigue siendo AGPL-3.0-only.
 
+## Lugares y mapas
+
+El catálogo local `electron/assets/gazetteer/cities.tsv.gz` es el mismo que usa el vault de genealogía de Nodus Research. Deriva de los datos `cities15000`, `admin1CodesASCII` y `countryInfo` de [GeoNames](https://www.geonames.org/), bajo [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Nodus filtra los registros, incorpora nombres administrativos y países, ordena por población, reduce campos y comprime el TSV. Se reutiliza ese extracto sin cambios. Fuentes: https://download.geonames.org/export/dump/. Texto de licencia: `legal/CC-BY-4.0-geonames.txt`. Puede regenerarse con `node scripts/build-gazetteer.mjs`.
+
+El mapa usa Leaflet 1.9.4 (BSD-2-Clause, incluido en el inventario de bibliotecas) y las teselas de OpenStreetMap, © OpenStreetMap contributors, datos bajo ODbL: https://www.openstreetmap.org/copyright. Las teselas se solicitan solo para la vista actual, respetando la caché HTTP; no se descargan áreas para uso sin conexión.
+
 ## Modelos y motores opcionales
 
 - **EmbeddingGemma 2**, Google DeepMind: Apache-2.0, repositorio oficial `google/embeddinggemma-2`. Se utilizan pesos originales, sin anunciar una conversión textual como multimodal.

@@ -4,8 +4,9 @@ import darkIcon from "../../build/icon-dark.png";
 let lastMode: boolean | null = null;
 
 /**
- * The macOS Dock follows the resolved app theme.
- * The renderer rasterises the approved light/dark artwork at 512 px and gives
+ * The macOS application/Dock keeps its square light/dark tile. The transparent
+ * circular mark belongs only to the application window.
+ * The renderer rasterises the artwork at 512 px and gives
  * the main process a PNG data URL, so no native SVG rasteriser is needed.
  */
 export async function applyAppIcon(dark: boolean) {

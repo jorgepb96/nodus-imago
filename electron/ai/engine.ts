@@ -18,9 +18,12 @@ import {
   type ModelChoice,
 } from "../../shared/aiConfig";
 import type { CompletionRequest } from "./apiProviders";
-import { imagePipeline } from "../import/images";
+import { imagePipeline, withInferenceImage } from "../import/images";
 import { LlamaPool } from "./llama";
-import { parseClassification, parseDescription } from "../../shared/visionOutput";
+import {
+  parseClassification,
+  parseDescription,
+} from "../../shared/visionOutput";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   es: "español",
@@ -78,6 +81,7 @@ export class Engine {
           audio: false,
           protocol: 1,
           normalization: "l2-after-mrl",
+          imagePreparation: "oriented-srgb-png-2200-v1",
         }),
       )
       .digest("hex");
@@ -95,22 +99,39 @@ export class Engine {
   ): Promise<number[][]> {
     this.ready("embeddinggemma2");
     const settings = this.repo.getSettings();
-    const vectors = await this.host.request(
-      {
-        task: "embedding",
-        directory: this.models.directory("embeddinggemma2"),
-        device: settings.device,
-        threads:
-          settings.profile === "light"
-            ? 1
-            : settings.profile === "balanced"
-              ? 2
-              : 4,
-        dimensions: settings.dimensions,
-        inputs,
-      },
-      signal,
-    );
+    const prepared = inputs.map((item) => ({ ...item }));
+    const encode = async (index: number): Promise<any> => {
+      if (index < prepared.length) {
+        const item = prepared[index];
+        if (item.image)
+          return withInferenceImage(
+            this.repo.root,
+            item.image,
+            async (file) => {
+              item.image = file;
+              return encode(index + 1);
+            },
+          );
+        return encode(index + 1);
+      }
+      return this.host.request(
+        {
+          task: "embedding",
+          directory: this.models.directory("embeddinggemma2"),
+          device: settings.device,
+          threads:
+            settings.profile === "light"
+              ? 1
+              : settings.profile === "balanced"
+                ? 2
+                : 4,
+          dimensions: settings.dimensions,
+          inputs: prepared,
+        },
+        signal,
+      );
+    };
+    const vectors = await encode(0);
     if (!Array.isArray(vectors) || vectors.length !== inputs.length)
       throw new Error("El runtime devolvió un lote de vectores inválido.");
     return vectors.map((v) => {
@@ -215,6 +236,7 @@ export class Engine {
         ...input,
         query: undefined,
         sortColumn: undefined,
+        sorts: undefined,
         limit: 200,
         offset,
       });
@@ -261,6 +283,7 @@ export class Engine {
           limit: 200,
           offset: start,
           sortColumn: undefined,
+          sorts: undefined,
         });
         literal.push(...p.rows.map((r) => r.id));
         start += p.rows.length;
@@ -269,6 +292,16 @@ export class Engine {
       ranked = fuseRanks(literal, semantic, input.semanticWeight ?? 0.5)
         .filter(([, score]) => score > 0)
         .map(([id]) => id);
+    }
+    if (input.sorts?.length || input.sortColumn) {
+      const page = this.repo.literal({ ...input, query: undefined }, ranked);
+      page.rows.forEach((row) => {
+        row.score = scores.get(row.id);
+      });
+      return {
+        ...page,
+        indexed: new Set(values.map((value) => value.content_hash)).size,
+      };
     }
     const rows = this.repo.hydrate(
       ranked.slice(
@@ -440,24 +473,34 @@ export class Engine {
       modelName = model.repository;
       revision = model.revision;
       if (model.backend === "llama") {
-        result = await this.llama.describe(
-          choice.model,
+        result = await withInferenceImage(
+          this.repo.root,
           asset.original_path,
-          prompt,
-          signal,
-          options ? "json" : "text",
+          (file) =>
+            this.llama.describe(
+              choice.model,
+              file,
+              prompt,
+              signal,
+              options ? "json" : "text",
+            ),
         );
       } else
-        result = await this.host.request(
-          {
-            task: "vision",
-            directory: this.models.directory(choice.model),
-            device: settings.device,
-            threads: settings.profile === "light" ? 1 : 2,
-            image: asset.original_path,
-            prompt,
-          },
-          signal,
+        result = await withInferenceImage(
+          this.repo.root,
+          asset.original_path,
+          (file) =>
+            this.host.request(
+              {
+                task: "vision",
+                directory: this.models.directory(choice.model),
+                device: settings.device,
+                threads: settings.profile === "light" ? 1 : 2,
+                image: file,
+                prompt,
+              },
+              signal,
+            ),
         );
     } else {
       const parts = [];

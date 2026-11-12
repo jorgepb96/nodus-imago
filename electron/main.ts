@@ -4,9 +4,11 @@ import {
   dialog,
   ipcMain,
   nativeImage,
+  nativeTheme,
   protocol,
   session,
   safeStorage,
+  shell,
 } from "electron";
 import { Worker } from "node:worker_threads";
 import path from "node:path";
@@ -15,6 +17,8 @@ import { validateCommand } from "../shared/validation";
 import { IMAGE_EXTENSIONS } from "./import/images";
 import { Secrets } from "./secrets/store";
 import { ApiProviders } from "./ai/apiProviders";
+import { Gazetteer } from "./geo/gazetteer";
+import { isMapTileRequest } from "./geo/mapRequests";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -48,8 +52,9 @@ function call(command: string, input?: unknown): Promise<any> {
 // The artwork revision is part of the filename so a persisted icon from an
 // older logo design can never override the current packaged app icon.
 const appIconPath = () =>
-  path.join(app.getPath("userData"), "last-app-icon-camera-lens-v2.png");
-let currentAppIcon: ReturnType<typeof nativeImage.createFromBuffer> | null = null;
+  path.join(app.getPath("userData"), "last-app-icon-camera-lens-tile-v5.png");
+let currentAppIcon: ReturnType<typeof nativeImage.createFromBuffer> | null =
+  null;
 
 function applyAppIcon(image: ReturnType<typeof nativeImage.createFromBuffer>) {
   if (image.isEmpty()) return;
@@ -62,18 +67,37 @@ function applyAppIcon(image: ReturnType<typeof nativeImage.createFromBuffer>) {
 
 async function restoreAppIcon() {
   try {
-    const image = nativeImage.createFromBuffer(await fs.readFile(appIconPath()));
-    if (!image.isEmpty()) applyAppIcon(image);
+    const image = nativeImage.createFromBuffer(
+      await fs.readFile(appIconPath()),
+    );
+    if (!image.isEmpty()) {
+      applyAppIcon(image);
+      return;
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       console.warn("[app-icon] No se pudo restaurar el icono:", error);
   }
+  // Set the approved artwork before creating the window or waiting for the
+  // renderer/worker. A fresh profile must never depend on a later UI update.
+  const file = nativeTheme.shouldUseDarkColors ? "icon-dark.png" : "icon.png";
+  const directory = app.isPackaged
+    ? path.join(process.resourcesPath, "icons")
+    : path.join(app.getAppPath(), "build");
+  const image = nativeImage.createFromBuffer(
+    await fs.readFile(path.join(directory, file)),
+  );
+  applyAppIcon(image);
+  await persistAppIcon(image);
 }
 
-async function persistAppIcon(image: ReturnType<typeof nativeImage.createFromBuffer>) {
+async function persistAppIcon(
+  image: ReturnType<typeof nativeImage.createFromBuffer>,
+) {
   const file = appIconPath(),
     temporary = `${file}.${process.pid}.tmp`;
   try {
+    await fs.mkdir(app.getPath("userData"), { recursive: true });
     await fs.writeFile(temporary, image.toPNG());
     await fs.rename(temporary, file);
   } catch (error) {
@@ -93,6 +117,9 @@ function internalFileRequest(command: string) {
 }
 app.whenReady().then(async () => {
   await restoreAppIcon();
+  const places = new Gazetteer(
+    path.join(app.getAppPath(), "electron/assets/gazetteer/cities.tsv.gz"),
+  );
   const root = path.join(app.getPath("userData"), "collection");
   await fs.mkdir(root, { recursive: true });
   const secrets = new Secrets(path.join(app.getPath("userData"), "secrets"), {
@@ -178,12 +205,23 @@ app.whenReady().then(async () => {
     callback({
       cancel:
         /^https?:|^wss?:/i.test(url) &&
+        !isMapTileRequest(url, details.resourceType) &&
         !(
           dev &&
           (url.startsWith(dev + "/") || url.startsWith("ws://127.0.0.1:5173/"))
         ),
     });
   });
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["https://tile.openstreetmap.org/*"] },
+    (details, callback) => {
+      const headers = { ...details.requestHeaders };
+      headers["User-Agent"] =
+        `Nodus-Imago/${app.getVersion()} (+https://github.com/jorgepb96/nodus-imago)`;
+      // Chromium honours the tile server's caching headers. Keep the default cache.
+      callback({ requestHeaders: headers });
+    },
+  );
   protocol.handle("imago", async (request) => {
     try {
       const u = new URL(request.url),
@@ -269,6 +307,12 @@ app.whenReady().then(async () => {
       )
         throw new Error("Origen IPC no autorizado.");
       const safe = validateCommand(command, input);
+      if (command === "searchPlaces")
+        return places.search((safe as { query: string }).query);
+      if (command === "openMapAttribution") {
+        await shell.openExternal("https://www.openstreetmap.org/copyright");
+        return;
+      }
       if (command === "modelLicense") {
         const model = await call("_modelInfo", safe);
         const filename = model.license.startsWith("Apache")
@@ -366,12 +410,20 @@ app.whenReady().then(async () => {
           directory: result.filePaths[0],
         });
       }
-      if (command === "backup" || command === "export") {
+      if (
+        command === "backup" ||
+        command === "export" ||
+        command === "agreementExport"
+      ) {
         const data = safe as any;
         const ext = command === "backup" ? "imago" : data.format;
         const result = await dialog.showSaveDialog(window, {
           defaultPath:
-            command === "backup" ? "Nodus Imago.imago" : "export." + ext,
+            command === "backup"
+              ? "Nodus Imago.imago"
+              : command === "agreementExport"
+                ? "Nodus Imago - concordancia." + ext
+                : "export." + ext,
           filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
         });
         if (result.canceled || !result.filePath) return false;

@@ -47,9 +47,65 @@ const launchOptions = process.env.IMAGO_E2E_EXECUTABLE
     };
 let app;
 const errors = [];
+async function assertSquareDockIcon(bytes) {
+  const { data, info } = await sharp(bytes)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  for (const [x, y] of [
+    [0.15, 0.15],
+    [0.85, 0.15],
+    [0.15, 0.85],
+    [0.85, 0.85],
+  ]) {
+    const pixel =
+      (Math.floor(y * info.height) * info.width + Math.floor(x * info.width)) *
+      info.channels;
+    assert.equal(
+      data[pixel + 3],
+      255,
+      "The macOS app/Dock icon must retain its square tile",
+    );
+  }
+  const center =
+    (Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) *
+    info.channels;
+  assert.equal(data[center + 3], 255);
+}
 try {
   app = await electron.launch(launchOptions);
   const page = await app.firstWindow();
+  if (process.platform === "darwin") {
+    // The icon exists before the UI has loaded, even on a clean profile.
+    const startupIcon = path.join(
+      root,
+      "profile",
+      "last-app-icon-camera-lens-tile-v5.png",
+    );
+    assert.equal(
+      (await sharp(await fs.readFile(startupIcon)).metadata()).format,
+      "png",
+    );
+    await assertSquareDockIcon(await fs.readFile(startupIcon));
+    if (process.env.IMAGO_E2E_EXECUTABLE) {
+      const plist = path.resolve(
+        path.dirname(process.env.IMAGO_E2E_EXECUTABLE),
+        "..",
+        "Info.plist",
+      );
+      assert.match(
+        await fs.readFile(plist, "utf8"),
+        /<string>nodus-imago-camera-lens-v5\.icns<\/string>/,
+      );
+      await fs.access(
+        path.join(
+          path.dirname(plist),
+          "Resources",
+          "nodus-imago-camera-lens-v5.icns",
+        ),
+      );
+    }
+  }
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
@@ -61,6 +117,27 @@ try {
     })
     .waitFor();
   await page.screenshot({ path: "test-results/01-empty.png" });
+  const windowIconAlpha = await page
+    .locator(".nodus-header-brand .imago-mark img")
+    .evaluate(async (img) => {
+      await img.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 512;
+      const context = canvas.getContext("2d");
+      context.drawImage(img, 0, 0, 512, 512);
+      return [
+        [77, 77],
+        [435, 77],
+        [77, 435],
+        [435, 435],
+        [256, 256],
+      ].map(([x, y]) => context.getImageData(x, y, 1, 1).data[3]);
+    });
+  assert.deepEqual(
+    windowIconAlpha,
+    [0, 0, 0, 0, 255],
+    "The window mark must be circular and transparent outside the lens",
+  );
   await app.evaluate(({ dialog }, file) => {
     dialog.showOpenDialog = async () => ({
       canceled: false,
@@ -71,10 +148,7 @@ try {
   await page
     .getByRole("heading", { name: "Previsualización de importación" })
     .waitFor();
-  await page
-    .locator(".preview-table select")
-    .nth(1)
-    .selectOption("rich_text");
+  await page.locator(".preview-table select").nth(1).selectOption("rich_text");
   await page
     .locator(".preview-table select")
     .nth(2)
@@ -86,16 +160,22 @@ try {
   await page.getByRole("button", { name: "Propiedades", exact: true }).click();
   const properties = page.getByRole("dialog");
   await properties.getByRole("button", { name: "Añadir propiedad" }).click();
-  await properties.getByLabel("Nombre", { exact: true }).fill("Archivo adjunto");
+  await properties
+    .getByLabel("Nombre", { exact: true })
+    .fill("Archivo adjunto");
   await properties.locator("select").nth(0).selectOption("attachment");
-  await properties.getByRole("button", { name: "Guardar", exact: true }).click();
+  await properties
+    .getByRole("button", { name: "Guardar", exact: true })
+    .click();
   await properties.getByRole("button", { name: "Añadir propiedad" }).click();
   await properties.getByLabel("Nombre", { exact: true }).fill("Doble año");
   await properties.locator("select").nth(0).selectOption("formula");
   await properties.locator("select").nth(2).selectOption({ label: "Año" });
   await properties.locator("select").nth(3).selectOption("multiply");
   await properties.locator('input[type="number"]').fill("2");
-  await properties.getByRole("button", { name: "Guardar", exact: true }).click();
+  await properties
+    .getByRole("button", { name: "Guardar", exact: true })
+    .click();
   await properties.getByRole("button", { name: "Cerrar", exact: true }).click();
   await page.locator(".gallery-card").nth(3).waitFor();
   await app.evaluate(({ dialog }, files) => {
@@ -275,7 +355,9 @@ try {
         query: "IMG001",
         limit: 1,
       });
-      return rows.rows[0]?.images.some((image) => image.fileName === "row-add.jpg");
+      return rows.rows[0]?.images.some(
+        (image) => image.fileName === "row-add.jpg",
+      );
     },
     null,
     { timeout: 30000 },
@@ -295,9 +377,7 @@ try {
   await page
     .getByRole("heading", { name: "Equivalencias de campos", exact: true })
     .waitFor();
-  await page
-    .getByPlaceholder("Lugar, Autor, Fecha…")
-    .fill("Campos de texto");
+  await page.getByPlaceholder("Lugar, Autor, Fecha…").fill("Campos de texto");
   await page
     .locator(".equivalence-form select")
     .selectOption([{ label: "ID" }, { label: "Descripción" }]);
@@ -347,12 +427,17 @@ try {
     .locator(".queue-popover")
     .getByRole("button", { name: "Cerrar", exact: true })
     .click();
-  const appIconFile = path.join(root, "profile", "last-app-icon-camera-lens-v2.png");
+  const appIconFile = path.join(
+    root,
+    "profile",
+    "last-app-icon-camera-lens-tile-v5.png",
+  );
   let lightIcon = null;
   if (process.platform === "darwin") {
     await page.waitForTimeout(400);
     lightIcon = await fs.readFile(appIconFile);
     assert.equal((await sharp(lightIcon).metadata()).width, 512);
+    await assertSquareDockIcon(lightIcon);
   }
   await page.getByRole("button", { name: "Interfaz", exact: true }).click();
   await page.getByRole("combobox").first().selectOption("dark");
@@ -364,15 +449,20 @@ try {
     const darkIcon = await fs.readFile(appIconFile);
     assert.equal((await sharp(darkIcon).metadata()).width, 512);
     assert.notDeepEqual(darkIcon, lightIcon);
+    await assertSquareDockIcon(darkIcon);
   }
   await page.screenshot({ path: "test-results/05-settings-dark.png" });
-  await page.evaluate(() => window.imago.call("updateSettings", { language: "en" }));
+  await page.evaluate(() =>
+    window.imago.call("updateSettings", { language: "en" }),
+  );
   await page.reload();
   await page
     .getByRole("heading", { name: "Your visual research space", exact: true })
     .waitFor();
   await page.screenshot({ path: "test-results/08-home-en.png" });
-  await page.evaluate(() => window.imago.call("updateSettings", { language: "es" }));
+  await page.evaluate(() =>
+    window.imago.call("updateSettings", { language: "es" }),
+  );
   await page.reload();
   await page
     .getByRole("heading", {
@@ -404,8 +494,8 @@ try {
   );
   assert.equal(stored.total, 1);
   assert.equal(stored.rows[0].images.length, 2);
-  const savedEquivalences = await reopened.evaluate(async () =>
-    (await window.imago.call("status")).settings.fieldEquivalences,
+  const savedEquivalences = await reopened.evaluate(
+    async () => (await window.imago.call("status")).settings.fieldEquivalences,
   );
   assert.equal(savedEquivalences.length, 1);
   assert.ok(savedEquivalences[0].columnIds.length >= 2);
@@ -450,7 +540,10 @@ try {
   assert.ok(hierarchyIds.parent);
   await reopened.reload();
   await reopened
-    .getByRole("heading", { name: "Tu espacio de investigación visual", exact: true })
+    .getByRole("heading", {
+      name: "Tu espacio de investigación visual",
+      exact: true,
+    })
     .waitFor();
   await reopened
     .locator(".sidebar nav button")
@@ -461,13 +554,15 @@ try {
     .locator(".database-cards button")
     .filter({ hasText: "Jerarquía" })
     .click();
-  await reopened.getByRole("heading", { name: "Jerarquía", exact: true }).waitFor();
+  await reopened
+    .getByRole("heading", { name: "Jerarquía", exact: true })
+    .waitFor();
   await reopened.getByRole("button", { name: "Árbol", exact: true }).click();
   await reopened.locator(".hierarchy-row").first().waitFor();
-  assert.deepEqual(
-    await reopened.locator(".hierarchy-row").allInnerTexts(),
-    ["Padre", "Hijo"],
-  );
+  assert.deepEqual(await reopened.locator(".hierarchy-row").allInnerTexts(), [
+    "Padre",
+    "Hijo",
+  ]);
   await reopened.screenshot({ path: "test-results/09-tree.png" });
   const rowsBeforeBulk = (
     await reopened.evaluate(() => window.imago.call("status"))

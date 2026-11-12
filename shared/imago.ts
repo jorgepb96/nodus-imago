@@ -8,9 +8,33 @@ import type {
 } from "./databases";
 import type { CsvImportPlanData } from "./databaseCsv";
 import type { ApiProfile, ApiProvider, ModelChoice } from "./aiConfig";
+import type { GazetteerPlace } from "./places";
+import type { DatabaseLocationValue } from "./databaseProperties";
+import type {
+  AgreementInput,
+  AgreementResult,
+  AgreementExperiment,
+} from "./agreement";
+
+export type MapRecord = {
+  id: string;
+  title: string;
+  location: DatabaseLocationValue | null;
+  image: { id: string; revision?: string } | null;
+  imageCount: number;
+};
+export type MapRecordsInput = {
+  databaseId: string;
+  columnId: string;
+  filters?: PropertyFilter[];
+  filterLogic?: "and" | "or";
+  filterGroups?: PropertyFilterGroup[];
+  sorts?: ViewSort[];
+};
 
 export type ImageAsset = {
   id: string;
+  revision?: string;
   rowId: string;
   columnId: string;
   fileName: string;
@@ -36,12 +60,46 @@ export type EquivalenceGroup = {
   columnIds: string[];
 };
 export type PropertyFilter = {
+  id?: string;
+  disabled?: boolean;
   databaseId?: string;
   columnId: string;
   columnIds?: string[];
   groupId?: string;
-  op: "contains" | "equals" | "gte" | "lte" | "any" | "all" | "empty";
+  op: PropertyFilterOp;
   value: string | string[];
+};
+export type PropertyFilterOp =
+  | "contains"
+  | "not_contains"
+  | "starts_with"
+  | "ends_with"
+  | "equals"
+  | "not_equals"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "between"
+  | "any"
+  | "all"
+  | "none"
+  | "empty"
+  | "not_empty"
+  | "checked"
+  | "unchecked"
+  | "relative_date"
+  | "has_coordinates"
+  | "no_coordinates";
+export type PropertyFilterGroup = {
+  id: string;
+  logic: "and" | "or";
+  filters: PropertyFilter[];
+  groups?: PropertyFilterGroup[];
+};
+export type ViewSort = {
+  columnId: string;
+  direction: "asc" | "desc";
 };
 export type SearchInput = {
   databaseIds?: string[];
@@ -50,6 +108,8 @@ export type SearchInput = {
   match?: "words" | "phrase" | "partial";
   filters?: PropertyFilter[];
   filterLogic?: "and" | "or";
+  filterGroups?: PropertyFilterGroup[];
+  sorts?: ViewSort[];
   limit?: number;
   offset?: number;
   sortColumn?: string;
@@ -159,6 +219,40 @@ export type Status = {
 };
 export type SavedSearch = { id: string; name: string; input: SearchInput };
 export type Commands = {
+  agreementRun: { input: AgreementInput; result: AgreementResult };
+  agreementList: {
+    input: { databaseId: string };
+    result: AgreementExperiment[];
+  };
+  agreementSave: {
+    input: { token: string; name: string };
+    result: AgreementExperiment;
+  };
+  agreementLoad: { input: { id: string }; result: AgreementResult };
+  agreementDelete: { input: { id: string }; result: void };
+  agreementExport: {
+    input: { token: string; format: "json" | "csv" };
+    result: boolean;
+  };
+  propertyChoices: {
+    input: {
+      columnIds: string[];
+      query?: string;
+      offset?: number;
+      selected?: string[];
+    };
+    result: {
+      choices: { value: string; label: string; count: number }[];
+      selections: { value: string; label: string; count: number }[];
+      more: boolean;
+    };
+  };
+  mapRecords: {
+    input: MapRecordsInput;
+    result: { records: MapRecord[]; total: number };
+  };
+  searchPlaces: { input: { query: string }; result: GazetteerPlace[] };
+  openMapAttribution: { input: void; result: void };
   status: { input: void; result: Status };
   listDatabases: { input: void; result: DatabaseSummary[] };
   createDatabase: { input: { name: string }; result: DatabaseDetail };

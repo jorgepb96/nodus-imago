@@ -75,6 +75,14 @@
     ]
   },
   {
+    "name": "@isaacs/nonrecursive-glob-match",
+    "version": "1.1.0",
+    "license": "BlueOak-1.0.0",
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
     "name": "@xmldom/xmldom",
     "version": "0.9.12",
     "license": "MIT",
@@ -713,6 +721,18 @@
     ]
   },
   {
+    "name": "leaflet",
+    "version": "1.9.4",
+    "license": "BSD-2-Clause",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/Leaflet/Leaflet.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "libheif-js",
     "version": "1.23.5",
     "license": "LGPL-3.0",
@@ -760,11 +780,11 @@
   },
   {
     "name": "minimatch",
-    "version": "10.2.6",
+    "version": "11.0.8",
     "license": "BlueOak-1.0.0",
     "repository": {
       "type": "git",
-      "url": "git@github.com:isaacs/minimatch"
+      "url": "git+ssh://git@github.com/isaacs/minimatch.git"
     },
     "licenseFiles": [
       "LICENSE.md"

@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-09T11:29:14.119Z",
+  "date": "2026-11-12T18:51:53.558Z",
   "platform": "darwin",
   "arch": "arm64",
   "cpu": "Apple M2",
@@ -51,15 +51,17 @@
     }
   ],
   "measurements": {
-    "indexThreeImagesMs": 19554,
-    "textQueryMs": 93,
-    "imageQueryMs": 3033,
-    "combinedQueryMs": 3386,
-    "descriptionMs": 9577,
-    "descriptionAfterPauseMs": 9572,
-    "classificationMs": 8525,
-    "twoCellDescriptionMs": 12032,
-    "restartQueryMs": 6963
+    "indexThreeImagesMs": 15540,
+    "textQueryMs": 102,
+    "imageQueryMs": 2946,
+    "combinedQueryMs": 3149,
+    "descriptionMs": 8035,
+    "descriptionAfterPauseMs": 8034,
+    "classificationMs": 6519,
+    "twoCellDescriptionMs": 10527,
+    "restartQueryMs": 6470,
+    "formatIndexMs": 7505,
+    "heicDescriptionMs": 10073
   },
   "results": {
     "text": [
@@ -69,7 +71,7 @@
       },
       {
         "title": "Documento C",
-        "score": 0.5999419736311526
+        "score": 0.6057540011112084
       },
       {
         "title": "Documento B",
@@ -88,7 +90,7 @@
       },
       {
         "title": "Documento C",
-        "score": 0.5724273132679297
+        "score": 0.5735270490398264
       }
     ],
     "combined": [
@@ -98,7 +100,7 @@
       },
       {
         "title": "Documento C",
-        "score": 0.6593616409166215
+        "score": 0.6635303728707421
       },
       {
         "title": "Documento B",
@@ -113,7 +115,7 @@
     "proposals": [
       {
         "column": "Categorías",
-        "value": "[\"3bdf0033-78d1-45ca-a7a5-1f509e24c015\"]",
+        "value": "[\"3f4f11f5-dfcd-4acc-bd19-184713195912\"]",
         "model": "LiquidAI/LFM3-VL-2B-GGUF",
         "revision": "b36554cfd35854b06429900131730cd80f092cdb",
         "prompt": "Classify the visible image for the field \"Categorías\". Choose only from this exact list of labels: [\"Arquitectura\",\"Paisaje\",\"Interiores\",\"Interfaz de software\"]. Return ONLY a JSON array of exact label strings, at most 5. Return [] if none applies. Do not invent labels, do not explain, and do not use any other format.\n\n=== DATOS DE LA FILA ===\nTítulo: Documento A\nImágenes: GoldenGate.png"
@@ -134,7 +136,7 @@
       "conflicts": 0
     },
     "multiCell": {
-      "elapsedMs": 12045,
+      "elapsedMs": 10530,
       "values": [
         {
           "column": "Descripción visual",
@@ -142,7 +144,7 @@
         },
         {
           "column": "Descripción visual",
-          "value": "La imagen muestra una interfaz de software con un panel lateral que incluye opciones como \"Ajustes\", \"Bases de datos\" y \"Activo\", junto a un área principal dedicada a \"Procedimientos de IA y modelos\" con una lista de modelos de lenguaje. Se observa también una barra de navegación superior con iconos y el texto \"Inicio\"."
+          "value": "La imagen muestra una interfaz de software con una pestaña llamada \"Ajustes\" y una sección titulada \"Procedimientos de IA y modelos\" que contiene una lista de modelos configurados como \"Anthropic\", \"OpenAI\", \"Google Gemini\", entre otros."
         }
       ]
     },
@@ -151,7 +153,23 @@
       "images": 3,
       "indexed": 3,
       "topMatch": "Documento A"
-    }
+    },
+    "formats": {
+      "heicIndexed": true,
+      "bmpIndexed": true,
+      "heicQueryTopMatch": true,
+      "heicLfm3Description": "La fotografía muestra un espacio interior con un suelo de baldosas claras, donde se han colocado múltiples paneles informativos verticales y algunos paneles horizontales en el centro. Las estructuras de soporte parecen estar bajo arcos o columnas de color claro, y hay una lámpara visible a la izquierda."
+    },
+    "dimensions": [
+      {
+        "dimensions": 256,
+        "norm": 1
+      },
+      {
+        "dimensions": 768,
+        "norm": 1
+      }
+    ]
   },
   "status": "passed"
 }

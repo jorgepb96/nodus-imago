@@ -1,16 +1,24 @@
 # Estado verificable y trabajo pendiente
 
+**Revisión conjunta ejecutada el 12 de noviembre de 2026:** filtros/ordenamientos, nuevo orden de pestañas y concordancia están cubiertos por la suite actual. **86/86 pruebas**, typecheck, lint, build, E2E de código fuente y paquetes macOS ARM64; x64 pasa todo salvo IA real. Ver [VERIFICATION.md](VERIFICATION.md) y [PENDING_REVIEW.md](PENDING_REVIEW.md).
+
+**Revisión independiente del 12 de noviembre de 2026:** [VERIFICATION.md](VERIFICATION.md) recoge los fallos encontrados y corregidos por Codex, la suite ampliada de **86 pruebas**, los recorridos nuevos de interfaz, la inferencia real y los límites pendientes. Esa revisión prevalece sobre las cifras y afirmaciones históricas que siguen. Los artefactos solo se consideran actuales si figuran como reconstruidos y probados en ese informe.
+
 Actualizado el **9 de noviembre de 2026** tras ejecutar la suite, el lint, la prueba E2E y la validación con pesos reales en un Apple M2 (16 GB, macOS ARM64, CPU), más macOS x64 bajo Rosetta y paquetes Linux ARM64/x64 en Docker. El encargo completo **no se declara terminado**: hay capacidades verificadas, capacidades integradas con límites y plataformas sin ejecutar.
 
 ## Cambios de alcance confirmados
 
 - APIs opcionales para descripción y clasificación, con credenciales cifradas propias de Imago; local sigue siendo el modo inicial.
+- Lugares: el mismo catálogo GeoNames local de genealogía; sugerencias sin conexión, texto propio, coordenadas manuales y mapa OpenStreetMap pequeño/ampliable. Ver la actualización de cobertura en `docs/VERIFICATION.md` y ejecutar `npm run test:places:e2e`.
+- Nueva vista **Mapa** en cada base: registros de toda la base, filtros, selector de propiedad de ubicación, agrupación por proximidad/zoom, miniaturas, apertura de fichas y consulta de registros sin coordenadas. Prueba específica: `npm run test:map:e2e`.
 - LFM3-VL-2B y EmbeddingGemma 2 como modelos principales, sin otro Gemma generativo.
 - Clasificación de propiedades y columnas completas con contexto, instrucciones y fuentes de imagen de Nodus.
 - Encabezado, sidebar, Inicio y Ajustes siguiendo las capturas de Nodus proporcionadas. Icono propio en la posición de la N; navegación simplificada, panel de ajustes por categorías y proveedores desplegables.
 - Varias colas simultáneas, visibles desde el header, con pausa individual y límite de trabajos configurable. La selección de Búsqueda permanece como área independiente del encargo original.
 
-## Evidencia de la última ejecución
+## Evidencia de la ejecución inicial (9 de noviembre)
+
+La validación posterior y las ampliaciones de lugares/vista Mapa están documentadas en [VERIFICATION.md](VERIFICATION.md): 69 pruebas en macOS ARM64, E2E general y pruebas específicas de lugares y mapa. La tabla siguiente conserva la evidencia histórica; no acredita que las vistas nuevas se hayan probado en Linux o Windows.
 
 | Comprobación | Resultado | Evidencia |
 | --- | --- | --- |
@@ -81,7 +89,7 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 ## Límites explícitos
 
 - HEIC/HEIF se admite con `heic-decode`/`libheif-js` (WASM) antes de sharp, porque el `libheif` nativo de sharp 0.35.5 no incluye el decodificador HEVC. El EXIF del contenedor se extrae con ExifReader (Make, Model, fechas, GPS y orientación). El WASM añade ~9 MB al paquete y decodifica en CPU; no se ha medido una carpeta completa de HEIC. JPEG/PNG/WebP/TIFF/BMP conservan su ruta nativa.
-- La importación Notion incorpora las páginas Markdown como texto plano con carpeta, imágenes y relación padre; no reconstruye bloques, una vista de árbol dedicada, bases embebidas ni formato enriquecido. Los CSV no contienen IDs de opciones, fórmulas ni relaciones tipadas.
+- La importación Notion incorpora las páginas Markdown como texto plano con carpeta, imágenes y relación padre; la vista Árbol muestra relaciones de la base consigo misma, pero no reconstruye bloques, bases embebidas ni formato enriquecido. Los CSV no contienen IDs de opciones, fórmulas ni relaciones tipadas.
 - Rollups, comparaciones, botones y automatizaciones avanzadas de Nodus se conservan como configuración/datos cuando se importan, pero no se ofrecen como servicios equivalentes activos. Las relaciones externas de otros vaults no se resuelven.
 - El editor de fórmulas permite aritmética, estadísticas de columna y expresiones seguras. Las recetas importadas de condicionales, concatenaciones y otras variantes se conservan sin edición visual; no se ha replicado todo el editor de Nodus.
 - Las equivalencias de campos se configuran para columnas de texto y se filtran con semántica OR; no se infieren automáticamente ni abarcan opciones tipadas de selección.

@@ -25,6 +25,7 @@ export const BACKUP_TABLES = [
   "history",
   "settings",
   "saved_searches",
+  "agreement_experiments",
 ] as const;
 const manifestSchema = z
   .object({
@@ -125,9 +126,9 @@ export async function restoreBackup(
   // A restore is deliberate and only accepts an empty collection. It never merges IDs.
   if (
     repo.stats().databases ||
-    repo.jobs().some((job) =>
-      ["queued", "running", "paused"].includes(job.state),
-    )
+    repo
+      .jobs()
+      .some((job) => ["queued", "running", "paused"].includes(job.state))
   )
     throw new Error(
       "Restaura en una instalación vacía y sin trabajos activos para preservar todos los identificadores. Exporta primero tus datos actuales.",
@@ -188,13 +189,25 @@ export async function restoreBackup(
     // An otherwise empty target can still hold orphaned vectors or saved
     // searches from deleted databases. Restore replaces them with the backup
     // instead of failing on a UNIQUE/PRIMARY KEY collision.
-    repo.db.prepare("DELETE FROM embeddings").run();
-    repo.db.prepare("DELETE FROM saved_searches").run();
-    repo.db.prepare("DELETE FROM history").run();
-    repo.db.prepare("DELETE FROM proposals").run();
     repo.db.transaction(() => {
+      repo.db.prepare("DELETE FROM embeddings").run();
+      repo.db.prepare("DELETE FROM saved_searches").run();
+      repo.db.prepare("DELETE FROM agreement_experiments").run();
+      repo.db.prepare("DELETE FROM history").run();
+      repo.db.prepare("DELETE FROM proposals").run();
+      repo.db.prepare("DELETE FROM jobs").run();
       for (const table of BACKUP_TABLES) {
         if (table === "settings") continue;
+        // Older v1 backups predate the optional research snapshots table.
+        if (
+          table === "agreement_experiments" &&
+          !snapshot!
+            .prepare(
+              "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            )
+            .get(table)
+        )
+          continue;
         const expected = (
           repo.db.prepare(`PRAGMA table_info(${table})`).all() as any[]
         ).map((c) => c.name);

@@ -234,7 +234,9 @@ export class Images {
         preview,
       );
     let metadata: Record<string, unknown> = {};
-    const heif = [".heic", ".heif"].includes(path.extname(file.path).toLowerCase());
+    const heif = [".heic", ".heif"].includes(
+      path.extname(file.path).toLowerCase(),
+    );
     try {
       metadata =
         (await exifr.parse(file.path, {
@@ -345,6 +347,7 @@ export class Images {
           position,
           now(),
         );
+      this.repo.touchRows([rowId]);
       this.repo.indexRow(rowId);
       // Commit item and cursor together: restart cannot create a second record.
     })();
@@ -352,7 +355,24 @@ export class Images {
   }
 }
 export async function imagePipeline(file: string): Promise<Sharp> {
-  if (path.extname(file).toLowerCase() === ".bmp") {
+  // Native backups store originals by hash, without an extension. Detect the
+  // two formats needing our own decoder from their bytes as well as the name.
+  const handle = await fsp.open(file, "r");
+  const header = Buffer.alloc(64);
+  let length: number;
+  try {
+    length = (await handle.read(header, 0, header.length, 0)).bytesRead;
+  } finally {
+    await handle.close();
+  }
+  const extension = path.extname(file).toLowerCase(),
+    heif =
+      [".heic", ".heif"].includes(extension) ||
+      (header.toString("ascii", 4, 8) === "ftyp" &&
+        /heic|heix|hevc|hevx|mif1|msf1/.test(
+          header.toString("ascii", 8, length),
+        ));
+  if (extension === ".bmp" || header.toString("ascii", 0, 2) === "BM") {
     const bmp = await import("bmp-js");
     const data = bmp.decode(await fsp.readFile(file));
     // bmp-js emits ABGR, while sharp expects RGBA.
@@ -368,7 +388,7 @@ export async function imagePipeline(file: string): Promise<Sharp> {
       limitInputPixels: 100_000_000,
     });
   }
-  if ([".heic", ".heif"].includes(path.extname(file).toLowerCase())) {
+  if (heif) {
     const { default: decode } = await import("heic-decode");
     const data = await decode({ buffer: await fsp.readFile(file) });
     return sharp(Buffer.from(data.data), {
@@ -377,4 +397,30 @@ export async function imagePipeline(file: string): Promise<Sharp> {
     });
   }
   return sharp(file, { limitInputPixels: 100_000_000, failOn: "error" });
+}
+
+/** Every local runtime receives the same oriented RGB PNG, regardless of its
+ * own codec support. Derived query images live only for the request and are
+ * removed even when inference fails or is cancelled. Originals stay intact. */
+export async function withInferenceImage<T>(
+  root: string,
+  original: string,
+  work: (file: string) => Promise<T>,
+): Promise<T> {
+  const file = path.join(root, "staging", uuid() + ".png");
+  try {
+    const image = await imagePipeline(original);
+    await writeAtomicImage(
+      image
+        .rotate()
+        .resize(2200, 2200, { fit: "inside", withoutEnlargement: true })
+        .toColourspace("srgb")
+        .removeAlpha()
+        .png(),
+      file,
+    );
+    return await work(file);
+  } finally {
+    await fsp.rm(file, { force: true });
+  }
 }

@@ -41,7 +41,7 @@ Su licencia es **LFM Open License 1.0**, no Apache ni AGPL. El instalador de la 
 
 ## Alternativas
 
-Las fichas oficiales de [SmolVLM2 256 M](https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct) y 500 M las licencian bajo Apache-2.0. La variante de 256 M es una alternativa compacta, con limitaciones de capacidad e idioma. La arquitectura está integrada, pero **no se han descargado ni ejecutado sus pesos**; no se afirma su calidad.
+Las fichas oficiales de [SmolVLM2 256 M](https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct) y 500 M las licencian bajo Apache-2.0. Son alternativas compactas con limitaciones de capacidad e idioma. El handoff de DeepSeek del 9 de noviembre registra ejecuciones de ambas variantes en CPU; la revisión independiente del 12 de noviembre se concentra en los dos modelos principales, EmbeddingGemma 2 y LFM3. No se presenta una evaluación de calidad de SmolVLM2.
 
 [Florence-2 Base](https://huggingface.co/microsoft/Florence-2-base) tiene licencia MIT y capacidades visuales útiles, pero su ruta histórica depende de código específico. Se mantiene como candidato, sin descarga disponible hasta cerrar una integración segura y probada.
 
@@ -57,4 +57,6 @@ Los proveedores API usan los constructores multimodales de Nodus y almacenan cla
 
 ## Límites de plataforma
 
-La validación se ejecutó únicamente en macOS ARM64/CPU. Metal/MPS, CUDA, macOS Intel, Windows x64 y Linux x64 no se han ejecutado. El motor llama.cpp descargado es el artefacto oficial macOS ARM64; las demás plataformas deben descargar su artefacto correspondiente. El entorno Python no está incluido en el instalador.
+La inferencia de los dos modelos principales se ha revalidado independientemente en macOS ARM64/CPU. Las pruebas anteriores de MPS y otras variantes se distinguen en [STATUS.md](STATUS.md) y [VERIFICATION.md](VERIFICATION.md); una prueba de la aplicación en Intel/Linux no implica haber probado sus backends de IA. El motor llama.cpp usado en esta revisión es el artefacto oficial macOS ARM64. Las demás plataformas necesitan sus artefactos correspondientes. El entorno Python no está incluido en el instalador.
+
+Desde la revisión del 12 de noviembre, los runtimes locales reciben imágenes convertidas temporalmente a PNG RGB, con orientación EXIF aplicada y un máximo de 2.200 px. Esto permite usar también HEIC y BMP sin depender de codecs de Pillow o de llama.cpp. La preparación forma parte del contrato vectorial: los vectores anteriores requieren reindexación y no se mezclan con los nuevos.

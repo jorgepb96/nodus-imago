@@ -1,5 +1,7 @@
 # Handoff para revisión de Codex
 
+**Revisado por Codex el 12 de noviembre de 2026.** Este documento conserva el handoff histórico de DeepSeek. Los hallazgos, correcciones, pruebas actuales y límites están en [VERIFICATION.md](VERIFICATION.md); sus resultados prevalecen sobre las afirmaciones y hashes antiguos de este archivo.
+
 **Repositorio:** `/Users/jorgepb96/Documents/GitHub/nodus-imago`  
 **Rama:** `codex/imago-desktop`  
 **HEAD de referencia:** rama `codex/imago-desktop`; último commit funcional `6bce161` (`Validate SmolVLM2 500M runtime`), más los commits de documentación del handoff que vengan después.  
@@ -21,9 +23,9 @@ No se declara completado lo que depende de esas validaciones externas.
 
 ## Comprobaciones ejecutadas
 
-- `npm run verify`: typecheck, ESLint, **58/58 pruebas** y build.
-- E2E macOS ARM64 sin empaquetar, empaquetado y desde el DMG montado: pasa, incluida la vista Árbol.
-- E2E macOS x64 bajo Rosetta, empaquetado y desde el DMG: pasa.
+- `npm run verify`: typecheck, ESLint, **86/86 pruebas** y build.
+- E2E macOS ARM64 sin empaquetar, empaquetado y desde el DMG montado: pasa, incluidos filtros, mapa, lugares, concordancia y vista Árbol.
+- E2E macOS x64 bajo Rosetta: pasa salvo la IA real x64, que no se declara pasada por el store de modelos ARM64.
 - E2E Linux ARM64 y Linux x64 empaquetados en Docker con Xvfb: pasan, incluida la vista Árbol.
 - Validación real con LFM3/EmbeddingGemma: `node scripts/validate-models.mjs` pasa; informe en `docs/benchmarks/real-models-macos-arm64.json`.
 - Benchmark sintético de 10.000 registros: `npm run benchmark` pasa; no es un corpus real.
@@ -52,8 +54,8 @@ No se declara completado lo que depende de esas validaciones externas.
 
 Todos sin firma ni notarización.
 
-- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `979758002b6ced9fd272cfc503ce7530f6e1fe9c267f2d5514ed72a1db954105`.
-- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `62211d6e975d216cb7e15d38ca5cb086cdb084d6eadf2abf810be793a2e7338f`.
+- `release/Nodus-Imago-0.1.0-arm64.dmg` — SHA-256 `b8a360143fca078881db870c86fc6085c423a9cc2f368058ee6e76815e64c994`.
+- `release/Nodus-Imago-0.1.0-x64.dmg` — SHA-256 `29ba1694d253ac7fc1d89d218298220f3ce59cc0b07a5798fd14a3f9cf139cf6`.
 - Linux ARM64: AppImage `f8b97f56bcb27293be48f06b816246949cabbae358ede58ed4f5ef1ac759ad62`, DEB `affbe0f98eda0fb9499edbef97c477656eecc7ead7dfe88a4a36a931d8a8748f`, RPM `6cbe2d43ff72fabdf9b7de0bb4d3ab2cdd18fd0769536896c070045de812c1a3`.
 - Linux x64: AppImage `6b5c91f145a296acc7ea028ff33681d40ea262ac6448e7bfcb546e699953f7fa`, DEB `1ea96a3100386cb4896e0aced2d493f12a0d23aa461e33d3158f47a92dd799c9`, RPM `2406555bbde81ed811e8fbfa24976b5b75705911f7fdb02e735e63b6cccca732`.
 - Windows x64 NSIS: `release/Nodus-Imago-0.1.0-x64.exe` — SHA-256 `454428ee13bfd568fb9ac97766b5bfd9126c2406020e775fa61af53d3d13f517`. Construido con ABI 148; smoke bajo Wine 11, no Windows nativo; instalador no ejecutado.

@@ -29,4 +29,6 @@ CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY,row_id TEXT NOT NULL RE
 CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY,batch_id TEXT NOT NULL,row_id TEXT NOT NULL,column_id TEXT NOT NULL,before_value TEXT,after_value TEXT,created_at TEXT NOT NULL,undone INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS saved_searches(id TEXT PRIMARY KEY,name TEXT NOT NULL,input_json TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS agreement_experiments(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,name TEXT NOT NULL,created_at TEXT NOT NULL,total INTEGER NOT NULL,complete INTEGER NOT NULL,snapshot_json TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS agreement_database ON agreement_experiments(database_id,created_at);
 `;

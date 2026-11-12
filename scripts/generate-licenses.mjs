@@ -29,7 +29,7 @@ for (const [directory, entry] of Object.entries(lock.packages)) {
   );
   for (const file of licenseFiles)
     texts.push(
-      `\n--- ${file} ---\n${fs.readFileSync(path.join(directory, file), "utf8")}\n`,
+      `\n--- ${file} ---\n${fs.readFileSync(path.join(directory, file), "utf8").replace(/\r\n/g, "\n")}\n`,
     );
 }
 inventory.sort((a, b) => a.name.localeCompare(b.name));

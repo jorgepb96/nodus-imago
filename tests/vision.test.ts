@@ -82,7 +82,12 @@ test("classification accepts label strings and objects, enforces vocabulary and 
     /vocabulario/,
   );
   assert.throws(
-    () => parseClassification('["Paisaje", "Interiores"]', ["Paisaje", "Interiores"], 1),
+    () =>
+      parseClassification(
+        '["Paisaje", "Interiores"]',
+        ["Paisaje", "Interiores"],
+        1,
+      ),
     /máximo 1/,
   );
   assert.throws(
@@ -95,6 +100,13 @@ test("classification accepts label strings and objects, enforces vocabulary and 
   );
 });
 test("description rejects bare JSON and unwraps explicit description fields", () => {
+  assert.throws(
+    () =>
+      parseDescription(
+        "description \n<argetype>string</argetype>\n<argetype>string</argetype>\n final",
+      ),
+    /sobre de herramienta incompleto/,
+  );
   assert.throws(
     () => parseDescription('["Paisaje"]'),
     /JSON en lugar de una descripción/,
@@ -144,12 +156,13 @@ test("persistent llama chat output separates prompt echo from the answer", () =>
     ),
     "A red bridge.",
   );
-  assert.equal(
-    cleanChatOutput("\u001b[32mAnswer\u001b[0m\b\b"),
-    "Answer",
-  );
+  assert.equal(cleanChatOutput("\u001b[32mAnswer\u001b[0m\b\b"), "Answer");
   assert.throws(
-    () => extractChatAnswer("Describe the photograph.\n\n", "Describe the photograph."),
+    () =>
+      extractChatAnswer(
+        "Describe the photograph.\n\n",
+        "Describe the photograph.",
+      ),
     /no devolvió texto/,
   );
 });

@@ -81,6 +81,6 @@
 <circle cx="46" cy="16" r="6.5" fill="#7c3aed"/>
 </g>
 <!-- amber lens index -->
-<circle cx="790" cy="330" r="8" fill="#fbbf24"/>
-<circle cx="790" cy="330" r="3" fill="#fff7d6" fill-opacity=".8"/>
+<circle cx="785.103449" cy="333.981725" r="8" fill="#fbbf24"/>
+<circle cx="785.103449" cy="333.981725" r="3" fill="#fff7d6" fill-opacity=".8"/>
 </svg>

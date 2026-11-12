@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-09T12:07:06.547Z",
+  "date": "2026-11-12T18:51:35.882Z",
   "platform": "darwin",
   "arch": "arm64",
   "cpu": "Apple M2",
@@ -7,13 +7,13 @@
   "node": "24.22.1",
   "electron": "43.8.4",
   "records": 10000,
-  "importCsvAndFtsMs": 1275,
-  "literalPage100MedianMs": 12,
-  "literalPage100P95Ms": 14,
-  "matching10000Ms": 14,
+  "importCsvAndFtsMs": 1107,
+  "literalPage100MedianMs": 11,
+  "literalPage100P95Ms": 11,
+  "matching10000Ms": 13,
   "safeMatches": 10000,
-  "vectorDotProducts10000x512Ms": 10,
-  "peakRssMB": 214,
+  "vectorDotProducts10000x512Ms": 9,
+  "peakRssMB": 267,
   "checksum": 6788.224831485884,
   "scope": "Synthetic structured records and synthetic vectors; no model inference and no real-photo corpus. Vector timing excludes SQL reads, filtering and ranking."
 }

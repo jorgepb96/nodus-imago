@@ -5,9 +5,12 @@ module.exports = {
   icon: "build/icon.png",
   artifactName: "Nodus-Imago-${version}-${arch}.${ext}",
   directories: { output: "release" },
-  files: ["dist/**/*", "dist-electron/**/*", "package.json"],
+  files: ["dist/**/*", "dist-electron/**/*", "electron/assets/gazetteer/**/*", "package.json"],
   asarUnpack: ["**/*.node", "**/sharp/**/*", "**/@img/**/*"],
+  afterPack: "scripts/after-pack.cjs",
   extraResources: [
+    { from: "build/icon.png", to: "icons/icon.png" },
+    { from: "build/icon-dark.png", to: "icons/icon-dark.png" },
     { from: "runtime", to: "runtime", filter: ["*.py", "*.txt"] },
     { from: "LICENSE", to: "legal/LICENSE" },
     { from: "THIRD_PARTY_NOTICES.md", to: "legal/THIRD_PARTY_NOTICES.md" },
@@ -29,6 +32,7 @@ module.exports = {
   win: { target: [{ target: "nsis", arch: ["x64"] }] },
   nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
   linux: {
+    syncDesktopName: true,
     category: "Education",
     target: ["AppImage", "deb", "rpm"],
     maintainer: "Jorge Pérez Burgueño",

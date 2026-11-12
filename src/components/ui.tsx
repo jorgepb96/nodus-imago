@@ -107,10 +107,12 @@ export function Empty({
 }
 export function Thumbnail({
   id,
+  revision,
   large = false,
   alt = "",
 }: {
   id?: string;
+  revision?: string;
   large?: boolean;
   alt?: string;
 }) {
@@ -121,7 +123,7 @@ export function Thumbnail({
       ref.current.hidden = false;
       ref.current.parentElement?.classList.remove("unavailable");
     }
-  }, [id]);
+  }, [id, revision]);
   return (
     <div className={`image-frame ${large ? "large" : ""}`}>
       {id ? (
@@ -129,7 +131,7 @@ export function Thumbnail({
           <img
             ref={ref}
             loading={large ? "eager" : "lazy"}
-            src={`imago://asset/${id}/${large ? "preview" : "thumb"}`}
+            src={`imago://asset/${id}/${large ? "preview" : "thumb"}${revision ? "?v=" + encodeURIComponent(revision) : ""}`}
             alt={alt}
             onError={(e) => {
               e.currentTarget.hidden = true;

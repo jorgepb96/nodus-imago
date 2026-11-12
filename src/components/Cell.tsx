@@ -4,14 +4,11 @@ import {
   encodeMultiSelect,
   decodeCheckbox,
 } from "../../shared/databases";
-import {
-  decodeDatabaseDate,
-  decodeDatabaseLocation,
-  encodeDatabaseLocation,
-} from "../../shared/databaseProperties";
+import { decodeDatabaseDate } from "../../shared/databaseProperties";
 import type { DatabaseColumn } from "../../shared/databases";
 import { useT } from "../i18n";
 import { MarkdownView } from "./MarkdownView";
+import { LocationCell } from "./LocationCell";
 export function Cell({
   column,
   value,
@@ -23,24 +20,12 @@ export function Cell({
   onSave: (v: string | null) => Promise<void>;
   compact?: boolean;
 }) {
-  const [draft, setDraft] = useState(
-      column.type === "location"
-        ? (decodeDatabaseLocation(value)?.name ?? value ?? "")
-        : (value ?? ""),
-    ),
+  const [draft, setDraft] = useState(value ?? ""),
     [busy, setBusy] = useState(false),
     [preview, setPreview] = useState(false);
   const t = useT(),
     textareaRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(
-    () =>
-      setDraft(
-        column.type === "location"
-          ? (decodeDatabaseLocation(value)?.name ?? value ?? "")
-          : (value ?? ""),
-      ),
-    [value, column.type],
-  );
+  useEffect(() => setDraft(value ?? ""), [value, column.type]);
   const save = async (v: string | null) => {
     setBusy(true);
     try {
@@ -151,7 +136,15 @@ export function Cell({
         onChange={(e) => void save(e.target.value || null)}
       />
     );
-  const location = column.type === "location";
+  if (column.type === "location")
+    return (
+      <LocationCell
+        name={column.name}
+        value={value}
+        onSave={onSave}
+        compact={compact}
+      />
+    );
   const displayed = draft;
   const props = {
     className: "cell-input",
@@ -161,20 +154,7 @@ export function Cell({
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setDraft(e.target.value),
     onBlur: () => {
-      if (
-        draft !==
-        (location
-          ? (decodeDatabaseLocation(value)?.name ?? value ?? "")
-          : (value ?? ""))
-      )
-        void save(
-          location
-            ? encodeDatabaseLocation({
-                ...decodeDatabaseLocation(value),
-                name: draft,
-              })
-            : draft || null,
-        );
+      if (draft !== (value ?? "")) void save(draft || null);
     },
     onKeyDown: (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement))
@@ -187,10 +167,15 @@ export function Cell({
       const start = element?.selectionStart ?? draft.length,
         end = element?.selectionEnd ?? draft.length,
         selected = draft.slice(start, end) || t("texto");
-      setDraft(draft.slice(0, start) + before + selected + after + draft.slice(end));
+      setDraft(
+        draft.slice(0, start) + before + selected + after + draft.slice(end),
+      );
       requestAnimationFrame(() => {
         element?.focus();
-        element?.setSelectionRange(start + before.length, start + before.length + selected.length);
+        element?.setSelectionRange(
+          start + before.length,
+          start + before.length + selected.length,
+        );
       });
     };
     const prefixLine = (prefix: string) => {
@@ -200,23 +185,101 @@ export function Cell({
       setDraft(draft.slice(0, lineStart) + prefix + draft.slice(lineStart));
       requestAnimationFrame(() => {
         element?.focus();
-        element?.setSelectionRange(start + prefix.length, start + prefix.length);
+        element?.setSelectionRange(
+          start + prefix.length,
+          start + prefix.length,
+        );
       });
     };
     return (
       <div className="markdown-cell">
         {column.type === "rich_text" && (
-          <div className="markdown-toolbar" role="toolbar" aria-label={t("Formato")}>
-            <button type="button" aria-label={t("Negrita")} title={t("Negrita")} onMouseDown={(event) => { event.preventDefault(); wrap("**"); }}><b>B</b></button>
-            <button type="button" aria-label={t("Cursiva")} title={t("Cursiva")} onMouseDown={(event) => { event.preventDefault(); wrap("*"); }}><i>I</i></button>
-            <button type="button" aria-label={t("Título")} title={t("Título")} onMouseDown={(event) => { event.preventDefault(); prefixLine("## "); }}>H</button>
-            <button type="button" aria-label={t("Lista")} title={t("Lista")} onMouseDown={(event) => { event.preventDefault(); prefixLine("- "); }}>•</button>
-            <button type="button" aria-label={t("Enlace")} title={t("Enlace")} onMouseDown={(event) => { event.preventDefault(); wrap("[", "](https://)"); }}>↗</button>
-            <button type="button" aria-label={t("Código")} title={t("Código")} onMouseDown={(event) => { event.preventDefault(); wrap("`"); }}>&lt;/&gt;</button>
-            <button type="button" aria-label={preview ? t("Editar") : t("Vista previa")} title={preview ? t("Editar") : t("Vista previa")} onClick={() => setPreview(!preview)}>{preview ? t("Editar") : t("Vista previa")}</button>
+          <div
+            className="markdown-toolbar"
+            role="toolbar"
+            aria-label={t("Formato")}
+          >
+            <button
+              type="button"
+              aria-label={t("Negrita")}
+              title={t("Negrita")}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                wrap("**");
+              }}
+            >
+              <b>B</b>
+            </button>
+            <button
+              type="button"
+              aria-label={t("Cursiva")}
+              title={t("Cursiva")}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                wrap("*");
+              }}
+            >
+              <i>I</i>
+            </button>
+            <button
+              type="button"
+              aria-label={t("Título")}
+              title={t("Título")}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                prefixLine("## ");
+              }}
+            >
+              H
+            </button>
+            <button
+              type="button"
+              aria-label={t("Lista")}
+              title={t("Lista")}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                prefixLine("- ");
+              }}
+            >
+              •
+            </button>
+            <button
+              type="button"
+              aria-label={t("Enlace")}
+              title={t("Enlace")}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                wrap("[", "](https://)");
+              }}
+            >
+              ↗
+            </button>
+            <button
+              type="button"
+              aria-label={t("Código")}
+              title={t("Código")}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                wrap("`");
+              }}
+            >
+              &lt;/&gt;
+            </button>
+            <button
+              type="button"
+              aria-label={preview ? t("Editar") : t("Vista previa")}
+              title={preview ? t("Editar") : t("Vista previa")}
+              onClick={() => setPreview(!preview)}
+            >
+              {preview ? t("Editar") : t("Vista previa")}
+            </button>
           </div>
         )}
-        {preview ? <MarkdownView text={draft} /> : <textarea {...props} ref={textareaRef} rows={3} />}
+        {preview ? (
+          <MarkdownView text={draft} />
+        ) : (
+          <textarea {...props} ref={textareaRef} rows={3} />
+        )}
       </div>
     );
   }

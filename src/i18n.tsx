@@ -1,6 +1,437 @@
 import { createContext, useContext } from "react";
 export const LanguageContext = createContext<"es" | "en">("es");
 const en: Record<string, string> = {
+  nominal: "nominal",
+  "categorías observadas": "observed categories",
+  "El resultado ha caducado. Vuelve a calcularlo o abre el ensayo guardado.":
+    "The result has expired. Recalculate it or open the saved experiment.",
+  "Elige al menos dos columnas diferentes; la referencia humana debe ser independiente.":
+    "Choose at least two distinct columns; the human reference must be independent.",
+  "Selecciona propiedades categóricas de esta base de datos.":
+    "Select categorical properties from this database.",
+  "Revisa las equivalencias de categorías.": "Check the category mappings.",
+  "Cada categoría de origen solo puede tener una equivalencia por columna.":
+    "Each source category can have only one mapping per column.",
+  "El kappa ponderado requiere una escala ordinal con categorías distintas y ordenadas.":
+    "Weighted kappa requires an ordinal scale with distinct, ordered categories.",
+  "Indica un separador para las columnas de texto multietiqueta.":
+    "Specify a delimiter for multilabel text columns.",
+  "Ensayo no encontrado.": "Experiment not found.",
+  "Referencias metodológicas": "Methodological references",
+  "Cada registro es una unidad de análisis. Si contiene varias imágenes, no se cuentan como juicios independientes. Los filtros actuales definen la muestra; el cálculo no se limita a la página visible. Los ensayos almacenan los identificadores y valores originales de cada registro.":
+    "Each record is one unit of analysis. When it contains several images, those images are not counted as independent judgments. Current filters define the sample; the calculation is not limited to the visible page. Experiments store each record’s identifier and original values.",
+  "Unanimidad exige que todos los modelos seleccionados coincidan exactamente. «Al menos uno» exige coincidencia de algún modelo con la referencia humana; «todos», de todos ellos. Ambos usan registros completos de modelos y referencia. La mayoría es estricta: más de la mitad de los modelos debe dar la misma categoría o el mismo conjunto; se excluyen los casos sin mayoría de su porcentaje y se informa su número.":
+    "Unanimity requires every selected model to match exactly. “At least one” requires a match between any model and the human reference; “all” requires every model to match. Both use complete cases across models and reference. A strict majority requires more than half of the models to give the same category or label set; cases without a majority are excluded from its percentage and counted separately.",
+  "κ = (Po − Pe) / (1 − Pe). Po es el acuerdo observado y Pe procede de los marginales de cada evaluador. El kappa nominal no presupone orden. El ponderado usa distancias lineales o cuadráticas entre categorías de una escala ordinal declarada. No es adecuado imponer un orden a temas históricos.":
+    "κ = (Po − Pe) / (1 − Pe). Po is observed agreement and Pe comes from each rater’s marginal distribution. Nominal kappa assumes no order. Weighted kappa uses linear or quadratic distances between categories on a declared ordinal scale. Historical themes should not be assigned an arbitrary order.",
+  "Fleiss usa un número fijo de evaluadores y casos completos del grupo. Alfa nominal usa coincidencias ponderadas por el número de juicios válidos de cada registro y excluye las unidades con menos de dos. Elegir casos completos para todos restringe también estos índices. No se asigna un valor ficticio cuando falta variación o muestra.":
+    "Fleiss uses a fixed number of raters and complete cases within the group. Nominal alpha uses coincidences weighted by the number of valid judgments per record and excludes units with fewer than two. Selecting complete cases for all restricts these indices too. No artificial value is assigned when there is insufficient variation or sample size.",
+  "El acuerdo exacto compara conjuntos sin atender al orden. Jaccard es la media de intersección / unión por registro; dos conjuntos vacíos válidos tienen Jaccard 1. El kappa binario por categoría compara presencia y ausencia en registros con ambos juicios válidos. No se informa un kappa nominal global ni Fleiss o alfa global para etiquetas mezcladas.":
+    "Exact agreement compares unordered sets. Jaccard is the mean of intersection / union per record; two valid empty sets have Jaccard 1. Binary kappa per category compares presence and absence in records with two valid judgments. No global nominal kappa, Fleiss or alpha is reported by mixing labels as independent observations.",
+  "En cada pareja, A es la referencia direccional; si interviene el investigador, A es su columna. Precisión = ambos / B; sensibilidad = ambos / A; F1 = 2 × ambos / (A + B). F1 micro agrega recuentos y F1 macro promedia las categorías observadas en esa pareja. Las categorías ausentes en ambos no se incorporan artificialmente. No se asume que la clasificación humana sea infalible.":
+    "For each pair, A is the directional reference; when the researcher is included, A is their column. Precision = both / B; recall = both / A; F1 = 2 × both / (A + B). Micro F1 aggregates counts and macro F1 averages observed categories in that pair. Categories absent from both are not added artificially. Human classification is not assumed to be infallible.",
+  "Los vacíos y los valores inválidos se excluyen, no se consideran acuerdos. Puedes declarar [] como conjunto vacío válido en selección múltiple; una celda nula sigue siendo un dato ausente. Se normaliza Unicode NFKC y se recortan espacios; opcionalmente se ignoran mayúsculas. Las tildes se conservan. Las opciones de distintas columnas se comparan por etiqueta, no por identificador. Las equivalencias son explícitas y se aplican una sola vez.":
+    "Missing and invalid values are excluded, not counted as agreements. You may declare [] a valid empty set in multi-select; a null cell remains missing. Unicode NFKC and whitespace normalization are applied; case can optionally be ignored. Accents are preserved. Options from different columns are compared by label, not identifier. Explicit mappings are applied once.",
+  "El intervalo del acuerdo exacto es Wilson al 95% y presupone registros independientes. No es un intervalo de kappa ni una prueba de superioridad entre modelos. Imágenes del mismo libro, fotógrafo o serie pueden estar relacionadas; diseña el muestreo con esa dependencia en mente. Examina cobertura, prevalencia, confusiones y sesgos junto a los índices; un acuerdo alto no demuestra exactitud histórica.":
+    "The exact-agreement interval is 95% Wilson and assumes independent records. It is not a kappa interval or a test of model superiority. Images from the same book, photographer or series may be related; account for this dependence in sampling. Examine coverage, prevalence, confusions and biases alongside the indices; high agreement does not establish historical accuracy.",
+  "Guardar conserva una instantánea local con configuración, opciones y valores originales, normalizados y procedencia disponible. Exporta JSON para reproducir todos los resultados; CSV ofrece tablas en formato largo con secciones de métricas, categorías, confusiones y registros. Las imágenes permanecen en la colección. Las nuevas ejecuciones no sobrescriben los ensayos anteriores.":
+    "Saving preserves a local snapshot with configuration, options, original and normalized values, and available provenance. Export JSON to reproduce all results; CSV provides long-format tables with metrics, categories, confusions and records. Images remain in the collection. New calculations do not overwrite previous experiments.",
+  "IC 95%": "95% CI",
+  "Estos campos documentan el ensayo. Genera las clasificaciones desde Analizar y los ajustes de modelos; usa una columna independiente para cada ejecución.":
+    "These fields document the experiment. Generate classifications through Analyze and model settings; use an independent column for each run.",
+  "Los ensayos difieren en registros, referencia humana, categorías o reglas de cálculo. Los porcentajes no permiten una comparación directa de rendimiento.":
+    "The experiments differ in records, human reference, categories or calculation rules. Percentages cannot be used to compare performance directly.",
+  Concordancia: "Agreement",
+  "Secciones de concordancia": "Agreement sections",
+  "Configurar ensayo": "Configure experiment",
+  "Ensayos guardados": "Saved experiments",
+  Metodología: "Methodology",
+  "Compara modelos y revisión humana": "Compare models and human review",
+  "Una columna por modelo o evaluador y, opcionalmente, otra con la clasificación del investigador. El cálculo usa todos los registros que cumplen los filtros de la vista.":
+    "One column per model or rater and, optionally, another with the researcher's classification. The calculation uses all records matching the view filters.",
+  "Unidad de análisis: un registro, aunque contenga varias imágenes.":
+    "Unit of analysis: one record, even when it contains several images.",
+  "filtros activos": "active filters",
+  "Columnas de modelos / evaluadores (máximo 8)":
+    "Model / rater columns (up to 8)",
+  "Referencia humana (opcional)": "Human reference (optional)",
+  "Tipo de clasificación": "Classification type",
+  "Una categoría por registro": "One category per record",
+  "Varias etiquetas por registro": "Multiple labels per record",
+  "Datos incompletos": "Incomplete data",
+  "Casos disponibles por pareja": "Available cases per pair",
+  "Cada pareja tiene su propio denominador.":
+    "Each pair has its own denominator.",
+  "Mismos casos completos para todos": "Same complete cases for all",
+  "Excluye registros sin algún evaluador seleccionado.":
+    "Exclude records missing any selected rater.",
+  "Añade columnas de selección, selección múltiple o texto para comparar clasificaciones.":
+    "Add select, multi-select or text columns to compare classifications.",
+  "Separador de etiquetas en columnas de texto":
+    "Label delimiter for text columns",
+  "Las propiedades de selección múltiple usan sus opciones, sin separador.":
+    "Multi-select properties use their options, without a delimiter.",
+  "Tratar [] de selección múltiple como conjunto vacío válido":
+    "Treat multi-select [] as a valid empty set",
+  "Ignorar mayúsculas": "Ignore case",
+  "Solo registros con imágenes": "Only records with images",
+  "Las tildes se conservan. Los vacíos no se convierten en coincidencias. Usa columnas categóricas, no descripciones completas.":
+    "Accents are preserved. Missing values do not count as matches. Use categorical columns, not full descriptions.",
+  "Identificar modelos, instrucciones y condiciones del ensayo":
+    "Document models, prompts and experiment conditions",
+  "Nombre del evaluador": "Rater name",
+  "Modelo, proveedor y versión": "Model, provider and version",
+  "Instrucciones / prompt": "Instructions / prompt",
+  "Notas metodológicas": "Methodological notes",
+  "Se guarda también la procedencia disponible de las propuestas de IA. La identificación manual del ensayo no sustituye el historial de cada celda.":
+    "Available AI proposal provenance is saved too. Manually documenting an experiment does not replace each cell's history.",
+  "Equivalencias entre categorías": "Category mappings",
+  "Cada equivalencia transforma una etiqueta de una columna en una categoría común. Se aplica una sola vez y no modifica los datos originales.":
+    "Each mapping converts a label in one column to a common category. It is applied once and does not modify the original data.",
+  "Columna de la equivalencia": "Mapping column",
+  "Etiqueta original": "Original label",
+  "Categoría común": "Common category",
+  "Eliminar equivalencia": "Delete mapping",
+  "Añadir equivalencia": "Add mapping",
+  "Escala ordinal y kappa ponderado (opcional)":
+    "Ordinal scale and weighted kappa (optional)",
+  "Las categorías temáticas son nominales. Activa pesos solo si tus categorías tienen un orden justificable, como grados de intensidad.":
+    "Thematic categories are nominal. Enable weights only when categories have a defensible order, such as degrees of intensity.",
+  "Ponderación de Cohen": "Cohen weighting",
+  "Sin ponderación (nominal)": "Unweighted (nominal)",
+  "Lineal (ordinal)": "Linear (ordinal)",
+  "Cuadrática (ordinal)": "Quadratic (ordinal)",
+  "Categorías ordenadas de menor a mayor, una por línea":
+    "Categories in ascending order, one per line",
+  "Incluye todas las categorías normalizadas, después de aplicar equivalencias. Máximo 100.":
+    "Include all normalized categories after applying mappings. Up to 100.",
+  "Instantánea del ensayo": "Experiment snapshot",
+  "registros analizados": "records analyzed",
+  categorías: "categories",
+  "Editar configuración": "Edit configuration",
+  "La configuración o los filtros actuales difieren de esta instantánea. Guardar y exportar conservan el resultado mostrado; recalcular crea uno nuevo.":
+    "The current configuration or filters differ from this snapshot. Saving and exporting preserve the displayed result; recalculating creates a new one.",
+  "Los resultados son una instantánea; las ediciones posteriores y las nuevas tareas de IA no la alteran.":
+    "Results are a snapshot; later edits and new AI tasks do not change it.",
+  "No hay registros en este conjunto. Revisa los filtros y la opción de imágenes.":
+    "This cohort has no records. Check the filters and images option.",
+  "Unanimidad entre modelos": "Model unanimity",
+  "Solo registros con todos los modelos válidos.":
+    "Only records with valid judgments from every model.",
+  "Al menos un modelo coincide con el investigador":
+    "At least one model matches the researcher",
+  "Todos los modelos coinciden con el investigador":
+    "All models match the researcher",
+  "Mayoría estricta frente al investigador":
+    "Strict majority versus the researcher",
+  "sin mayoría estricta": "without a strict majority",
+  "Los porcentajes «al menos uno» y «todos» usan los casos completos de todos los modelos y la referencia humana.":
+    "The “at least one” and “all” percentages use complete cases across all models and the human reference.",
+  "registros con unanimidad de modelos diferente de la referencia.":
+    "records where unanimous models differ from the reference.",
+  "Cobertura y datos excluidos": "Coverage and exclusions",
+  "casos completos de todos los evaluadores":
+    "complete cases across all raters",
+  "excluidos por no tener imágenes": "excluded for having no images",
+  Evaluador: "Rater",
+  Válidos: "Valid",
+  Vacíos: "Missing",
+  Inválidos: "Invalid",
+  Cobertura: "Coverage",
+  "Inválidos: opciones borradas, texto demasiado largo o varias categorías en modo de categoría única. Revisa esos registros antes de interpretar el resultado.":
+    "Invalid: deleted options, overly long text or multiple categories in single-category mode. Review these records before interpreting the result.",
+  "Acuerdo del conjunto de evaluadores": "Agreement across raters",
+  Grupo: "Group",
+  "Casos completos": "Complete cases",
+  "Casos / juicios para α": "Cases / judgments for α",
+  "Solo modelos": "Models only",
+  "Modelos e investigador": "Models and researcher",
+  "Fleiss usa casos completos del grupo. Alfa nominal aprovecha registros con al menos dos juicios válidos, salvo que hayas elegido casos completos para todos.":
+    "Fleiss uses complete cases within the group. Nominal alpha uses records with at least two valid judgments, unless complete cases for all have been selected.",
+  "Comparación por parejas": "Pairwise comparison",
+  "Selecciona una pareja para explorar categorías y confusiones. Cada n cuenta registros, no etiquetas.":
+    "Select a pair to explore categories and confusions. Each n counts records, not labels.",
+  Pareja: "Pair",
+  "Acuerdo exacto": "Exact agreement",
+  "κ ponderado": "Weighted κ",
+  excluidos: "excluded",
+  "A es la referencia para las métricas direccionales. Con el investigador, A siempre es su columna. Coincidir con una referencia no demuestra por sí solo la verdad histórica.":
+    "A is the reference for directional metrics. When the researcher is included, A is always their column. Matching a reference alone does not establish historical truth.",
+  "Buscar categoría en resultados": "Search result categories",
+  "Categorías y sesgos de asignación": "Categories and assignment biases",
+  "La diferencia B − A muestra sobreasignación o infraasignación frente a la referencia en esta pareja.":
+    "The difference B − A shows overassignment or underassignment relative to the reference in this pair.",
+  Categoría: "Category",
+  Ambos: "Both",
+  Precisión: "Precision",
+  Sensibilidad: "Recall",
+  binario: "binary",
+  "Matriz de confusión (formato de pares)": "Confusion matrix (pair format)",
+  "Cruces de conjuntos de etiquetas": "Label-set cross-tabulation",
+  "Se muestran los cruces observados, incluidos los acuerdos. A = filas de referencia; B = asignaciones comparadas. Los cruces no mostrados tienen frecuencia cero.":
+    "Observed combinations are shown, including agreements. A = reference rows; B = compared assignments. Combinations not shown have zero frequency.",
+  "Porcentaje de la pareja": "Percentage of the pair",
+  "Revisar registros y discrepancias": "Review records and disagreements",
+  "Tipo de discrepancia": "Disagreement type",
+  "Desacuerdo entre modelos": "Disagreement between models",
+  "Algún modelo difiere del investigador":
+    "A model differs from the researcher",
+  "Modelos unánimes que difieren del investigador":
+    "Unanimous models differ from the researcher",
+  "Registros incompletos o inválidos": "Incomplete or invalid records",
+  "Todos los registros del ensayo": "All experiment records",
+  "Filtrar revisión por categoría": "Filter review by category",
+  "Buscar registros del ensayo": "Search experiment records",
+  "Guardar una instantánea reproducible": "Save a reproducible snapshot",
+  "Incluye valores originales, etiquetas normalizadas, opciones, filtros, instrucciones, procedencia disponible y resultados. No incluye los archivos de imagen.":
+    "Includes original values, normalized labels, options, filters, prompts, available provenance and results. Image files are not included.",
+  "Nombre del ensayo": "Experiment name",
+  Guardado: "Saved",
+  "Guardar ensayo": "Save experiment",
+  "Configuración y procedencia de esta instantánea":
+    "Snapshot configuration and provenance",
+  "Referencia humana": "Human reference",
+  "Sin referencia humana": "No human reference",
+  Modo: "Mode",
+  "Modelo no documentado": "Model not documented",
+  "Sin instrucciones documentadas": "No documented instructions",
+  propuestas: "proposals",
+  "valores aceptados coinciden con la celda actual":
+    "accepted values match the current cell",
+  "La procedencia registra propuestas históricas. Puede contener varios modelos o instrucciones por columna; revisa su homogeneidad antes de comparar ensayos.":
+    "Provenance records historical proposals. A column may contain multiple models or prompts; check consistency before comparing experiments.",
+  "Ensayos guardados en esta base de datos":
+    "Saved experiments in this database",
+  "Cada ensayo conserva sus datos y condiciones. Puedes abrirlo, reutilizar su configuración y calcular otro con los filtros actuales. Las copias de seguridad incluyen los ensayos.":
+    "Each experiment preserves its data and conditions. Open it, reuse its configuration and calculate a new one with current filters. Backups include experiments.",
+  "Todavía no hay ensayos guardados.": "No experiments have been saved yet.",
+  completos: "complete",
+  "Abrir ensayo": "Open experiment",
+  Comparar: "Compare",
+  "Eliminar ensayo": "Delete experiment",
+  "Comparación de ensayos": "Experiment comparison",
+  "Limpiar comparación": "Clear comparison",
+  "Los ensayos no comparten exactamente los registros, la referencia humana o el tipo de clasificación. Los porcentajes no permiten una comparación directa de rendimiento.":
+    "The experiments do not share exactly the same records, human reference or classification type. Percentages cannot be used to compare performance directly.",
+  "Compara también denominadores, cobertura, taxonomías e instrucciones. Cambiar el número de modelos cambia la interpretación de unanimidad y «al menos uno».":
+    "Compare denominators, coverage, taxonomies and prompts too. Changing the number of models changes the interpretation of unanimity and “at least one”.",
+  Ensayo: "Experiment",
+  Modelos: "Models",
+  Unanimidad: "Unanimity",
+  "Al menos uno / humano": "At least one / human",
+  "Cada modelo frente a la referencia humana":
+    "Each model versus the human reference",
+  "Modelo / evaluador": "Model / rater",
+  "Cálculo local · sin llamadas a modelos ni APIs":
+    "Local calculation · no model or API calls",
+  "Recalcular con filtros actuales": "Recalculate with current filters",
+  "Calcular concordancia": "Calculate agreement",
+  Investigador: "Researcher",
+  "No estimable": "Not estimable",
+  "Intervalo de Wilson al 95%; supone registros independientes.":
+    "95% Wilson interval; assumes independent records.",
+  "Sin variación suficiente.": "Insufficient variation.",
+  "Se necesitan al menos dos registros comparables.":
+    "At least two comparable records are required.",
+  "Define un orden ordinal con al menos dos categorías.":
+    "Define an ordinal order with at least two categories.",
+  "El orden ordinal no incluye todas las categorías observadas.":
+    "The ordinal order does not include all observed categories.",
+  "Se necesitan dos evaluadores y dos registros comparables.":
+    "Two raters and two comparable records are required.",
+  "En multietiqueta se calcula kappa binario por categoría; no se mezclan etiquetas como observaciones independientes.":
+    "Multilabel mode computes binary kappa per category; labels are not treated as independent observations.",
+  "Consulta el kappa binario de cada categoría.":
+    "See binary kappa for each category.",
+  "Solo para una escala ordinal declarada.":
+    "Only for a declared ordinal scale.",
+  "Cómo interpretar el análisis": "Interpreting the analysis",
+  "Unidad y muestra": "Unit and sample",
+  "Acuerdo observado": "Observed agreement",
+  "Cohen y ponderación": "Cohen and weighting",
+  "Fleiss y Krippendorff": "Fleiss and Krippendorff",
+  Multietiqueta: "Multilabel",
+  "Referencia y categorías": "Reference and categories",
+  "Vacíos, normalización y equivalencias":
+    "Missing values, normalization and mappings",
+  "Incertidumbre e interpretación": "Uncertainty and interpretation",
+  Reproducibilidad: "Reproducibility",
+  "Referencias metodológicas disponibles en docs/CONCORDANCE.md del proyecto.":
+    "Methodological references are available in the project's docs/CONCORDANCE.md.",
+  "No contiene": "Does not contain",
+  "Empieza por": "Starts with",
+  "Termina en": "Ends with",
+  "No es igual a": "Does not equal",
+  "Mayor que": "Greater than",
+  "Mayor o igual que": "Greater than or equal to",
+  "Menor que": "Less than",
+  "Menor o igual que": "Less than or equal to",
+  "Está entre": "Is between",
+  "Es cualquiera de": "Is any of",
+  "Incluye todos": "Includes all",
+  "No es ninguno de": "Is none of",
+  "No está vacío": "Is not empty",
+  "Está marcado": "Is checked",
+  "No está marcado": "Is unchecked",
+  "Fecha relativa": "Relative date",
+  "Tiene coordenadas": "Has coordinates",
+  "No tiene coordenadas": "Has no coordinates",
+  Hoy: "Today",
+  Ayer: "Yesterday",
+  Mañana: "Tomorrow",
+  "Esta semana": "This week",
+  "La semana pasada": "Last week",
+  "La próxima semana": "Next week",
+  "Este mes": "This month",
+  "El mes pasado": "Last month",
+  "El próximo mes": "Next month",
+  "Este año": "This year",
+  "Últimos 7 días": "Last 7 days",
+  "Últimos 30 días": "Last 30 days",
+  "Últimos 90 días": "Last 90 days",
+  "Fecha de incorporación": "Date added",
+  "Última modificación": "Last modified",
+  "Número de imágenes": "Image count",
+  "Buscar…": "Search…",
+  "Limpiar búsqueda": "Clear search",
+  "Seleccionar…": "Select…",
+  "Cargando opciones…": "Loading options…",
+  "Sin coincidencias": "No matches",
+  "Usar este valor": "Use this value",
+  "Cargar más opciones": "Load more options",
+  "Seleccionar resultados": "Select results",
+  "Limpiar selección": "Clear selection",
+  Listo: "Done",
+  "Intervalo de fechas": "Date range",
+  "Valores del filtro": "Filter values",
+  "No se pudieron cargar las sugerencias.": "Suggestions could not be loaded.",
+  "Valor del filtro": "Filter value",
+  "Escribe un valor…": "Enter a value…",
+  "Datos del registro": "Record metadata",
+  "Mostrar registros que cumplan": "Show records matching",
+  "Grupo de condiciones": "Condition group",
+  "Combinar condiciones": "Combine conditions",
+  "Todas las condiciones (Y)": "All conditions (AND)",
+  "Cualquiera de las condiciones (O)": "Any condition (OR)",
+  "Es anterior a": "Is before",
+  "Es posterior a": "Is after",
+  "En esta fecha o después": "On or after",
+  "En esta fecha o antes": "On or before",
+  "Activar condición": "Enable condition",
+  "Propiedad del filtro": "Filter property",
+  "Duplicar condición": "Duplicate condition",
+  "Eliminar condición": "Remove condition",
+  "Condición del filtro": "Filter condition",
+  "La propiedad ya no existe. Elige otra o elimina esta condición.":
+    "This property no longer exists. Choose another or remove this condition.",
+  "Completa el valor para activar esta condición.":
+    "Enter a value to activate this condition.",
+  "Eliminar grupo": "Remove group",
+  "+ Añadir filtro": "+ Add filter",
+  "Se aplica primero el criterio superior. Los valores vacíos quedan al final.":
+    "The top criterion is applied first. Empty values appear last.",
+  "Ordenamientos rápidos": "Quick sorts",
+  "Elegir un ordenamiento rápido…": "Choose a quick sort…",
+  "Alfabético: A → Z": "Alphabetical: A → Z",
+  "Alfabético: Z → A": "Alphabetical: Z → A",
+  "Añadidos recientemente": "Recently added",
+  "Añadidos más antiguos": "Oldest additions first",
+  "Modificados recientemente": "Recently modified",
+  "Sin modificar desde hace más tiempo": "Least recently modified",
+  "Más imágenes primero": "Most images first",
+  "Menos imágenes primero": "Fewest images first",
+  "Más antiguos primero": "Oldest first",
+  "Más recientes primero": "Newest first",
+  "Menor a mayor": "Lowest to highest",
+  "Mayor a menor": "Highest to lowest",
+  "Orden de las opciones": "Option order",
+  "Orden inverso de las opciones": "Reverse option order",
+  "Ascendente: A → Z": "Ascending: A → Z",
+  "Descendente: Z → A": "Descending: Z → A",
+  "Sin marcar primero": "Unchecked first",
+  "Marcados primero": "Checked first",
+  "Más temprano primero": "Earliest time first",
+  "Más tarde primero": "Latest time first",
+  "Arrastra para cambiar la prioridad": "Drag to change priority",
+  "Propiedad de ordenamiento": "Sort property",
+  "Dirección del ordenamiento": "Sort direction",
+  "Subir prioridad": "Move earlier",
+  "Bajar prioridad": "Move later",
+  "Eliminar ordenamiento": "Remove sort",
+  "Añadir ordenamiento": "Add sort",
+  "+ Añadir ordenamiento": "+ Add sort",
+  "Quitar ordenamientos": "Clear sorts",
+  "Filtrar y ordenar": "Filter and sort",
+  "Filtros y ordenamientos": "Filters and sorts",
+  Ordenamientos: "Sorts",
+  "Se conserva al cambiar entre Tabla, Galería y Mapa.":
+    "Preserved when switching between Table, Gallery and Map.",
+  "Los filtros de Búsqueda se aplican al pulsar Buscar.":
+    "Search filters are applied when you press Search.",
+  Restablecer: "Reset",
+  "Bases de datos de la búsqueda": "Search databases",
+  "Seleccionar bases de datos…": "Select databases…",
+  "Tipo de coincidencia": "Match type",
+  y: "and",
+  Mapa: "Map",
+  "Mapa de registros": "Record map",
+  "Vista de mapa": "Map view",
+  "Propiedad de ubicación": "Location property",
+  "situados en el mapa": "located on the map",
+  "Ajustar al contenido": "Fit all records",
+  "Registros del mapa": "Map records",
+  "En el mapa": "On the map",
+  "Sin coordenadas": "No coordinates",
+  "Buscar en los registros del mapa": "Search map records",
+  "registros en este grupo": "records in this group",
+  "Quitar selección del mapa": "Clear map selection",
+  "Acercar al grupo": "Zoom to group",
+  "Todos los registros tienen coordenadas.": "All records have coordinates.",
+  "No hay registros situados con estos filtros o esta búsqueda.":
+    "No located records match these filters or this search.",
+  "Sin ubicación": "No location",
+  "Mostrar más registros": "Show more records",
+  "Se muestran todos los registros con coordenadas que cumplen los filtros, sin limitarse a la página de la tabla.":
+    "All records with coordinates matching the filters are shown, beyond the current table page.",
+  "Añade una ubicación para situar tus imágenes":
+    "Add a location to place your images",
+  "Crea una propiedad de tipo Ubicación y elige un lugar o introduce coordenadas en las fichas.":
+    "Create a Location property and choose a place or enter coordinates in the records.",
+  "Sin conexión. Los registros y sus coordenadas siguen disponibles.":
+    "Offline. Records and their coordinates remain available.",
+  "No se pudo cargar el fondo del mapa. Puedes seguir consultando los registros.":
+    "The map background could not load. You can still browse records.",
+  Reintentar: "Retry",
+  "Buscar un lugar o escribir uno propio…":
+    "Search for a place or enter your own…",
+  "Lugares sugeridos": "Suggested places",
+  "Buscando lugares…": "Searching places…",
+  "Catálogo no disponible. Puedes escribir un lugar propio.":
+    "Catalogue unavailable. You can enter your own place.",
+  "Catálogo local · GeoNames · CC BY 4.0":
+    "Local catalogue · GeoNames · CC BY 4.0",
+  "Sin coincidencias. Puedes escribir un lugar propio.":
+    "No matches. You can enter your own place.",
+  "Usar texto propio": "Use custom text",
+  "Elige una sugerencia o escribe un lugar propio. La lista funciona sin conexión.":
+    "Choose a suggestion or enter your own place. The list works offline.",
+  "Ver mapa": "View map",
+  "Mapa de": "Map of",
+  "Quitar lugar": "Remove place",
+  "Ampliar mapa": "Expand map",
+  "Conéctate para ver el mapa. El lugar está guardado en este equipo.":
+    "Connect to view the map. The place is saved on this device.",
+  "No se pudo cargar el mapa. El lugar sigue guardado.":
+    "The map could not load. The place is still saved.",
+  "No se pudo abrir el enlace.": "The link could not be opened.",
+  "No se pudo guardar el lugar.": "The place could not be saved.",
+  "Coordenadas (opcional)": "Coordinates (optional)",
+  Latitud: "Latitude",
+  Longitud: "Longitude",
+  "Guardar coordenadas": "Save coordinates",
+  "Escribe primero un nombre para el lugar.": "Enter a place name first.",
+  "Introduce una latitud entre −90 y 90 y una longitud entre −180 y 180.":
+    "Enter a latitude between −90 and 90 and a longitude between −180 and 180.",
   "Bases de datos": "Databases",
   Búsqueda: "Search",
   Configuración: "Settings",
@@ -225,7 +656,8 @@ const en: Record<string, string> = {
   "Importa una base de datos": "Import a database",
   "CSV, Nodus y Notion; conserva tu clasificación.":
     "CSV, Nodus and Notion; keep your classification.",
-  "Configura la descripción y clasificación": "Configure descriptions and classification",
+  "Configura la descripción y clasificación":
+    "Configure descriptions and classification",
   "Modelos locales o APIs opcionales, seleccionables por columna.":
     "Local models or optional APIs, selectable per column.",
   "Supervisa tus colas de trabajo": "Monitor your work queues",
@@ -280,8 +712,7 @@ const en: Record<string, string> = {
   "○ sin clave": "○ no key",
   Endpoint: "Endpoint",
   "Clave de API": "API key",
-  "Clave guardada · escribe para sustituirla":
-    "Key saved · type to replace it",
+  "Clave guardada · escribe para sustituirla": "Key saved · type to replace it",
   "Clave del proveedor": "Provider key",
   "Guardar clave": "Save key",
   "Eliminar clave": "Delete key",
@@ -406,7 +837,8 @@ const en: Record<string, string> = {
   Código: "Code",
   Editar: "Edit",
   Árbol: "Tree",
-  "Jerarquía según la relación de la base.": "Hierarchy from the database relation.",
+  "Jerarquía según la relación de la base.":
+    "Hierarchy from the database relation.",
   "Sin relaciones todavía.": "No relationships yet.",
   "Peso semántico": "Semantic weight",
   "Archivo fotográfico": "Photo archive",

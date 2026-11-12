@@ -20,6 +20,7 @@ export interface DatabasePersonReference {
 
 export interface DatabaseLocationValue {
   name: string;
+  gazetteerId?: string | null;
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -122,7 +123,8 @@ export function encodeDatabaseLocation(value: DatabaseLocationValue | null): str
   const coordinate = (candidate: number | null | undefined, min: number, max: number) =>
     typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= min && candidate <= max ? candidate : null;
   return JSON.stringify({ name: value.name.trim(), address: value.address?.trim() || null,
-    latitude: coordinate(value.latitude, -90, 90), longitude: coordinate(value.longitude, -180, 180) });
+    latitude: coordinate(value.latitude, -90, 90), longitude: coordinate(value.longitude, -180, 180),
+    ...(value.gazetteerId ? { gazetteerId: value.gazetteerId } : {}) });
 }
 
 export function decodeDatabaseLocation(raw: string | null): DatabaseLocationValue | null {
@@ -132,7 +134,8 @@ export function decodeDatabaseLocation(raw: string | null): DatabaseLocationValu
   if (typeof object.name !== 'string' || !object.name.trim()) return null;
   return { name: object.name, address: typeof object.address === 'string' ? object.address : null,
     latitude: typeof object.latitude === 'number' ? object.latitude : null,
-    longitude: typeof object.longitude === 'number' ? object.longitude : null };
+    longitude: typeof object.longitude === 'number' ? object.longitude : null,
+    ...(typeof object.gazetteerId === 'string' ? { gazetteerId: object.gazetteerId } : {}) };
 }
 
 export function decodeDatabaseButton(raw: string | null): DatabaseButtonState {

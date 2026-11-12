@@ -1,8 +1,6 @@
-import lightMark from "../../build/icon-light.svg";
-import darkMark from "../../build/icon-dark.svg";
+import mark from "../../build/icon-mark.svg";
 
-/** The in-app brand uses the exact approved app artwork (objective + N), not
- *  a simplified glyph. The two images follow the resolved light/dark theme. */
+/** Inside the window use only the lens + N, without the macOS app tile. */
 export function ImagoMark({ size = 28 }: { size?: number }) {
   return (
     <span
@@ -10,8 +8,7 @@ export function ImagoMark({ size = 28 }: { size?: number }) {
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
-      <img className="imago-mark-light" src={lightMark} alt="" />
-      <img className="imago-mark-dark" src={darkMark} alt="" />
+      <img src={mark} alt="" />
     </span>
   );
 }

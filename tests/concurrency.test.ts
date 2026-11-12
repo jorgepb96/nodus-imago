@@ -9,6 +9,59 @@ import { Models } from "../electron/ai/models";
 import { InferenceHost } from "../electron/ai/host";
 import { Engine } from "../electron/ai/engine";
 import { JobQueue } from "../electron/jobs";
+import { Service } from "../electron/service";
+
+test("pausing work permits settings changes after the in-flight request has settled", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "imago-paused-settings-")),
+    service = new Service(root, "unused", () => {});
+  try {
+    let settled = false;
+    service.engine.analyzeOne = async (_payload, _index, signal) => {
+      await new Promise<void>((resolve) =>
+        signal.addEventListener(
+          "abort",
+          () => {
+            setTimeout(() => {
+              settled = true;
+              resolve();
+            }, 20);
+          },
+          { once: true },
+        ),
+      );
+      return "imported";
+    };
+    const id = service.repo.newJob(
+      "analyze",
+      {
+        items: [
+          {
+            rowId: "fixture",
+            columnId: "fixture",
+            choice: { provider: "custom", model: "fixture" },
+          },
+        ],
+      },
+      1,
+    );
+    service.queue.pump();
+    await assert.rejects(
+      service.run("updateSettings", { parallelJobs: 1 }),
+      /Pausa/,
+    );
+    service.queue.control(id, "pause");
+    await service.run("updateSettings", { parallelJobs: 1 });
+    assert.equal(settled, true);
+    assert.equal(service.repo.getSettings().parallelJobs, 1);
+    assert.equal(
+      service.repo.jobs().find((job) => job.id === id)?.state,
+      "paused",
+    );
+  } finally {
+    await service.run("_close");
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 test("separate column jobs execute concurrently; pausing one does not cancel another", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imago-parallel-")),
     repo = new Repository(root),

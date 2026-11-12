@@ -36,9 +36,15 @@ const copy = (from, to) =>
       if (!relative) return true;
       const top = relative.split(path.sep)[0];
       if (
-        ["node_modules", ".git", ".venv", "release", "test-results", "dist", "dist-electron"].includes(
-          top,
-        )
+        [
+          "node_modules",
+          ".git",
+          ".venv",
+          "release",
+          "test-results",
+          "dist",
+          "dist-electron",
+        ].includes(top)
       )
         return false;
       return path.basename(source) !== ".DS_Store";
@@ -120,12 +126,7 @@ try {
   console.log("→ Empaquetando macOS x64…");
   await run(
     "npx",
-    [
-      "electron-builder",
-      "--config",
-      configPath,
-      "--config.npmRebuild=false",
-    ],
+    ["electron-builder", "--config", configPath, "--config.npmRebuild=false"],
     temp,
   );
 
@@ -143,6 +144,11 @@ try {
     if (!fs.existsSync(source))
       throw new Error(`electron-builder no generó ${file}.`);
     await fsp.copyFile(source, path.join(root, "release", file));
+    if (fs.existsSync(source + ".blockmap"))
+      await fsp.copyFile(
+        source + ".blockmap",
+        path.join(root, "release", file + ".blockmap"),
+      );
     console.log(`✓ release/${file}`);
   }
 } finally {

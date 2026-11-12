@@ -15,6 +15,7 @@ import { decodeMultiSelect } from "../shared/databases";
 import { matchImages } from "../shared/imageMatching";
 import { normalizeVector, fuseRanks } from "../shared/vectors";
 import { validateCommand } from "../shared/validation";
+import { parseFormulaExpression } from "../shared/databaseFormulaExpression";
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "imago-core-"));
@@ -28,6 +29,28 @@ function fixture() {
     },
   };
 }
+test("single and bulk row creation immediately compute expression formulas and index their values", () => {
+  const f = fixture();
+  try {
+    const d = f.repo.create("Fórmulas"),
+      source = 'concat("Registro ", "calculado")',
+      formula = f.repo.addColumn(d.database.id, "Etiqueta", "formula", {
+        formula: {
+          kind: "expression",
+          source,
+          ast: parseFormulaExpression(source),
+          resultKind: "text",
+        },
+      }),
+      first = f.repo.createRow(d.database.id),
+      more = f.repo.createRows(d.database.id, 2);
+    for (const id of [first.id, ...more])
+      assert.equal(f.repo.getRow(id).cells[formula.id], "Registro calculado");
+    assert.equal(f.repo.literal({ query: "calculado" }).total, 3);
+  } finally {
+    f.close();
+  }
+});
 test("Nodus codecs and CSV import preserve typed multi-select options and identifiers", () => {
   const f = fixture();
   try {
@@ -77,9 +100,9 @@ test("checkbox CSV accepts 1/0 and yes/no but rejects unknown values instead of 
       ],
     );
     assert.deepEqual(
-      f.repo.literal({ databaseIds: [d.database.id] }).rows.map(
-        (row) => row.cells[d.columns[1].id],
-      ),
+      f.repo
+        .literal({ databaseIds: [d.database.id] })
+        .rows.map((row) => row.cells[d.columns[1].id]),
       ["1", "0", "1", "0"],
     );
     assert.throws(
@@ -278,9 +301,60 @@ test("row and column deletion removes orphaned undo history", () => {
       .prepare(
         "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at) VALUES(?,?,?,?,?,?)",
       )
-      .run("batch2", row2.id, column.id, null, "texto", new Date().toISOString());
+      .run(
+        "batch2",
+        row2.id,
+        column.id,
+        null,
+        "texto",
+        new Date().toISOString(),
+      );
     f.repo.deleteColumn(column.id);
     assert.equal(f.repo.undo(), 0);
+  } finally {
+    f.close();
+  }
+});
+
+test("accepting an empty AI multi-select alongside a description keeps batch undo usable", () => {
+  const f = fixture();
+  try {
+    const d = f.repo.create("Propuestas"),
+      row = f.repo.createRow(d.database.id),
+      tags = f.repo.addColumn(d.database.id, "Categorías", "multi_select"),
+      description = f.repo.addColumn(d.database.id, "Descripción", "text");
+    const insert = f.repo.db.prepare(
+      "INSERT INTO proposals(id,row_id,column_id,before_value,value,model,revision,prompt,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+    );
+    insert.run(
+      "empty",
+      row.id,
+      tags.id,
+      null,
+      "[]",
+      "fixture",
+      "1",
+      "fixture",
+      "2026-11-12",
+    );
+    insert.run(
+      "text",
+      row.id,
+      description.id,
+      null,
+      "Una descripción",
+      "fixture",
+      "1",
+      "fixture",
+      "2026-11-12",
+    );
+    assert.equal(
+      f.repo.reviewProposals(["empty", "text"], "accept").applied,
+      2,
+    );
+    assert.equal(f.repo.getRow(row.id).cells[tags.id], undefined);
+    assert.equal(f.repo.undo(), 1);
+    assert.equal(f.repo.getRow(row.id).cells[description.id], undefined);
   } finally {
     f.close();
   }
@@ -371,7 +445,7 @@ test("computed unique IDs and timestamps can be filtered and sorted", () => {
     });
     assert.deepEqual(
       sorted.rows.map((row) => row.id),
-      [a.id, b.id].sort((x, y) => ("IMG-" + x).localeCompare("IMG-" + y)),
+      [a.id, b.id].sort((x, y) => ("IMG-" + x).localeCompare("IMG-" + y, "es", { numeric: true, sensitivity: "base" })),
     );
   } finally {
     f.close();
@@ -453,8 +527,18 @@ test("IPC command validation rejects filesystem paths, unknown operations, inval
 test("equivalent fields from different schemas filter together with OR semantics", () => {
   const f = fixture();
   try {
-    const a = f.repo.importCsv("A", ["Lugar"], ["title"], [["Granada"], ["Sevilla"]]),
-      b = f.repo.importCsv("B", ["Ciudad"], ["title"], [["Granada"], ["Madrid"]]),
+    const a = f.repo.importCsv(
+        "A",
+        ["Lugar"],
+        ["title"],
+        [["Granada"], ["Sevilla"]],
+      ),
+      b = f.repo.importCsv(
+        "B",
+        ["Ciudad"],
+        ["title"],
+        [["Granada"], ["Madrid"]],
+      ),
       aColumn = a.columns[0],
       bColumn = b.columns[0];
     const result = f.repo.literal({

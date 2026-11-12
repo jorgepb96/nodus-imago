@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { isDatabaseColumnType } from "./databases";
+import { FILTER_LABELS } from "./viewCriteria";
+import type { PropertyFilterGroup, PropertyFilterOp } from "./imago";
 const id = z.string().min(1).max(200);
 const name = z.string().trim().min(1).max(300);
 const ids = z.array(id).max(100000);
@@ -23,14 +25,51 @@ const choice = z
   .strict();
 const filter = z
   .object({
+    id: id.optional(),
+    disabled: z.boolean().optional(),
     databaseId: id.optional(),
     columnId: id,
     columnIds: z.array(id).min(1).max(100).optional(),
     groupId: id.optional(),
-    op: z.enum(["contains", "equals", "gte", "lte", "any", "all", "empty"]),
-    value: z.union([z.string().max(10000), z.array(z.string()).max(1000)]),
+    op: z.enum(
+      Object.keys(FILTER_LABELS) as [PropertyFilterOp, ...PropertyFilterOp[]],
+    ),
+    value: z.union([
+      z.string().max(10000),
+      z.array(z.string().max(10000)).max(1000),
+    ]),
   })
   .strict();
+const sort = z
+  .object({ columnId: id, direction: z.enum(["asc", "desc"]) })
+  .strict();
+function groupSchema(depth: number): z.ZodType<PropertyFilterGroup> {
+  return z
+    .object({
+      id,
+      logic: z.enum(["and", "or"]),
+      filters: z.array(filter).max(100),
+      groups:
+        depth < 2
+          ? z
+              .array(groupSchema(depth + 1))
+              .max(20)
+              .optional()
+          : z.array(z.never()).max(0).optional(),
+    })
+    .strict();
+}
+const groups = z
+  .array(groupSchema(0))
+  .max(20)
+  .refine((items) => {
+    const count = (items: PropertyFilterGroup[]): number =>
+      items.reduce(
+        (n, item) => n + item.filters.length + 1 + count(item.groups ?? []),
+        0,
+      );
+    return count(items) <= 150;
+  }, "Demasiadas condiciones de filtro.");
 export const searchSchema = z
   .object({
     databaseIds: ids.optional(),
@@ -39,6 +78,8 @@ export const searchSchema = z
     match: z.enum(["words", "phrase", "partial"]).optional(),
     filters: z.array(filter).max(100).optional(),
     filterLogic: z.enum(["and", "or"]).optional(),
+    filterGroups: groups.optional(),
+    sorts: z.array(sort).max(8).optional(),
     limit: z.number().int().min(1).max(200).optional(),
     offset: z.number().int().min(0).max(100000000).optional(),
     sortColumn: id.optional(),
@@ -87,6 +128,71 @@ export const settingsSchema = z
   })
   .strict();
 export const schemas: Record<string, z.ZodTypeAny> = {
+  agreementRun: searchSchema
+    .pick({ filters: true, filterLogic: true, filterGroups: true })
+    .extend({
+      databaseId: id,
+      config: z
+        .object({
+          raters: z
+            .array(
+              z
+                .object({
+                  columnId: id,
+                  label: name,
+                  model: z.string().max(1000),
+                  prompt: z.string().max(30000),
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(8),
+          referenceId: id.optional(),
+          mode: z.enum(["nominal", "multilabel"]),
+          delimiter: z.string().max(10),
+          ignoreCase: z.boolean(),
+          emptySetValid: z.boolean(),
+          imagesOnly: z.boolean(),
+          cohort: z.enum(["pairwise", "complete"]),
+          aliases: z
+            .array(
+              z
+                .object({
+                  columnId: id,
+                  from: z.string().trim().min(1).max(500),
+                  to: z.string().trim().min(1).max(500),
+                })
+                .strict(),
+            )
+            .max(500),
+          weight: z.enum(["none", "linear", "quadratic"]),
+          categoryOrder: z.array(z.string().trim().min(1).max(500)).max(100),
+          notes: z.string().max(30000),
+        })
+        .strict(),
+    })
+    .strict(),
+  agreementList: z.object({ databaseId: id }).strict(),
+  agreementSave: z.object({ token: id, name }).strict(),
+  agreementLoad: z.object({ id }).strict(),
+  agreementDelete: z.object({ id }).strict(),
+  agreementExport: z
+    .object({ token: id, format: z.enum(["json", "csv"]) })
+    .strict(),
+  mapRecords: searchSchema
+    .pick({ filters: true, filterLogic: true, filterGroups: true, sorts: true })
+    .extend({ databaseId: id, columnId: id })
+    .strict(),
+  propertyChoices: z
+    .object({
+      columnIds: z.array(id).min(1).max(100),
+      query: z.string().max(300).optional(),
+      offset: z.number().int().min(0).max(100000).optional(),
+      selected: z.array(z.string().max(10000)).max(1000).optional(),
+    })
+    .strict(),
+  searchPlaces: z.object({ query: z.string().trim().max(200) }).strict(),
+  openMapAttribution: z.undefined(),
   status: z.undefined(),
   listDatabases: z.undefined(),
   createDatabase: z.object({ name }).strict(),
