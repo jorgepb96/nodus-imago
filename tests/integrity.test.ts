@@ -18,6 +18,8 @@ import {
 import { Archive } from "../electron/import/archive";
 import { writeBackup, restoreBackup } from "../electron/export/backup";
 import { Models, type CatalogModel } from "../electron/ai/models";
+const runtimeExecutableName =
+  process.platform === "win32" ? "llama-mtmd-cli.exe" : "llama-mtmd-cli";
 
 test("a failed runtime replacement retains the previous executable and verification", async (context) => {
   const root = await fs.mkdtemp(
@@ -47,7 +49,9 @@ test("a failed runtime replacement retains the previous executable and verificat
     const directory = models.directory(model.id),
       bin = path.join(directory, "bin"),
       name =
-        process.platform === "win32" ? "llama-mtmd-cli.exe" : "llama-mtmd-cli";
+        process.platform === "win32"
+          ? "llama-mtmd-cli.exe"
+          : runtimeExecutableName;
     await fs.mkdir(bin, { recursive: true });
     await fs.writeFile(path.join(bin, name), "previous runtime");
     await fs.writeFile(
@@ -355,7 +359,7 @@ test("runtime archives extract files first and then create only validated intern
     const packageRoot = path.join(root, "package");
     await fs.mkdir(path.join(packageRoot, "pkg"), { recursive: true });
     await fs.writeFile(
-      path.join(packageRoot, "pkg", "llama-mtmd-cli"),
+      path.join(packageRoot, "pkg", runtimeExecutableName),
       "#!/bin/sh\n",
       { mode: 0o755 },
     );
@@ -400,7 +404,7 @@ test("runtime archives extract files first and then create only validated intern
       JSON.stringify({ revision: "unit" }),
     );
     const executable = await models.runtimeExecutable();
-    assert.ok(executable.endsWith("llama-mtmd-cli"));
+    assert.ok(executable.endsWith(runtimeExecutableName));
     const alias = path.join(directory, "bin", "pkg", "libfoo.dylib");
     assert.equal(await fs.readlink(alias), "libfoo.0.dylib");
     assert.equal(
@@ -425,7 +429,7 @@ test("runtime archives reject links that leave the extraction directory", async 
     const packageRoot = path.join(root, "package");
     await fs.mkdir(path.join(packageRoot, "pkg"), { recursive: true });
     await fs.writeFile(
-      path.join(packageRoot, "pkg", "llama-mtmd-cli"),
+      path.join(packageRoot, "pkg", runtimeExecutableName),
       "#!/bin/sh\n",
       { mode: 0o755 },
     );
@@ -454,7 +458,7 @@ test("runtime archives reject links that leave the extraction directory", async 
     await fs.mkdir(directory, { recursive: true });
     await fs.writeFile(path.join(directory, "runtime.tar.gz"), bytes);
     await fs.mkdir(path.join(directory, "bin"), { recursive: true });
-    const prior = path.join(directory, "bin", "llama-mtmd-cli");
+    const prior = path.join(directory, "bin", runtimeExecutableName);
     await fs.writeFile(prior, "previous working runtime");
     await fs.writeFile(
       path.join(directory, "verified.json"),

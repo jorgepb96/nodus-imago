@@ -9,6 +9,10 @@ import { Repository, now } from "../db/repository";
 import { matchImages } from "../../shared/imageMatching";
 import type { ImagePlan } from "../../shared/imago";
 
+// libvips' file cache can keep a decoded source locked after the operation on
+// Windows, preventing users from moving/deleting linked originals or restoring.
+if (process.platform === "win32") sharp.cache({ files: 0 });
+
 export const IMAGE_EXTENSIONS = [
   "jpg",
   "jpeg",

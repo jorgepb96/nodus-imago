@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 export const LanguageContext = createContext<"es" | "en">("es");
 const en: Record<string, string> = {
+  "Guardar enlace": "Save link",
   "1024 dimensiones · imágenes mediante descripciones locales de LFM3":
     "1024 dimensions · images through local LFM3 descriptions",
   Acción: "Action",

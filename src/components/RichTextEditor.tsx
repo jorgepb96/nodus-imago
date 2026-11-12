@@ -38,7 +38,11 @@ export function RichTextEditor({
   }, [onSave]);
   const [sourceMode, setSourceMode] = useState(false),
     [source, setSource] = useState(value ?? ""),
-    [preview, setPreview] = useState(false);
+    [preview, setPreview] = useState(false),
+    [linkDraft, setLinkDraft] = useState<string | null>(null),
+    [linkRange, setLinkRange] = useState<{ from: number; to: number } | null>(
+      null,
+    );
   const persist = (markdown: string) => {
     if (markdown === saved.current) return;
     const before = saved.current;
@@ -168,25 +172,13 @@ export function RichTextEditor({
           type="button"
           aria-label={t("Enlace")}
           onMouseDown={(e) => e.preventDefault()}
+          disabled={sourceMode || preview}
           onClick={() => {
-            const raw = window.prompt(
-              t("URL HTTPS"),
-              editor.getAttributes("link").href ?? "https://",
-            );
-            if (raw === null) return;
-            if (raw === "") {
-              editor.chain().focus().unsetLink().run();
-              return;
-            }
-            const url = externalHttpsUrl(raw);
-            if (url)
-              editor
-                .chain()
-                .focus()
-                .extendMarkRange("link")
-                .setLink({ href: url })
-                .run();
-            else setError(t("Solo se permiten enlaces HTTPS válidos."));
+            setLinkRange({
+              from: editor.state.selection.from,
+              to: editor.state.selection.to,
+            });
+            setLinkDraft(editor.getAttributes("link").href ?? "https://");
           }}
         >
           ↗
@@ -226,6 +218,49 @@ export function RichTextEditor({
           {preview ? t("Editar") : t("Vista previa")}
         </button>
       </div>
+      {linkDraft !== null && (
+        <div className="row inset">
+          <label>
+            {t("URL HTTPS")}
+            <input
+              aria-label={t("URL HTTPS")}
+              value={linkDraft}
+              autoFocus
+              onChange={(e) => setLinkDraft(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              if (!linkDraft) {
+                editor.chain().focus().unsetLink().run();
+                setLinkDraft(null);
+                return;
+              }
+              const url = externalHttpsUrl(linkDraft);
+              if (!url) {
+                setError(t("Solo se permiten enlaces HTTPS válidos."));
+                return;
+              }
+              editor
+                .chain()
+                .focus()
+                .setTextSelection(linkRange ?? editor.state.selection)
+                .extendMarkRange("link")
+                .setLink({ href: url })
+                .run();
+              persist(editor.getMarkdown());
+              setLinkDraft(null);
+              setError("");
+            }}
+          >
+            {t("Guardar enlace")}
+          </button>
+          <button type="button" onClick={() => setLinkDraft(null)}>
+            {t("Cancelar")}
+          </button>
+        </div>
+      )}
       {preview ? (
         <MarkdownView text={sourceMode ? source : editor.getMarkdown()} />
       ) : sourceMode ? (

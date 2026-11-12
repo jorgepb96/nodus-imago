@@ -12,7 +12,7 @@ test("download network failure preserves resumable bytes and a later response ve
     models = new Models(repo),
     payload = Buffer.from("exact model fixture bytes");
   const model = {
-    id: "embeddinggemma2-onnx",
+    id: "fixture-download",
     repository: "test/fixture",
     revision: "revision",
     label: "Fixture (not an inference test)",
