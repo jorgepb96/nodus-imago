@@ -55,21 +55,18 @@ Los modelos principales preconfigurados son:
 
 | Tarea | Modelo | Ejecución |
 | --- | --- | --- |
-| Embeddings multimodales | Google EmbeddingGemma 2, texto + visión, aproximadamente 440 M de parámetros activos | Python, Sentence Transformers 6.2, FP32, 512 dimensiones, sin codificador de audio |
+| Embeddings multimodales | EmbeddingGemma 2 ONNX Q8, texto + visión, 541,8 MB | Transformers.js 4.3.1 y ONNX Runtime 1.30.0 integrados, CPU, 256/512/768 dimensiones; sin Python ni audio |
+| Embeddings en Mac Intel | Harrier OSS v1 0.6B Q8_0, 639,4 MB | llama.cpp CPU, pooling last, 1024 dimensiones; imágenes mediante descripciones locales de LFM3 |
 | Descripción y clasificación | LiquidAI LFM3-VL-2B, Q4_K_M + proyector F16 oficial | llama.cpp b11981, proceso nativo local, CPU |
-| Alternativas compactas | SmolVLM2 256 M y 500 M | Python, Transformers, FP32 |
+| Alternativas experimentales | PyTorch anterior y SmolVLM2 256 M/500 M | Python opcional, instalación manual; fuera del flujo principal |
 
-**Los pesos no se incluyen en el instalador.** Se descargan desde Ajustes, desde una URL oficial fijada por revisión, o con:
+**Los pesos no se incluyen en el instalador.** En **Inicio → Preparar búsqueda local** o **Ajustes → Modelos**, el gestor muestra modelo/runtime, procedencia, licencia, tamaño, espacio disponible y destino antes de pedir autorización. Descarga las dependencias bajo demanda con progreso, pausa/cancelación, reanudación y SHA-256. La búsqueda literal funciona sin modelos. Mac Intel selecciona Harrier porque el runtime ONNX fijado no ofrece binario darwin-x64.
 
-```sh
-node scripts/download-models.mjs --yes
-```
-
-Ese comando descarga unos 3 GB y solo debe ejecutarse tras una decisión explícita. Las descargas de la aplicación muestran progreso y se pueden pausar, reanudar o cancelar; cada archivo se verifica antes de marcarse como instalado.
+Los vectores PyTorch anteriores se conservan bajo su contrato. Al cambiar backend o dimensiones hay que reindexar; la interfaz muestra los vectores de otros contratos y nunca los mezcla con el índice activo. Las copias anteriores siguen siendo restaurables.
 
 ### Entorno Python opcional
 
-EmbeddingGemma 2 y SmolVLM2 requieren un intérprete con las dependencias de `runtime/requirements.txt`. `torchvision` es necesario porque el procesador visual de EmbeddingGemma 2 lo carga al construir las entradas de imagen.
+Solo el modo experimental PyTorch anterior y SmolVLM2 requieren `runtime/requirements.txt`. El flujo principal ONNX/Harrier/LFM3 no usa este intérprete. El CLI histórico `node scripts/download-models.mjs --yes` descarga los pesos de compatibilidad (~3 GB), no sustituye al gestor ONNX actual. `torchvision` se necesita únicamente en ese modo experimental para las entradas visuales.
 
 ```sh
 python3 -m venv .venv
@@ -80,7 +77,7 @@ En Windows usa `.venv\Scripts\python.exe`. Introduce la ruta absoluta del intér
 
 ### LFM3 y razonamiento
 
-Para LFM3, descarga **Motor de visión local · llama.cpp** y el modelo desde **Ajustes → Modelos locales**. La aplicación usa `llama-mtmd-cli` en su modo de chat persistente, sin abrir un puerto: mantiene el GGUF y el proyector cargados entre celdas y envía `/clear`, `/image` y el prompt por la entrada estándar. El pool se limita por perfil y número de trabajos; las sesiones inactivas se cierran tras un minuto. CPU es la configuración predeterminada. EmbeddingGemma 2 se probó funcionalmente en Metal/MPS con texto e imagen; LFM3 sigue en CPU y CUDA no se ha ejecutado.
+Para LFM3, descarga **Motor de visión local · llama.cpp** y el modelo desde **Ajustes → Modelos locales**. La aplicación usa `llama-mtmd-cli` en su modo de chat persistente, sin abrir un puerto: mantiene el GGUF y el proyector cargados entre celdas y envía `/clear`, `/image` y el prompt por la entrada estándar. El pool se limita por perfil y número de trabajos; las sesiones inactivas se cierran tras un minuto. CPU es la configuración predeterminada. La ruta principal ONNX y Harrier utiliza CPU. Las pruebas históricas de Metal/MPS corresponden al modo PyTorch experimental; CUDA no se ha ejecutado.
 
 El CLI b11981 no admite `--single-turn`, `--simple-io` ni `--no-display-prompt`. Imago usa `--log-verbosity 0`, `--image-max-tokens 280` para acotar el coste visual y, en clasificación, `--json-schema` para exigir un array de cadenas. LFM3 puede anteponer un bloque de razonamiento terminado en `</think>`, una cabecera Markdown o un sobre `<minimax:tool_call>`; `shared/visionOutput.ts` extrae el cuerpo útil y elimina el resto antes de validar. Si solo queda razonamiento o JSON inválido, el trabajo falla y no se crea ninguna propuesta. Una clasificación debe pertenecer al vocabulario exacto de la propiedad; se aceptan etiquetas en objetos con claves como `label`, `Label` o `category`.
 
@@ -121,7 +118,13 @@ Si falla, el diagnóstico se escribe en `test-results/real-models-failure.json`.
 
 Las relaciones hacia Zotero u otros vaults se conservan como referencias externas sin resolver. Páginas, automatizaciones y funciones ajenas a la investigación visual no se importan como servicios activos. La versión de Nodus inspeccionada y los módulos adaptados se documentan en [REUSE.md](docs/REUSE.md).
 
-Notion ZIP admite las tablas CSV, las imágenes referenciadas por rutas relativas y las páginas Markdown. Las páginas se incorporan como una base «Páginas Notion» con título, texto plano, carpeta de origen, relación «Página padre» y las imágenes que referencian. La jerarquía de carpetas queda enlazada y las bases con una relación a sí mismas ofrecen una vista «Árbol» navegable; no se reconstruyen bloques ni formato enriquecido. Los CSV de Notion no codifican sus IDs de opciones, fórmulas ni relaciones tipadas; no se afirma una reconstrucción sin pérdida de esos datos. Al importar imágenes se puede elegir la propiedad de adjuntos de destino.
+Notion ZIP admite las tablas CSV, las imágenes referenciadas por rutas relativas y las páginas Markdown. Las páginas se incorporan como una base «Páginas Notion» con título, contenido enriquecido, carpeta de origen, relación «Página padre» y las imágenes que referencian. El contenido conserva un árbol real de bloques anidados, incluidos listas, tareas, citas, tablas, referencias de imagen y tokens de formato. El original importado se mantiene para consulta tras las ediciones visuales. El HTML desconocido se conserva como dato y no se ejecuta; no se garantiza una reconstrucción de bloques exclusivos de la API de Notion que su exportación Markdown no contiene. Las bases con una relación a sí mismas ofrecen también una vista «Árbol» navegable. Los CSV de Notion no codifican sus IDs de opciones, fórmulas ni relaciones tipadas; no se afirma una reconstrucción sin pérdida de esos datos. Al importar imágenes se puede elegir la propiedad de adjuntos de destino.
+
+## Edición y automatización
+
+Las propiedades de texto enriquecido usan un editor visual con historial, listas anidadas, tablas, enlaces HTTPS y modo Markdown opcional. **Propiedades → Rollup** permite elegir relación, propiedad y agregación; los resultados se recalculan con las ediciones y eliminaciones, y no dependen de los filtros de la vista.
+
+**Automatizaciones** admite reglas por creación, cambio, intervalo o ejecución manual, condiciones con los mismos filtros de las vistas y acciones de asignación, copia o análisis en la cola de IA. Las reglas requieren activación expresa, conservan los valores existentes por defecto, no encadenan otras reglas y registran resultados. Las acciones de IA generan propuestas para revisión. Las copias restauran las reglas desactivadas para exigir nueva activación.
 
 ## Formatos de imagen
 
@@ -148,12 +151,12 @@ El benchmark de [docs/benchmarks/local.json](docs/benchmarks/local.json) mide **
 
 ```sh
 npm run dist:mac       # DMG y ZIP, ARM64
-npm run dist:mac:x64   # DMG y ZIP, Intel x64 (dependencias x64 aisladas)
+npm run dist:mac:x64   # DMG y ZIP, Intel x64 (ejecutar en Intel nativo)
 npm run dist:win       # NSIS, x64
-npm run dist:linux     # AppImage, DEB y RPM, arquitectura actual (ARM64 probado)
+npm run dist:linux     # AppImage, DEB y RPM, arquitectura actual, x64 o ARM64
 ```
 
-Compila en el sistema destino; los módulos nativos requieren el ABI y la arquitectura correctos. La [automatización de CI](.github/workflows/ci.yml) define esa matriz, pero **una configuración de CI no equivale a una plataforma comprobada**. En este entorno se han construido y probado con E2E macOS ARM64, macOS x64, Linux ARM64 y Linux x64; Windows x64 está construido como instalador NSIS; la app ha superado un smoke bajo Wine 11, pero no se ha ejecutado en Windows nativo ni se ha probado el instalador. Firma, notarización y publicación requieren las credenciales del mantenedor y no se han realizado.
+Compila en el sistema destino; los módulos nativos requieren el ABI y la arquitectura correctos. La [CI](.github/workflows/ci.yml) ejecuta cinco targets nativos: macOS ARM64/Intel, Windows x64 y Linux x64/ARM64. Construye instaladores de prueba sin firma y ejercita sus ejecutables; los jobs de IA descargan pesos explícitamente en perfiles limpios, sin caché de pesos. La evidencia vigente y los fallos aún abiertos están en [VERIFICATION.md](docs/VERIFICATION.md). Un build o una matriz configurada no acreditan por sí solos compatibilidad. No se ha solicitado una release pública firmada, notarización, APIs comerciales ni CUDA.
 
 ## Documentación y licencia
 

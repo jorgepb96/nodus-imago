@@ -1,5 +1,9 @@
 # Cambios acumulados para revisión final
 
+**Evidencia adicional de CI (13 de noviembre):** el run 43326874728 pasa IA real desde aplicación empaquetada en macOS ARM64, Windows x64, Linux ARM64 y macOS Intel. Harrier Intel: 108.250 ms para dos imágenes mediante descripciones LFM3; máximo RSS observado del proceso de embeddings 1.671.184.384 bytes (51 muestras de un segundo, no memoria total de todos los procesos); consulta posterior 3.735 ms. No hace falta el fallback BGE-M3 para este recorrido. Evidencia descargada bajo `test-results/ci-first-*-evidence/` (ignorada en Git).
+
+La suite completa de ese primer run NO pasa: referencia Python sin preparar, SQLite precompilado incompatible con glibc 2.35 en Ubuntu 22.04 y tres fixtures de Windows/Intel. Se corrigen mediante entorno estadístico de test explícito, compilación nativa SQLite con clang-15, nombres .exe en fixtures, fixture de descarga independiente del backend y desactivación de la caché de archivos libvips en Windows. Se prepara una nueva ejecución; no se presentan instaladores antiguos como actuales.
+
 La revisión conjunta pendiente se ha ejecutado el 12 de noviembre de 2026. Resultado: **86/86 pruebas unitarias**, TypeScript, ESLint, build, E2E general, auditoría, lugares, mapa, IA real, criterios/filtros y concordancia pasan; la referencia estadística independiente y los benchmarks también pasan. Los únicos pendientes son los límites de plataforma indicados al final.
 
 ## Implementado desde la última tanda de pruebas

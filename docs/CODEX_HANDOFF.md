@@ -1,5 +1,9 @@
 # Handoff para revisión de Codex
 
+**Evidencia adicional de CI (13 de noviembre):** el run 43326874728 pasa IA real desde aplicación empaquetada en macOS ARM64, Windows x64, Linux ARM64 y macOS Intel. Harrier Intel: 108.250 ms para dos imágenes mediante descripciones LFM3; máximo RSS observado del proceso de embeddings 1.671.184.384 bytes (51 muestras de un segundo, no memoria total de todos los procesos); consulta posterior 3.735 ms. No hace falta el fallback BGE-M3 para este recorrido. Evidencia descargada bajo `test-results/ci-first-*-evidence/` (ignorada en Git).
+
+La suite completa de ese primer run NO pasa: referencia Python sin preparar, SQLite precompilado incompatible con glibc 2.35 en Ubuntu 22.04 y tres fixtures de Windows/Intel. Se corrigen mediante entorno estadístico de test explícito, compilación nativa SQLite con clang-15, nombres .exe en fixtures, fixture de descarga independiente del backend y desactivación de la caché de archivos libvips en Windows. Se prepara una nueva ejecución; no se presentan instaladores antiguos como actuales.
+
 ## Estado vigente — 13 de noviembre de 2026
 
 Misma carpeta y rama `codex/imago-desktop`; no se ha creado otra copia. Las fases 0, 1 y 2 están implementadas en commits separados. La instrucción más reciente de acumular implementaciones y probar al final se ha respetado: las pruebas conjuntas se están ejecutando ahora. Suite local 101/101, typecheck/lint/build correctos; ONNX real sin Python y recorridos de UI correctos en ARM64; referencia estadística 17.010 comparaciones correcta. Evidencia y pendientes exactos en `V1_IMPLEMENTATION.md` y `VERIFICATION.md`. Paridad real ONNX/PyTorch y visión LFM3 sin Python correctas en ARM64. No declarar cierre hasta terminar paquetes y cinco runners.
