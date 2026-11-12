@@ -5,14 +5,21 @@ import { createHash, randomUUID } from "node:crypto";
 import catalog from "../../shared/modelCatalog.json";
 import runtimes from "../../shared/runtimeCatalog.json";
 import embeddingOnnx from "../../shared/embeddingOnnxCatalog.json";
-import { HARRIER_ID, HARRIER_REVISION, ONNX_ID } from "../../shared/embeddingBackends";
+import {
+  HARRIER_ID,
+  HARRIER_REVISION,
+  ONNX_ID,
+} from "../../shared/embeddingBackends";
 import { Archive } from "../import/archive";
 import * as tar from "tar";
 import type { ModelInfo } from "../../shared/imago";
 import type { Repository } from "../db/repository";
 import { ensureDiskSpace } from "../storage/disk";
 import { DISK_RESERVE } from "../storage/disk";
-import type { ModelPreparation, ModelPreparationStep } from "../../shared/modelPreparation";
+import type {
+  ModelPreparation,
+  ModelPreparationStep,
+} from "../../shared/modelPreparation";
 import { embeddingDimensions } from "../../shared/embeddingBackends";
 
 export type CatalogModel = {
@@ -37,9 +44,24 @@ export class Models {
     const runtime = runtimes.find(
       (r) => r.platform === process.platform && r.arch === process.arch,
     );
-    const harrier: CatalogModel = { id: HARRIER_ID, repository: "mradermacher/harrier-oss-v1-0.6b-GGUF", revision: HARRIER_REVISION,
-      label: "Harrier OSS v1 0.6B · Q8_0 · Mac Intel", task: "embedding", license: "MIT", backend: "llama_cpp",
-      files: [{ path: "harrier-oss-v1-0.6b.Q8_0.gguf", size: 639448320, algorithm: "sha256", digest: "ba2c9408f82cfdb73aaf70aaea9f125f3fb24c5e76ce0efb469e1530e5ec53e4" }] };
+    const harrier: CatalogModel = {
+      id: HARRIER_ID,
+      repository: "mradermacher/harrier-oss-v1-0.6b-GGUF",
+      revision: HARRIER_REVISION,
+      label: "Harrier OSS v1 0.6B · Q8_0 · Mac Intel",
+      task: "embedding",
+      license: "MIT",
+      backend: "llama_cpp",
+      files: [
+        {
+          path: "harrier-oss-v1-0.6b.Q8_0.gguf",
+          size: 639448320,
+          algorithm: "sha256",
+          digest:
+            "ba2c9408f82cfdb73aaf70aaea9f125f3fb24c5e76ce0efb469e1530e5ec53e4",
+        },
+      ],
+    };
     return [embeddingOnnx, harrier, ...catalog, ...(runtime ? [runtime] : [])];
   }
   get(id: string): CatalogModel {
@@ -49,49 +71,128 @@ export class Models {
   }
   available(id: string) {
     const target = `${process.platform}-${process.arch}`;
-    return ["darwin-arm64", "darwin-x64", "win32-x64", "linux-x64", "linux-arm64"].includes(target) && !(id === ONNX_ID && target === "darwin-x64");
+    return (
+      [
+        "darwin-arm64",
+        "darwin-x64",
+        "win32-x64",
+        "linux-x64",
+        "linux-arm64",
+      ].includes(target) && !(id === ONNX_ID && target === "darwin-x64")
+    );
   }
   requirementIds() {
     const id = this.repo.getSettings().embeddingModel;
-    return id === HARRIER_ID ? ["llama-runtime", "lfm3-vl-2b", HARRIER_ID] : [id];
+    return id === HARRIER_ID
+      ? ["llama-runtime", "lfm3-vl-2b", HARRIER_ID]
+      : [id];
   }
   async preparation(activeContract: string): Promise<ModelPreparation> {
-    const settings = this.repo.getSettings(), all = this.list();
-    const requirements = this.requirementIds().map(id => all.find(model => model.id === id)!).filter(Boolean);
+    const settings = this.repo.getSettings(),
+      all = this.list();
+    const requirements = this.requirementIds()
+      .map((id) => all.find((model) => model.id === id)!)
+      .filter(Boolean);
     let remainingBytes = 0;
-    for (const model of requirements) if (!model.verified) for (const file of this.get(model.id).files) {
-      const target = path.join(this.directory(model.id), file.path);
-      try { if ((await fsp.stat(target)).size === file.size) continue; } catch {}
-      let partial = 0; try { partial = Math.min(file.size, (await fsp.stat(target + ".part")).size); } catch {}
-      remainingBytes += file.size - partial;
-    }
+    for (const model of requirements)
+      if (!model.verified)
+        for (const file of this.get(model.id).files) {
+          const target = path.join(this.directory(model.id), file.path);
+          try {
+            if ((await fsp.stat(target)).size === file.size) continue;
+          } catch {}
+          let partial = 0;
+          try {
+            partial = Math.min(
+              file.size,
+              (await fsp.stat(target + ".part")).size,
+            );
+          } catch {}
+          remainingBytes += file.size - partial;
+        }
     const disk = await fsp.statfs(this.repo.root);
-    return { embeddingModel: settings.embeddingModel, requirements, remainingBytes, freeBytes: Number(disk.bavail) * Number(disk.bsize), destination: path.join(this.repo.root, "models"),
-      supported: this.available(settings.embeddingModel), ready: settings.embeddingModel !== "embeddinggemma2" && requirements.length === this.requirementIds().length && requirements.every(m => m.verified),
-      activeDimensions: embeddingDimensions(settings.embeddingModel, settings.dimensions), priorVectors: (this.repo.db.prepare("SELECT count(*) n FROM embeddings WHERE contract<>?").get(activeContract) as { n: number }).n,
-      runtime: settings.embeddingModel === ONNX_ID ? "onnx-cpu" : settings.embeddingModel === HARRIER_ID ? "llama-cpu" : "python-experimental" };
+    return {
+      embeddingModel: settings.embeddingModel,
+      requirements,
+      remainingBytes,
+      freeBytes: Number(disk.bavail) * Number(disk.bsize),
+      destination: path.join(this.repo.root, "models"),
+      supported: this.available(settings.embeddingModel),
+      ready:
+        settings.embeddingModel !== "embeddinggemma2" &&
+        requirements.length === this.requirementIds().length &&
+        requirements.every((m) => m.verified),
+      activeDimensions: embeddingDimensions(
+        settings.embeddingModel,
+        settings.dimensions,
+      ),
+      priorVectors: (
+        this.repo.db
+          .prepare("SELECT count(*) n FROM embeddings WHERE contract<>?")
+          .get(activeContract) as { n: number }
+      ).n,
+      runtime:
+        settings.embeddingModel === ONNX_ID
+          ? "onnx-cpu"
+          : settings.embeddingModel === HARRIER_ID
+            ? "llama-cpu"
+            : "python-experimental",
+    };
   }
   async enqueuePreparation(activeContract: string) {
     const plan = await this.preparation(activeContract);
-    if (!plan.supported) throw new Error("El modelo elegido no está disponible en este dispositivo.");
-    if (plan.runtime === "python-experimental") throw new Error("El modo Python es experimental y se prepara manualmente; elige ONNX o Harrier para el flujo principal.");
+    if (!plan.supported)
+      throw new Error(
+        "El modelo elegido no está disponible en este dispositivo.",
+      );
+    if (plan.runtime === "python-experimental")
+      throw new Error(
+        "El modo Python es experimental y se prepara manualmente; elige ONNX o Harrier para el flujo principal.",
+      );
     if (plan.ready) return null;
-    await ensureDiskSpace(this.repo.root, plan.remainingBytes + (plan.runtime === "llama-cpu" ? 256 * 2 ** 20 : 0));
-    const existing = this.repo.db.prepare("SELECT id FROM jobs WHERE kind='prepare' AND state IN ('queued','running','paused') LIMIT 1").get() as { id: string } | undefined;
-    if (existing) { this.repo.db.prepare("UPDATE jobs SET state='queued' WHERE id=? AND state='paused'").run(existing.id); return existing.id; }
-    const steps: ModelPreparationStep[] = [];
-    for (const model of plan.requirements) if (!model.verified) {
-      this.get(model.id).files.forEach((_, fileIndex) => steps.push({ id: model.id, fileIndex }));
-      steps.push({ id: model.id, fileIndex: null });
+    await ensureDiskSpace(
+      this.repo.root,
+      plan.remainingBytes + (plan.runtime === "llama-cpu" ? 256 * 2 ** 20 : 0),
+    );
+    const existing = this.repo.db
+      .prepare(
+        "SELECT id FROM jobs WHERE kind='prepare' AND state IN ('queued','running','paused') LIMIT 1",
+      )
+      .get() as { id: string } | undefined;
+    if (existing) {
+      this.repo.db
+        .prepare("UPDATE jobs SET state='queued' WHERE id=? AND state='paused'")
+        .run(existing.id);
+      return existing.id;
     }
-    return this.repo.newJob("prepare", { label: "Preparar búsqueda local", steps, model: plan.embeddingModel }, steps.length);
+    const steps: ModelPreparationStep[] = [];
+    for (const model of plan.requirements)
+      if (!model.verified) {
+        this.get(model.id).files.forEach((_, fileIndex) =>
+          steps.push({ id: model.id, fileIndex }),
+        );
+        steps.push({ id: model.id, fileIndex: null });
+      }
+    return this.repo.newJob(
+      "prepare",
+      { label: "Preparar búsqueda local", steps, model: plan.embeddingModel },
+      steps.length,
+    );
   }
   directory(id: string) {
     const m = this.get(id);
-    const directory = path.join(this.repo.root, "models", m.id, m.revision), parent = path.dirname(directory);
+    const directory = path.join(this.repo.root, "models", m.id, m.revision),
+      parent = path.dirname(directory);
     if (!fs.existsSync(directory) && fs.existsSync(parent)) {
       const prefix = m.revision + ".previous-";
-      const previous = fs.readdirSync(parent).find(name => name.startsWith(prefix) && /^[a-f0-9-]{36}$/.test(name.slice(prefix.length)) && fs.lstatSync(path.join(parent, name)).isDirectory());
+      const previous = fs
+        .readdirSync(parent)
+        .find(
+          (name) =>
+            name.startsWith(prefix) &&
+            /^[a-f0-9-]{36}$/.test(name.slice(prefix.length)) &&
+            fs.lstatSync(path.join(parent, name)).isDirectory(),
+        );
       if (previous) fs.renameSync(path.join(parent, previous), directory);
     }
     return directory;
@@ -112,7 +213,10 @@ export class Models {
       );
       return {
         id: m.id,
-        label: m.id === "embeddinggemma2" || m.id.startsWith("smolvlm") ? m.label + " · experimental Python" : m.label,
+        label:
+          m.id === "embeddinggemma2" || m.id.startsWith("smolvlm")
+            ? m.label + " · experimental Python"
+            : m.label,
         task: m.task as ModelInfo["task"],
         repository: m.repository,
         revision: m.revision,
@@ -124,7 +228,9 @@ export class Models {
         files: present.length,
         bytes: present.reduce((s, f) => s + f.size, 0),
         available: this.available(m.id),
-        unavailableReason: this.available(m.id) ? undefined : "EmbeddingGemma ONNX no dispone de runtime para Mac Intel; utiliza Harrier.",
+        unavailableReason: this.available(m.id)
+          ? undefined
+          : "EmbeddingGemma ONNX no dispone de runtime para Mac Intel; utiliza Harrier.",
         experimental: m.id === "embeddinggemma2" || m.id.startsWith("smolvlm"),
       };
     });
@@ -134,7 +240,8 @@ export class Models {
       dir = this.directory(id);
     // A prepared runtime stays usable while its replacement is checked. Its
     // previous verification is superseded only after a successful promotion.
-    if (model.task !== "runtime") await fsp.rm(path.join(dir, "verified.json"), { force: true });
+    if (model.task !== "runtime")
+      await fsp.rm(path.join(dir, "verified.json"), { force: true });
     for (const file of model.files) {
       const target = path.join(dir, file.path),
         stat = await fsp.lstat(target);
@@ -169,39 +276,62 @@ export class Models {
   async importDirectory(id: string, source: string) {
     const model = this.get(id),
       dir = this.directory(id);
-    if (!this.available(id)) throw new Error("Este modelo no está disponible en esta plataforma.");
+    if (!this.available(id))
+      throw new Error("Este modelo no está disponible en esta plataforma.");
     await fsp.mkdir(path.dirname(dir), { recursive: true });
-    await ensureDiskSpace(path.dirname(dir), model.files.reduce((sum, file) => sum + file.size, 0));
-    const staging = await fsp.mkdtemp(path.join(path.dirname(dir), ".model-stage-"));
+    await ensureDiskSpace(
+      path.dirname(dir),
+      model.files.reduce((sum, file) => sum + file.size, 0),
+    );
+    const staging = await fsp.mkdtemp(
+      path.join(path.dirname(dir), ".model-stage-"),
+    );
     const previous = dir + ".previous-" + randomUUID();
     let moved = false;
     try {
-    // Only exact catalogued data files are copied; no pickle, Python, GGUF or executable.
-    for (const file of model.files) {
-      const input = path.join(source, file.path),
-        stat = await fsp.lstat(input);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== file.size)
-        throw new Error("Modelo local incompleto o incompatible: " + file.path);
-      await fsp.mkdir(path.dirname(path.join(staging, file.path)), {
-        recursive: true,
-      });
-      const target = path.join(staging, file.path);
-      await fsp.copyFile(input, target);
-      const hash = createHash(file.algorithm === "sha256" ? "sha256" : "sha1");
-      if (file.algorithm === "git-sha1") hash.update(`blob ${stat.size}\0`);
-      for await (const chunk of fs.createReadStream(target)) hash.update(chunk);
-      if (hash.digest("hex") !== file.digest) throw new Error("El modelo importado no supera SHA: " + file.path);
-    }
-    if (model.task === "runtime") await this.prepareRuntime(staging);
-    await fsp.writeFile(path.join(staging, "verified.json"), JSON.stringify({ revision: model.revision, checkedAt: new Date().toISOString() }));
-    if (fs.existsSync(dir)) { fs.renameSync(dir, previous); moved = true; }
-    fs.renameSync(staging, dir);
-    await fsp.rm(previous, { recursive: true, force: true }).catch(() => {});
-    return true;
+      // Only exact catalogued data files are copied; no pickle, Python, GGUF or executable.
+      for (const file of model.files) {
+        const input = path.join(source, file.path),
+          stat = await fsp.lstat(input);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== file.size)
+          throw new Error(
+            "Modelo local incompleto o incompatible: " + file.path,
+          );
+        await fsp.mkdir(path.dirname(path.join(staging, file.path)), {
+          recursive: true,
+        });
+        const target = path.join(staging, file.path);
+        await fsp.copyFile(input, target);
+        const hash = createHash(
+          file.algorithm === "sha256" ? "sha256" : "sha1",
+        );
+        if (file.algorithm === "git-sha1") hash.update(`blob ${stat.size}\0`);
+        for await (const chunk of fs.createReadStream(target))
+          hash.update(chunk);
+        if (hash.digest("hex") !== file.digest)
+          throw new Error("El modelo importado no supera SHA: " + file.path);
+      }
+      if (model.task === "runtime") await this.prepareRuntime(staging);
+      await fsp.writeFile(
+        path.join(staging, "verified.json"),
+        JSON.stringify({
+          revision: model.revision,
+          checkedAt: new Date().toISOString(),
+        }),
+      );
+      if (fs.existsSync(dir)) {
+        fs.renameSync(dir, previous);
+        moved = true;
+      }
+      fs.renameSync(staging, dir);
+      await fsp.rm(previous, { recursive: true, force: true }).catch(() => {});
+      return true;
     } catch (error) {
       if (moved && !fs.existsSync(dir)) await fsp.rename(previous, dir);
       throw error;
-    } finally { await fsp.rm(staging, { recursive: true, force: true }); }
+    } finally {
+      await fsp.rm(staging, { recursive: true, force: true });
+    }
   }
   async downloadFile(
     id: string,
@@ -214,7 +344,8 @@ export class Models {
       dir = this.directory(id),
       destination = path.join(dir, file.path),
       partial = destination + ".part";
-    if (!this.available(id)) throw new Error("Este modelo no está disponible en esta plataforma.");
+    if (!this.available(id))
+      throw new Error("Este modelo no está disponible en esta plataforma.");
     await fsp.mkdir(path.dirname(destination), { recursive: true });
     if (
       fs.existsSync(destination) &&
@@ -415,15 +546,15 @@ export class Models {
         return;
       }
   }
-  private async findExecutable(root: string, name = "llama-mtmd-cli"): Promise<string | null> {
+  private async findExecutable(
+    root: string,
+    name = "llama-mtmd-cli",
+  ): Promise<string | null> {
     for (const entry of await fsp.readdir(root, { withFileTypes: true })) {
       const p = path.join(root, entry.name);
       if (
         entry.isFile() &&
-        entry.name ===
-          (process.platform === "win32"
-            ? name + ".exe"
-            : name)
+        entry.name === (process.platform === "win32" ? name + ".exe" : name)
       )
         return p;
       if (entry.isDirectory()) {
@@ -437,7 +568,11 @@ export class Models {
     const root = this.directory("llama-runtime");
     await this.recoverRuntime(root);
     let verified = false;
-    try { verified = JSON.parse(await fsp.readFile(path.join(root, "verified.json"), "utf8")).revision === this.get("llama-runtime").revision; } catch {}
+    try {
+      verified =
+        JSON.parse(await fsp.readFile(path.join(root, "verified.json"), "utf8"))
+          .revision === this.get("llama-runtime").revision;
+    } catch {}
     if (!verified)
       throw new Error("Instala el motor de visión local en Ajustes.");
     const executable = await this.findExecutable(

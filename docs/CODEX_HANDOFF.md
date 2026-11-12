@@ -1,5 +1,11 @@
 # Handoff para revisión de Codex
 
+## Estado vigente — 13 de noviembre de 2026
+
+Misma carpeta y rama `codex/imago-desktop`; no se ha creado otra copia. Las fases 0, 1 y 2 están implementadas en commits separados. La instrucción más reciente de acumular implementaciones y probar al final se ha respetado: las pruebas conjuntas se están ejecutando ahora. Suite local 100/100, typecheck/lint/build correctos; ONNX real sin Python y recorridos de UI correctos en ARM64; referencia estadística 17.010 comparaciones correcta. Evidencia y pendientes exactos en `V1_IMPLEMENTATION.md` y `VERIFICATION.md`. No declarar cierre hasta terminar paridad, visión, paquetes y cinco runners.
+
+El remoto público ya existe y su main inicial b567918 contiene únicamente el mismo LICENSE. Conservar ambos historiales al publicar mediante merge de historiales no relacionados, sin force-push ni cambio de rama local. No subir perfiles, modelos ni `test-results`. No ejecutar firma/release/APIs comerciales/CUDA. Las nuevas reglas se restauran desactivadas; el árbol de bloques conserva el Markdown original de Notion. Las correcciones de DeepSeek se mantienen.
+
 **Revisado por Codex el 12 de noviembre de 2026.** Este documento conserva el handoff histórico de DeepSeek. Los hallazgos, correcciones, pruebas actuales y límites están en [VERIFICATION.md](VERIFICATION.md); sus resultados prevalecen sobre las afirmaciones y hashes antiguos de este archivo.
 
 **Repositorio:** `/Users/jorgepb96/Documents/GitHub/nodus-imago`  

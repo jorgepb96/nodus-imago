@@ -12,6 +12,78 @@
     ]
   },
   {
+    "name": "@floating-ui/core",
+    "version": "1.8.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/floating-ui/floating-ui.git",
+      "directory": "packages/core"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@floating-ui/dom",
+    "version": "1.8.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/floating-ui/floating-ui.git",
+      "directory": "packages/dom"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@floating-ui/utils",
+    "version": "0.2.12",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/floating-ui/floating-ui.git",
+      "directory": "packages/utils"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@huggingface/jinja",
+    "version": "0.5.12",
+    "license": "MIT",
+    "repository": "https://github.com/huggingface/huggingface.js.git",
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@huggingface/tokenizers",
+    "version": "0.2.0",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/huggingface/tokenizers.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@huggingface/transformers",
+    "version": "4.3.1",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/huggingface/transformers.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "@img/colour",
     "version": "1.1.0",
     "license": "MIT",
@@ -80,6 +152,608 @@
     "license": "BlueOak-1.0.0",
     "licenseFiles": [
       "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@protobufjs/aspromise",
+    "version": "1.1.2",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@protobufjs/base64",
+    "version": "1.1.2",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@protobufjs/codegen",
+    "version": "2.0.5",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@protobufjs/eventemitter",
+    "version": "1.1.1",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@protobufjs/fetch",
+    "version": "1.1.1",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@protobufjs/float",
+    "version": "1.0.2",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@protobufjs/path",
+    "version": "1.1.2",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@protobufjs/pool",
+    "version": "1.1.0",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@protobufjs/utf8",
+    "version": "1.1.2",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/protobufjs/protobuf.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@tiptap/core",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/core"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-blockquote",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-blockquote"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-bold",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-bold"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-bubble-menu",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-bubble-menu"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-bullet-list",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-bullet-list"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-code",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-code"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-code-block",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-code-block"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-document",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-document"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-dropcursor",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages-deprecated/extension-dropcursor"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-floating-menu",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-floating-menu"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-gapcursor",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages-deprecated/extension-gapcursor"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-hard-break",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-hard-break"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-heading",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-heading"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-horizontal-rule",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-horizontal-rule"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-image",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-image"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-italic",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-italic"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-link",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-link"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-list",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-list"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-list-item",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-list-item"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-list-keymap",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-list-keymap"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-ordered-list",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-ordered-list"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-paragraph",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-paragraph"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-strike",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-strike"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-table",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-table"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-task-item",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-task-item"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-task-list",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-task-list"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-text",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-text"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-underline",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension-underline"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extensions",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/extension"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/markdown",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/markdown"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/pm",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/pm"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@tiptap/react",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/react"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/starter-kit",
+    "version": "3.33.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ueberdosis/tiptap",
+      "directory": "packages/starter-kit"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "@types/node",
+    "version": "22.20.5",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/node"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@types/prop-types",
+    "version": "15.7.15",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/prop-types"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@types/react",
+    "version": "18.3.31",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/react"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@types/react-dom",
+    "version": "18.3.7",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/react-dom"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "@types/use-sync-external-store",
+    "version": "0.0.6",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+      "directory": "types/use-sync-external-store"
+    },
+    "licenseFiles": [
+      "LICENSE"
     ]
   },
   {
@@ -468,6 +1142,15 @@
     ]
   },
   {
+    "name": "csstype",
+    "version": "3.2.3",
+    "license": "MIT",
+    "repository": "https://github.com/frenic/csstype",
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "decompress-response",
     "version": "6.0.0",
     "license": "MIT",
@@ -483,6 +1166,30 @@
     "repository": {
       "type": "git",
       "url": "git://github.com/unclechu/node-deep-extend.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "define-data-property",
+    "version": "1.1.4",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/ljharb/define-data-property.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "define-properties",
+    "version": "1.2.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/ljharb/define-properties.git"
     },
     "licenseFiles": [
       "LICENSE"
@@ -510,6 +1217,39 @@
     },
     "licenseFiles": [
       "LICENSE"
+    ]
+  },
+  {
+    "name": "es-define-property",
+    "version": "1.0.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/ljharb/es-define-property.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "es-errors",
+    "version": "1.3.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/ljharb/es-errors.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "escape-string-regexp",
+    "version": "4.0.0",
+    "license": "MIT",
+    "repository": "sindresorhus/escape-string-regexp",
+    "licenseFiles": [
+      "license"
     ]
   },
   {
@@ -586,6 +1326,18 @@
     ]
   },
   {
+    "name": "fast-equals",
+    "version": "5.4.5",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/planttheidea/fast-equals.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "fast-fifo",
     "version": "1.3.2",
     "license": "MIT",
@@ -610,6 +1362,18 @@
     ]
   },
   {
+    "name": "flatbuffers",
+    "version": "25.9.23",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/google/flatbuffers.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "fs-constants",
     "version": "1.0.0",
     "license": "MIT",
@@ -628,6 +1392,66 @@
     "repository": {
       "type": "git",
       "url": "git://github.com/substack/github-from-package.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "global-agent",
+    "version": "4.1.7",
+    "license": "BSD-3-Clause",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/gajus/global-agent"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "globalthis",
+    "version": "1.0.4",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/ljharb/System.global.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "gopd",
+    "version": "1.2.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/ljharb/gopd.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "guid-typescript",
+    "version": "1.0.9",
+    "license": "ISC",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/NicolasDeveloper/guid-typescript"
+    },
+    "licenseFiles": [
+      "README.md"
+    ]
+  },
+  {
+    "name": "has-property-descriptors",
+    "version": "1.0.2",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/inspect-js/has-property-descriptors.git"
     },
     "licenseFiles": [
       "LICENSE"
@@ -745,6 +1569,31 @@
     ]
   },
   {
+    "name": "linkifyjs",
+    "version": "4.4.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/nfrasser/linkifyjs.git",
+      "directory": "packages/linkifyjs"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "long",
+    "version": "5.3.2",
+    "license": "Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/dcodeIO/long.js.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "loose-envify",
     "version": "1.4.0",
     "license": "MIT",
@@ -767,6 +1616,39 @@
     },
     "licenseFiles": [
       "LICENSE"
+    ]
+  },
+  {
+    "name": "marked",
+    "version": "17.0.6",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/markedjs/marked.git"
+    },
+    "licenseFiles": [
+      "LICENSE.md"
+    ]
+  },
+  {
+    "name": "marked",
+    "version": "18.2.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/markedjs/marked.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "matcher",
+    "version": "4.0.0",
+    "license": "MIT",
+    "repository": "sindresorhus/matcher",
+    "licenseFiles": [
+      "license"
     ]
   },
   {
@@ -869,12 +1751,84 @@
     ]
   },
   {
+    "name": "object-keys",
+    "version": "1.1.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/ljharb/object-keys.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "once",
     "version": "1.4.0",
     "license": "ISC",
     "repository": {
       "type": "git",
       "url": "git://github.com/isaacs/once"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "onnxruntime-common",
+    "version": "1.30.0",
+    "license": "MIT",
+    "repository": {
+      "url": "https://github.com/Microsoft/onnxruntime.git",
+      "type": "git"
+    },
+    "licenseFiles": [
+      "README.md"
+    ]
+  },
+  {
+    "name": "onnxruntime-common",
+    "version": "1.31.0-dev.20260911-2a43ec07e",
+    "license": "MIT",
+    "repository": {
+      "url": "https://github.com/Microsoft/onnxruntime.git",
+      "type": "git"
+    },
+    "licenseFiles": [
+      "README.md"
+    ]
+  },
+  {
+    "name": "onnxruntime-node",
+    "version": "1.30.0",
+    "license": "MIT",
+    "repository": {
+      "url": "https://github.com/Microsoft/onnxruntime.git",
+      "type": "git"
+    },
+    "licenseFiles": [
+      "README.md"
+    ]
+  },
+  {
+    "name": "onnxruntime-web",
+    "version": "1.31.0-dev.20260914-8d85527a0",
+    "license": "MIT",
+    "repository": {
+      "url": "https://github.com/Microsoft/onnxruntime.git",
+      "type": "git"
+    },
+    "licenseFiles": [
+      "README.md"
+    ]
+  },
+  {
+    "name": "orderedmap",
+    "version": "2.1.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/marijnh/orderedmap.git"
     },
     "licenseFiles": [
       "LICENSE"
@@ -888,6 +1842,15 @@
       "type": "git",
       "url": "git://github.com/andrewrk/node-pend.git"
     },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "platform",
+    "version": "1.3.6",
+    "license": "MIT",
+    "repository": "bestiejs/platform.js",
     "licenseFiles": [
       "LICENSE"
     ]
@@ -926,6 +1889,171 @@
     },
     "licenseFiles": [
       "license.md"
+    ]
+  },
+  {
+    "name": "prosemirror-changeset",
+    "version": "2.4.6",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://code.haverbeke.berlin/prosemirror/prosemirror-changeset.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-commands",
+    "version": "1.7.2",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://code.haverbeke.berlin/prosemirror/prosemirror-commands.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-dropcursor",
+    "version": "1.8.4",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://code.haverbeke.berlin/prosemirror/prosemirror-dropcursor.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-gapcursor",
+    "version": "1.4.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/prosemirror/prosemirror-gapcursor.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-history",
+    "version": "1.5.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://code.haverbeke.berlin/prosemirror/prosemirror-history.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-inputrules",
+    "version": "1.5.1",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/prosemirror/prosemirror-inputrules.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-keymap",
+    "version": "1.2.3",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/prosemirror/prosemirror-keymap.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-model",
+    "version": "1.25.13",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://code.haverbeke.berlin/prosemirror/prosemirror-model.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-schema-list",
+    "version": "1.6.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://code.haverbeke.berlin/prosemirror/prosemirror-schema-list.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-state",
+    "version": "1.4.4",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git://github.com/prosemirror/prosemirror-state.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-tables",
+    "version": "1.8.5",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/ProseMirror/prosemirror-tables.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-transform",
+    "version": "1.12.5",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://code.haverbeke.berlin/prosemirror/prosemirror-transform.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "prosemirror-view",
+    "version": "1.42.9",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://code.haverbeke.berlin/prosemirror/prosemirror-view.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "protobufjs",
+    "version": "7.6.6",
+    "license": "BSD-3-Clause",
+    "repository": "protobufjs/protobuf.js",
+    "licenseFiles": [
+      "LICENSE"
     ]
   },
   {
@@ -1062,6 +2190,18 @@
     ]
   },
   {
+    "name": "rope-sequence",
+    "version": "1.3.4",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/marijnh/rope-sequence.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "safe-buffer",
     "version": "5.1.2",
     "license": "MIT",
@@ -1100,6 +2240,18 @@
   },
   {
     "name": "semver",
+    "version": "7.8.6",
+    "license": "ISC",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/npm/node-semver.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "semver",
     "version": "7.8.5",
     "license": "ISC",
     "repository": {
@@ -1120,6 +2272,15 @@
     },
     "licenseFiles": [
       "LICENSE"
+    ]
+  },
+  {
+    "name": "serialize-error",
+    "version": "8.1.0",
+    "license": "MIT",
+    "repository": "sindresorhus/serialize-error",
+    "licenseFiles": [
+      "license"
     ]
   },
   {
@@ -1299,12 +2460,58 @@
     ]
   },
   {
+    "name": "type-fest",
+    "version": "0.20.2",
+    "license": "(MIT OR CC0-1.0)",
+    "repository": "sindresorhus/type-fest",
+    "licenseFiles": [
+      "license"
+    ]
+  },
+  {
+    "name": "undici-types",
+    "version": "6.21.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/nodejs/undici.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "use-sync-external-store",
+    "version": "1.7.0",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/react/react.git",
+      "directory": "packages/use-sync-external-store"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
     "name": "util-deprecate",
     "version": "1.0.2",
     "license": "MIT",
     "repository": {
       "type": "git",
       "url": "git://github.com/TooTallNate/util-deprecate.git"
+    },
+    "licenseFiles": [
+      "LICENSE"
+    ]
+  },
+  {
+    "name": "w3c-keyname",
+    "version": "2.2.8",
+    "license": "MIT",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/marijnh/w3c-keyname.git"
     },
     "licenseFiles": [
       "LICENSE"

@@ -90,17 +90,56 @@ export const searchSchema = z
     semanticWeight: z.number().min(0).max(1).optional(),
   })
   .strict();
-export const automationRuleSchema=z.object({
- id,name,databaseId:id,enabled:z.boolean(),trigger:z.enum(['created','changed','manual','schedule']),watchColumnId:id.nullable(),intervalMinutes:z.number().int().min(5).max(525600),filters:z.array(filter).max(30),filterGroups:groups.optional(),filterLogic:z.enum(['and','or']).optional(),
- actions:z.array(z.discriminatedUnion('kind',[
-  z.object({kind:z.literal('set'),columnId:id,value,overwrite:z.boolean()}).strict(),
-  z.object({kind:z.literal('copy'),columnId:id,sourceColumnId:id,overwrite:z.boolean()}).strict(),
-  z.object({kind:z.literal('analyze'),columnIds:z.array(id).min(1).max(30)}).strict(),
- ])).min(1).max(10),
-}).strict();
+export const automationRuleSchema = z
+  .object({
+    id,
+    name,
+    databaseId: id,
+    enabled: z.boolean(),
+    trigger: z.enum(["created", "changed", "manual", "schedule"]),
+    watchColumnId: id.nullable(),
+    intervalMinutes: z.number().int().min(5).max(525600),
+    filters: z.array(filter).max(30),
+    filterGroups: groups.optional(),
+    filterLogic: z.enum(["and", "or"]).optional(),
+    actions: z
+      .array(
+        z.discriminatedUnion("kind", [
+          z
+            .object({
+              kind: z.literal("set"),
+              columnId: id,
+              value,
+              overwrite: z.boolean(),
+            })
+            .strict(),
+          z
+            .object({
+              kind: z.literal("copy"),
+              columnId: id,
+              sourceColumnId: id,
+              overwrite: z.boolean(),
+            })
+            .strict(),
+          z
+            .object({
+              kind: z.literal("analyze"),
+              columnIds: z.array(id).min(1).max(30),
+            })
+            .strict(),
+        ]),
+      )
+      .min(1)
+      .max(10),
+  })
+  .strict();
 export const settingsSchema = z
   .object({
-    embeddingModel: z.enum(["embeddinggemma2-onnx", "harrier-oss-v1-0.6b-q8_0", "embeddinggemma2"]),
+    embeddingModel: z.enum([
+      "embeddinggemma2-onnx",
+      "harrier-oss-v1-0.6b-q8_0",
+      "embeddinggemma2",
+    ]),
     mode: z.enum(["light", "dark", "system"]),
     theme: z.string().max(100),
     accent: z.string().regex(/^#[0-9a-f]{6}$/i),
@@ -221,12 +260,12 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   renameDatabase: z.object({ id, name }).strict(),
   deleteDatabase: z.object({ id }).strict(),
   detail: z.object({ id }).strict(),
-  pageDocument:z.object({rowId:id,columnId:id}).strict(),
-  automationList:z.object({databaseId:id}).strict(),
-  automationHistory:z.object({databaseId:id}).strict(),
-  automationSave:automationRuleSchema,
-  automationDelete:z.object({id}).strict(),
-  automationRun:z.object({id}).strict(),
+  pageDocument: z.object({ rowId: id, columnId: id }).strict(),
+  automationList: z.object({ databaseId: id }).strict(),
+  automationHistory: z.object({ databaseId: id }).strict(),
+  automationSave: automationRuleSchema,
+  automationDelete: z.object({ id }).strict(),
+  automationRun: z.object({ id }).strict(),
   addColumn: z
     .object({
       databaseId: id,

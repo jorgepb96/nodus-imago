@@ -26,7 +26,14 @@ import {
 } from "../../shared/visionOutput";
 import { OnnxHost } from "./onnxHost";
 import { HarrierHost } from "./harrier";
-import { ONNX_ID, HARRIER_ID, LEGACY_EMBEDDING_ID, HARRIER_IMAGE_PROMPT, embeddingBackendContract, embeddingDimensions } from "../../shared/embeddingBackends";
+import {
+  ONNX_ID,
+  HARRIER_ID,
+  LEGACY_EMBEDDING_ID,
+  HARRIER_IMAGE_PROMPT,
+  embeddingBackendContract,
+  embeddingDimensions,
+} from "../../shared/embeddingBackends";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   es: "español",
@@ -75,15 +82,28 @@ export class Engine {
     this.harrier.close();
   }
   async resetRuntimes() {
-    await this.onnx.close(); this.harrier.close(); this.llama.close(); this.llama = new LlamaPool(this.repo, this.models);
+    await this.onnx.close();
+    this.harrier.close();
+    this.llama.close();
+    this.llama = new LlamaPool(this.repo, this.models);
   }
-  dimensions() { const s = this.repo.getSettings(); return embeddingDimensions(s.embeddingModel, s.dimensions); }
+  dimensions() {
+    const s = this.repo.getSettings();
+    return embeddingDimensions(s.embeddingModel, s.dimensions);
+  }
   contract() {
     const s = this.repo.getSettings();
     if (s.embeddingModel !== LEGACY_EMBEDDING_ID)
-      return createHash("sha256").update(embeddingBackendContract(s.embeddingModel, s.dimensions, this.models.get("lfm3-vl-2b").revision)).digest("hex");
-    const
-      m = this.models.get("embeddinggemma2");
+      return createHash("sha256")
+        .update(
+          embeddingBackendContract(
+            s.embeddingModel,
+            s.dimensions,
+            this.models.get("lfm3-vl-2b").revision,
+          ),
+        )
+        .digest("hex");
+    const m = this.models.get("embeddinggemma2");
     return createHash("sha256")
       .update(
         JSON.stringify({
@@ -103,7 +123,12 @@ export class Engine {
   }
   async probe() {
     const model = this.repo.getSettings().embeddingModel;
-    return { backend: model, pythonRequired: model === LEGACY_EMBEDDING_ID, integratedRuntime: model === ONNX_ID, available: this.models.available(model) };
+    return {
+      backend: model,
+      pythonRequired: model === LEGACY_EMBEDDING_ID,
+      integratedRuntime: model === ONNX_ID,
+      available: this.models.available(model),
+    };
   }
   ready(id: string) {
     if (!this.models.list().some((m) => m.id === id && m.verified))
@@ -130,19 +155,51 @@ export class Engine {
           );
         return encode(index + 1);
       }
-      if (settings.embeddingModel === ONNX_ID) return this.onnx.embed(this.models.directory(ONNX_ID), settings.profile === "light" ? 1 : settings.profile === "balanced" ? 2 : 4, settings.dimensions, prepared, signal);
+      if (settings.embeddingModel === ONNX_ID)
+        return this.onnx.embed(
+          this.models.directory(ONNX_ID),
+          settings.profile === "light"
+            ? 1
+            : settings.profile === "balanced"
+              ? 2
+              : 4,
+          settings.dimensions,
+          prepared,
+          signal,
+        );
       if (settings.embeddingModel === HARRIER_ID) {
         const results: number[][] = [];
         for (const item of prepared) {
           let text = item.text ?? "";
           if (item.image) {
-            const hash = await hashFile(item.image), contract = this.contract();
-            const cached = this.repo.db.prepare("SELECT text FROM image_captions WHERE content_hash=? AND contract=?").get(hash, contract) as { text: string } | undefined;
+            const hash = await hashFile(item.image),
+              contract = this.contract();
+            const cached = this.repo.db
+              .prepare(
+                "SELECT text FROM image_captions WHERE content_hash=? AND contract=?",
+              )
+              .get(hash, contract) as { text: string } | undefined;
             if (!cached) this.ready("lfm3-vl-2b");
-            text = cached?.text ?? parseDescription(await this.llama.describe("lfm3-vl-2b", item.image, HARRIER_IMAGE_PROMPT, signal ?? new AbortController().signal));
-            if (!cached) this.repo.db.prepare("INSERT INTO image_captions VALUES(?,?,?) ON CONFLICT DO NOTHING").run(hash, contract, text);
+            text =
+              cached?.text ??
+              parseDescription(
+                await this.llama.describe(
+                  "lfm3-vl-2b",
+                  item.image,
+                  HARRIER_IMAGE_PROMPT,
+                  signal ?? new AbortController().signal,
+                ),
+              );
+            if (!cached)
+              this.repo.db
+                .prepare(
+                  "INSERT INTO image_captions VALUES(?,?,?) ON CONFLICT DO NOTHING",
+                )
+                .run(hash, contract, text);
           }
-          results.push(await this.harrier.embed(text, item.role ?? "document", signal));
+          results.push(
+            await this.harrier.embed(text, item.role ?? "document", signal),
+          );
         }
         return results;
       }
@@ -174,7 +231,10 @@ export class Engine {
   }
   enqueueIndex(databaseIds?: string[]) {
     this.ready(this.repo.getSettings().embeddingModel);
-    if (this.repo.getSettings().embeddingModel === HARRIER_ID) { this.ready("lfm3-vl-2b"); this.ready("llama-runtime"); }
+    if (this.repo.getSettings().embeddingModel === HARRIER_ID) {
+      this.ready("lfm3-vl-2b");
+      this.ready("llama-runtime");
+    }
     const params = databaseIds?.length ? databaseIds : [];
     if (databaseIds && !databaseIds.length)
       throw new Error("Selecciona alguna base de datos.");
@@ -195,7 +255,12 @@ export class Engine {
     signal: AbortSignal,
   ) {
     if (payload.contract !== this.contract())
-      throw Object.assign(new Error("La configuración del modelo ha cambiado. Crea una nueva tarea de indexación."), { fatal: true });
+      throw Object.assign(
+        new Error(
+          "La configuración del modelo ha cambiado. Crea una nueva tarea de indexación.",
+        ),
+        { fatal: true },
+      );
     const asset = this.repo.asset(payload.assets[index]);
     if ((await hashFile(asset.original_path)) !== asset.content_hash)
       throw new Error(

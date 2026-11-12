@@ -12,20 +12,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: macos-latest, target: mac, arch: arm64}
-          - {os: macos-15-intel, target: mac, arch: x64}
-          - {os: windows-latest, target: win, arch: x64}
-          - {os: ubuntu-22.04, target: linux, arch: x64}
-          - {os: ubuntu-24.04-arm, target: linux, arch: arm64}
+          - { os: macos-latest, target: mac, arch: arm64 }
+          - { os: macos-15-intel, target: mac, arch: x64 }
+          - { os: windows-latest, target: win, arch: x64 }
+          - { os: ubuntu-22.04, target: linux, arch: x64 }
+          - { os: ubuntu-24.04-arm, target: linux, arch: arm64 }
     runs-on: ${{ matrix.os }}
     env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
       ONNXRUNTIME_NODE_INSTALL: skip
       ONNXRUNTIME_NODE_INSTALL_CUDA: skip
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm}
+        with: { node-version: 24, cache: npm }
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -67,16 +67,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, macos-15-intel, windows-latest, ubuntu-22.04, ubuntu-24.04-arm]
+        os:
+          [
+            macos-latest,
+            macos-15-intel,
+            windows-latest,
+            ubuntu-22.04,
+            ubuntu-24.04-arm,
+          ]
     runs-on: ${{ matrix.os }}
     env:
       ONNXRUNTIME_NODE_INSTALL: skip
       ONNXRUNTIME_NODE_INSTALL_CUDA: skip
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm}
+        with: { node-version: 24, cache: npm }
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update

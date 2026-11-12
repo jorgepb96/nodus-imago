@@ -146,7 +146,8 @@ export function Cell({
         compact={compact}
       />
     );
-  if (!compact && column.type === "rich_text") return <RichTextEditor name={column.name} value={value} onSave={onSave}/>;
+  if (!compact && column.type === "rich_text")
+    return <RichTextEditor name={column.name} value={value} onSave={onSave} />;
   const displayed = draft;
   const props = {
     className: "cell-input",

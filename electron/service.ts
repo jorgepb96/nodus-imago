@@ -27,10 +27,10 @@ import { importNotion } from "./import/notion";
 import type { CompletionRequest } from "./ai/apiProviders";
 import { AgreementResearch } from "./research/agreement";
 
-import {Automations} from './automations';
+import { Automations } from "./automations";
 
 export class Service {
-  automations:Automations;
+  automations: Automations;
   research: AgreementResearch;
   repo: Repository;
   images: Images;
@@ -62,7 +62,21 @@ export class Service {
       this.engine,
       changed,
     );
-    this.automations=new Automations(this.repo,(rowId,columnIds)=>this.engine.enqueueAnalysis({rowIds:[rowId],columnIds,language:this.repo.getSettings().language==='en'?'English':'Español',detailed:false}),()=>{this.queue.pump();changed();});
+    this.automations = new Automations(
+      this.repo,
+      (rowId, columnIds) =>
+        this.engine.enqueueAnalysis({
+          rowIds: [rowId],
+          columnIds,
+          language:
+            this.repo.getSettings().language === "en" ? "English" : "Español",
+          detailed: false,
+        }),
+      () => {
+        this.queue.pump();
+        changed();
+      },
+    );
     this.automations.start();
     this.queue.pump();
   }
@@ -73,17 +87,37 @@ export class Service {
   }
   async run(command: string, input: any = undefined): Promise<any> {
     switch (command) {
-      case 'automationList':return this.automations.list(input.databaseId);
-      case 'automationHistory':return this.automations.history(input.databaseId);
-      case 'automationSave':return this.automations.save(input);
-      case 'automationDelete':return this.automations.delete(input.id);
-      case 'automationRun':return this.automations.run(input.id);
-      case "inferenceDiagnostics": return { backend: this.repo.getSettings().embeddingModel, dimensions: this.engine.dimensions(), contract: this.engine.contract(), processId: this.repo.getSettings().embeddingModel === "harrier-oss-v1-0.6b-q8_0" ? this.engine.harrier.pid : this.engine.onnx.pid, serviceRss: process.memoryUsage().rss };
-      case "modelPreparation": return this.models.preparation(this.engine.contract());
+      case "automationList":
+        return this.automations.list(input.databaseId);
+      case "automationHistory":
+        return this.automations.history(input.databaseId);
+      case "automationSave":
+        return this.automations.save(input);
+      case "automationDelete":
+        return this.automations.delete(input.id);
+      case "automationRun":
+        return this.automations.run(input.id);
+      case "inferenceDiagnostics":
+        return {
+          backend: this.repo.getSettings().embeddingModel,
+          dimensions: this.engine.dimensions(),
+          contract: this.engine.contract(),
+          processId:
+            this.repo.getSettings().embeddingModel ===
+            "harrier-oss-v1-0.6b-q8_0"
+              ? this.engine.harrier.pid
+              : this.engine.onnx.pid,
+          serviceRss: process.memoryUsage().rss,
+        };
+      case "modelPreparation":
+        return this.models.preparation(this.engine.contract());
       case "prepareModels": {
-        const id = await this.models.enqueuePreparation(this.engine.contract()); this.queue.pump(); return id;
+        const id = await this.models.enqueuePreparation(this.engine.contract());
+        this.queue.pump();
+        return id;
       }
-      case "probeExperimentalPython": return this.host.request({ operation: "probe" });
+      case "probeExperimentalPython":
+        return this.host.request({ operation: "probe" });
       case "agreementRun":
         return this.research.run(input);
       case "agreementList":
@@ -142,7 +176,8 @@ export class Service {
             .prepare("DELETE FROM db_databases WHERE id=?")
             .run(input.id);
           this.repo.pruneEquivalences(removedColumns);
-          for(const database of this.repo.list())this.repo.recompute(database.id);
+          for (const database of this.repo.list())
+            this.repo.recompute(database.id);
           this.repo.db
             .prepare(
               "DELETE FROM embeddings WHERE content_hash NOT IN (SELECT content_hash FROM image_assets)",
@@ -153,7 +188,8 @@ export class Service {
       }
       case "detail":
         return this.repo.detail(input.id);
-      case 'pageDocument':return this.repo.pageDocument(input.rowId,input.columnId);
+      case "pageDocument":
+        return this.repo.pageDocument(input.rowId, input.columnId);
       case "addColumn":
         return this.repo.addColumn(
           input.databaseId,
@@ -455,8 +491,18 @@ export class Service {
           force: true,
         });
         {
-          const model = this.models.get(input.id), parent = path.join(this.repo.root, "models", model.id), prefix = model.revision + ".previous-";
-          for (const name of await fs.readdir(parent).catch(() => [])) if (name.startsWith(prefix) && /^[a-f0-9-]{36}$/.test(name.slice(prefix.length))) await fs.rm(path.join(parent, name), { recursive: true, force: true });
+          const model = this.models.get(input.id),
+            parent = path.join(this.repo.root, "models", model.id),
+            prefix = model.revision + ".previous-";
+          for (const name of await fs.readdir(parent).catch(() => []))
+            if (
+              name.startsWith(prefix) &&
+              /^[a-f0-9-]{36}$/.test(name.slice(prefix.length))
+            )
+              await fs.rm(path.join(parent, name), {
+                recursive: true,
+                force: true,
+              });
         }
         return;
       case "analyze": {

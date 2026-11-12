@@ -44,8 +44,8 @@ import {
 } from "./viewQuery";
 import { settingsSchema } from "../../shared/validation";
 import { defaultEmbeddingModel } from "../../shared/embeddingBackends";
-import {markdownBlocks, type PageDocument} from '../../shared/pageBlocks';
-import {recomputeRollups,validateRollup} from './rollups';
+import { markdownBlocks, type PageDocument } from "../../shared/pageBlocks";
+import { recomputeRollups, validateRollup } from "./rollups";
 
 export const now = () => new Date().toISOString();
 const marks = (xs: unknown[]) => xs.map(() => "?").join(",");
@@ -172,7 +172,7 @@ export class Repository {
   ): DatabaseColumn {
     if (!isDatabaseColumnType(type)) throw new Error("Tipo desconocido.");
     const detail = this.detail(databaseId);
-    if(type==='rollup')validateRollup(this,databaseId,config);
+    if (type === "rollup") validateRollup(this, databaseId, config);
     if (type === "title" && detail.columns.some((c) => c.type === "title"))
       throw new Error("La base ya tiene una propiedad de título.");
     const id = uuid(),
@@ -191,7 +191,7 @@ export class Repository {
           at,
         );
       // A new formula column must show results for rows that already exist.
-      if (type === "formula"||type==='rollup') {
+      if (type === "formula" || type === "rollup") {
         this.recompute(databaseId);
         this.rebuildText(databaseId);
       }
@@ -200,7 +200,8 @@ export class Repository {
   }
   updateColumn(id: string, name?: string, config?: DatabaseColumnConfig) {
     const c = this.column(id);
-    if(c.type==='rollup'&&config)validateRollup(this,c.databaseId,config);
+    if (c.type === "rollup" && config)
+      validateRollup(this, c.databaseId, config);
     this.db.transaction(() => {
       this.db
         .prepare(
@@ -354,9 +355,23 @@ export class Repository {
     value: string | null,
     type: DatabaseColumnType,
   ) {
-    if(type==='rich_text') {
-      if(value==null)this.db.prepare('DELETE FROM page_documents WHERE row_id=? AND column_id=?').run(rowId,columnId);
-      else this.db.prepare('INSERT INTO page_documents(row_id,column_id,format,source_markdown,tree_json) VALUES(?,?,?,?,?) ON CONFLICT(row_id,column_id) DO UPDATE SET source_markdown=excluded.source_markdown,tree_json=excluded.tree_json').run(rowId,columnId,'imago.blocks/1',value,JSON.stringify(markdownBlocks(value)));
+    if (type === "rich_text") {
+      if (value == null)
+        this.db
+          .prepare("DELETE FROM page_documents WHERE row_id=? AND column_id=?")
+          .run(rowId, columnId);
+      else
+        this.db
+          .prepare(
+            "INSERT INTO page_documents(row_id,column_id,format,source_markdown,tree_json) VALUES(?,?,?,?,?) ON CONFLICT(row_id,column_id) DO UPDATE SET source_markdown=excluded.source_markdown,tree_json=excluded.tree_json",
+          )
+          .run(
+            rowId,
+            columnId,
+            "imago.blocks/1",
+            value,
+            JSON.stringify(markdownBlocks(value)),
+          );
     }
     if (value == null)
       this.db
@@ -474,15 +489,36 @@ export class Repository {
       this.indexRow(rowId);
     })();
   }
-  pageDocument(rowId:string,columnId:string):PageDocument {
-    const row=this.getRow(rowId),column=this.column(columnId);
-    if(column.databaseId!==row.databaseId||column.type!=='rich_text')throw Error('Documento incompatible.');
-    const saved=this.db.prepare('SELECT source_markdown,imported_markdown,tree_json FROM page_documents WHERE row_id=? AND column_id=?').get(rowId,columnId) as any;
-    const sourceMarkdown=row.cells[columnId]??'';
-    return {format:'imago.blocks/1',sourceMarkdown,importedMarkdown:saved?.imported_markdown??null,blocks:saved&&saved.source_markdown===sourceMarkdown?JSON.parse(saved.tree_json):markdownBlocks(sourceMarkdown)};
+  pageDocument(rowId: string, columnId: string): PageDocument {
+    const row = this.getRow(rowId),
+      column = this.column(columnId);
+    if (column.databaseId !== row.databaseId || column.type !== "rich_text")
+      throw Error("Documento incompatible.");
+    const saved = this.db
+      .prepare(
+        "SELECT source_markdown,imported_markdown,tree_json FROM page_documents WHERE row_id=? AND column_id=?",
+      )
+      .get(rowId, columnId) as any;
+    const sourceMarkdown = row.cells[columnId] ?? "";
+    return {
+      format: "imago.blocks/1",
+      sourceMarkdown,
+      importedMarkdown: saved?.imported_markdown ?? null,
+      blocks:
+        saved && saved.source_markdown === sourceMarkdown
+          ? JSON.parse(saved.tree_json)
+          : markdownBlocks(sourceMarkdown),
+    };
   }
   recompute(databaseId: string) {
-    if(this.db.prepare("SELECT 1 FROM db_columns WHERE type='rollup' LIMIT 1").get()){recomputeRollups(this,databaseId);return;}
+    if (
+      this.db
+        .prepare("SELECT 1 FROM db_columns WHERE type='rollup' LIMIT 1")
+        .get()
+    ) {
+      recomputeRollups(this, databaseId);
+      return;
+    }
     const columns = this.detail(databaseId).columns;
     if (!columns.some((c) => c.type === "formula")) return;
     const ids = (

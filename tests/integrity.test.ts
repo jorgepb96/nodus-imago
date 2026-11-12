@@ -19,6 +19,67 @@ import { Archive } from "../electron/import/archive";
 import { writeBackup, restoreBackup } from "../electron/export/backup";
 import { Models, type CatalogModel } from "../electron/ai/models";
 
+test("a failed runtime replacement retains the previous executable and verification", async (context) => {
+  const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "imago-runtime-rollback-"),
+    ),
+    repo = new Repository(root),
+    models = new Models(repo);
+  try {
+    const source = path.join(root, "incoming");
+    await fs.mkdir(source);
+    await fs.writeFile(
+      path.join(source, "not-an-executable"),
+      "invalid replacement",
+    );
+    const model: CatalogModel = {
+      id: "llama-runtime",
+      repository: "fixture/runtime",
+      revision: "atomic-test",
+      label: "Fixture",
+      task: "runtime",
+      license: "MIT",
+      files: [
+        { path: "runtime.tar.gz", size: 0, algorithm: "sha256", digest: "" },
+      ],
+    };
+    context.mock.method(models, "catalog", () => [model]);
+    const directory = models.directory(model.id),
+      bin = path.join(directory, "bin"),
+      name =
+        process.platform === "win32" ? "llama-mtmd-cli.exe" : "llama-mtmd-cli";
+    await fs.mkdir(bin, { recursive: true });
+    await fs.writeFile(path.join(bin, name), "previous runtime");
+    await fs.writeFile(
+      path.join(directory, "verified.json"),
+      JSON.stringify({ revision: model.revision }),
+    );
+    const file = path.join(directory, "runtime.tar.gz");
+    await tar.c({ file, cwd: source, gzip: true }, ["not-an-executable"]);
+    const bytes = await fs.readFile(file);
+    model.files[0].size = bytes.length;
+    model.files[0].digest = createHash("sha256").update(bytes).digest("hex");
+    await assert.rejects(
+      models.verify(model.id),
+      /ejecutable|llama-mtmd|motor|Motor/i,
+    );
+    assert.equal(
+      await fs.readFile(await models.runtimeExecutable(), "utf8"),
+      "previous runtime",
+    );
+    assert.equal(
+      JSON.parse(
+        await fs.readFile(path.join(directory, "verified.json"), "utf8"),
+      ).revision,
+      model.revision,
+    );
+  } finally {
+    context.mock.restoreAll();
+    repo.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("restored extensionless HEIC and BMP originals can regenerate their previews", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-extensionless-"));
   try {
@@ -395,7 +456,10 @@ test("runtime archives reject links that leave the extraction directory", async 
     await fs.mkdir(path.join(directory, "bin"), { recursive: true });
     const prior = path.join(directory, "bin", "llama-mtmd-cli");
     await fs.writeFile(prior, "previous working runtime");
-    await fs.writeFile(path.join(directory, "verified.json"), JSON.stringify({ revision: "unit" }));
+    await fs.writeFile(
+      path.join(directory, "verified.json"),
+      JSON.stringify({ revision: "unit" }),
+    );
     await assert.rejects(
       models.verify("llama-runtime"),
       /Enlace de runtime no permitido/,
@@ -414,15 +478,46 @@ test("runtime archives reject links that leave the extraction directory", async 
   }
 });
 
-test('atomic local model import preserves the verified model when a same-size replacement is corrupt', async () => {
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'imago-atomic-model-')),repo=new Repository(path.join(root,'data')),models=new Models(repo);
+test("atomic local model import preserves the verified model when a same-size replacement is corrupt", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-atomic-model-")),
+    repo = new Repository(path.join(root, "data")),
+    models = new Models(repo);
   try {
-    const source=path.join(root,'source');await fs.mkdir(source);
-    const definition:CatalogModel={id:'fixture-data',repository:'fixture',revision:'unit',label:'Fixture',task:'embedding',license:'MIT',files:[{path:'weights.bin',size:4,algorithm:'sha256',digest:createHash('sha256').update('good').digest('hex')}]};
-    models.catalog=()=>[definition];
-    const directory=models.directory(definition.id);await fs.mkdir(directory,{recursive:true});await fs.writeFile(path.join(directory,'weights.bin'),'good');await models.verify(definition.id);
-    await fs.writeFile(path.join(source,'weights.bin'),'evil');
-    await assert.rejects(models.importDirectory(definition.id,source),/no supera SHA/);
-    assert.equal(await fs.readFile(path.join(directory,'weights.bin'),'utf8'),'good');assert.equal(models.list()[0].verified,true);
-  } finally {repo.close();await fs.rm(root,{recursive:true,force:true});}
+    const source = path.join(root, "source");
+    await fs.mkdir(source);
+    const definition: CatalogModel = {
+      id: "fixture-data",
+      repository: "fixture",
+      revision: "unit",
+      label: "Fixture",
+      task: "embedding",
+      license: "MIT",
+      files: [
+        {
+          path: "weights.bin",
+          size: 4,
+          algorithm: "sha256",
+          digest: createHash("sha256").update("good").digest("hex"),
+        },
+      ],
+    };
+    models.catalog = () => [definition];
+    const directory = models.directory(definition.id);
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(path.join(directory, "weights.bin"), "good");
+    await models.verify(definition.id);
+    await fs.writeFile(path.join(source, "weights.bin"), "evil");
+    await assert.rejects(
+      models.importDirectory(definition.id, source),
+      /no supera SHA/,
+    );
+    assert.equal(
+      await fs.readFile(path.join(directory, "weights.bin"), "utf8"),
+      "good",
+    );
+    assert.equal(models.list()[0].verified, true);
+  } finally {
+    repo.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });

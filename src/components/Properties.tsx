@@ -22,7 +22,7 @@ import { useT } from "../i18n";
 import type { Status } from "../../shared/imago";
 import type { ModelChoice } from "../../shared/aiConfig";
 import { ModelPicker } from "./ModelPicker";
-import {RollupSettings} from './RollupSettings';
+import { RollupSettings } from "./RollupSettings";
 export type Perform = (
   work: () => Promise<void>,
   message?: string,
@@ -63,7 +63,9 @@ export function Properties({
   status: Status;
 }) {
   const t = useT();
-  const [rollup,setRollup]=useState<DatabaseColumnConfig>({rollupFunction:'count'});
+  const [rollup, setRollup] = useState<DatabaseColumnConfig>({
+    rollupFunction: "count",
+  });
   const [selected, setSelected] = useState<DatabaseColumn | null>(null),
     [name, setName] = useState(""),
     [type, setType] = useState<DatabaseColumnType>("text"),
@@ -177,7 +179,7 @@ export function Properties({
     );
   };
   const add = () => {
-    setRollup({rollupFunction:'count'});
+    setRollup({ rollupFunction: "count" });
     setSelected(null);
     setName("");
     setType("text");
@@ -230,7 +232,7 @@ export function Properties({
                   name,
                   config: {
                     ...selected.config,
-                    ...(type==='rollup'?rollup:{}),
+                    ...(type === "rollup" ? rollup : {}),
                     ...aiConfig(),
                     ...(formula ? { formula } : {}),
                   },
@@ -242,14 +244,16 @@ export function Properties({
                   });
               } else {
                 const config =
-                  type==='rollup'?rollup:type === "relation"
-                    ? {
-                        relationTargetDatabaseId: relationDb,
-                        relationTargetKind: "db_row" as const,
-                      }
-                    : type === "formula"
-                      ? { formula: formulaConfig() }
-                      : aiConfig();
+                  type === "rollup"
+                    ? rollup
+                    : type === "relation"
+                      ? {
+                          relationTargetDatabaseId: relationDb,
+                          relationTargetKind: "db_row" as const,
+                        }
+                      : type === "formula"
+                        ? { formula: formulaConfig() }
+                        : aiConfig();
                 const c = await window.imago.call("addColumn", {
                   databaseId: detail.database.id,
                   name,
@@ -323,7 +327,13 @@ export function Properties({
                   </select>
                 </label>
               )}
-              {type==='rollup'&&<RollupSettings detail={detail} value={rollup} onChange={setRollup}/>}
+              {type === "rollup" && (
+                <RollupSettings
+                  detail={detail}
+                  value={rollup}
+                  onChange={setRollup}
+                />
+              )}
               {type === "formula" && (
                 <div className="stack">
                   {formulaImported ? (

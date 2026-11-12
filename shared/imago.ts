@@ -224,13 +224,34 @@ export type Status = {
 };
 export type SavedSearch = { id: string; name: string; input: SearchInput };
 export type Commands = {
-  automationList:{input:{databaseId:string};result:import('./automations').AutomationRule[]};
-  automationHistory:{input:{databaseId:string};result:import('./automations').AutomationRun[]};
-  automationSave:{input:import('./automations').AutomationRule;result:import('./automations').AutomationRule};
-  automationDelete:{input:{id:string};result:void};
-  automationRun:{input:{id:string};result:number};
-  pageDocument:{input:{rowId:string;columnId:string};result:import('./pageBlocks').PageDocument};
-  inferenceDiagnostics: { input: void; result: { backend: string; dimensions: number; contract: string; processId: number | null; serviceRss: number } };
+  automationList: {
+    input: { databaseId: string };
+    result: import("./automations").AutomationRule[];
+  };
+  automationHistory: {
+    input: { databaseId: string };
+    result: import("./automations").AutomationRun[];
+  };
+  automationSave: {
+    input: import("./automations").AutomationRule;
+    result: import("./automations").AutomationRule;
+  };
+  automationDelete: { input: { id: string }; result: void };
+  automationRun: { input: { id: string }; result: number };
+  pageDocument: {
+    input: { rowId: string; columnId: string };
+    result: import("./pageBlocks").PageDocument;
+  };
+  inferenceDiagnostics: {
+    input: void;
+    result: {
+      backend: string;
+      dimensions: number;
+      contract: string;
+      processId: number | null;
+      serviceRss: number;
+    };
+  };
   modelPreparation: { input: void; result: ModelPreparation };
   prepareModels: { input: { consent: true }; result: string | null };
   openExternalLink: { input: { url: string }; result: void };
@@ -399,7 +420,15 @@ export type Commands = {
       pillow: string;
     };
   };
-  probeRuntime: { input: void; result: { backend: string; pythonRequired: boolean; integratedRuntime: boolean; available: boolean } };
+  probeRuntime: {
+    input: void;
+    result: {
+      backend: string;
+      pythonRequired: boolean;
+      integratedRuntime: boolean;
+      available: boolean;
+    };
+  };
   updateSettings: { input: Partial<Settings>; result: Settings };
   jobs: { input: void; result: Job[] };
   controlJob: {
