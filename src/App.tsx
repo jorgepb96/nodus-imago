@@ -68,6 +68,7 @@ import { buildHierarchy, type HierarchyNode } from "../shared/hierarchy";
 import { QueuePopover, type QueueFilter } from "./components/QueuePopover";
 import { DatabaseMap } from "./components/DatabaseMap";
 import { AgreementWorkbench } from "./components/AgreementWorkbench";
+import {Automations} from './components/Automations';
 
 export default function App() {
   const [language, setLanguage] = useState<"es" | "en">("es");
@@ -123,6 +124,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "rename"
       | "properties"
       | "agreement"
+      | "automations"
       | "deleteRows"
       | "deleteDatabase"
       | "saveSearch"
@@ -1318,6 +1320,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           {t("Concordancia")}
                         </Button>
                       )}
+                      {area==='databases'&&detail&&<Button onClick={()=>setModal('automations')}><Sparkles size={14}/>{t('Automatizaciones')}</Button>}
                       <ViewControls
                         deferred={area === "search"}
                         details={visibleDetails}
@@ -2043,6 +2046,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onClose={() => setModal(null)}
         />
       )}
+      {modal==='automations'&&detail&&<Automations key={detail.database.id} detail={detail} perform={perform} onClose={()=>setModal(null)}/>}
       {modal === "agreement" && detail && (
         <AgreementWorkbench
           key={detail.database.id}

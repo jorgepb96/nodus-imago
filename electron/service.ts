@@ -27,7 +27,10 @@ import { importNotion } from "./import/notion";
 import type { CompletionRequest } from "./ai/apiProviders";
 import { AgreementResearch } from "./research/agreement";
 
+import {Automations} from './automations';
+
 export class Service {
+  automations:Automations;
   research: AgreementResearch;
   repo: Repository;
   images: Images;
@@ -59,6 +62,8 @@ export class Service {
       this.engine,
       changed,
     );
+    this.automations=new Automations(this.repo,(rowId,columnIds)=>this.engine.enqueueAnalysis({rowIds:[rowId],columnIds,language:this.repo.getSettings().language==='en'?'English':'Español',detailed:false}),()=>{this.queue.pump();changed();});
+    this.automations.start();
     this.queue.pump();
   }
   private unfinishedJobs() {
@@ -68,6 +73,11 @@ export class Service {
   }
   async run(command: string, input: any = undefined): Promise<any> {
     switch (command) {
+      case 'automationList':return this.automations.list(input.databaseId);
+      case 'automationHistory':return this.automations.history(input.databaseId);
+      case 'automationSave':return this.automations.save(input);
+      case 'automationDelete':return this.automations.delete(input.id);
+      case 'automationRun':return this.automations.run(input.id);
       case "inferenceDiagnostics": return { backend: this.repo.getSettings().embeddingModel, dimensions: this.engine.dimensions(), contract: this.engine.contract(), processId: this.repo.getSettings().embeddingModel === "harrier-oss-v1-0.6b-q8_0" ? this.engine.harrier.pid : this.engine.onnx.pid, serviceRss: process.memoryUsage().rss };
       case "modelPreparation": return this.models.preparation(this.engine.contract());
       case "prepareModels": {
@@ -132,6 +142,7 @@ export class Service {
             .prepare("DELETE FROM db_databases WHERE id=?")
             .run(input.id);
           this.repo.pruneEquivalences(removedColumns);
+          for(const database of this.repo.list())this.repo.recompute(database.id);
           this.repo.db
             .prepare(
               "DELETE FROM embeddings WHERE content_hash NOT IN (SELECT content_hash FROM image_assets)",
@@ -518,6 +529,7 @@ export class Service {
       case "_modelInfo":
         return this.models.get(input.id);
       case "_close":
+        this.automations.close();
         await this.queue.close();
         this.engine.close();
         this.repo.close();

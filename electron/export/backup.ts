@@ -9,6 +9,7 @@ import { z } from "zod";
 import { Repository } from "../db/repository";
 import { Archive } from "../import/archive";
 import { hashFile } from "../import/images";
+import {ensureDiskSpace} from '../storage/disk';
 
 export const BACKUP_TABLES = [
   "db_databases",
@@ -19,6 +20,9 @@ export const BACKUP_TABLES = [
   "page_documents",
   "image_assets",
   "db_relations",
+  "automation_rules",
+  "automation_events",
+  "automation_runs",
   "jobs",
   "job_errors",
   "embeddings",
@@ -50,6 +54,8 @@ export async function writeBackup(repo: Repository, destination: string) {
   await fsp.mkdir(staging);
   const temp = destination + ".partial-" + uuid();
   try {
+    const pageSize=repo.db.pragma('page_size',{simple:true}) as number,pageCount=repo.db.pragma('page_count',{simple:true}) as number;
+    await ensureDiskSpace(staging,pageSize*pageCount);
     const snapshot = path.join(staging, "imago.sqlite");
     await repo.db.backup(snapshot);
     const backupDb = new Database(snapshot, { readonly: true });
@@ -82,6 +88,9 @@ export async function writeBackup(repo: Repository, destination: string) {
       createdAt: new Date().toISOString(),
       files,
     };
+    let archiveBytes=(await fsp.stat(snapshot)).size+Buffer.byteLength(JSON.stringify(manifest))+1024*1024;
+    for(const source of new Set(files.map(file=>file.source)))archiveBytes+=(await fsp.stat(source)).size+1024;
+    await ensureDiskSpace(path.dirname(destination),archiveBytes);
     const out = fs.createWriteStream(temp);
     const archive = new ZipArchive({ zlib: { level: 0 } });
     const done = new Promise<void>((resolve, reject) => {
@@ -218,7 +227,7 @@ export async function restoreBackup(
         if (table === "settings") continue;
         // Older v1 backups predate the optional research snapshots table.
         if (
-          ["agreement_experiments", "image_captions", "page_documents"].includes(table) &&
+          ["agreement_experiments", "image_captions", "page_documents", "automation_rules", "automation_events", "automation_runs"].includes(table) &&
           !snapshot!
             .prepare(
               "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
@@ -236,6 +245,8 @@ export async function restoreBackup(
           `INSERT INTO ${table}(${expected.join(",")}) VALUES(${expected.map(() => "?").join(",")})`,
         );
         for (const r of records) {
+          if(table==='automation_rules'){r.enabled=0;const config=JSON.parse(r.config_json);config.enabled=false;r.config_json=JSON.stringify(config);}
+          if(table==='automation_events')continue;
           if (table === "image_assets") {
             r.original_path = relocated.get(r.original_path);
             r.managed = 1;
