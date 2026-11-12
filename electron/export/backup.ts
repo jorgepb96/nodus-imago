@@ -137,7 +137,10 @@ export async function restoreBackup(
     staging = path.join(repo.root, "staging", uuid());
   await fsp.mkdir(staging);
   let snapshot: Database.Database | undefined;
+  const promoted: string[] = [];
+  let committed = false;
   try {
+    await archive.preflight(staging);
     const manifest = manifestSchema.parse(
       JSON.parse((await archive.read("manifest.json")).toString("utf8")),
     );
@@ -184,12 +187,24 @@ export async function restoreBackup(
       if (fs.existsSync(dest)) {
         if ((await hashFile(dest)) !== hash)
           throw new Error("Original existente dañado.");
-      } else await fsp.rename(local, dest);
+      } else {
+        await fsp.rename(local, dest);
+        promoted.push(dest);
+      }
     }
     // An otherwise empty target can still hold orphaned vectors or saved
     // searches from deleted databases. Restore replaces them with the backup
     // instead of failing on a UNIQUE/PRIMARY KEY collision.
     repo.db.transaction(() => {
+      if (
+        repo.stats().databases ||
+        repo
+          .jobs()
+          .some((job) => ["queued", "running", "paused"].includes(job.state))
+      )
+        throw new Error(
+          "La colección ha cambiado durante la restauración; no se ha sustituido ningún dato.",
+        );
       repo.db.prepare("DELETE FROM embeddings").run();
       repo.db.prepare("DELETE FROM saved_searches").run();
       repo.db.prepare("DELETE FROM agreement_experiments").run();
@@ -240,10 +255,21 @@ export async function restoreBackup(
       if ((repo.db.pragma("foreign_key_check") as unknown[]).length)
         throw new Error("Relaciones de la copia incoherentes.");
     })();
+    committed = true;
     return repo.stats().databases;
   } finally {
     snapshot?.close();
     archive.close();
     await fsp.rm(staging, { recursive: true, force: true });
+    if (!committed)
+      for (const file of promoted) {
+        // Never remove a pre-existing file or one adopted by another operation.
+        if (
+          !repo.db
+            .prepare("SELECT 1 FROM image_assets WHERE original_path=? LIMIT 1")
+            .get(file)
+        )
+          await fsp.rm(file, { force: true });
+      }
   }
 }

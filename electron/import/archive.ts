@@ -1,4 +1,8 @@
 import fs from "node:fs";
+import fsp from "node:fs/promises";
+import path from "node:path";
+import { Transform } from "node:stream";
+import { ensureDiskSpace } from "../storage/disk";
 import { pipeline } from "node:stream/promises";
 import yauzl from "yauzl";
 import type { Entry, ZipFile } from "yauzl";
@@ -58,6 +62,13 @@ export class Archive {
       ),
     );
   }
+  async preflight(destination: string, multiplier = 1) {
+    const bytes = [...this.entries.values()].reduce(
+      (sum, entry) => sum + entry.uncompressedSize,
+      0,
+    );
+    await ensureDiskSpace(destination, Math.ceil(bytes * multiplier));
+  }
   async read(name: string, max = 32 * 2 ** 20) {
     const entry = this.entries.get(name);
     if (!entry || entry.uncompressedSize > max)
@@ -72,10 +83,38 @@ export class Archive {
     return Buffer.concat(chunks);
   }
   async extract(name: string, destination: string) {
-    await pipeline(
-      (await this.stream(name)) as any,
-      fs.createWriteStream(destination, { flags: "wx" }),
-    );
+    const entry = this.entries.get(name);
+    if (!entry) throw new Error("Archivo ausente del ZIP: " + name);
+    await ensureDiskSpace(path.dirname(destination), entry.uncompressedSize);
+    let bytes = 0,
+      created = false;
+    const output = fs.createWriteStream(destination, { flags: "wx" });
+    output.once("open", () => {
+      created = true;
+    });
+    try {
+      await pipeline(
+        (await this.stream(name)) as any,
+        new Transform({
+          transform(chunk, _encoding, callback) {
+            bytes += chunk.length;
+            callback(
+              bytes > entry.uncompressedSize
+                ? new Error("La entrada ZIP excede su cuota declarada.")
+                : null,
+              chunk,
+            );
+          },
+        }),
+        output,
+      );
+      if (bytes !== entry.uncompressedSize)
+        throw new Error("Entrada ZIP incompleta.");
+    } catch (error) {
+      output.destroy();
+      if (created) await fsp.rm(destination, { force: true });
+      throw error;
+    }
   }
   close() {
     this.zip.close();

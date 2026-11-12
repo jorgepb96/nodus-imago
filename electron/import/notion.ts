@@ -22,6 +22,8 @@ export async function importNotion(
     attachments = 0;
   const created: string[] = [];
   try {
+    // Images may temporarily coexist in staging and the managed collection.
+    await zip.preflight(staging, 2);
     for (const entry of zip.entries.keys()) {
       if (!entry.toLowerCase().endsWith(".csv")) continue;
       const plan = buildCsvImportPlan(
@@ -239,13 +241,21 @@ export async function importNotion(
           },
         );
         for (const [rowId, parentRowId] of pageParents)
-          repo.setCell(rowId, parentColumn.id, JSON.stringify([parentRowId]), false);
+          repo.setCell(
+            rowId,
+            parentColumn.id,
+            JSON.stringify([parentRowId]),
+            false,
+          );
       }
       notices.push(
         `Se importaron ${markdown.length} páginas Markdown como texto plano en «${pagesName}». La relación «Página padre» conserva la jerarquía de carpetas; no se reproducen bloques ni formato enriquecido.`,
       );
     }
-    if (!databases) throw new Error("El ZIP no contiene bases de datos CSV ni páginas Markdown.");
+    if (!databases)
+      throw new Error(
+        "El ZIP no contiene bases de datos CSV ni páginas Markdown.",
+      );
     notices.push(
       "CSV de Notion no conserva IDs originales de opciones, fórmulas ni relaciones tipadas. Revisa los tipos detectados después de importar.",
     );

@@ -171,7 +171,26 @@ test("a failed restore preserves the target's saved searches and vectors atomica
     source = new Repository(path.join(root, "source")),
     target = new Repository(path.join(root, "target"));
   try {
-    source.create("Backup");
+    const detail = source.create("Backup"),
+      row = source.createRow(detail.database.id);
+    const original = path.join(root, "restore-original.png");
+    await sharp({
+      create: { width: 10, height: 10, channels: 3, background: "#446688" },
+    })
+      .png()
+      .toFile(original);
+    await new Images(source).importOne(
+      {
+        databaseId: detail.database.id,
+        columnId: detail.columns.find((c) => c.type === "attachment")!.id,
+        storage: "copy",
+        createUnmatched: false,
+        files: [{ path: original, rowId: row.id }],
+      },
+      0,
+    );
+    const preserved = path.join(target.root, "originals", "pre-existing");
+    await fs.writeFile(preserved, "preserve this file");
     const file = path.join(root, "backup.imago");
     await writeBackup(source, file);
     const zip = new AdmZip(file),
@@ -189,6 +208,9 @@ test("a failed restore preserves the target's saved searches and vectors atomica
       .prepare("INSERT INTO embeddings VALUES(?,?,?)")
       .run("hash", "contract", Buffer.alloc(4));
     await assert.rejects(restoreBackup(target, file));
+    assert.deepEqual(await fs.readdir(path.join(target.root, "originals")), [
+      "pre-existing",
+    ]);
     assert.equal(target.list().length, 0);
     assert.equal(
       (target.db.prepare("SELECT count(*) n FROM saved_searches").get() as any)
@@ -370,9 +392,21 @@ test("runtime archives reject links that leave the extraction directory", async 
     const directory = models.directory("llama-runtime");
     await fs.mkdir(directory, { recursive: true });
     await fs.writeFile(path.join(directory, "runtime.tar.gz"), bytes);
+    await fs.mkdir(path.join(directory, "bin"), { recursive: true });
+    const prior = path.join(directory, "bin", "llama-mtmd-cli");
+    await fs.writeFile(prior, "previous working runtime");
+    await fs.writeFile(path.join(directory, "verified.json"), JSON.stringify({ revision: "unit" }));
     await assert.rejects(
-      models.prepareRuntime(),
+      models.verify("llama-runtime"),
       /Enlace de runtime no permitido/,
+    );
+    assert.equal(await fs.readFile(prior, "utf8"), "previous working runtime");
+    assert.equal(await models.runtimeExecutable(), prior);
+    assert.equal(
+      (await fs.readdir(directory)).filter((name) =>
+        name.startsWith(".runtime-stage-"),
+      ).length,
+      0,
     );
   } finally {
     repo.close();

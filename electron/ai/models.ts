@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import catalog from "../../shared/modelCatalog.json";
 import runtimes from "../../shared/runtimeCatalog.json";
 import { Archive } from "../import/archive";
 import * as tar from "tar";
 import type { ModelInfo } from "../../shared/imago";
 import type { Repository } from "../db/repository";
+import { ensureDiskSpace } from "../storage/disk";
 
 export type CatalogModel = {
   id: string;
@@ -75,7 +76,9 @@ export class Models {
   async verify(id: string) {
     const model = this.get(id),
       dir = this.directory(id);
-    await fsp.rm(path.join(dir, "verified.json"), { force: true });
+    // A prepared runtime stays usable while its replacement is checked. Its
+    // previous verification is superseded only after a successful promotion.
+    if (model.task !== "runtime") await fsp.rm(path.join(dir, "verified.json"), { force: true });
     for (const file of model.files) {
       const target = path.join(dir, file.path),
         stat = await fsp.lstat(target);
@@ -216,13 +219,16 @@ export class Models {
     const model = this.get("llama-runtime"),
       root = this.directory(model.id),
       file = path.join(root, model.files[0].path),
-      destination = path.join(root, "bin");
-    await fsp.rm(destination, { recursive: true, force: true });
-    await fsp.mkdir(destination, { recursive: true });
+      active = path.join(root, "bin"),
+      previous = path.join(root, ".runtime-previous-" + randomUUID());
+    await fsp.mkdir(root, { recursive: true });
+    await this.recoverRuntime(root);
+    const destination = await fsp.mkdtemp(path.join(root, ".runtime-stage-"));
     try {
       if (file.endsWith(".zip")) {
         const archive = await Archive.open(file);
         try {
+          await archive.preflight(destination);
           for (const [name, entry] of archive.entries) {
             if (name.endsWith("/")) continue;
             const target = path.join(destination, name);
@@ -233,6 +239,14 @@ export class Models {
           archive.close();
         }
       } else {
+        let unpackedBytes = 0;
+        await tar.t({
+          file,
+          onReadEntry: (entry) => {
+            unpackedBytes += entry.size;
+          },
+        });
+        await ensureDiskSpace(destination, unpackedBytes);
         const links: { file: string; target: string; hard: boolean }[] = [];
         let invalid: Error | undefined;
         await tar.x({
@@ -292,10 +306,36 @@ export class Models {
       await fsp.rm(destination, { recursive: true, force: true });
       throw error;
     }
-    const executable = await this.findExecutable(destination);
-    if (!executable)
-      throw new Error("El motor descargado no contiene llama-mtmd-cli.");
-    if (process.platform !== "win32") await fsp.chmod(executable, 0o755);
+    let moved = false;
+    try {
+      const executable = await this.findExecutable(destination);
+      if (!executable)
+        throw new Error("El motor descargado no contiene llama-mtmd-cli.");
+      if (process.platform !== "win32") await fsp.chmod(executable, 0o755);
+      // All extraction and checks finish before touching the working runtime.
+      if (fs.existsSync(active)) {
+        await fsp.rename(active, previous);
+        moved = true;
+      }
+      await fsp.rename(destination, active);
+      await fsp.rm(previous, { recursive: true, force: true }).catch(() => {});
+    } catch (error) {
+      if (moved && !fs.existsSync(active)) await fsp.rename(previous, active);
+      await fsp.rm(destination, { recursive: true, force: true });
+      throw error;
+    }
+  }
+  private async recoverRuntime(root: string) {
+    if (!fs.existsSync(root)) return;
+    if (fs.existsSync(path.join(root, "bin"))) return;
+    const backups = (await fsp.readdir(root)).filter((name) =>
+      /^\.runtime-previous-[a-f0-9-]{36}$/.test(name),
+    );
+    for (const backup of backups.reverse())
+      if (await this.findExecutable(path.join(root, backup))) {
+        await fsp.rename(path.join(root, backup), path.join(root, "bin"));
+        return;
+      }
   }
   private async findExecutable(root: string): Promise<string | null> {
     for (const entry of await fsp.readdir(root, { withFileTypes: true })) {
@@ -316,7 +356,11 @@ export class Models {
     return null;
   }
   async runtimeExecutable() {
-    if (!this.list().some((m) => m.id === "llama-runtime" && m.verified))
+    const root = this.directory("llama-runtime");
+    await this.recoverRuntime(root);
+    let verified = false;
+    try { verified = JSON.parse(await fsp.readFile(path.join(root, "verified.json"), "utf8")).revision === this.get("llama-runtime").revision; } catch {}
+    if (!verified)
       throw new Error("Instala el motor de visión local en Ajustes.");
     const executable = await this.findExecutable(
       path.join(this.directory("llama-runtime"), "bin"),
