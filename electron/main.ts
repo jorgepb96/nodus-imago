@@ -341,7 +341,7 @@ app.whenReady().then(async () => {
       }
       if (command === "modelLicense") {
         const model = await call("_modelInfo", safe);
-        const filename = model.license.startsWith("Apache")
+        const filename = model.id === "harrier-oss-v1-0.6b-q8_0" ? "MIT-harrier.txt" : model.license.startsWith("Apache")
           ? "Apache-2.0.txt"
           : model.license.startsWith("LFM")
             ? "LFM-Open-License-1.0.txt"

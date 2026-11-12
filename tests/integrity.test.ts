@@ -413,3 +413,16 @@ test("runtime archives reject links that leave the extraction directory", async 
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('atomic local model import preserves the verified model when a same-size replacement is corrupt', async () => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'imago-atomic-model-')),repo=new Repository(path.join(root,'data')),models=new Models(repo);
+  try {
+    const source=path.join(root,'source');await fs.mkdir(source);
+    const definition:CatalogModel={id:'fixture-data',repository:'fixture',revision:'unit',label:'Fixture',task:'embedding',license:'MIT',files:[{path:'weights.bin',size:4,algorithm:'sha256',digest:createHash('sha256').update('good').digest('hex')}]};
+    models.catalog=()=>[definition];
+    const directory=models.directory(definition.id);await fs.mkdir(directory,{recursive:true});await fs.writeFile(path.join(directory,'weights.bin'),'good');await models.verify(definition.id);
+    await fs.writeFile(path.join(source,'weights.bin'),'evil');
+    await assert.rejects(models.importDirectory(definition.id,source),/no supera SHA/);
+    assert.equal(await fs.readFile(path.join(directory,'weights.bin'),'utf8'),'good');assert.equal(models.list()[0].verified,true);
+  } finally {repo.close();await fs.rm(root,{recursive:true,force:true});}
+});

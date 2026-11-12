@@ -1,0 +1,18 @@
+Harrier OSS v1 0.6B — MIT
+
+The upstream model card declares the model under the MIT license. Imago does not
+replace that notice with llama.cpp's copyright notice.
+
+Original model and license declaration:
+https://huggingface.co/microsoft/harrier-oss-v1-0.6b/tree/f9b9dc8d367d443f2479d27aa5d8d2850c0774ee
+
+GGUF conversion used by Imago:
+https://huggingface.co/mradermacher/harrier-oss-v1-0.6b-GGUF/tree/d79decec1ab9442e969e79804515b9c31683d30e
+
+File: harrier-oss-v1-0.6b.Q8_0.gguf
+Bytes: 639448320
+SHA-256: ba2c9408f82cfdb73aaf70aaea9f125f3fb24c5e76ce0efb469e1530e5ec53e4
+
+The pinned model repository does not include a separate LICENSE file. Consult the
+upstream model card and publisher's terms before downloading or redistributing.
+Model weights are not bundled with Imago.

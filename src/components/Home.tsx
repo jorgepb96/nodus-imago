@@ -15,6 +15,7 @@ import type { DatabaseSummary } from "../../shared/databases";
 import { Button } from "./ui";
 import { useT } from "../i18n";
 import { ImagoMark } from "./ImagoMark";
+import { useState } from "react";
 export function Home({
   status,
   databases,
@@ -34,6 +35,7 @@ export function Home({
   onSearch: () => void;
   onQueue: () => void;
 }) {
+  const [dismissed, setDismissed] = useState(() => { try { return localStorage.getItem("imago.onboarding.dismissed") === "1"; } catch { return false; } });
   const t = useT(),
     jobs = status?.jobs ?? [],
     live = jobs.filter((j) =>
@@ -56,6 +58,7 @@ export function Home({
           <p>{t("Organiza tus imágenes, describe tus fuentes y encuentra conexiones en una colección local.")}</p>
         </div>
       </section>
+      {!dismissed && status && !status.models.some(model => model.id === status.settings.embeddingModel && model.verified) && <section className="home-next onboarding-intro"><div><span className="home-section-label">{t("PREPARACIÓN OPCIONAL")}</span><h2>{t("Prepara la IA local sin Python")}</h2><p>{t("Consulta licencias, espacio y dependencias antes de descargar. Puedes empezar a catalogar y buscar literalmente sin modelos.")}</p></div><div className="row wrap"><Button primary onClick={onModels}>{t("Preparar búsqueda local")}</Button><Button onClick={() => { setDismissed(true); try { localStorage.setItem("imago.onboarding.dismissed", "1"); } catch {} }}>{t("Ahora no")}</Button></div></section>}
       <section className="home-next">
         <div>
           <span className="home-section-label">{t("SIGUIENTE PASO")}</span>

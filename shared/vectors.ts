@@ -3,7 +3,7 @@ export function normalizeVector(
   dimensions = vector.length,
 ): number[] {
   if (
-    ![256, 512, 768].includes(dimensions) ||
+    ![256, 512, 768, 1024].includes(dimensions) ||
     vector.length < dimensions ||
     !vector.every(Number.isFinite)
   )

@@ -24,6 +24,9 @@ import {
   parseClassification,
   parseDescription,
 } from "../../shared/visionOutput";
+import { OnnxHost } from "./onnxHost";
+import { HarrierHost } from "./harrier";
+import { ONNX_ID, HARRIER_ID, LEGACY_EMBEDDING_ID, HARRIER_IMAGE_PROMPT, embeddingBackendContract, embeddingDimensions } from "../../shared/embeddingBackends";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   es: "español",
@@ -50,6 +53,8 @@ function targetLanguage(value: string): string {
 
 export class Engine {
   llama: LlamaPool;
+  onnx = new OnnxHost();
+  harrier: HarrierHost;
   constructor(
     public repo: Repository,
     public models: Models,
@@ -62,12 +67,22 @@ export class Engine {
     },
   ) {
     this.llama = new LlamaPool(repo, models);
+    this.harrier = new HarrierHost(models);
   }
   close() {
     this.llama.close();
+    void this.onnx.close();
+    this.harrier.close();
   }
+  async resetRuntimes() {
+    await this.onnx.close(); this.harrier.close(); this.llama.close(); this.llama = new LlamaPool(this.repo, this.models);
+  }
+  dimensions() { const s = this.repo.getSettings(); return embeddingDimensions(s.embeddingModel, s.dimensions); }
   contract() {
-    const s = this.repo.getSettings(),
+    const s = this.repo.getSettings();
+    if (s.embeddingModel !== LEGACY_EMBEDDING_ID)
+      return createHash("sha256").update(embeddingBackendContract(s.embeddingModel, s.dimensions, this.models.get("lfm3-vl-2b").revision)).digest("hex");
+    const
       m = this.models.get("embeddinggemma2");
     return createHash("sha256")
       .update(
@@ -87,7 +102,8 @@ export class Engine {
       .digest("hex");
   }
   async probe() {
-    return this.host.request({ operation: "probe" });
+    const model = this.repo.getSettings().embeddingModel;
+    return { backend: model, pythonRequired: model === LEGACY_EMBEDDING_ID, integratedRuntime: model === ONNX_ID, available: this.models.available(model) };
   }
   ready(id: string) {
     if (!this.models.list().some((m) => m.id === id && m.verified))
@@ -97,8 +113,8 @@ export class Engine {
     inputs: { image?: string; text?: string; role?: string }[],
     signal?: AbortSignal,
   ): Promise<number[][]> {
-    this.ready("embeddinggemma2");
     const settings = this.repo.getSettings();
+    this.ready(settings.embeddingModel);
     const prepared = inputs.map((item) => ({ ...item }));
     const encode = async (index: number): Promise<any> => {
       if (index < prepared.length) {
@@ -113,6 +129,22 @@ export class Engine {
             },
           );
         return encode(index + 1);
+      }
+      if (settings.embeddingModel === ONNX_ID) return this.onnx.embed(this.models.directory(ONNX_ID), settings.profile === "light" ? 1 : settings.profile === "balanced" ? 2 : 4, settings.dimensions, prepared, signal);
+      if (settings.embeddingModel === HARRIER_ID) {
+        const results: number[][] = [];
+        for (const item of prepared) {
+          let text = item.text ?? "";
+          if (item.image) {
+            const hash = await hashFile(item.image), contract = this.contract();
+            const cached = this.repo.db.prepare("SELECT text FROM image_captions WHERE content_hash=? AND contract=?").get(hash, contract) as { text: string } | undefined;
+            if (!cached) this.ready("lfm3-vl-2b");
+            text = cached?.text ?? parseDescription(await this.llama.describe("lfm3-vl-2b", item.image, HARRIER_IMAGE_PROMPT, signal ?? new AbortController().signal));
+            if (!cached) this.repo.db.prepare("INSERT INTO image_captions VALUES(?,?,?) ON CONFLICT DO NOTHING").run(hash, contract, text);
+          }
+          results.push(await this.harrier.embed(text, item.role ?? "document", signal));
+        }
+        return results;
       }
       return this.host.request(
         {
@@ -135,13 +167,14 @@ export class Engine {
     if (!Array.isArray(vectors) || vectors.length !== inputs.length)
       throw new Error("El runtime devolvió un lote de vectores inválido.");
     return vectors.map((v) => {
-      if (!Array.isArray(v) || v.length !== settings.dimensions)
+      if (!Array.isArray(v) || v.length !== this.dimensions())
         throw new Error("Dimensiones de embedding incorrectas.");
-      return normalizeVector(v, settings.dimensions);
+      return normalizeVector(v, this.dimensions());
     });
   }
   enqueueIndex(databaseIds?: string[]) {
-    this.ready("embeddinggemma2");
+    this.ready(this.repo.getSettings().embeddingModel);
+    if (this.repo.getSettings().embeddingModel === HARRIER_ID) { this.ready("lfm3-vl-2b"); this.ready("llama-runtime"); }
     const params = databaseIds?.length ? databaseIds : [];
     if (databaseIds && !databaseIds.length)
       throw new Error("Selecciona alguna base de datos.");
@@ -162,9 +195,7 @@ export class Engine {
     signal: AbortSignal,
   ) {
     if (payload.contract !== this.contract())
-      throw new Error(
-        "La configuración del modelo ha cambiado. Crea una nueva tarea de indexación.",
-      );
+      throw Object.assign(new Error("La configuración del modelo ha cambiado. Crea una nueva tarea de indexación."), { fatal: true });
     const asset = this.repo.asset(payload.assets[index]);
     if ((await hashFile(asset.original_path)) !== asset.content_hash)
       throw new Error(
@@ -191,7 +222,7 @@ export class Engine {
   async search(input: SearchInput, queryImage?: string): Promise<Page> {
     if (!input.mode || input.mode === "literal")
       return this.repo.literal(input);
-    this.ready("embeddinggemma2");
+    this.ready(this.repo.getSettings().embeddingModel);
     if (!input.query?.trim() && !queryImage && !input.similarAssetId)
       throw new Error("Escribe una consulta o adjunta una imagen.");
     const settings = this.repo.getSettings(),
@@ -224,7 +255,7 @@ export class Engine {
     if (inputs.length) vectors.push(...(await this.embed(inputs)));
     const vector = normalizeVector(
       Array.from(
-        { length: settings.dimensions },
+        { length: this.dimensions() },
         (_, i) => vectors.reduce((sum, v) => sum + v[i], 0) / vectors.length,
       ),
     );

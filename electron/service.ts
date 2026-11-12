@@ -68,6 +68,12 @@ export class Service {
   }
   async run(command: string, input: any = undefined): Promise<any> {
     switch (command) {
+      case "inferenceDiagnostics": return { backend: this.repo.getSettings().embeddingModel, dimensions: this.engine.dimensions(), contract: this.engine.contract(), processId: this.repo.getSettings().embeddingModel === "harrier-oss-v1-0.6b-q8_0" ? this.engine.harrier.pid : this.engine.onnx.pid, serviceRss: process.memoryUsage().rss };
+      case "modelPreparation": return this.models.preparation(this.engine.contract());
+      case "prepareModels": {
+        const id = await this.models.enqueuePreparation(this.engine.contract()); this.queue.pump(); return id;
+      }
+      case "probeExperimentalPython": return this.host.request({ operation: "probe" });
       case "agreementRun":
         return this.research.run(input);
       case "agreementList":
@@ -373,6 +379,7 @@ export class Service {
         // in-flight requests to settle before replacing their runtime settings.
         await this.queue.task;
         this.host.close();
+        await this.engine.resetRuntimes();
         return this.repo.updateSettings(input);
       }
       case "jobs":
@@ -414,6 +421,7 @@ export class Service {
           throw new Error(
             "Pausa o cancela las tareas antes de importar un modelo.",
           );
+        await this.engine.resetRuntimes();
         return this.models.importDirectory(input.id, input.directory);
       case "verifyModel":
         if (this.unfinishedJobs())
@@ -421,6 +429,7 @@ export class Service {
             "Pausa o cancela las tareas antes de verificar un modelo.",
           );
         this.host.close();
+        await this.engine.resetRuntimes();
         return this.models.verify(input.id);
       case "deleteModel":
         if (this.unfinishedJobs())
@@ -428,10 +437,15 @@ export class Service {
             "Pausa o cancela las tareas antes de eliminar un modelo.",
           );
         this.host.close();
+        await this.engine.resetRuntimes();
         await fs.rm(this.models.directory(input.id), {
           recursive: true,
           force: true,
         });
+        {
+          const model = this.models.get(input.id), parent = path.join(this.repo.root, "models", model.id), prefix = model.revision + ".previous-";
+          for (const name of await fs.readdir(parent).catch(() => [])) if (name.startsWith(prefix) && /^[a-f0-9-]{36}$/.test(name.slice(prefix.length))) await fs.rm(path.join(parent, name), { recursive: true, force: true });
+        }
         return;
       case "analyze": {
         const id = this.engine.enqueueAnalysis(input);

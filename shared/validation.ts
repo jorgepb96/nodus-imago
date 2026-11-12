@@ -92,6 +92,7 @@ export const searchSchema = z
   .strict();
 export const settingsSchema = z
   .object({
+    embeddingModel: z.enum(["embeddinggemma2-onnx", "harrier-oss-v1-0.6b-q8_0", "embeddinggemma2"]),
     mode: z.enum(["light", "dark", "system"]),
     theme: z.string().max(100),
     accent: z.string().regex(/^#[0-9a-f]{6}$/i),
@@ -129,6 +130,10 @@ export const settingsSchema = z
   })
   .strict();
 export const schemas: Record<string, z.ZodTypeAny> = {
+  inferenceDiagnostics: z.undefined(),
+  modelPreparation: z.undefined(),
+  prepareModels: z.object({ consent: z.literal(true) }).strict(),
+  probeExperimentalPython: z.undefined(),
   openExternalLink: z
     .object({
       url: z

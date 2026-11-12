@@ -46,7 +46,7 @@ export function QueuePopover({
   }, [onClose]);
   const filtered = jobs.filter(
       (j) =>
-        (filter === "all" || j.kind === filter) &&
+        (filter === "all" || (j.kind === filter || (filter === "download" && j.kind === "prepare"))) &&
         (history || !["completed", "cancelled"].includes(j.state)),
     ),
     running = jobs.filter((j) => j.state === "running").length;
@@ -122,7 +122,7 @@ export function QueuePopover({
               {
                 jobs.filter(
                   (j) =>
-                    (id === "all" || j.kind === id) &&
+                    (id === "all" || (j.kind === id || (id === "download" && j.kind === "prepare"))) &&
                     (history ||
                       !["completed", "cancelled"].includes(j.state)),
                 ).length

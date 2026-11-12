@@ -79,6 +79,7 @@ async function waitRunning(id: string) {
 try {
   service.repo.updateSettings({
     python: path.resolve(".venv/bin/python"),
+    embeddingModel: "embeddinggemma2",
     device: "cpu",
     profile: "balanced",
     parallelJobs: 2,

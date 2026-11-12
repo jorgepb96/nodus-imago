@@ -43,6 +43,7 @@ import {
   propertyChoices,
 } from "./viewQuery";
 import { settingsSchema } from "../../shared/validation";
+import { defaultEmbeddingModel } from "../../shared/embeddingBackends";
 
 export const now = () => new Date().toISOString();
 const marks = (xs: unknown[]) => xs.map(() => "?").join(",");
@@ -858,6 +859,7 @@ export class Repository {
       .prepare("SELECT value FROM settings WHERE key='preferences'")
       .get() as { value: string } | undefined;
     return settingsSchema.parse({
+      embeddingModel: defaultEmbeddingModel(process.platform, process.arch),
       mode: "system",
       theme: "default",
       accent: "#6366f1",

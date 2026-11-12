@@ -40,14 +40,14 @@ export class JobQueue {
     pump = true,
   ) {
     const job = this.repo.db
-      .prepare("SELECT state,done,total FROM jobs WHERE id=?")
-      .get(id) as { state: string; done: number; total: number } | undefined;
+      .prepare("SELECT state,done,total,kind FROM jobs WHERE id=?")
+      .get(id) as { state: string; done: number; total: number; kind: string } | undefined;
     if (!job) throw new Error("Tarea no encontrada.");
     if (["completed", "cancelled"].includes(job.state)) return;
     if (
       action === "resume" &&
       job.state === "failed" &&
-      job.done === job.total
+      (job.done === job.total || ["prepare", "download"].includes(job.kind))
     ) {
       this.repo.db
         .prepare(
@@ -90,6 +90,7 @@ export class JobQueue {
       resources = new Set<string>();
     if (job.kind === "images") resources.add("image-import");
     if (job.kind === "download") resources.add("model:" + payload.id);
+    if (job.kind === "prepare") for (const step of payload.steps) resources.add("model:" + step.id);
     if (job.kind === "index") resources.add("python-inference");
     if (job.kind === "analyze")
       for (const item of payload.items) {
@@ -153,11 +154,15 @@ export class JobQueue {
             outcome = await this.engine.indexOne(payload, done, signal);
           else if (job.kind === "analyze")
             outcome = await this.engine.analyzeOne(payload, done, signal);
-          else if (job.kind === "download") {
+          else if (job.kind === "download" || job.kind === "prepare") {
+            const step = job.kind === "prepare" ? payload.steps[done] : { id: payload.id, fileIndex: done };
+            if (step.fileIndex === null) {
+              await this.models.verify(step.id);
+            } else {
             let last = 0;
             await this.models.downloadFile(
-              payload.id,
-              done,
+              step.id,
+              step.fileIndex,
               signal,
               (bytes, total) => {
                 if (Date.now() - last > 500) {
@@ -167,7 +172,7 @@ export class JobQueue {
                       "UPDATE jobs SET message=?,updated_at=? WHERE id=?",
                     )
                     .run(
-                      `${Math.round(bytes / 1e6)} / ${Math.round(total / 1e6)} MB`,
+                      `${this.models.get(step.id).label} · ${Math.round(bytes / 1e6)} / ${Math.round(total / 1e6)} MB`,
                       now(),
                       job.id,
                     );
@@ -175,11 +180,12 @@ export class JobQueue {
                 }
               },
             );
+            }
           } else throw new Error("Tipo de tarea desconocido.");
           if (outcome === "skipped") skipped++;
         } catch (error) {
           if (signal.aborted) break;
-          if ((error as { fatal?: boolean })?.fatal || job.kind === "download")
+          if ((error as { fatal?: boolean })?.fatal || ["download", "prepare"].includes(job.kind))
             throw error;
           failed++;
           const message =

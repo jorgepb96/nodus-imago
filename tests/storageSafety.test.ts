@@ -72,3 +72,15 @@ test("external documents allow HTTPS only, without credentials, controls or rend
     }),
   );
 });
+
+test('model preparation rejects insufficient disk before creating any jobs or starting downloads', async context => {
+  const { Repository } = await import('../electron/db/repository');
+  const { Models } = await import('../electron/ai/models');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(),'imago-model-disk-')), repo = new Repository(root);
+  try {
+    const models = new Models(repo);
+    const stat = context.mock.method(fs,'statfs',async()=>({bsize:1,bavail:0}));
+    await assert.rejects(models.enqueuePreparation('fixture-active-contract'),/Espacio insuficiente/);
+    assert.equal(repo.jobs().length,0);stat.mock.restore();
+  } finally { context.mock.restoreAll();repo.close();await fs.rm(root,{recursive:true,force:true}); }
+});

@@ -20,6 +20,7 @@ test("retrieval scopes, structured filters, temporary image queries and dimensio
     engine = new Engine(repo, models, host),
     images = new Images(repo);
   try {
+    repo.updateSettings({ embeddingModel: "embeddinggemma2" });
     const a = repo.importCsv(
         "A",
         ["ID", "Año"],

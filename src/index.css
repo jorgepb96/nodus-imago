@@ -4114,3 +4114,14 @@ thead th:last-child {
   color: var(--text);
   background: var(--hover);
 }
+
+.model-preparation { display: flex; flex-direction: column; gap: 16px; }
+.model-preparation > .criteria-select { max-width: 600px; }
+.preparation-dependencies { list-style: none; padding: 0; margin: 0; }
+.preparation-dependencies li { display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); padding: 14px 0; }
+.preparation-dependencies li > div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.preparation-dependencies small { overflow-wrap: anywhere; color: var(--muted); }
+.preparation-ready { display: flex; align-items: center; gap: 10px; color: var(--accent-ink); }
+.model-preparation .mono { overflow-wrap: anywhere; }
+.license-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
+.onboarding-intro { border-color: var(--accent); }

@@ -10,6 +10,7 @@ import type { CsvImportPlanData } from "./databaseCsv";
 import type { ApiProfile, ApiProvider, ModelChoice } from "./aiConfig";
 import type { GazetteerPlace } from "./places";
 import type { DatabaseLocationValue } from "./databaseProperties";
+import type { ModelPreparation } from "./modelPreparation";
 import type {
   AgreementInput,
   AgreementResult,
@@ -172,6 +173,9 @@ export type Provenance = {
   createdAt: string;
 };
 export type ModelInfo = {
+  available?: boolean;
+  unavailableReason?: string;
+  experimental?: boolean;
   id: string;
   label: string;
   task: "embedding" | "vision" | "runtime";
@@ -186,6 +190,7 @@ export type ModelInfo = {
   bytes: number;
 };
 export type Settings = {
+  embeddingModel: string;
   mode: "light" | "dark" | "system";
   theme: string;
   accent: string;
@@ -219,6 +224,9 @@ export type Status = {
 };
 export type SavedSearch = { id: string; name: string; input: SearchInput };
 export type Commands = {
+  inferenceDiagnostics: { input: void; result: { backend: string; dimensions: number; contract: string; processId: number | null; serviceRss: number } };
+  modelPreparation: { input: void; result: ModelPreparation };
+  prepareModels: { input: { consent: true }; result: string | null };
   openExternalLink: { input: { url: string }; result: void };
   agreementRun: { input: AgreementInput; result: AgreementResult };
   agreementList: {
@@ -375,7 +383,7 @@ export type Commands = {
       notices: string[];
     } | null;
   };
-  probeRuntime: {
+  probeExperimentalPython: {
     input: void;
     result: {
       torch: string;
@@ -385,6 +393,7 @@ export type Commands = {
       pillow: string;
     };
   };
+  probeRuntime: { input: void; result: { backend: string; pythonRequired: boolean; integratedRuntime: boolean; available: boolean } };
   updateSettings: { input: Partial<Settings>; result: Settings };
   jobs: { input: void; result: Job[] };
   controlJob: {

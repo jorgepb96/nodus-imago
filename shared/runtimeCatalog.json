@@ -5,7 +5,7 @@
     "arch": "arm64",
     "repository": "ggml-org/llama.cpp",
     "revision": "b11981",
-    "label": "Motor de visi\u00f3n local \u00b7 llama.cpp",
+    "label": "Motor de visión local · llama.cpp",
     "task": "runtime",
     "license": "MIT",
     "files": [
@@ -24,7 +24,7 @@
     "arch": "x64",
     "repository": "ggml-org/llama.cpp",
     "revision": "b11981",
-    "label": "Motor de visi\u00f3n local \u00b7 llama.cpp",
+    "label": "Motor de visión local · llama.cpp",
     "task": "runtime",
     "license": "MIT",
     "files": [
@@ -43,7 +43,7 @@
     "arch": "x64",
     "repository": "ggml-org/llama.cpp",
     "revision": "b11981",
-    "label": "Motor de visi\u00f3n local \u00b7 llama.cpp",
+    "label": "Motor de visión local · llama.cpp",
     "task": "runtime",
     "license": "MIT",
     "files": [
@@ -62,7 +62,7 @@
     "arch": "x64",
     "repository": "ggml-org/llama.cpp",
     "revision": "b11981",
-    "label": "Motor de visi\u00f3n local \u00b7 llama.cpp",
+    "label": "Motor de visión local · llama.cpp",
     "task": "runtime",
     "license": "MIT",
     "files": [
@@ -72,6 +72,26 @@
         "size": 22691734,
         "algorithm": "sha256",
         "digest": "78986f25ddf08ba9b2d81b53ab6a6d68ac9548ad8022c19df75920a55f6d84ac"
+      }
+    ]
+  },
+  {
+    "id": "llama-runtime",
+    "platform": "linux",
+    "arch": "arm64",
+    "backend": "cpu",
+    "repository": "ggml-org/llama.cpp",
+    "revision": "b11981",
+    "label": "Motor local · llama.cpp CPU",
+    "task": "runtime",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "llama-b11981-bin-ubuntu-arm64.tar.gz",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11981/llama-b11981-bin-ubuntu-arm64.tar.gz",
+        "size": 18428400,
+        "algorithm": "sha256",
+        "digest": "0ac963f7749054f1f668b2040f52f922a8a9b34cacac34f877878639ce709d5f"
       }
     ]
   }

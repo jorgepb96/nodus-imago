@@ -1,3 +1,4 @@
+import { ModelPreparation } from "./ModelPreparation";
 import { useState, useEffect } from "react";
 import {
   Download,
@@ -302,19 +303,8 @@ export function Settings({
               Las bases de datos y la búsqueda literal funcionan sin modelos.
               Las descargas solo comienzan al pulsar Descargar.
             </p>
-            <div className="notice">
-              <Cpu size={18} />
-              <div>
-                <strong>{t("Runtime local · Python")}</strong>
-                <p>
-                  EmbeddingGemma 2 requiere el entorno Python descrito en el
-                  README. LFM3 usa el motor llama.cpp descargable. Ambos se han
-                  validado con pesos reales en macOS ARM64/CPU; las demás
-                  plataformas dependen de sus binarios y no se presuponen.
-                </p>
-              </div>
-            </div>
-            {status.models.map((m) => (
+            <ModelPreparation status={status} perform={perform} onChanged={onChanged}/>
+            {status.models.filter(m => !m.experimental || m.id === s.embeddingModel || m.id === s.visionModel || m.id === s.descriptionModel.model || m.id === s.classificationModel.model).map((m) => (
               <article className="model-card" key={m.id}>
                 <div className="row">
                   <div className="model-icon">
@@ -328,7 +318,7 @@ export function Settings({
                     <h3>{m.label}</h3>
                     <span className="muted">
                       {m.task === "embedding"
-                        ? t("Búsqueda multimodal · 440 M activos")
+                        ? t(m.id === "harrier-oss-v1-0.6b-q8_0" ? "Embeddings textuales · 0,6B" : "Embeddings de texto e imagen")
                         : m.task === "runtime"
                           ? "Motor nativo de LFM3 · CPU / Metal"
                           : "Descripción y clasificación"}{" "}
@@ -350,6 +340,8 @@ export function Settings({
                   <span>
                     {t("Tamaño de descarga")}: {m.estimatedGB.toFixed(2)} GB
                   </span>
+                  {m.unavailableReason && <span role="status">{t(m.unavailableReason)}</span>}
+                  {m.experimental && <span>{t("Experimental · requiere Python opcional")}</span>}
                   <span>{m.repository}</span>
                   <span className="mono">{m.revision.slice(0, 12)}</span>
                 </div>
@@ -357,8 +349,10 @@ export function Settings({
                   {!m.installed && (
                     <Button
                       primary
+                      disabled={m.available === false}
                       onClick={() =>
                         void perform(async () => {
+                          if (!window.confirm(`${m.label} · ${m.estimatedGB.toFixed(3)} GB · ${m.license}\n${status.root}/models\n${t("¿Autorizar esta descarga?")}`)) return;
                           await window.imago.call("downloadModel", {
                             id: m.id,
                           });
@@ -767,6 +761,7 @@ export function Settings({
               <strong>{t("Dimensiones")}</strong>
               <select
                 value={s.dimensions}
+                disabled={s.embeddingModel === "harrier-oss-v1-0.6b-q8_0"}
                 onChange={(e) =>
                   update({
                     dimensions: Number(e.target.value) as 256 | 512 | 768,
@@ -813,7 +808,7 @@ export function Settings({
                   onClick={() =>
                     void perform(async () => {
                       await window.imago.call("updateSettings", { python });
-                      const r = await window.imago.call("probeRuntime");
+                      const r = await window.imago.call("probeExperimentalPython");
                       notify(
                         `Python listo · torch ${r.torch} · torchvision ${r.torchvision} · transformers ${r.transformers} · sentence-transformers ${r.sentence_transformers} · Pillow ${r.pillow}`,
                       );

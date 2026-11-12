@@ -37,3 +37,7 @@ La integración posterior de lugares se consultó en la revisión **db026617457e
 - Motor local de Nodus: separación modelo/proyector y runtimes por plataforma. La revisión ONNX de EmbeddingGemma que usa Nodus es textual; **no se anuncia como multimodal en Imago**. El backend visual emplea la implementación oficial sin conversión de pesos.
 
 © Jorge Pérez Burgueño. Todos los módulos reutilizados de Nodus mantienen **AGPL-3.0-only**. Los encabezados de los módulos y la licencia raíz conservan esta atribución.
+
+## Native embeddings (implementation v1)
+
+Reference checkout of Nodus Research: `db0266174`, read-only. `shared/embeddingContract.ts` and `shared/embeddingGemma2.ts` retain its canonical contract, task prefixes and reduction/normalization helpers. The ONNX model and runtime versions follow `shared/localAiModels.ts`, `shared/embeddingGemma2.ts` and the Nodus EmbeddingGemma worker. Imago additionally loads the official vision encoder from the same pinned ONNX revision; it does not claim Nodus's text-only profile has image capabilities. Harrier uses Nodus's exact web_search_query instruction, last pooling, 8192 context and 1024 dimensions. Imago's local-image-caption adaptation gets a separate contract containing LFM3 revision, preprocessing and the fixed indexing prompt.

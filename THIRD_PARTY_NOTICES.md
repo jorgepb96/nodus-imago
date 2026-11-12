@@ -29,3 +29,11 @@ El mapa usa Leaflet 1.9.4 (BSD-2-Clause, incluido en el inventario de biblioteca
 - El adaptador Python usa PyTorch (BSD-3-Clause), torchvision (BSD-3-Clause), Transformers y Sentence Transformers (Apache-2.0), Pillow (HPND) y Accelerate (Apache-2.0). Es un entorno opcional instalado aparte; consulta sus distribuciones para los avisos transitivos. torchvision es necesario para el procesador visual de EmbeddingGemma 2. SmolVLM2 requiere además num2words (LGPL) en el entorno Python opcional.
 
 Las revisiones y digests están en los catálogos del directorio `shared/`. Nunca se descarga ni ejecuta código remoto Python suministrado por un modelo. Las condiciones del proveedor de API corresponden al servicio elegido voluntariamente por el usuario.
+
+## Primary embedding runtime (v1 implementation; validation pending)
+
+- Transformers.js 4.3.1 is installed as `@nodus/embeddinggemma-transformers`, the same npm alias/version used by Nodus Research. Apache-2.0. ONNX Runtime Node 1.30.0 supplies the CPU runtime under MIT; native binaries are bundled, model weights are not.
+- The embedding contract, task preparation and Matryoshka helpers are reused from Nodus Research (reference checkout `db0266174`), © Jorge Pérez Burgueño, AGPL-3.0-only. Imago's multimodal and Harrier-caption contracts are explicitly separate from Nodus text profiles and historical PyTorch vectors.
+- EmbeddingGemma 2 ONNX: `onnx-community/embeddinggemma-2-ONNX`, revision `daa72c51243991dfcaf9f9137d2c573d8f7790c0`; Apache-2.0 declaration and upstream notice in `legal/EMBEDDINGGEMMA_2_NOTICE.md`.
+- Harrier OSS v1 0.6B Q8_0: GGUF conversion revision `d79decec1ab9442e969e79804515b9c31683d30e`; upstream model declares MIT. `legal/MIT-harrier.txt` records the actual model-card provenance and the absence of a separate license file in that pinned upstream card, rather than substituting llama.cpp's copyright notice.
+- llama.cpp Linux ARM64 CPU archive: official `b11981` release. Source, exact bytes and SHA-256 are in `shared/runtimeCatalog.json`. No Windows ARM target is added.

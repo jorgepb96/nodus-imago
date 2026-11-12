@@ -21,6 +21,7 @@ export const BACKUP_TABLES = [
   "jobs",
   "job_errors",
   "embeddings",
+  "image_captions",
   "proposals",
   "history",
   "settings",
@@ -206,6 +207,7 @@ export async function restoreBackup(
           "La colección ha cambiado durante la restauración; no se ha sustituido ningún dato.",
         );
       repo.db.prepare("DELETE FROM embeddings").run();
+      repo.db.prepare("DELETE FROM image_captions").run();
       repo.db.prepare("DELETE FROM saved_searches").run();
       repo.db.prepare("DELETE FROM agreement_experiments").run();
       repo.db.prepare("DELETE FROM history").run();
@@ -215,7 +217,7 @@ export async function restoreBackup(
         if (table === "settings") continue;
         // Older v1 backups predate the optional research snapshots table.
         if (
-          table === "agreement_experiments" &&
+          ["agreement_experiments", "image_captions"].includes(table) &&
           !snapshot!
             .prepare(
               "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
