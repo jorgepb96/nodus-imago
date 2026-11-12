@@ -4125,3 +4125,10 @@ thead th:last-child {
 .model-preparation .mono { overflow-wrap: anywhere; }
 .license-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
 .onboarding-intro { border-color: var(--accent); }
+
+.wysiwyg-document { min-height: 100px; padding: 12px; outline: none; line-height: 1.65; overflow-wrap: anywhere; }
+.wysiwyg-document p { margin: .35em 0; }
+.wysiwyg-document ul, .wysiwyg-document ol { padding-left: 1.6rem; }
+.wysiwyg-document blockquote { border-left: 3px solid var(--accent, #5748ef); padding-left: 12px; margin-left: 0; }
+.wysiwyg-document pre { white-space: pre-wrap; background: var(--surface); padding: 12px; border-radius: 8px; }
+.markdown-toolbar [aria-pressed="true"] { background: #eeedff; color: #5145ed; }

@@ -8,6 +8,7 @@ import { decodeDatabaseDate } from "../../shared/databaseProperties";
 import type { DatabaseColumn } from "../../shared/databases";
 import { useT } from "../i18n";
 import { MarkdownView } from "./MarkdownView";
+import { RichTextEditor } from "./RichTextEditor";
 import { LocationCell } from "./LocationCell";
 export function Cell({
   column,
@@ -145,6 +146,7 @@ export function Cell({
         compact={compact}
       />
     );
+  if (!compact && column.type === "rich_text") return <RichTextEditor name={column.name} value={value} onSave={onSave}/>;
   const displayed = draft;
   const props = {
     className: "cell-input",
