@@ -1,58 +1,51 @@
 name: Desktop validation
-on:
-  push:
-  pull_request:
-  workflow_dispatch:
+on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   desktop:
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            target: mac
-            arch: arm64
-          - os: macos-15-intel
-            target: mac
-            arch: x64
-          - os: windows-latest
-            target: win
-            arch: x64
-          - os: ubuntu-24.04
-            target: linux
-            arch: x64
+          - {os: macos-latest, target: mac, arch: arm64}
+          - {os: macos-15-intel, target: mac, arch: x64}
+          - {os: windows-latest, target: win, arch: x64}
+          - {os: ubuntu-22.04, target: linux, arch: x64}
+          - {os: ubuntu-24.04-arm, target: linux, arch: arm64}
     runs-on: ${{ matrix.os }}
     env:
-      CSC_IDENTITY_AUTO_DISCOVERY: false
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ONNXRUNTIME_NODE_INSTALL: skip
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
-      - if: runner.os != 'Linux'
-        run: npm run test:e2e
+        with: {node-version: 24, cache: npm}
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y rpm xvfb libnspr4 libnss3 libgtk-3-0t64 libgbm1 libasound2t64 libxss1 libxtst6 libatspi2.0-0 libx11-xcb1 libxdamage1 libxrandr2
-      - if: runner.os == 'Linux'
-        run: xvfb-run -a env IMAGO_E2E_NO_SANDBOX=1 npm run test:e2e
+          sudo apt-get install -y rpm xvfb libnspr4 libnss3 libgtk-3-0 libgbm1 libasound2 libxss1 libxtst6 libatspi2.0-0 libx11-xcb1 libxdamage1 libxrandr2
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:agreement:reference
+      - run: npm run test:desktop:all
       - run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --config build/electron-builder.cjs --publish never
-      - if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $env:IMAGO_E2E_EXECUTABLE = (Resolve-Path 'release/win-unpacked/Nodus Imago.exe').Path
-          npm run test:e2e
+      - name: Install and exercise current packages
+        run: node scripts/packaged-e2e.mjs
+      - run: node scripts/artifact-manifest.mjs release
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: nodus-imago-${{ matrix.target }}-${{ matrix.arch }}
+          name: unsigned-test-${{ matrix.target }}-${{ matrix.arch }}-${{ github.sha }}
+          if-no-files-found: warn
           path: |
             release/*.dmg
             release/*.zip
@@ -60,4 +53,40 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.rpm
+            release/*manifest*.json
+            release/SHA256SUMS
+            test-results/*.json
             test-results/*.png
+  native-ai:
+    name: Real CPU AI (${{ matrix.os }})
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel, windows-latest, ubuntu-22.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 24, cache: npm}
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnspr4 libnss3 libgtk-3-0 libgbm1 libasound2 libxss1 libxtst6 libatspi2.0-0 libx11-xcb1 libxdamage1 libxrandr2
+      - run: npm ci
+      - run: npm run build
+      # No weight cache: this job must exercise a genuinely clean first install.
+      - name: Clean profile, actual downloads and real CPU inference
+        run: node scripts/native-ai-ci.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-cpu-evidence-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            test-results/v1-*.json
+            test-results/v1-*.png
+          if-no-files-found: warn
