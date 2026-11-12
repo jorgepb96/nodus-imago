@@ -16,11 +16,11 @@ Encargo vigente: misma carpeta y rama, sin borrar historial, modelos, entornos, 
 - Mensajes, traducciones y procedencia implementados; comprobación local de traducciones correcta.
 - E2E limpio de preparación real y fallos (cancelación, corrupción, red, espacio); paridad ONNX/PyTorch y mediciones Harrier.
 - CI en macos-latest ARM64, macos-15-intel, windows-latest x64, ubuntu-22.04 x64 y ubuntu-24.04-arm ARM64. Ejecutables empaquetados y artefactos de prueba actuales; sin release ni firma.
-- Publicar la rama actual conservando ambos historiales. El remoto no está vacío: main contiene un commit inicial b567918, no ancestro del historial local. No sobrescribir main ni forzar pushes.
+- Publicar el historial actual sin force-push. Comprobación tras fetch: main inicial b567918 SÍ es ancestro del historial local; basta un fast-forward. Se corrige la sospecha previa de historiales no relacionados.
 
 ## Fase 2, en commits separados
 
-Implementados en commits separados: editor visual Tiptap con historial/tablas/listas y modo Markdown opcional; árbol persistente de bloques y original importado inmutable; rollups vivos y detección de ciclos; automatizaciones opt-in, outbox duradero, acciones atómicas e historial. Las reglas de copias restauradas quedan desactivadas para exigir nueva activación. Suite local: 100 pruebas. Recorrido nativo `test-results/phase2-e2e.json` correcto en ARM64.
+Implementados en commits separados: editor visual Tiptap con historial/tablas/listas y modo Markdown opcional; árbol persistente de bloques y original importado inmutable; rollups vivos y detección de ciclos; automatizaciones opt-in, outbox duradero, acciones atómicas e historial. Las reglas de copias restauradas quedan desactivadas para exigir nueva activación. Suite local: 101 pruebas. Recorrido nativo `test-results/phase2-e2e.json` correcto en ARM64.
 
 ## Cierre obligatorio
 

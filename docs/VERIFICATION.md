@@ -2,11 +2,13 @@
 
 ## Validación conjunta iniciada el 13 de noviembre de 2026
 
-- `npm run verify`: 100/100, typecheck, ESLint y build correctos (`test-results/v1-final-verify.log`). Se corrigieron dos errores de tipos y el acceso a ref durante render antes de obtener este resultado.
+- `npm run verify`: 101/101, typecheck, ESLint y build correctos (`test-results/v1-final-verify.log`). Se corrigieron dos errores de tipos y el acceso a ref durante render antes de obtener este resultado.
 - Recorridos general, auditoría de nueve grupos, lugares, mapa, criterios y concordancia correctos (`v1-final-desktop.log`). El nuevo recorrido de fase 2 pasa por separado (`phase2-e2e.json`): formato visual, bloques anidados, regla creada/activada/ejecutada desde la interfaz y propagación de rollups. Se corrigió un selector del nuevo test, sin cambiar el comportamiento de la app.
 - ONNX Q8 real, perfil limpio `test-results/v1-onboarding-native-20261113`, Python configurado a una ruta inexistente: descarga explícita 541.790.748 bytes Apache-2.0, SHA, cancelación/reanudación, corrupción de igual tamaño y reparación, indexación, consulta textual/imagen, cierre y reapertura. Dos imágenes, 23.114 ms de indexación; máximo RSS observado 1.132.986.368 bytes en 23 muestras de un segundo. No es un benchmark de calidad ni un pico exhaustivo (`v1-onboarding-e2e.json`).
 - Referencia estadística externa: 180 casos, 17.010 comparaciones, tolerancia 1e-9, correcta (`v1-final-reference.log`).
-- Pendiente al registrar esta nota: paridad ONNX/PyTorch completa, paquetes actuales, IA x64 y cinco runners. Los resultados nuevos prevalecen sobre declaraciones históricas de compatibilidad.
+- Paridad real ONNX Q8/PyTorch FP32: cinco entradas (tres textos/dos imágenes), dimensiones 256/512/768, cosenos 0,987721–0,999984, normalización dentro de 1e-5 y recuperación propia de las dos imágenes correcta (`v1-onnx-parity.json`). Es una prueba de paridad pequeña, no un benchmark de calidad documental.
+- LFM3 real en CPU sin Python: dos descripciones, propuestas y aceptación explícita correctas; 8.189 ms, consulta ONNX posterior 1.440 ms (`v1-native-ai-e2e.json`). Se corrigió una aserción del test que comparaba el identificador LFM3 con minúsculas sin normalizarlo.
+- Pendiente al registrar esta nota: paquetes actuales, IA x64 y cinco runners. Los resultados nuevos prevalecen sobre declaraciones históricas de compatibilidad.
 
 ## Resultados finales de la revisión conjunta (12 de noviembre de 2026)
 
