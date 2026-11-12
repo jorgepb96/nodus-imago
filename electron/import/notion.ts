@@ -130,6 +130,11 @@ export async function importNotion(
       const pageRows = repo.db
         .prepare("SELECT id FROM db_rows WHERE database_id=? ORDER BY position")
         .all(pageDb.database.id) as { id: string }[];
+      const contentColumn=pageDb.columns.find(c=>c.type==='rich_text')!;
+      repo.db.transaction(()=>pages.forEach((page,index)=>{
+        // Keep the original export even after visual edits change its blocks.
+        repo.db.prepare('UPDATE page_documents SET imported_markdown=? WHERE row_id=? AND column_id=?').run(page.text,pageRows[index].id,contentColumn.id);
+      }))();
       // Notion exports a page hierarchy as folders + Markdown files. Preserve
       // that parent/child relationship as a relation column, while keeping the
       // original folder path as a plain text column.

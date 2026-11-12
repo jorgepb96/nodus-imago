@@ -44,6 +44,7 @@ import {
 } from "./viewQuery";
 import { settingsSchema } from "../../shared/validation";
 import { defaultEmbeddingModel } from "../../shared/embeddingBackends";
+import {markdownBlocks, type PageDocument} from '../../shared/pageBlocks';
 
 export const now = () => new Date().toISOString();
 const marks = (xs: unknown[]) => xs.map(() => "?").join(",");
@@ -349,6 +350,10 @@ export class Repository {
     value: string | null,
     type: DatabaseColumnType,
   ) {
+    if(type==='rich_text') {
+      if(value==null)this.db.prepare('DELETE FROM page_documents WHERE row_id=? AND column_id=?').run(rowId,columnId);
+      else this.db.prepare('INSERT INTO page_documents(row_id,column_id,format,source_markdown,tree_json) VALUES(?,?,?,?,?) ON CONFLICT(row_id,column_id) DO UPDATE SET source_markdown=excluded.source_markdown,tree_json=excluded.tree_json').run(rowId,columnId,'imago.blocks/1',value,JSON.stringify(markdownBlocks(value)));
+    }
     if (value == null)
       this.db
         .prepare("DELETE FROM db_cells WHERE row_id=? AND column_id=?")
@@ -464,6 +469,13 @@ export class Repository {
       this.recompute(row.databaseId);
       this.indexRow(rowId);
     })();
+  }
+  pageDocument(rowId:string,columnId:string):PageDocument {
+    const row=this.getRow(rowId),column=this.column(columnId);
+    if(column.databaseId!==row.databaseId||column.type!=='rich_text')throw Error('Documento incompatible.');
+    const saved=this.db.prepare('SELECT source_markdown,imported_markdown,tree_json FROM page_documents WHERE row_id=? AND column_id=?').get(rowId,columnId) as any;
+    const sourceMarkdown=row.cells[columnId]??'';
+    return {format:'imago.blocks/1',sourceMarkdown,importedMarkdown:saved?.imported_markdown??null,blocks:saved&&saved.source_markdown===sourceMarkdown?JSON.parse(saved.tree_json):markdownBlocks(sourceMarkdown)};
   }
   recompute(databaseId: string) {
     const columns = this.detail(databaseId).columns;

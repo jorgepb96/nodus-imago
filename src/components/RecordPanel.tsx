@@ -14,6 +14,7 @@ import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
 import type { Provenance, RecordRow } from "../../shared/imago";
 import { Button, Thumbnail } from "./ui";
 import { Cell } from "./Cell";
+import {BlockOutline} from './BlockOutline';
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
 function RelationEditor({
@@ -392,6 +393,7 @@ export function RecordPanel({
                         }
                       />
                     )}
+                    {c.type==='rich_text'&&<BlockOutline rowId={row.id} columnId={c.id}/>}
                   </div>
                 </div>
               ))}

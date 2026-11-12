@@ -16,6 +16,7 @@ export const BACKUP_TABLES = [
   "db_select_options",
   "db_rows",
   "db_cells",
+  "page_documents",
   "image_assets",
   "db_relations",
   "jobs",
@@ -217,7 +218,7 @@ export async function restoreBackup(
         if (table === "settings") continue;
         // Older v1 backups predate the optional research snapshots table.
         if (
-          ["agreement_experiments", "image_captions"].includes(table) &&
+          ["agreement_experiments", "image_captions", "page_documents"].includes(table) &&
           !snapshot!
             .prepare(
               "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",

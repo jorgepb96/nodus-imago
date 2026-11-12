@@ -224,6 +224,7 @@ export type Status = {
 };
 export type SavedSearch = { id: string; name: string; input: SearchInput };
 export type Commands = {
+  pageDocument:{input:{rowId:string;columnId:string};result:import('./pageBlocks').PageDocument};
   inferenceDiagnostics: { input: void; result: { backend: string; dimensions: number; contract: string; processId: number | null; serviceRss: number } };
   modelPreparation: { input: void; result: ModelPreparation };
   prepareModels: { input: { consent: true }; result: string | null };

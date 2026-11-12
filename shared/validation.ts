@@ -213,6 +213,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   renameDatabase: z.object({ id, name }).strict(),
   deleteDatabase: z.object({ id }).strict(),
   detail: z.object({ id }).strict(),
+  pageDocument:z.object({rowId:id,columnId:id}).strict(),
   addColumn: z
     .object({
       databaseId: id,

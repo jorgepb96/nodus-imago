@@ -142,6 +142,7 @@ export class Service {
       }
       case "detail":
         return this.repo.detail(input.id);
+      case 'pageDocument':return this.repo.pageDocument(input.rowId,input.columnId);
       case "addColumn":
         return this.repo.addColumn(
           input.databaseId,
