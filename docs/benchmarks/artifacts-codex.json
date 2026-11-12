@@ -12,9 +12,9 @@
     },
     {
       "file": "release/Nodus-Imago-0.1.0-arm64.zip",
-      "bytes": 146898599,
-      "sha256": "b63471e60754fed5b400db351fff47badfeae839c816c6472fd00dd1f6ad69f1",
-      "notes": "Incluye selector local GeoNames y vista Mapa de todos los registros por base de datos."
+      "bytes": 146960174,
+      "sha256": "f45e67c917a29fd801001d9634e69a61b4ad4529f1c921863643de5dbc55c0d1",
+      "notes": "Reconstruido con el árbol final del 12 de noviembre de 2026 (filtros/ordenamientos, mapa, lugares y concordancia)."
     },
     {
       "file": "release/Nodus-Imago-0.1.0-x64.dmg",
@@ -24,9 +24,9 @@
     },
     {
       "file": "release/Nodus-Imago-0.1.0-x64.zip",
-      "bytes": 151851622,
-      "sha256": "f443aa1e9f15d99252415071f831a153495132eeabef75e1f37aa71e7890464d",
-      "notes": "Incluye selector local GeoNames y vista Mapa de todos los registros por base de datos."
+      "bytes": 151913194,
+      "sha256": "3c55f6a61e6ef147ac2ff89dcc82209fa7341ff52297b310232dbe723f3679be",
+      "notes": "Reconstruido con el árbol final del 12 de noviembre de 2026 (filtros/ordenamientos, mapa, lugares y concordancia)."
     },
     {
       "file": "release/Nodus-Imago-0.1.0-arm64.AppImage",
