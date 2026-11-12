@@ -79,16 +79,23 @@ export class Models {
     for (const file of model.files) {
       const target = path.join(dir, file.path),
         stat = await fsp.lstat(target);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== file.size)
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== file.size) {
+        // A corrupted file with the official size would otherwise be skipped
+        // by downloadFile() on every retry. Remove only the invalid file so the
+        // user can download it again.
+        await fsp.rm(target, { force: true }).catch(() => {});
         throw new Error("Archivo de modelo inválido: " + file.path);
+      }
       const digest = createHash(
         file.algorithm === "sha256" ? "sha256" : "sha1",
       );
       if (file.algorithm === "git-sha1") digest.update(`blob ${stat.size}\0`);
       for await (const chunk of fs.createReadStream(target))
         digest.update(chunk);
-      if (digest.digest("hex") !== file.digest)
+      if (digest.digest("hex") !== file.digest) {
+        await fsp.rm(target, { force: true }).catch(() => {});
         throw new Error("Integridad incorrecta: " + file.path);
+      }
     }
     if (model.task === "runtime") await this.prepareRuntime();
     await fsp.writeFile(

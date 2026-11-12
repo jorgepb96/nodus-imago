@@ -39,3 +39,39 @@ __pycache__/
 # OS metadata
 Thumbs.db
 desktop.ini
+
+# Signing/credentials and private keys (never publish)
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.crt
+secrets/
+
+# Downloaded model weights and runtime archives
+*.gguf
+*.onnx
+*.safetensors
+*.pth
+*.pt
+*.ckpt
+*.mlmodel
+*.tflite
+models/
+runtime/models/
+
+# User backups and generated installers outside release/
+*.imago
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.exe
+*.msi
+*.blockmap
+
+# Local agent/tool state
+.codex/

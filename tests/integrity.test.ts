@@ -253,6 +253,10 @@ test("model integrity verifies actual bytes and rejects same-size tampering", as
     assert.equal(await models.verify("fixture"), true);
     await fs.writeFile(path.join(directory, "config.json"), '{"unit":2}');
     await assert.rejects(models.verify("fixture"), /Integridad/);
+    await assert.rejects(
+      fs.stat(path.join(directory, "config.json")),
+      /ENOENT/,
+    );
     assert.equal(models.list()[0].verified, false);
   } finally {
     repo.close();
