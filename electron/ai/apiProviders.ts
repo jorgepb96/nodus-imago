@@ -29,6 +29,10 @@ export class ApiProviders {
   constructor(
     public secrets: Secrets,
     public fetcher: typeof fetch = fetch,
+    public authorizeEndpoint?: (
+      provider: ApiProvider,
+      base: string,
+    ) => Promise<boolean>,
   ) {}
   keyStatus() {
     return {
@@ -49,6 +53,17 @@ export class ApiProviders {
     signal: AbortSignal,
   ) {
     const key = this.secrets.get(provider);
+    if (key) {
+      const official = PROVIDERS[provider].baseUrl;
+      const expected = official ? providerBase(provider, {}) : null;
+      if (
+        base !== expected &&
+        !(await this.authorizeEndpoint?.(provider, base))
+      )
+        throw new ApiFailure(
+          "Autoriza el destino personalizado antes de enviarle una clave guardada.",
+        );
+    }
     if (!key && !isLoopbackUrl(base))
       throw new ApiFailure("Configura la clave del proveedor en Ajustes.");
     const headers: Record<string, string> = {

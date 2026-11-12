@@ -140,3 +140,9 @@ Para ejecutar las pruebas sobre un binario, establecer `IMAGO_E2E_EXECUTABLE` a 
 - El modelo puede equivocarse sobre una imagen. El paso obligatorio de propuestas y revisión preserva la distinción entre una sugerencia de IA y una anotación confirmada.
 
 Las limitaciones anteriores impiden afirmar que **todo el objetivo original esté verificado al 100 %**. El cierre correcto se apoya en las pruebas ejecutadas y sus límites, no en esa garantía.
+
+## Fase 0 previa a la migración de IA
+
+Partiendo de `ce8f33a` limpio: suite inicial de 86 pruebas y nueva suite de **89/89**, typecheck, lint y build pasan. Las nuevas regresiones cubren espacio insuficiente, destino existente, esquema HTTPS, consentimiento del endpoint y recuperación de originales/runtime tras fallos. Pasan E2E general y nueve grupos de auditoría, ampliados con confirmación nativa ficticia de endpoint y apertura HTTPS interceptada. Logs: `test-results/v1-baseline-verify.log`, `v1-phase0-verify.log`, `v1-phase0-general.log`, `v1-phase0-audit.log`.
+
+Las pruebas de la arquitectura ONNX y de los cinco targets quedan para la pasada final solicitada por el usuario. No hay evidencia nueva de compatibilidad multiplataforma todavía.

@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
+import { externalHttpsUrl } from "../../shared/externalLinks";
 
 function safeHref(value: string): string | null {
   const href = value.trim();
-  return /^(?:https?:|mailto:)/i.test(href) ? href : null;
+  return externalHttpsUrl(href);
 }
 
 function inline(text: string, keyPrefix: string): ReactNode[] {
@@ -20,12 +21,20 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
     else if (token.startsWith("`"))
       nodes.push(<code key={key}>{token.slice(1, -1)}</code>);
     else if (token.startsWith("[")) {
-      const [, label, href] =
-        /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token) ?? [];
+      const [, label, href] = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token) ?? [];
       const safe = href ? safeHref(href) : null;
       nodes.push(
         safe ? (
-          <a key={key} href={safe} target="_blank" rel="noreferrer">
+          <a
+            key={key}
+            href={safe}
+            onClick={(event) => {
+              event.preventDefault();
+              void window.imago
+                .call("openExternalLink", { url: safe })
+                .catch(() => {});
+            }}
+          >
             {label}
           </a>
         ) : (
@@ -65,12 +74,19 @@ export function MarkdownView({ text }: { text: string }) {
       return;
     }
     flush();
-    if (!line.trim()) nodes.push(<div className="markdown-gap" key={`gap-${index}`} />);
+    if (!line.trim())
+      nodes.push(<div className="markdown-gap" key={`gap-${index}`} />);
     else if (heading) {
-      const Tag = (`h${heading[1].length + 2}` as "h3" | "h4" | "h5");
-      nodes.push(<Tag key={`h-${index}`}>{inline(heading[2], `h-${index}`)}</Tag>);
+      const Tag = `h${heading[1].length + 2}` as "h3" | "h4" | "h5";
+      nodes.push(
+        <Tag key={`h-${index}`}>{inline(heading[2], `h-${index}`)}</Tag>,
+      );
     } else nodes.push(<p key={`p-${index}`}>{inline(line, `p-${index}`)}</p>);
   });
   flush();
-  return <div className="markdown-view">{nodes.length ? nodes : <p className="muted">—</p>}</div>;
+  return (
+    <div className="markdown-view">
+      {nodes.length ? nodes : <p className="muted">—</p>}
+    </div>
+  );
 }

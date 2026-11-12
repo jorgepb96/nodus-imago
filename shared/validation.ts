@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isDatabaseColumnType } from "./databases";
 import { FILTER_LABELS } from "./viewCriteria";
+import { externalHttpsUrl } from "./externalLinks";
 import type { PropertyFilterGroup, PropertyFilterOp } from "./imago";
 const id = z.string().min(1).max(200);
 const name = z.string().trim().min(1).max(300);
@@ -128,6 +129,14 @@ export const settingsSchema = z
   })
   .strict();
 export const schemas: Record<string, z.ZodTypeAny> = {
+  openExternalLink: z
+    .object({
+      url: z
+        .string()
+        .max(4000)
+        .refine((value) => externalHttpsUrl(value) !== null),
+    })
+    .strict(),
   agreementRun: searchSchema
     .pick({ filters: true, filterLogic: true, filterGroups: true })
     .extend({

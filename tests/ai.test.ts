@@ -157,6 +157,68 @@ test("Nodus-compatible API vision messages use encrypted credentials and retain 
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+test("stored API keys require explicit authorization for a custom endpoint before any network request", async () => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), "imago-endpoint-trust-"),
+  );
+  try {
+    const secrets = new Secrets(root, encryption);
+    secrets.set("openai", "fixture-secret");
+    let requests = 0,
+      approvals = 0;
+    const fetcher = async () => {
+      requests++;
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "fixture" } }] }),
+      );
+    };
+    const input = {
+      choice: { provider: "openai" as const, model: "fixture" },
+      profiles: { openai: { baseUrl: "https://other.example/v1", models: [] } },
+      remoteEnabled: true,
+      prompt: "fixture",
+      system: "fixture",
+      images: [],
+    };
+    await assert.rejects(
+      new ApiProviders(secrets, fetcher).complete(
+        input,
+        new AbortController().signal,
+      ),
+      /Autoriza/,
+    );
+    assert.equal(requests, 0);
+    const providers = new ApiProviders(
+      secrets,
+      fetcher,
+      async (_provider, base) => {
+        approvals++;
+        return base === "https://other.example/v1";
+      },
+    );
+    assert.equal(
+      await providers.complete(input, new AbortController().signal),
+      "fixture",
+    );
+    assert.equal(requests, 1);
+    assert.equal(approvals, 1);
+    await assert.rejects(
+      providers.complete(
+        {
+          ...input,
+          profiles: {
+            openai: { baseUrl: "https://changed.example/v1", models: [] },
+          },
+        },
+        new AbortController().signal,
+      ),
+      /Autoriza/,
+    );
+    assert.equal(requests, 1);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 test("whole-column classification queues incrementally, validates taxonomy, protects human values and can undo accepted proposals", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-ai-")),
     repo = new Repository(path.join(root, "data"));

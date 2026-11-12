@@ -19,6 +19,8 @@ import { Secrets } from "./secrets/store";
 import { ApiProviders } from "./ai/apiProviders";
 import { Gazetteer } from "./geo/gazetteer";
 import { isMapTileRequest } from "./geo/mapRequests";
+import { externalHttpsUrl } from "../shared/externalLinks";
+import { PROVIDERS } from "../shared/aiConfig";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -130,7 +132,25 @@ app.whenReady().then(async () => {
     encrypt: (key) => safeStorage.encryptString(key),
     decrypt: (data) => safeStorage.decryptString(data),
   });
-  const providers = new ApiProviders(secrets),
+  const approvedEndpoints = new Set<string>();
+  const providers = new ApiProviders(secrets, fetch, async (provider, base) => {
+      const entry = provider + "|" + base;
+      if (approvedEndpoints.has(entry)) return true;
+      if (!window) return false;
+      const result = await dialog.showMessageBox(window, {
+        type: "question",
+        title: "Autorizar destino de la clave",
+        message: `${PROVIDERS[provider].label}: ${base}`,
+        detail:
+          "Este destino difiere del endpoint oficial. Se enviará la clave guardada a esta dirección. Autorízalo solo si reconoces el servidor. La autorización dura esta sesión.",
+        buttons: ["Cancelar", "Autorizar destino"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (result.response !== 1) return false;
+      approvedEndpoints.add(entry);
+      return true;
+    }),
     completionAborts = new Map<number, AbortController>();
   worker = new Worker(path.join(__dirname, "worker.cjs"), {
     workerData: {
@@ -307,6 +327,12 @@ app.whenReady().then(async () => {
       )
         throw new Error("Origen IPC no autorizado.");
       const safe = validateCommand(command, input);
+      if (command === "openExternalLink") {
+        const url = externalHttpsUrl((safe as { url: string }).url);
+        if (!url) throw new Error("Solo se permiten enlaces HTTPS válidos.");
+        await shell.openExternal(url);
+        return;
+      }
       if (command === "searchPlaces")
         return places.search((safe as { query: string }).query);
       if (command === "openMapAttribution") {

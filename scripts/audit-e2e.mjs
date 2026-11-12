@@ -595,6 +595,27 @@ try {
           path.join(root, "restored-profile", "secrets", "ai_key_custom.bin"),
         );
         assert.ok(!bytes.includes("audit-only-credential"));
+        await app.evaluate(({ dialog }) => {
+          global.__auditOriginalPrompt = dialog.showMessageBox;
+          global.__auditEndpointPrompts = [];
+          global.__auditEndpointResponse = 0;
+          dialog.showMessageBox = async (_window, options) => {
+            global.__auditEndpointPrompts.push(options);
+            return { response: global.__auditEndpointResponse };
+          };
+        });
+        await call("updateSettings", { apiProfiles: { custom: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, models: [] } } });
+        const beforeTrust = traffic.length;
+        await assert.rejects(call("listProviderModels", { provider: "custom" }), /Autoriza/);
+        assert.equal(traffic.length, beforeTrust);
+        await app.evaluate(() => { global.__auditEndpointResponse = 1; });
+        assert.ok((await call("listProviderModels", { provider: "custom" })).includes("audit-description"));
+        const prompts = await app.evaluate(({ dialog }) => {
+          dialog.showMessageBox = global.__auditOriginalPrompt;
+          return global.__auditEndpointPrompts;
+        });
+        assert.equal(prompts.length, 2);
+        assert.ok(prompts.every(prompt => prompt.defaultId === 0 && prompt.message.includes("127.0.0.1")));
         await call("clearApiKey", { provider: "custom" });
         assert.equal((await call("credentialsStatus")).providers.custom, false);
       } else {
@@ -749,7 +770,7 @@ try {
       await record.getByLabel("Revisado", { exact: true }).click();
       await record
         .getByLabel("Descripción", { exact: true })
-        .fill("**Anotación humana** de archivo.");
+        .fill("**Anotación humana** de archivo. [Fuente](https://example.org/source) [No abrir](javascript:alert)");
       await record
         .getByRole("button", { name: "Vista previa", exact: true })
         .click();
@@ -757,6 +778,18 @@ try {
         .locator(".markdown-view strong")
         .filter({ hasText: "Anotación humana" })
         .waitFor();
+      await app.evaluate(({ shell }) => {
+        global.__auditOriginalExternal = shell.openExternal;
+        global.__auditOpenedExternal = [];
+        shell.openExternal = async url => { global.__auditOpenedExternal.push(url); };
+      });
+      assert.equal(await record.locator(".markdown-view a").count(), 1);
+      await record.locator(".markdown-view").getByRole("link", { name: "Fuente", exact: true }).click();
+      await poll(async () => (await app.evaluate(() => global.__auditOpenedExternal)).length === 1);
+      assert.deepEqual(await app.evaluate(({ shell }) => {
+        shell.openExternal = global.__auditOriginalExternal;
+        return global.__auditOpenedExternal;
+      }), ["https://example.org/source"]);
       const relations = record
         .locator(".record-property")
         .filter({ hasText: "Relacionado" });
@@ -782,7 +815,7 @@ try {
       assert.equal(stored[fields.Revisado.id], "1");
       assert.equal(stored[fields.Referencia.id], "https://example.org/archive");
       assert.equal(JSON.parse(stored[fields.Lugar.id]).name, "Andalucía");
-      assert.equal(stored[description.id], "**Anotación humana** de archivo.");
+      assert.equal(stored[description.id], "**Anotación humana** de archivo. [Fuente](https://example.org/source) [No abrir](javascript:alert)");
       await page.screenshot({
         path: "test-results/codex-audit-record-editors.png",
       });

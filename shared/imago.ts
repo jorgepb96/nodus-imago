@@ -219,6 +219,7 @@ export type Status = {
 };
 export type SavedSearch = { id: string; name: string; input: SearchInput };
 export type Commands = {
+  openExternalLink: { input: { url: string }; result: void };
   agreementRun: { input: AgreementInput; result: AgreementResult };
   agreementList: {
     input: { databaseId: string };

@@ -103,3 +103,7 @@ node scripts/validate-models.mjs
 
 Entrega hallazgos P0/P1/P2 con archivo, líneas, evidencia reproducible y separación entre verificado y no verificado. No reescribas la implementación sin pedir confirmación. Comprueba que Windows sigue sin ejecutar, que Notion no reconstruye el árbol de bloques, que la vista Árbol solo cubre relaciones a sí mismas y que el editor es Markdown con vista previa, no WYSIWYG, y que HEIC sí extrae EXIF de contenedor. Si encuentras una contradicción en docs/STATUS.md, señálala.
 ```
+
+## Continuidad de implementación v1
+
+Se conserva el repositorio, rama `codex/imago-desktop`, historial local y artefactos previos. Base `ce8f33a`; fase 0 corregida y verificada con 89 pruebas, typecheck, lint, build y recorridos general/auditoría. Las correcciones previas de DeepSeek en filtros, Leaflet, modelos corruptos e ignore se conservan. La instrucción más reciente pide implementar lo pendiente y ejecutar las siguientes pruebas juntas al final. No ejecutar firma/notarización, APIs comerciales, CUDA ni corpus real; no publicar una release.

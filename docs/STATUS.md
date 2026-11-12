@@ -101,3 +101,9 @@ Medidas reales de referencia (Apple M2, 16 GB, CPU, 512 dimensiones, corpus de t
 - Se ha validado macOS ARM64, Linux ARM64 y Linux x64/CPU; EmbeddingGemma 2 también se probó en Metal/MPS con texto e imagen. No CUDA, hardware Intel nativo ni Windows nativo. SmolVLM2 256M y 500M se ejecutaron en CPU; la descripción en inglés fue correcta en ambos, pero la calidad en español de 500M no es fiable y no se ha medido. macOS x64 se ejecutó bajo Rosetta; Windows x64 se ejecutó solo bajo Wine 11 y su instalador no se ha probado. El motor llama.cpp solo se ha ejecutado en macOS ARM64.
 - La inferencia real se ha probado con tres imágenes de fixtures, no con un corpus fotográfico heterogéneo. No se han inventado métricas de precisión, sesgo o calidad.
 - LFM3 usa un pool persistente de `llama-mtmd-cli` en modo chat, con un máximo por perfil y cierre por inactividad. La validación mide dos celdas consecutivas en 12,0 s, pero no una columna completa de miles de celdas ni un corpus de 10.000 fotografías. El tope de 280 tokens visuales puede reducir detalles en imágenes muy densas.
+
+## Inicio de la primera versión sin Python obligatorio
+
+Base de trabajo `ce8f33a`, misma rama y carpeta. La fase 0 corrige runtime no atómico, originales huérfanos al fallar una restauración, preflight de ZIP, apertura HTTPS de Markdown y autorización de endpoints con claves. Suite anterior a la migración: 89/89, typecheck, lint, build, E2E general y auditoría pasan. Ver seguimiento en `AUDIT-2026-11-12.md`.
+
+Por nueva instrucción del usuario, las implementaciones restantes se acumulan antes de la siguiente pasada de pruebas. ONNX multimodal, alternativa Intel, onboarding, matriz de cinco runners y funcionalidades de fase 2 **no se consideran implementados ni verificados todavía**. Python sigue siendo necesario en la arquitectura actual hasta completar la migración. No se ha creado una release.
