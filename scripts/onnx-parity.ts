@@ -103,7 +103,36 @@ async function main() {
         assert.equal(nearest(legacy, query), query);
         assert.equal(nearest(onnx, query), query);
       }
+      const imageRanking = (vectors: number[][], query: number) =>
+        [3, 4]
+          .map((index) => ({
+            index,
+            score: vectors[query].reduce(
+              (sum, value, j) => sum + value * vectors[index][j],
+              0,
+            ),
+          }))
+          .sort((a, b) => b.score - a.score)
+          .map((item) => item.index);
+      const retrieval = [0, 2].map((query) => ({
+        query,
+        python: imageRanking(legacy, query),
+        onnx: imageRanking(onnx, query),
+      }));
+      for (const item of retrieval) {
+        assert.deepEqual(
+          item.onnx,
+          item.python,
+          "Cross-modal image ranking differs",
+        );
+        assert.equal(
+          item.onnx[0],
+          item.query === 0 ? 3 : 4,
+          "The semantic query must retrieve its relevant image",
+        );
+      }
       result.samples.push({
+        retrieval,
         dimensions,
         cosines,
         pythonMs,

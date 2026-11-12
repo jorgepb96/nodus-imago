@@ -1,6 +1,7 @@
 // Adapted from Nodus desktop targets; independent identifiers and resources.
 module.exports = {
   appId: "app.nodus.imago",
+  buildDependenciesFromSource: process.platform === "linux",
   productName: "Nodus Imago",
   icon: "build/icon.png",
   artifactName: "Nodus-Imago-${version}-${arch}.${ext}",

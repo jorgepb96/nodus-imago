@@ -88,6 +88,25 @@ try {
       (await call("getRow", { id: row.id })).cells[rich.id] ?? "",
     ),
   );
+  await editor.click();
+  await editor.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await pollNative(async () =>
+    editor.evaluate((e) => !e.editor.state.selection.empty),
+  );
+  await record.getByRole("button", { name: "Enlace", exact: true }).click();
+  await record
+    .getByLabel("URL HTTPS", { exact: true })
+    .fill("https://example.org/source");
+  await record
+    .getByRole("button", { name: "Guardar enlace", exact: true })
+    .click();
+  await record.locator("header strong").click();
+
+  await pollNative(async () =>
+    (await call("getRow", { id: row.id })).cells[rich.id].includes(
+      "https://example.org/source",
+    ),
+  );
   await record.getByRole("button", { name: "Markdown", exact: true }).click();
   await record
     .getByLabel("Anotaciones", { exact: true })
@@ -153,6 +172,9 @@ try {
   assert.equal((await call("getRow", { id: row.id })).cells[sum.id], "10");
   checks.push("Cross-database rollups update after edits and deletion");
   assert.deepEqual(errors, []);
+  console.log(
+    "Phase 2 E2E passed: visual formatting and links, nested block tree, enabled manual automation, audit history and live rollups.",
+  );
   await page.screenshot({ path: "test-results/phase2-desktop.png" });
   await fs.writeFile(
     "test-results/phase2-e2e.json",

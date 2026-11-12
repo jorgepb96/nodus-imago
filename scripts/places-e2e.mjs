@@ -14,8 +14,17 @@ delete env.IMAGO_DEV_URL;
 const launch = () =>
   electron.launch(
     process.env.IMAGO_E2E_EXECUTABLE
-      ? { executablePath: process.env.IMAGO_E2E_EXECUTABLE, env }
-      : { args: ["."], env },
+      ? {
+          executablePath: process.env.IMAGO_E2E_EXECUTABLE,
+          args: process.env.IMAGO_E2E_NO_SANDBOX ? ["--no-sandbox"] : [],
+          env,
+        }
+      : {
+          args: process.env.IMAGO_E2E_NO_SANDBOX
+            ? [".", "--no-sandbox"]
+            : ["."],
+          env,
+        },
   );
 let app, page;
 const errors = [],

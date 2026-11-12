@@ -1,96 +1,308 @@
-import { _electron as electron } from 'playwright-core';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import assert from 'node:assert/strict';
-import { chooseCriteria } from './e2e-criteria.mjs';
-const root = await fs.mkdtemp(path.join(os.tmpdir(), 'imago-criteria-e2e-'));
-const env = { ...process.env, IMAGO_USER_DATA: path.join(root, 'profile') }; delete env.ELECTRON_RUN_AS_NODE; delete env.IMAGO_DEV_URL;
-let app, page; const checks = [], errors = [];
-const call = (command, input) => page.evaluate(({ command, input }) => window.imago.call(command, input), { command, input });
-const poll = async fn => { const until = Date.now() + 20000; while (!await fn()) { if (Date.now() > until) throw Error('Criteria condition timed out'); await new Promise(r => setTimeout(r, 70)); } };
+import { _electron as electron } from "playwright-core";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import assert from "node:assert/strict";
+import { chooseCriteria } from "./e2e-criteria.mjs";
+const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-criteria-e2e-"));
+const env = { ...process.env, IMAGO_USER_DATA: path.join(root, "profile") };
+delete env.ELECTRON_RUN_AS_NODE;
+delete env.IMAGO_DEV_URL;
+let app, page;
+const checks = [],
+  errors = [];
+const call = (command, input) =>
+  page.evaluate(({ command, input }) => window.imago.call(command, input), {
+    command,
+    input,
+  });
+const poll = async (fn) => {
+  const until = Date.now() + 20000;
+  while (!(await fn())) {
+    if (Date.now() > until) throw Error("Criteria condition timed out");
+    await new Promise((r) => setTimeout(r, 70));
+  }
+};
 try {
- await fs.mkdir('test-results', { recursive: true });
- app = await electron.launch(process.env.IMAGO_E2E_EXECUTABLE ? { executablePath: process.env.IMAGO_E2E_EXECUTABLE, env } : { args: ['.'], env });
- page = await app.firstWindow(); page.setDefaultTimeout(20000); page.on('pageerror', e => errors.push(e.message));
- await app.context().route('https://tile.openstreetmap.org/**', route => route.abort());
- await page.getByRole('heading', { name: 'Tu espacio de investigación visual', exact: true }).waitFor();
- const fixture = await page.evaluate(async () => {
-  const api = window.imago, d = await api.call('createDatabase', { name:'Criterios de investigación' }), title = d.columns.find(c => c.type === 'title');
-  const number = await api.call('addColumn', { databaseId:d.database.id, name:'Número', type:'number' });
-  const tags = await api.call('addColumn', { databaseId:d.database.id, name:'Temas', type:'multi_select' });
-  const location = await api.call('addColumn', { databaseId:d.database.id, name:'Lugar', type:'location' });
-  await api.call('saveOptions', { columnId:tags.id, options:[{ label:'Árbol', color:'#118866' },{ label:'Patrimonio', color:'#9955aa' }] });
-  const options = (await api.call('detail', { id:d.database.id })).columns.find(c => c.id === tags.id).options;
-  const rows = await api.call('createRows', { databaseId:d.database.id, count:147 });
-  for (let i=0; i<rows.length; i++) for (const [columnId,value] of [[title.id,'P'+String(i+1).padStart(3,'0')],[number.id,String(i)],[tags.id,JSON.stringify([options[i<70 ? 0 : 1].id])],[location.id,JSON.stringify({ name:'Lugar', latitude:37+(i%4)/10, longitude:-3 })]]) await api.call('setCell', { rowId:rows[i], columnId,value });
-  const other = await api.call('createDatabase', { name:'Otra base sin criterios' }); await api.call('createRows', { databaseId:other.database.id, count:2 });
-  return { database:d.database, number, rows, other:other.database };
- });
- await page.reload(); await page.locator('.sidebar-databases>button').filter({ hasText:fixture.database.name }).click();
- await page.getByRole('button', { name:'Tabla',exact:true }).click();
- const controls = page.locator('.view-controls-panel');
- await page.getByRole('button', { name:'Filtrar y ordenar', exact:true }).click();
- await chooseCriteria(page,'Añadir filtro','Temas');
- const row = controls.locator('.criteria-filter-row').first();
- await row.getByRole('button', { name:'Valores del filtro',exact:true }).click();
- const search = page.getByRole('combobox', { name:'Buscar: Valores del filtro', exact:true });
- await search.fill('arbol'); await search.press('Enter');
- await page.locator('.criteria-select-menu:popover-open').getByRole('button', { name:'Listo',exact:true }).click();
- await poll(async () => await page.locator('.data-table tbody tr').count() === 70);
- await controls.getByRole('button', { name:'Añadir grupo',exact:true }).click();
- const group = controls.locator('.criteria-subgroup').first();
- await chooseCriteria(page,'Añadir filtro','Número',group);
- const numeric = group.locator('.criteria-filter-row').first();
- await chooseCriteria(page,'Condición del filtro','Mayor o igual que',numeric);
- await numeric.getByRole('spinbutton', { name:'Valor del filtro',exact:true }).fill('65');
- await chooseCriteria(page,'Añadir filtro','Título',group);
- const text = group.locator('.criteria-filter-row').nth(1);
- await chooseCriteria(page,'Condición del filtro','Es igual a',text);
- await text.getByRole('textbox', { name:'Valor del filtro',exact:true }).fill('P003');
- await poll(async () => await page.locator('.data-table tbody tr').count() === 6);
- await page.screenshot({ path:'test-results/final-criteria-filters.png' });
- await controls.getByRole('button', { name:/Ordenamientos/ }).click();
- await chooseCriteria(page,'Añadir ordenamiento','Número');
- await chooseCriteria(page,'Dirección del ordenamiento','Mayor a menor');
- await poll(async () => await page.locator('.data-table tbody tr input[aria-label="Título"]').first().inputValue() === 'P070');
- await page.screenshot({ path:'test-results/final-criteria-popover.png' });
- await controls.getByRole('button', { name:'Cerrar',exact:true }).click();
- await page.getByRole('button', { name:'Galería',exact:true }).click(); await poll(async () => await page.locator('.gallery-card').count() === 6);
- await page.getByRole('button', { name:'Mapa',exact:true }).click();
- await poll(async () => (await page.locator('.map-record-count').innerText()).trim() === '6 situados en el mapa · 6 registros');
- checks.push('Accent-insensitive keyboard multiselect, nested AND/OR, range condition, number ordering, same six records in all three views');
- await page.reload(); await page.locator('.sidebar-databases>button').filter({ hasText:fixture.database.name }).click();
- await page.getByRole('button', { name:'Tabla',exact:true }).click(); await poll(async () => await page.locator('.data-table tbody tr').count() === 6);
- assert.equal(await page.locator('.data-table tbody tr input[aria-label="Título"]').first().inputValue(),'P070');
- await page.locator('.sidebar-databases>button').filter({ hasText:fixture.other.name }).click(); await poll(async () => await page.locator('.data-table tbody tr').count() === 2);
- await page.locator('.sidebar-databases>button').filter({ hasText:fixture.database.name }).click(); await poll(async () => await page.locator('.data-table tbody tr').count() === 6);
- await page.getByRole('button', { name:'Filtrar y ordenar',exact:true }).click();
- await controls.getByRole('button', { name:/Filtros/ }).first().click();
- // The focused delete button disappears. This must not close its editor.
- await controls.locator('.criteria-subgroup').first().getByRole('button', { name:'Eliminar grupo',exact:true }).click();
- await controls.waitFor(); await poll(async () => await page.locator('.data-table tbody tr').count() === 70);
- await controls.locator('.criteria-filter-row').first().getByRole('button', { name:'Eliminar condición',exact:true }).click();
- await controls.waitFor();
- await chooseCriteria(page,'Añadir filtro','Título');
- await controls.getByRole('textbox', { name:'Valor del filtro',exact:true }).fill('P145');
- await poll(async () => await page.locator('.data-table tbody tr').count() === 1);
- await controls.getByRole('button', { name:'Cerrar',exact:true }).click();
- assert.equal(await page.locator('.data-table tbody tr input[aria-label="Título"]').first().inputValue(),'P145');
- checks.push('Restart and per-database isolation, deletion keeps editor open, filters reach records beyond first 100');
- // Deleting a property referenced by saved criteria removes the stale rule safely.
- await call('deleteColumn', { id:fixture.number.id }); await page.reload();
- await page.locator('.sidebar-databases>button').filter({ hasText:fixture.database.name }).click();
- await page.getByRole('button', { name:'Tabla', exact:true }).click();
- await poll(async () => await page.locator('.data-table tbody tr').count() === 1);
- const pref = await page.evaluate(id => JSON.parse(localStorage.getItem('imago.criteria.database:'+id)),fixture.database.id);
- assert.equal(pref.sorts.length,0);
- await page.getByRole('button', { name:'Filtrar y ordenar',exact:true }).click();
- await chooseCriteria(page,'Propiedad del filtro','Título',controls.locator('.criteria-filter-row').first());
- await page.keyboard.press('Escape'); await controls.waitFor({state:'hidden'});
- assert.deepEqual(errors,[]);
- checks.push('Deleted-property pruning, nested Escape and no renderer errors');
- await fs.writeFile('test-results/final-criteria-e2e.json',JSON.stringify({ executable:process.env.IMAGO_E2E_EXECUTABLE || 'native-source',checks,errors },null,2));
- console.log('Criteria E2E passed:',checks.join('; '));
-} catch(error) { if(page) await page.screenshot({path:'test-results/final-criteria-failure.png'}).catch(()=>{}); throw error; }
-finally { if(app) await app.close().catch(()=>{}); await fs.rm(root,{recursive:true,force:true}); }
+  await fs.mkdir("test-results", { recursive: true });
+  app = await electron.launch(
+    process.env.IMAGO_E2E_EXECUTABLE
+      ? {
+          executablePath: process.env.IMAGO_E2E_EXECUTABLE,
+          args: process.env.IMAGO_E2E_NO_SANDBOX ? ["--no-sandbox"] : [],
+          env,
+        }
+      : {
+          args: process.env.IMAGO_E2E_NO_SANDBOX
+            ? [".", "--no-sandbox"]
+            : ["."],
+          env,
+        },
+  );
+  page = await app.firstWindow();
+  page.setDefaultTimeout(20000);
+  page.on("pageerror", (e) => errors.push(e.message));
+  await app
+    .context()
+    .route("https://tile.openstreetmap.org/**", (route) => route.abort());
+  await page
+    .getByRole("heading", {
+      name: "Tu espacio de investigación visual",
+      exact: true,
+    })
+    .waitFor();
+  const fixture = await page.evaluate(async () => {
+    const api = window.imago,
+      d = await api.call("createDatabase", {
+        name: "Criterios de investigación",
+      }),
+      title = d.columns.find((c) => c.type === "title");
+    const number = await api.call("addColumn", {
+      databaseId: d.database.id,
+      name: "Número",
+      type: "number",
+    });
+    const tags = await api.call("addColumn", {
+      databaseId: d.database.id,
+      name: "Temas",
+      type: "multi_select",
+    });
+    const location = await api.call("addColumn", {
+      databaseId: d.database.id,
+      name: "Lugar",
+      type: "location",
+    });
+    await api.call("saveOptions", {
+      columnId: tags.id,
+      options: [
+        { label: "Árbol", color: "#118866" },
+        { label: "Patrimonio", color: "#9955aa" },
+      ],
+    });
+    const options = (
+      await api.call("detail", { id: d.database.id })
+    ).columns.find((c) => c.id === tags.id).options;
+    const rows = await api.call("createRows", {
+      databaseId: d.database.id,
+      count: 147,
+    });
+    for (let i = 0; i < rows.length; i++)
+      for (const [columnId, value] of [
+        [title.id, "P" + String(i + 1).padStart(3, "0")],
+        [number.id, String(i)],
+        [tags.id, JSON.stringify([options[i < 70 ? 0 : 1].id])],
+        [
+          location.id,
+          JSON.stringify({
+            name: "Lugar",
+            latitude: 37 + (i % 4) / 10,
+            longitude: -3,
+          }),
+        ],
+      ])
+        await api.call("setCell", { rowId: rows[i], columnId, value });
+    const other = await api.call("createDatabase", {
+      name: "Otra base sin criterios",
+    });
+    await api.call("createRows", { databaseId: other.database.id, count: 2 });
+    return { database: d.database, number, rows, other: other.database };
+  });
+  await page.reload();
+  await page
+    .locator(".sidebar-databases>button")
+    .filter({ hasText: fixture.database.name })
+    .click();
+  await page.getByRole("button", { name: "Tabla", exact: true }).click();
+  const controls = page.locator(".view-controls-panel");
+  await page
+    .getByRole("button", { name: "Filtrar y ordenar", exact: true })
+    .click();
+  await chooseCriteria(page, "Añadir filtro", "Temas");
+  const row = controls.locator(".criteria-filter-row").first();
+  await row
+    .getByRole("button", { name: "Valores del filtro", exact: true })
+    .click();
+  const search = page.getByRole("combobox", {
+    name: "Buscar: Valores del filtro",
+    exact: true,
+  });
+  await search.fill("arbol");
+  await search.press("Enter");
+  await page
+    .locator(".criteria-select-menu:popover-open")
+    .getByRole("button", { name: "Listo", exact: true })
+    .click();
+  await poll(
+    async () => (await page.locator(".data-table tbody tr").count()) === 70,
+  );
+  await controls
+    .getByRole("button", { name: "Añadir grupo", exact: true })
+    .click();
+  const group = controls.locator(".criteria-subgroup").first();
+  await chooseCriteria(page, "Añadir filtro", "Número", group);
+  const numeric = group.locator(".criteria-filter-row").first();
+  await chooseCriteria(
+    page,
+    "Condición del filtro",
+    "Mayor o igual que",
+    numeric,
+  );
+  await numeric
+    .getByRole("spinbutton", { name: "Valor del filtro", exact: true })
+    .fill("65");
+  await chooseCriteria(page, "Añadir filtro", "Título", group);
+  const text = group.locator(".criteria-filter-row").nth(1);
+  await chooseCriteria(page, "Condición del filtro", "Es igual a", text);
+  await text
+    .getByRole("textbox", { name: "Valor del filtro", exact: true })
+    .fill("P003");
+  await poll(
+    async () => (await page.locator(".data-table tbody tr").count()) === 6,
+  );
+  await page.screenshot({ path: "test-results/final-criteria-filters.png" });
+  await controls.getByRole("button", { name: /Ordenamientos/ }).click();
+  await chooseCriteria(page, "Añadir ordenamiento", "Número");
+  await chooseCriteria(page, "Dirección del ordenamiento", "Mayor a menor");
+  await poll(
+    async () =>
+      (await page
+        .locator('.data-table tbody tr input[aria-label="Título"]')
+        .first()
+        .inputValue()) === "P070",
+  );
+  await page.screenshot({ path: "test-results/final-criteria-popover.png" });
+  await controls.getByRole("button", { name: "Cerrar", exact: true }).click();
+  await page.getByRole("button", { name: "Galería", exact: true }).click();
+  await poll(async () => (await page.locator(".gallery-card").count()) === 6);
+  await page.getByRole("button", { name: "Mapa", exact: true }).click();
+  await poll(
+    async () =>
+      (await page.locator(".map-record-count").innerText()).trim() ===
+      "6 situados en el mapa · 6 registros",
+  );
+  checks.push(
+    "Accent-insensitive keyboard multiselect, nested AND/OR, range condition, number ordering, same six records in all three views",
+  );
+  await page.reload();
+  await page
+    .locator(".sidebar-databases>button")
+    .filter({ hasText: fixture.database.name })
+    .click();
+  await page.getByRole("button", { name: "Tabla", exact: true }).click();
+  await poll(
+    async () => (await page.locator(".data-table tbody tr").count()) === 6,
+  );
+  assert.equal(
+    await page
+      .locator('.data-table tbody tr input[aria-label="Título"]')
+      .first()
+      .inputValue(),
+    "P070",
+  );
+  await page
+    .locator(".sidebar-databases>button")
+    .filter({ hasText: fixture.other.name })
+    .click();
+  await poll(
+    async () => (await page.locator(".data-table tbody tr").count()) === 2,
+  );
+  await page
+    .locator(".sidebar-databases>button")
+    .filter({ hasText: fixture.database.name })
+    .click();
+  await poll(
+    async () => (await page.locator(".data-table tbody tr").count()) === 6,
+  );
+  await page
+    .getByRole("button", { name: "Filtrar y ordenar", exact: true })
+    .click();
+  await controls
+    .getByRole("button", { name: /Filtros/ })
+    .first()
+    .click();
+  // The focused delete button disappears. This must not close its editor.
+  await controls
+    .locator(".criteria-subgroup")
+    .first()
+    .getByRole("button", { name: "Eliminar grupo", exact: true })
+    .click();
+  await controls.waitFor();
+  await poll(
+    async () => (await page.locator(".data-table tbody tr").count()) === 70,
+  );
+  await controls
+    .locator(".criteria-filter-row")
+    .first()
+    .getByRole("button", { name: "Eliminar condición", exact: true })
+    .click();
+  await controls.waitFor();
+  await chooseCriteria(page, "Añadir filtro", "Título");
+  await controls
+    .getByRole("textbox", { name: "Valor del filtro", exact: true })
+    .fill("P145");
+  await poll(
+    async () => (await page.locator(".data-table tbody tr").count()) === 1,
+  );
+  await controls.getByRole("button", { name: "Cerrar", exact: true }).click();
+  assert.equal(
+    await page
+      .locator('.data-table tbody tr input[aria-label="Título"]')
+      .first()
+      .inputValue(),
+    "P145",
+  );
+  checks.push(
+    "Restart and per-database isolation, deletion keeps editor open, filters reach records beyond first 100",
+  );
+  // Deleting a property referenced by saved criteria removes the stale rule safely.
+  await call("deleteColumn", { id: fixture.number.id });
+  await page.reload();
+  await page
+    .locator(".sidebar-databases>button")
+    .filter({ hasText: fixture.database.name })
+    .click();
+  await page.getByRole("button", { name: "Tabla", exact: true }).click();
+  await poll(
+    async () => (await page.locator(".data-table tbody tr").count()) === 1,
+  );
+  const pref = await page.evaluate(
+    (id) => JSON.parse(localStorage.getItem("imago.criteria.database:" + id)),
+    fixture.database.id,
+  );
+  assert.equal(pref.sorts.length, 0);
+  await page
+    .getByRole("button", { name: "Filtrar y ordenar", exact: true })
+    .click();
+  await chooseCriteria(
+    page,
+    "Propiedad del filtro",
+    "Título",
+    controls.locator(".criteria-filter-row").first(),
+  );
+  await page.keyboard.press("Escape");
+  await controls.waitFor({ state: "hidden" });
+  assert.deepEqual(errors, []);
+  checks.push("Deleted-property pruning, nested Escape and no renderer errors");
+  await fs.writeFile(
+    "test-results/final-criteria-e2e.json",
+    JSON.stringify(
+      {
+        executable: process.env.IMAGO_E2E_EXECUTABLE || "native-source",
+        checks,
+        errors,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log("Criteria E2E passed:", checks.join("; "));
+} catch (error) {
+  if (page)
+    await page
+      .screenshot({ path: "test-results/final-criteria-failure.png" })
+      .catch(() => {});
+  throw error;
+} finally {
+  if (app) await app.close().catch(() => {});
+  await fs.rm(root, { recursive: true, force: true });
+}

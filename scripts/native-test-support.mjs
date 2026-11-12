@@ -30,7 +30,12 @@ export async function launchNative(profile) {
           env,
         },
   );
-  const page = await app.firstWindow();
+  const page = await app
+    .firstWindow({ timeout: 60000 })
+    .catch(async (error) => {
+      await app.close().catch(() => {});
+      throw error;
+    });
   page.setDefaultTimeout(30000);
   await page
     .getByRole("heading", {

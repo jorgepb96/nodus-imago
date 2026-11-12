@@ -46,8 +46,17 @@ try {
   await fs.mkdir("test-results", { recursive: true });
   app = await electron.launch(
     process.env.IMAGO_E2E_EXECUTABLE
-      ? { executablePath: process.env.IMAGO_E2E_EXECUTABLE, env }
-      : { args: ["."], env },
+      ? {
+          executablePath: process.env.IMAGO_E2E_EXECUTABLE,
+          args: process.env.IMAGO_E2E_NO_SANDBOX ? ["--no-sandbox"] : [],
+          env,
+        }
+      : {
+          args: process.env.IMAGO_E2E_NO_SANDBOX
+            ? [".", "--no-sandbox"]
+            : ["."],
+          env,
+        },
   );
   await app.context().route("https://tile.openstreetmap.org/**", (route) => {
     tileRequests.push(route.request().url());
@@ -220,17 +229,26 @@ try {
   await map
     .getByRole("button", { name: "En el mapa (232)", exact: true })
     .click();
-  await page.getByRole("button", { name: "Filtrar y ordenar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Filtrar y ordenar", exact: true })
+    .click();
   await chooseCriteria(page, "Añadir filtro", "Título");
-  await page.getByRole("textbox", { name: "Valor del filtro", exact: true }).fill("MAP233");
+  await page
+    .getByRole("textbox", { name: "Valor del filtro", exact: true })
+    .fill("MAP233");
   await poll(
     async () =>
       (await map.locator(".map-record-count").innerText()).trim() ===
       "1 situados en el mapa · 1 registros",
   );
-  await page.locator(".view-controls-panel").getByRole("button", { name: "Cerrar", exact: true }).click();
+  await page
+    .locator(".view-controls-panel")
+    .getByRole("button", { name: "Cerrar", exact: true })
+    .click();
   await page.getByRole("button", { name: "MAP233", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Filtrar y ordenar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Filtrar y ordenar", exact: true })
+    .click();
   await page
     .locator(".criteria-filter-row")
     .getByRole("button", { name: "Eliminar condición", exact: true })
@@ -238,7 +256,10 @@ try {
   await poll(async () =>
     (await map.locator(".map-record-count").innerText()).includes("232"),
   );
-  await page.locator(".view-controls-panel").getByRole("button", { name: "Cerrar", exact: true }).click();
+  await page
+    .locator(".view-controls-panel")
+    .getByRole("button", { name: "Cerrar", exact: true })
+    .click();
   await chooseCriteria(page, "Propiedad de ubicación", other.name, map);
   await poll(async () =>
     (await map.locator(".map-record-count").innerText()).includes("1 situados"),
@@ -251,7 +272,11 @@ try {
     .click();
   await page.getByRole("button", { name: "Mapa", exact: true }).click();
   assert.equal(
-    (await map.getByRole("button", { name: "Propiedad de ubicación", exact: true }).innerText()).trim(),
+    (
+      await map
+        .getByRole("button", { name: "Propiedad de ubicación", exact: true })
+        .innerText()
+    ).trim(),
     other.name,
   );
   await chooseCriteria(page, "Propiedad de ubicación", location.name, map);

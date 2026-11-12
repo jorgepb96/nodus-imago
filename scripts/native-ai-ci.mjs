@@ -10,6 +10,7 @@ if (process.env.IMAGO_TEST_PACKAGED_AI)
   );
 for (const script of [
   "scripts/onboarding-e2e.mjs",
+  "scripts/migration-e2e.mjs",
   "scripts/native-ai-e2e.mjs",
 ]) {
   const command = process.platform === "linux" ? "xvfb-run" : process.execPath;
