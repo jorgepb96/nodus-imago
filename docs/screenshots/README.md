@@ -4,9 +4,9 @@ The screenshots show the real Nodus Imago desktop application, in **English** wi
 
 ## Historical photographs
 
-**Imágenes procedentes de los fondos de la Biblioteca Nacional de España.**
+**Images taken from the holdings of the Biblioteca Nacional de España.**
 
-Images taken from the holdings of the Biblioteca Nacional de España (BNE), made available through the Biblioteca Digital Hispánica (BDH). The BNE permits public reuse of its open-access public-domain works with attribution under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) or equivalent; see its [reproduction conditions](https://www.bne.es/es/servicios/reproduccion-documentos/uso-reproducciones). This does not extend to every item in its collections. The selected access copies below are individually identified as public domain or CC BY 4.0 on their Wikimedia Commons file records.
+The photographs belong to the holdings of the Biblioteca Nacional de España (BNE) and were made available through the Biblioteca Digital Hispánica (BDH). The BNE permits public reuse of its open-access public-domain works with attribution under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) or equivalent; see its [reproduction conditions](https://www.bne.es/es/servicios/reproduccion-documentos/uso-reproducciones). This does not extend to every item in its collections. The selected access copies below are individually identified as public domain or CC BY 4.0 on their Wikimedia Commons file records.
 
 Some BNE image endpoints refused automated access during preparation. The copies used here were therefore retrieved from **Wikimedia Commons**, whose file records identify BDH as their source. Commons is the access source, not the holding institution. Original catalogue titles remain available through the links; English display titles are supplied for the demo.
 
