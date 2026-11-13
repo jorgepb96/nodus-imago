@@ -22,7 +22,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_RUN: ${{ inputs.artifact-run }}
-        run: gh run download "$ARTIFACT_RUN" --pattern 'unsigned-test-linux-x64-*' --dir test-results/installed-regression
+        run: |
+          artifact=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN/artifacts" --jq '.artifacts[] | select(.name | startswith("unsigned-test-linux-x64-")) | .name')
+          gh run download "$ARTIFACT_RUN" --name "$artifact" --dir test-results/installed-regression
       - name: Exercise the existing AppImage without rebuilding it
         run: |
           mkdir -p test-results/appimage
