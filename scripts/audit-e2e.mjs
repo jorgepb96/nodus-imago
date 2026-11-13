@@ -52,7 +52,7 @@ const server = http.createServer(async (req, res) => {
   }, responseDelay);
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const env = { ...process.env, IMAGO_USER_DATA: path.join(root, "profile") };
+const env = { ...process.env, IMAGO_DISABLE_UPDATES: "1", IMAGO_USER_DATA: path.join(root, "profile") };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.IMAGO_DEV_URL;
 const launchOptions = process.env.IMAGO_E2E_EXECUTABLE
@@ -487,6 +487,11 @@ try {
       await page
         .getByRole("button", { name: "Restaurar copia", exact: true })
         .click();
+      const restoreDialog=page.getByRole("dialog").last();
+      await restoreDialog.getByRole("button",{name:"Comprobar antes de restaurar",exact:true}).click();
+      await restoreDialog.getByRole("button",{name:"Restaurar datos comprobados",exact:true}).click();
+      await page.getByRole("heading",{name:"Tu espacio de investigación visual",exact:true}).waitFor();
+
       await poll(async () => (await call("status")).rows === 3);
       assert.equal((await call("status")).images, 3);
       assert.deepEqual(

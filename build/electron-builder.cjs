@@ -28,7 +28,7 @@ module.exports = {
     target: ["dmg", "zip"],
   },
   win: { target: [{ target: "nsis", arch: ["x64"] }] },
-  nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
+  nsis: { oneClick: false, allowToChangeInstallationDirectory: true, deleteAppDataOnUninstall: false },
   linux: {
     syncDesktopName: true,
     category: "Education",

@@ -32,7 +32,7 @@ await sharp({
 })
   .jpeg()
   .toFile(rowImage);
-const env = { ...process.env, IMAGO_USER_DATA: path.join(root, "profile") };
+const env = { ...process.env, IMAGO_DISABLE_UPDATES: "1", IMAGO_USER_DATA: path.join(root, "profile") };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.IMAGO_DEV_URL;
 const launchOptions = process.env.IMAGO_E2E_EXECUTABLE

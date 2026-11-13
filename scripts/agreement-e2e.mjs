@@ -6,7 +6,7 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { chooseCriteria } from "./e2e-criteria.mjs";
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-agreement-e2e-"));
-const env = { ...process.env, IMAGO_USER_DATA: path.join(root, "profile") };
+const env = { ...process.env, IMAGO_DISABLE_UPDATES: "1", IMAGO_USER_DATA: path.join(root, "profile") };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.IMAGO_DEV_URL;
 let app, page;

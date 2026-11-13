@@ -12,7 +12,7 @@ export async function launchNative(profile) {
     !path.resolve(profile).startsWith(path.resolve("test-results") + path.sep)
   )
     throw Error("Refusing a non-isolated native test profile.");
-  const env = { ...process.env, IMAGO_USER_DATA: path.resolve(profile) };
+  const env = { ...process.env, IMAGO_DISABLE_UPDATES: process.env.IMAGO_TEST_UPDATER === "1" ? "0" : "1", IMAGO_USER_DATA: path.resolve(profile) };
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.IMAGO_DEV_URL;
   const app = await electron.launch(

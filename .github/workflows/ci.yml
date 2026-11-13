@@ -19,6 +19,7 @@ jobs:
           - { os: ubuntu-24.04-arm, target: linux, arch: arm64 }
     runs-on: ${{ matrix.os }}
     env:
+      IMAGO_DISABLE_UPDATES: "1"
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       ONNXRUNTIME_NODE_INSTALL: skip
       ONNXRUNTIME_NODE_INSTALL_CUDA: skip
@@ -65,10 +66,16 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.rpm
+            release/latest*.yml
+            release/*.blockmap
             release/*manifest*.json
             release/SHA256SUMS
             test-results/*.json
             test-results/*.png
+            test-results/backups-native-*/evidence.json
+            test-results/backups-native-*/failure.json
+            test-results/backups-native-*/*.png
+            test-results/update-protocol-*/*.json
   native-ai:
     name: Real CPU AI (${{ matrix.os }})
     timeout-minutes: 120
@@ -87,6 +94,7 @@ jobs:
     env:
       ONNXRUNTIME_NODE_INSTALL: skip
       ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+      IMAGO_DISABLE_UPDATES: "1"
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
@@ -118,4 +126,9 @@ jobs:
           path: |
             test-results/v1-*.json
             test-results/v1-*.png
+            test-results/*preflight-e2e.json
+            test-results/*preflight-e2e.png
+            test-results/queue-real-*/evidence.json
+            test-results/queue-real-*/failure.json
+            test-results/queue-real-*/*.png
           if-no-files-found: warn

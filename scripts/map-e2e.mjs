@@ -10,7 +10,7 @@ import { installMapTiles } from "./map-tile-fixture.mjs";
 import { chooseCriteria } from "./e2e-criteria.mjs";
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-db-map-"));
-const env = { ...process.env, IMAGO_USER_DATA: path.join(root, "profile") };
+const env = { ...process.env, IMAGO_DISABLE_UPDATES: "1", IMAGO_USER_DATA: path.join(root, "profile") };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.IMAGO_DEV_URL;
 let app, page, tiles;

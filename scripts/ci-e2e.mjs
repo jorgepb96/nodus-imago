@@ -8,6 +8,8 @@ const entries = [
   "scripts/criteria-e2e.mjs",
   "scripts/agreement-e2e.mjs",
   "scripts/phase2-e2e.mjs",
+  "scripts/backups-e2e.mjs",
+  "scripts/update-protocol-e2e.mjs",
 ];
 for (const entry of entries) {
   const args =

@@ -1,0 +1,108 @@
+name: Prepare signed release draft (explicit request only)
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag matching package.json
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  packages:
+    environment: release-signing
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest, target: mac, arch: arm64 }
+          - { os: macos-15-intel, target: mac, arch: x64 }
+          - { os: windows-latest, target: win, arch: x64 }
+          - { os: ubuntu-22.04, target: linux, arch: x64 }
+          - { os: ubuntu-24.04-arm, target: linux, arch: arm64 }
+    runs-on: ${{ matrix.os }}
+    env:
+      IMAGO_RELEASE_TAG: ${{ inputs.tag }}
+      IMAGO_DISABLE_UPDATES: "1"
+      ONNXRUNTIME_NODE_INSTALL: skip
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - name: Validate immutable release tag
+        shell: bash
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("package.json")).version; if(process.env.IMAGO_RELEASE_TAG!=="v"+v)throw Error("Tag/version mismatch"); fs.appendFileSync(process.env.GITHUB_ENV,"IMAGO_RELEASE_CHANNEL="+(v.includes("-")?"beta":"latest")+"\n");'
+          test "$(git describe --tags --exact-match HEAD)" = "$IMAGO_RELEASE_TAG"
+      - if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.arch }}" = arm64 ]; then
+            sudo apt-get install -y clang-15 rpm cpio xvfb libnspr4 libnss3 libgtk-3-0t64 libgbm1 libasound2t64 libxss1 libxtst6 libatspi2.0-0t64 libx11-xcb1 libxdamage1 libxrandr2
+          else
+            sudo apt-get install -y clang-15 rpm cpio xvfb libnspr4 libnss3 libgtk-3-0 libgbm1 libasound2 libxss1 libxtst6 libatspi2.0-0 libx11-xcb1 libxdamage1 libxrandr2
+          fi
+          echo "CC=clang-15" >> "$GITHUB_ENV"
+          echo "CXX=clang++-15" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run test:desktop:all
+      - name: Build with required signing (never unsigned fallback)
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          node --input-type=module -e 'if(process.platform==="darwin"&&!["CSC_LINK","CSC_KEY_PASSWORD","APPLE_ID","APPLE_APP_SPECIFIC_PASSWORD","APPLE_TEAM_ID"].every(k=>process.env[k]))throw Error("Release signing/notarization credentials required"); if(process.platform==="win32"&&!["WIN_CSC_LINK","WIN_CSC_KEY_PASSWORD"].every(k=>process.env[k]))throw Error("Windows signing credentials required");'
+          npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --config build/electron-builder.release.cjs --publish never
+      - name: Validate installed packages
+        run: node scripts/packaged-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.target }}-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.blockmap
+            release/latest*.yml
+            release/beta*.yml
+  draft:
+    needs: packages
+    runs-on: ubuntu-22.04
+    environment: release-signing
+    permissions:
+      contents: write
+    env:
+      IMAGO_RELEASE_TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.tag }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with: { pattern: "signed-*", path: artifacts }
+      - name: Verify all bytes and merge architecture feeds
+        run: node scripts/assemble-update-feeds.mjs artifacts feeds "${IMAGO_RELEASE_TAG#v}"
+      - name: Create draft only; publication remains a separate explicit step
+        shell: bash
+        run: |
+          gh release create "$IMAGO_RELEASE_TAG" --draft --verify-tag --title "Nodus Imago $IMAGO_RELEASE_TAG" --generate-notes
+          find artifacts -type f ! -name '*.yml' -print0 | xargs -0 gh release upload "$IMAGO_RELEASE_TAG"
+          gh release upload "$IMAGO_RELEASE_TAG" feeds/*.yml

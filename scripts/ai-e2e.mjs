@@ -15,7 +15,7 @@ await fs.symlink(
   path.join(root, "collection", "models"),
   "dir",
 );
-const env = { ...process.env, IMAGO_USER_DATA: root };
+const env = { ...process.env, IMAGO_DISABLE_UPDATES: "1", IMAGO_USER_DATA: root };
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.IMAGO_DEV_URL;
 const options = process.env.IMAGO_E2E_EXECUTABLE
