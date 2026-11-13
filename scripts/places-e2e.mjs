@@ -6,6 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import assert from "node:assert/strict";
 import sharp from "sharp";
+import { installMapTiles } from "./map-tile-fixture.mjs";
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-places-"));
 const env = { ...process.env, IMAGO_USER_DATA: path.join(root, "profile") };
@@ -26,11 +27,9 @@ const launch = () =>
           env,
         },
   );
-let app, page;
+let app, page, tiles;
 const errors = [],
-  requests = [],
   checks = [];
-let failTiles = false;
 const tile = await sharp(
   Buffer.from(
     '<svg width="256" height="256" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" fill="#e3eadc"/><path d="M0 40L256 200M30 0L210 256M0 150L256 30" stroke="#fff" stroke-width="10"/><text x="10" y="240" font-size="12" fill="#78816f">Map fixture · no live traffic</text></svg>',
@@ -53,18 +52,8 @@ async function poll(predicate) {
 }
 async function openApp() {
   app = await launch();
-  await app.context().route("https://tile.openstreetmap.org/**", (route) => {
-    requests.push(route.request().url());
-    return failTiles
-      ? route.abort()
-      : route.fulfill({ status: 200, contentType: "image/png", body: tile });
-  });
+  tiles = await installMapTiles(app, tile);
   page = await app.firstWindow();
-  // AppImage launches may reuse Chromium's disk cache across test sessions.
-  // Force this isolated test to exercise its tile route rather than cached data.
-  await app.evaluate(async ({ session }) => {
-    await session.defaultSession.clearCache();
-  });
   page.setDefaultTimeout(15000);
   page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
   await page
@@ -150,14 +139,7 @@ try {
   await record.locator(".leaflet-tile-loaded").first().waitFor();
   await page.waitForTimeout(350); // Leaflet's tile fade and panel's opening animation.
   await assertCentredPin(record);
-  if (!requests.length) {
-    console.log("TILE_DIAGNOSTIC", JSON.stringify(await page.evaluate(() => ({
-      online: navigator.onLine,
-      tiles: [...document.querySelectorAll(".leaflet-tile")].map(t => ({src: t.src, complete: t.complete, width: t.naturalWidth, classes: t.className})),
-      resources: performance.getEntriesByType("resource").filter(r => r.name.includes("openstreetmap")).map(r => ({name:r.name, duration:r.duration, transferSize:r.transferSize})),
-    }))));
-  }
-  assert.ok(requests.length > 0);
+  assert.ok((await tiles.requests()).length > 0);
   const mapRect = await record.locator(".location-map").boundingBox();
   assert.ok(
     Math.abs(mapRect.width - mapRect.height) < 2 && mapRect.width <= 201,
@@ -214,7 +196,7 @@ try {
     });
     window.dispatchEvent(new Event("offline"));
   });
-  const beforeOffline = requests.length;
+  const beforeOffline = (await tiles.requests()).length;
   await input.fill("Granada");
   await page.getByRole("option").filter({ hasText: "Spain" }).first().click();
   await poll(async () => (await stored())?.name === "Granada");
@@ -224,12 +206,12 @@ try {
       { exact: true },
     )
     .waitFor();
-  assert.equal(requests.length, beforeOffline);
+  assert.equal((await tiles.requests()).length, beforeOffline);
   const granada = await stored();
   checks.push(
     "Offline selection and retained coordinates without tile requests",
   );
-  failTiles = true;
+  await tiles.fail(true);
   await page.evaluate(() => {
     Object.defineProperty(navigator, "onLine", {
       get: () => true,
@@ -242,7 +224,7 @@ try {
       exact: true,
     })
     .waitFor();
-  failTiles = false;
+  await tiles.fail(false);
   await record.getByRole("button", { name: "Reintentar", exact: true }).click();
   await record.locator(".leaflet-tile-loaded").first().waitFor();
   assert.deepEqual(await stored(), granada);
@@ -362,7 +344,7 @@ try {
           arch: process.arch,
         })),
         checks,
-        fixtureTileRequests: requests.length,
+        fixtureTileRequests: (await tiles.requests()).length,
         errors,
       },
       null,

@@ -6,6 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import assert from "node:assert/strict";
 import sharp from "sharp";
+import { installMapTiles } from "./map-tile-fixture.mjs";
 import { chooseCriteria } from "./e2e-criteria.mjs";
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-db-map-"));
@@ -14,10 +15,9 @@ delete env.ELECTRON_RUN_AS_NODE;
 delete env.IMAGO_DEV_URL;
 let app,
   page,
-  failTiles = false;
+  tiles;
 const errors = [],
-  checks = [],
-  tileRequests = [];
+  checks = [];
 const tile = await sharp(
   Buffer.from(
     '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#dfe8d7"/><path d="M0 50L256 210M80 0L20 256" stroke="#fff" stroke-width="8"/><text x="12" y="245" font-size="12" fill="#7d8977">Map fixture · no live traffic</text></svg>',
@@ -58,12 +58,7 @@ try {
           env,
         },
   );
-  await app.context().route("https://tile.openstreetmap.org/**", (route) => {
-    tileRequests.push(route.request().url());
-    return failTiles
-      ? route.abort()
-      : route.fulfill({ status: 200, contentType: "image/png", body: tile });
-  });
+  tiles = await installMapTiles(app, tile);
   page = await app.firstWindow();
   page.setDefaultTimeout(30000);
   page.on("pageerror", (error) => errors.push(error.message));
@@ -333,7 +328,7 @@ try {
   await page
     .getByRole("button", { name: "231 registros · Granada", exact: true })
     .waitFor();
-  failTiles = true;
+  await tiles.fail(true);
   await app.evaluate(async ({ session }) => {
     await session.defaultSession.clearCache();
     return true;
@@ -356,7 +351,7 @@ try {
       { exact: false },
     )
     .waitFor();
-  failTiles = false;
+  await tiles.fail(false);
   await map.getByRole("button", { name: "Reintentar", exact: true }).click();
   await map.locator(".leaflet-tile-loaded").first().waitFor();
   await map
@@ -444,7 +439,7 @@ try {
       arch: process.arch,
     })),
     checks,
-    fixtureTileRequests: tileRequests.length,
+    fixtureTileRequests: (await tiles.requests()).length,
     errors,
   };
   await fs.writeFile(
