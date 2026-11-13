@@ -789,28 +789,10 @@ summary::-webkit-details-marker {
   font-size: 10px;
 }
 .sidebar-bottom {
+  margin-top: auto;
+  flex-shrink: 0;
   display: grid;
   gap: 15px;
-}
-.privacy {
-  border-top: 1px solid var(--line);
-  padding: 16px 10px 0;
-  display: flex;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 10px;
-  align-items: flex-start;
-}
-.privacy svg {
-  color: var(--accent-ink);
-  margin-top: 2px;
-}
-.privacy small {
-  display: block;
-  font-size: 9px;
-  line-height: 1.5;
-  margin-top: 3px;
-  max-width: 150px;
 }
 .workspace {
   flex: 1;
@@ -3227,19 +3209,10 @@ thead th:last-child {
 .nodus-layout .sidebar-bottom {
   gap: 12px;
 }
-.nodus-layout .privacy {
-  font-size: 9px;
-  padding: 14px 7px 6px;
-  align-items: center;
-}
-.nodus-layout .privacy > svg {
-  margin: 0;
-}
 .sidebar-collapsed .nav-title,
 .sidebar-collapsed .nav-count,
 .sidebar-collapsed .nav-group-label,
-.sidebar-collapsed .sidebar-databases,
-.sidebar-collapsed .privacy span {
+.sidebar-collapsed .sidebar-databases {
   display: none;
 }
 .sidebar-collapsed .sidebar nav > button,

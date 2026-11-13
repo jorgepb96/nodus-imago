@@ -831,14 +831,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <SettingsIcon size={18} />
               <span className="nav-title">{t("Ajustes")}</span>
             </button>
-            <div className="privacy">
-              <ShieldCheck size={14} />
-              <span>
-                {status?.settings.remoteEnabled
-                  ? t("APIs opcionales activadas")
-                  : t("Local y privado")}
-              </span>
-            </div>
           </div>
         </aside>
         <main
