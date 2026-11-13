@@ -150,6 +150,13 @@ try {
   await record.locator(".leaflet-tile-loaded").first().waitFor();
   await page.waitForTimeout(350); // Leaflet's tile fade and panel's opening animation.
   await assertCentredPin(record);
+  if (!requests.length) {
+    console.log("TILE_DIAGNOSTIC", JSON.stringify(await page.evaluate(() => ({
+      online: navigator.onLine,
+      tiles: [...document.querySelectorAll(".leaflet-tile")].map(t => ({src: t.src, complete: t.complete, width: t.naturalWidth, classes: t.className})),
+      resources: performance.getEntriesByType("resource").filter(r => r.name.includes("openstreetmap")).map(r => ({name:r.name, duration:r.duration, transferSize:r.transferSize})),
+    }))));
+  }
   assert.ok(requests.length > 0);
   const mapRect = await record.locator(".location-map").boundingBox();
   assert.ok(
