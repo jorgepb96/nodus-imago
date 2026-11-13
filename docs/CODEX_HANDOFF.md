@@ -2,7 +2,7 @@
 
 ## Revisión vigente de fiabilidad — 13 de noviembre de 2026
 
-Se han ampliado colas, copias y actualizaciones según el encargo reactivado. Suite local **173/173**, tipos, lint y build correctos; nueve recorridos de escritorio pasan en fuente. Restauración nativa entre tres perfiles, cifrado e integridad de originales y recuperación de cola con IA real sin Python comprobados. Ver [RELIABILITY-AUDIT-2026-11-13.md](RELIABILITY-AUDIT-2026-11-13.md) para cambios, evidencia y límites. La instalación entre releases firmadas queda reservada a la futura autorización de release. La nueva CI multiplataforma debe identificarse por su run; la CI histórica inferior corresponde al producto anterior.
+Producto revisado: **`d72e716`**. Suite **173/173 en los cinco targets**, tipos, lint, build y nueve recorridos de escritorio correctos. **CI final 10/10**: [run 43424372795](https://github.com/jorgepb96/nodus-imago/actions/runs/43424372795). Pasan los paquetes actuales y la IA real sin Python en macOS ARM64, macOS Intel, Windows x64, Linux x64 y Linux ARM64. La última restauración completa de copias también pasa desde el paquete final. Ver [RELIABILITY-AUDIT-2026-11-13.md](RELIABILITY-AUDIT-2026-11-13.md) para evidencia y límites. La instalación entre releases firmadas sigue reservada a la autorización de release; RPM se extrae y ejecuta en Ubuntu, sin afirmar instalación en una distribución RPM. Los apartados inferiores se conservan como historial.
 
 
 ## Estado vigente del candidato `6af64a0` — 13 de noviembre de 2026

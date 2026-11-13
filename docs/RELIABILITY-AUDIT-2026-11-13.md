@@ -43,8 +43,28 @@ El ensamblador de feeds exige versión coincidente, cinco targets, los once inst
 
 - Suite ampliada: **173 pruebas**, sin omitidas, más typecheck, lint y build locales correctos.
 - Nueve recorridos de escritorio pasan en fuente: general, auditoría, lugares, mapa, criterios, concordancia, fase 2, copias y transporte de actualizaciones.
-- Inferencia real ARM64 con recuperación de cola e indexación sin Python comprobada. Se reutilizan modelos de pruebas ya descargados con licencia; gasto de APIs en esta revisión: cero.
+- Inferencia real y recuperación de cola con indexación sin Python comprobadas en los cinco runners. Se reutilizan modelos de pruebas ya descargados con licencia; gasto de APIs en esta revisión: cero.
 - Los logs y perfiles se conservan en `test-results/`; no se publican claves, copias ni modelos en Git.
-- Los resultados multiplataforma del candidato anterior no acreditan por sí solos este árbol. La ejecución de los cinco runners y sus artefactos debe identificarse por commit/run antes de declararlos actuales.
+- Producto final `d72e716`: **10/10 jobs correctos**, [run 43424372795](https://github.com/jorgepb96/nodus-imago/actions/runs/43424372795), diez artefactos de ese commit. Los resultados anteriores se conservan como historia.
 - Pendiente de la futura autorización de release: instalación nativa entre dos versiones firmadas/notarizadas y validación del instalador privilegiado en cada SO. Las pruebas con payload sintético no cubren esta frontera.
 - Ninguna suite finita garantiza todos los fallos físicos de discos, pérdidas del almacén seguro o cambios futuros del sistema. Se conserva la necesidad de guardar la contraseña y una copia externa; no se afirma «100 %».
+
+## Cierre del producto `d72e716`
+
+Los cinco jobs desktop pasan 173 pruebas cada uno, tipos/lint/build, 17.010 comparaciones estadísticas independientes por runner, los ocho recorridos de aplicación en fuente y sobre sus paquetes actuales, más el protocolo independiente de actualización con Electron. Los otros cinco jobs pasan descargas verificadas desde perfil limpio, migración de contratos, inferencia real sin Python y recuperación de colas con LFM3 y ONNX/Harrier.
+
+| Destino | Paquetes ejercitados | IA real |
+| --- | --- | --- |
+| macOS ARM64 | DMG de solo lectura y ZIP | LFM3 + EmbeddingGemma ONNX |
+| macOS Intel | DMG de solo lectura y ZIP | LFM3 + Harrier |
+| Windows x64 | NSIS instalado | LFM3 + EmbeddingGemma ONNX |
+| Linux x64 | AppImage extraído, DEB instalado con dependencias, RPM extraído | LFM3 + EmbeddingGemma ONNX |
+| Linux ARM64 | AppImage extraído, DEB instalado con dependencias, RPM extraído | LFM3 + EmbeddingGemma ONNX |
+
+En el runner Intel, Harrier registró 1.640.488.960 bytes de RSS del proceso de embeddings (aprox. 1,53 GiB), consulta de 1,879 s y dos descripciones LFM3 en 28,891 s. No incluye toda la RAM de Electron/LFM3 ni garantiza esas cifras en otro equipo. Evidencia nativa de los cinco sistemas en `test-results/d72e716-ai-evidence/`.
+
+Localmente, los DMG/ZIP de `release/audit-d72e716` pasan los ocho recorridos de aplicación; el protocolo independiente de actualización también pasa. Manifiesto y SHA-256 en esa carpeta. El primer intento local cerró el proceso al comprobar el tema tras reabrir la app. No hubo informe de crash nuevo y no se reprodujo al repetir el recorrido completo con el mismo paquete. Se conservan `d72e716-packaged.log` (incidencia) y `d72e716-packaged-recheck.log` (repetición correcta); la CI de ambos Mac también pasa. La causa de ese cierre aislado no se ha determinado y no se presenta como fallo corregido.
+
+Después de finalizar la CI, se repitió la recuperación completa desde el ejecutable final: copia cifrada, comprobación, sustitución desde la interfaz con copia de rescate, cierre/reapertura, recuperación en otro perfil y segunda copia/restauración en un tercero; originales verificados por SHA-256 y contenido/configuración recuperados. Evidencia: `test-results/d72e716-last-backup-verification.log`, último perfil `test-results/backups-native-1794580605427/evidence.json`.
+
+Cierre verificable: `test-results/reliability-final-closure.json`, `d72e716-ci.json`, `d72e716-ci.log` y `d72e716-ci-artifacts.json`. Los once instaladores de los cinco destinos están en los artefactos del run; no se suben pesos, perfiles, copias ni instaladores al historial Git. La documentación de cierre posterior no modifica el producto probado. No se ha creado ninguna release pública ni ejecutado firma/notarización. La instalación nativa entre versiones firmadas y las comprobaciones reservadas para release siguen pendientes de esa autorización.
