@@ -611,6 +611,9 @@ export class DesktopBackups {
             );
           this.controller!.signal.throwIfAborted();
           const databases = await this.callbacks.restore(plain, replace);
+          // Older native copies have no application metadata; restoration must
+          // still leave automatic backups off, as the confirmation promises.
+          this.config.preferences.enabled = false;
           const warnings: string[] = [];
           let credentialsRestored = 0,
             credentialsPreserved = 0;

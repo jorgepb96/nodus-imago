@@ -763,3 +763,31 @@ test("registered backups restore using their saved password version after master
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("restoring a native copy without application metadata also disables the existing automatic schedule", async () => {
+  const root = await temp(),
+    a = await harness(root, "source"),
+    b = await harness(root, "target");
+  try {
+    a.repo.create("Older native format");
+    const file = path.join(root, "native-without-application.imago");
+    await writeBackup(a.repo, file);
+    const folder = path.join(root, "copies");
+    await fs.mkdir(folder);
+    await b.manager.folder(folder);
+    await b.manager.setPassword("legacy-restore-password");
+    await b.manager.configure({
+      ...backupPreferencesSchema.parse({}),
+      enabled: true,
+    });
+    const pick = await b.manager.pick(file);
+    await b.manager.inspect(pick.token);
+    await b.manager.restore(pick.token, undefined, false, false);
+    assert.equal(b.repo.list()[0].name, "Older native format");
+    assert.equal((await b.manager.status()).preferences.enabled, false);
+  } finally {
+    await a.close();
+    await b.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

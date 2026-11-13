@@ -242,25 +242,28 @@ test("development/disabled profiles never contact the update feed even when pref
     await f.close();
   }
 });
-for (const [platform, arch, type, extension] of [
-  ["darwin", "arm64", "", "zip"],
-  ["darwin", "x64", "", "zip"],
-  ["win32", "x64", "", "exe"],
-  ["linux", "x64", "deb", "deb"],
-  ["linux", "arm64", "rpm", "rpm"],
-  ["linux", "arm64", "AppImage", "AppImage"],
+for (const [platform, arch, type, extension, publishedArch, otherArch] of [
+  ["darwin", "arm64", "", "zip", "arm64", "x64"],
+  ["darwin", "x64", "", "zip", "x64", "arm64"],
+  ["win32", "x64", "", "exe", "x64", "arm64"],
+  ["linux", "x64", "AppImage", "AppImage", "x86_64", "arm64"],
+  ["linux", "x64", "deb", "deb", "amd64", "arm64"],
+  ["linux", "x64", "rpm", "rpm", "x86_64", "aarch64"],
+  ["linux", "arm64", "AppImage", "AppImage", "arm64", "x86_64"],
+  ["linux", "arm64", "deb", "deb", "arm64", "amd64"],
+  ["linux", "arm64", "rpm", "rpm", "aarch64", "x86_64"],
 ])
-  test(`update assets select ${platform}/${arch}/${type}`, () => {
+  test(`update assets select ${platform}/${arch}/${type} using real builder suffix ${publishedArch}`, () => {
     const hash = Buffer.alloc(64).toString("base64");
     const info = {
       version: "0.2.0",
       files: [
-        { url: `Nodus-Imago-0.2.0-${arch}.${extension}`, sha512: hash },
         {
-          url: `Nodus-Imago-0.2.0-${arch === "arm64" ? "x64" : "arm64"}.${extension}`,
+          url: `Nodus-Imago-0.2.0-${publishedArch}.${extension}`,
           sha512: hash,
         },
-        { url: "https://evil.invalid/not-an-imago.zip", sha512: hash },
+        { url: `Nodus-Imago-0.2.0-${otherArch}.${extension}`, sha512: hash },
+        { url: "https://invalid.invalid/not-an-imago.zip", sha512: hash },
       ],
     };
     assert.equal(compatibleUpdateAssets(info, platform, arch, type).length, 1);

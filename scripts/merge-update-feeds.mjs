@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
+import { updateArtifactArchitecture } from "../shared/updateArtifacts.mjs";
 import { load, dump } from "js-yaml";
 export async function mergeUpdateFeeds(root, output, expectedVersion) {
   const groups = new Map(),
@@ -58,13 +59,24 @@ export async function mergeUpdateFeeds(root, output, expectedVersion) {
       (a, b) =>
         Number(b.url.includes("-arm64.")) - Number(a.url.includes("-arm64.")),
     );
-    const expected = name.includes("-mac")
-      ? ["arm64.zip", "x64.zip"]
-      : name.includes("linux-arm64")
-        ? ["arm64.AppImage", "arm64.deb", "arm64.rpm"]
-        : name.includes("linux")
-          ? ["x64.AppImage", "x64.deb", "x64.rpm"]
-          : ["x64.exe"];
+    const packages = name.includes("-mac")
+      ? [
+          ["darwin", "arm64", "zip"],
+          ["darwin", "x64", "zip"],
+          ["darwin", "arm64", "dmg"],
+          ["darwin", "x64", "dmg"],
+        ]
+      : name.includes("linux")
+        ? ["AppImage", "deb", "rpm"].map((extension) => [
+            "linux",
+            name.includes("linux-arm64") ? "arm64" : "x64",
+            extension,
+          ])
+        : [["win32", "x64", "exe"]];
+    const expected = packages.map(
+      ([platform, arch, extension]) =>
+        `${updateArtifactArchitecture(platform, arch, extension)}.${extension}`,
+    );
     for (const suffix of expected)
       if (
         !ordered.some(

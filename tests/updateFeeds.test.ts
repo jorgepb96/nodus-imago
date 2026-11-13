@@ -15,10 +15,14 @@ async function fixture() {
     ["mac-arm", ["arm64.zip", "arm64.dmg"], "latest-mac.yml"],
     ["mac-x64", ["x64.zip", "x64.dmg"], "latest-mac.yml"],
     ["win", ["x64.exe"], "latest.yml"],
-    ["linux", ["x64.AppImage", "x64.deb", "x64.rpm"], "latest-linux.yml"],
+    [
+      "linux",
+      ["x86_64.AppImage", "amd64.deb", "x86_64.rpm"],
+      "latest-linux.yml",
+    ],
     [
       "linux-arm",
-      ["arm64.AppImage", "arm64.deb", "arm64.rpm"],
+      ["arm64.AppImage", "arm64.deb", "aarch64.rpm"],
       "latest-linux-arm64.yml",
     ],
   ] as [string, string[], string][]) {

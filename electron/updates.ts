@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
+import { updateArtifactArchitecture } from "../shared/updateArtifacts.mjs";
 import { valid, gt, prerelease } from "semver";
 import {
   updatePreferencesSchema,
@@ -52,7 +53,9 @@ export function compatibleUpdateAssets(
         .pop()!;
       return (
         file.startsWith("Nodus-Imago-") &&
-        file.endsWith(`-${arch}.${extension}`) &&
+        file.endsWith(
+          `-${updateArtifactArchitecture(platform, arch, extension)}.${extension}`,
+        ) &&
         Buffer.from(f.sha512, "base64").length === 64
       );
     } catch {
