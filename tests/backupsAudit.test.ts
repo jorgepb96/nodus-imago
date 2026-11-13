@@ -26,7 +26,10 @@ import {
   sealMetadata,
   openMetadata,
 } from "../electron/export/backupCrypto";
-import { DesktopBackups } from "../electron/export/desktopBackups";
+import {
+  DesktopBackups,
+  publishBackupFile,
+} from "../electron/export/desktopBackups";
 import { backupDue, backupPreferencesSchema } from "../shared/backups";
 async function harness(root: string, name: string) {
   const profile = path.join(root, name);
@@ -580,6 +583,181 @@ test("aborted snapshot removes only its partial output and preserves existing da
     );
     await verifyBackup(f.repo, old);
     assert.deepEqual(await fs.readdir(path.join(f.repo.root, "staging")), []);
+  } finally {
+    await f.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("encrypted backup never prepares its plaintext archive in the external/synced destination", async () => {
+  const root = await temp(),
+    f = await harness(root, "private-profile");
+  try {
+    const external = path.join(root, "synced-folder");
+    await fs.mkdir(external);
+    f.repo.create("Private research");
+    const original = f.service.run.bind(f.service);
+    let observed = false;
+    f.service.run = async (command, input) => {
+      if (command === "_writeBackup") {
+        observed = true;
+        assert.ok(input.file.startsWith(f.profile + path.sep));
+        assert.equal(input.file.startsWith(external + path.sep), false);
+      }
+      return original(command, input);
+    };
+    const copy = await f.manager.create(
+      path.join(external, "encrypted.imago"),
+      "manual",
+      "external-folder-password",
+    );
+    assert.equal(observed, true);
+    assert.equal(
+      (await fs.readFile(copy.file)).subarray(0, 10).toString(),
+      "IMAGOENC1\n",
+    );
+    assert.deepEqual(await fs.readdir(external), ["encrypted.imago"]);
+    assert.equal(
+      (await fs.readdir(f.profile)).some((n) => n.startsWith(".imago-backup-")),
+      false,
+    );
+  } finally {
+    await f.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+test("disk exhaustion during creation or replacement preserves all previous copies and target records", async () => {
+  const root = await temp(),
+    a = await harness(root, "source"),
+    b = await harness(root, "target"),
+    statfs = fs.statfs;
+  try {
+    const folder = path.join(root, "copies");
+    await fs.mkdir(folder);
+    await b.manager.folder(folder);
+    await b.manager.setPassword("disk-safety-password");
+    a.repo.create("Source");
+    b.repo.create("Preserved");
+    const copy = await a.manager.create(
+        path.join(folder, "good.imago"),
+        "manual",
+        "disk-source-password",
+      ),
+      pick = await b.manager.pick(copy.file);
+    await b.manager.inspect(pick.token, "disk-source-password");
+    const hash = createHash("sha256")
+      .update(await fs.readFile(copy.file))
+      .digest("hex");
+    fs.statfs = (async () => ({
+      bavail: 0,
+      bsize: 4096,
+    })) as unknown as typeof fs.statfs;
+    await assert.rejects(
+      b.manager.create(
+        path.join(folder, "no-space.imago"),
+        "manual",
+        "disk-safety-password",
+      ),
+      /Espacio insuficiente/,
+    );
+    await assert.rejects(
+      b.manager.restore(pick.token, "disk-source-password", true, false),
+      /Espacio insuficiente/,
+    );
+    assert.equal(b.repo.list()[0].name, "Preserved");
+    assert.equal(
+      createHash("sha256")
+        .update(await fs.readFile(copy.file))
+        .digest("hex"),
+      hash,
+    );
+    assert.deepEqual(await fs.readdir(folder), ["good.imago"]);
+    await b.service.run("createRow", { databaseId: b.repo.list()[0].id });
+  } finally {
+    fs.statfs = statfs;
+    await a.close();
+    await b.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("exclusive publication preserves both files when a destination appears after preflight", async () => {
+  const root = await temp(),
+    link = fs.link;
+  try {
+    const source = path.join(root, "verified.partial"),
+      destination = path.join(root, "new.imago");
+    await fs.writeFile(source, "verified-data");
+    const hash = createHash("sha256").update("verified-data").digest("hex");
+    fs.link = async (from, to) => {
+      await fs.writeFile(to, "concurrently-created-copy", { flag: "wx" });
+      return link(from, to);
+    };
+    await assert.rejects(publishBackupFile(source, destination, hash), {
+      code: "EEXIST",
+    });
+    assert.equal(await fs.readFile(source, "utf8"), "verified-data");
+    assert.equal(
+      await fs.readFile(destination, "utf8"),
+      "concurrently-created-copy",
+    );
+  } finally {
+    fs.link = link;
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+test("exclusive publication supports external filesystems without hard links and never overwrites an existing file", async () => {
+  const root = await temp(),
+    link = fs.link;
+  try {
+    fs.link = async () => {
+      throw Object.assign(Error("Hard links unsupported"), { code: "ENOTSUP" });
+    };
+    const source = path.join(root, "verified.partial"),
+      destination = path.join(root, "new.imago"),
+      hash = createHash("sha256").update("verified-data").digest("hex");
+    await fs.writeFile(source, "verified-data");
+    await publishBackupFile(source, destination, hash);
+    assert.equal(await fs.readFile(destination, "utf8"), "verified-data");
+    await assert.rejects(fs.stat(source), { code: "ENOENT" });
+    await fs.writeFile(source, "verified-data");
+    await assert.rejects(publishBackupFile(source, destination, hash), {
+      code: "EEXIST",
+    });
+    assert.equal(await fs.readFile(source, "utf8"), "verified-data");
+    assert.equal(await fs.readFile(destination, "utf8"), "verified-data");
+  } finally {
+    fs.link = link;
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("registered backups restore using their saved password version after master-password rotation", async () => {
+  const root = await temp(),
+    f = await harness(root, "source");
+  try {
+    const folder = path.join(root, "copies");
+    await fs.mkdir(folder);
+    await f.manager.folder(folder);
+    await f.manager.setPassword("first-master-password");
+    const db = f.repo.create("Before rotation"),
+      row = f.repo.createRow(db.database.id);
+    const copy = await f.manager.create();
+    await f.manager.setPassword("second-master-password");
+    f.repo.setCell(
+      row.id,
+      db.columns.find((c) => c.type === "title")!.id,
+      "Changed later",
+    );
+    const pick = await f.manager.pick(copy.file);
+    assert.equal(pick.passwordStored, true);
+    await f.manager.inspect(pick.token);
+    await f.manager.restore(pick.token, undefined, true, false);
+    assert.notEqual(f.repo.getRow(row.id).title, "Changed later");
+    const safety = (await f.manager.status()).entries.find(
+      (e) => e.reason === "before-restore",
+    )!;
+    await f.manager.verify(safety.id);
   } finally {
     await f.close();
     await fs.rm(root, { recursive: true, force: true });

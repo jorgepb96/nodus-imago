@@ -235,7 +235,7 @@ export type Commands = {
   backupConfigure:{input:import("./backups").BackupPreferences;result:void};
   backupSetPassword:{input:{password:string};result:void};
   backupRun:{input:{password?:string}|void;result:import("./backups").BackupEntry|null};
-  backupPickRestore:{input:void;result:{token:string;encrypted:boolean}|null};
+  backupPickRestore:{input:void;result:{token:string;encrypted:boolean;passwordStored:boolean}|null};
   backupInspect:{input:{token:string;password?:string};result:{databases:number;rows:number;files:number;createdAt:string;legacy:boolean}};
   backupRestore:{input:{token:string;password?:string;replace:boolean;restoreCredentials:boolean};result:{databases:number;credentialsRestored:number;credentialsPreserved:number;warnings:string[]}|null};
   backupVerify:{input:{id:string;password?:string};result:{databases:number;rows:number;files:number;legacy:boolean}};

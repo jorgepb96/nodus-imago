@@ -81,6 +81,36 @@ type Callbacks = {
   updates?: () => UpdatePreferences;
   applyUpdates?: (preferences: UpdatePreferences) => Promise<unknown>;
 };
+// Never replace a file that appeared after preflight (e.g. a cloud-sync race).
+// Hard links publish atomically; filesystems without them use exclusive copying.
+export async function publishBackupFile(
+  source: string,
+  destination: string,
+  expectedHash: string,
+) {
+  try {
+    await fsp.link(source, destination);
+  } catch (error) {
+    if (
+      !["EPERM", "ENOTSUP", "EOPNOTSUPP", "EXDEV", "ENOSYS"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )
+    )
+      throw error;
+    await fsp.copyFile(source, destination, fs.constants.COPYFILE_EXCL);
+    const handle = await fsp.open(destination, "r+");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  }
+  if ((await hashFile(destination)) !== expectedHash)
+    throw Error(
+      "La copia publicada no coincide; el archivo de origen se conserva.",
+    );
+  await fsp.unlink(source);
+}
 export class DesktopBackups {
   private config: z.infer<typeof configSchema>;
   private active: Promise<unknown> | null = null;
@@ -90,7 +120,10 @@ export class DesktopBackups {
   private registryInvalid = false;
   private saveTask: Promise<unknown> = Promise.resolve();
   private phase = "";
-  private picks = new Map<string, { file: string; hash?: string }>();
+  private picks = new Map<
+    string,
+    { file: string; hash?: string; keyId?: string }
+  >();
   constructor(
     private userData: string,
     private secrets: Secrets,
@@ -287,7 +320,7 @@ export class DesktopBackups {
         profile = await fsp.realpath(this.userData);
       if (resolved === profile || resolved.startsWith(profile + path.sep))
         throw Error("Guarda las copias fuera del perfil de Imago.");
-      workspace = await fsp.mkdtemp(path.join(folder, ".imago-backup-"));
+      workspace = await fsp.mkdtemp(path.join(this.userData, ".imago-backup-"));
       await fsp.chmod(workspace, 0o700);
       const client = await this.callbacks.client();
       const credentials: Record<string, string> = {};
@@ -354,7 +387,7 @@ export class DesktopBackups {
         throw Error(
           "El destino ya existe; no se ha sustituido ningún archivo.",
         );
-      await fsp.rename(temp, file);
+      await publishBackupFile(temp, file, sha256);
       temp = undefined;
       const entry: BackupEntry = {
         id,
@@ -442,7 +475,7 @@ export class DesktopBackups {
     const target = path.join(targetFolder, path.basename(entry.file));
     if (fs.existsSync(target))
       throw Error("Ya existe un archivo con ese nombre.");
-    await fsp.rename(entry.file, target);
+    await publishBackupFile(entry.file, target, entry.sha256);
     entry.file = target;
     entry.archived = archived;
     await this.save();
@@ -478,8 +511,15 @@ export class DesktopBackups {
   async pick(file: string) {
     const token = uuid();
     if (this.picks.size > 20) this.picks.clear();
-    this.picks.set(token, { file });
-    return { token, encrypted: await encryptedBackup(file) };
+    const keyId = this.config.entries.find(
+      (entry) => path.resolve(entry.file) === path.resolve(file),
+    )?.keyId;
+    this.picks.set(token, { file, keyId });
+    return {
+      token,
+      encrypted: await encryptedBackup(file),
+      passwordStored: !!(keyId && this.password(keyId)),
+    };
   }
   async inspect(token: string, password?: string) {
     return this.operation(async () => {
@@ -487,7 +527,11 @@ export class DesktopBackups {
       if (!pick) throw Error("Selecciona de nuevo la copia.");
       pick.hash = undefined;
       const before = await hashFile(pick.file);
-      const result = await this.inspectFile(pick.file, password);
+      const result = await this.inspectFile(
+        pick.file,
+        password ??
+          (pick.keyId ? (this.password(pick.keyId) ?? undefined) : undefined),
+      );
       if ((await hashFile(pick.file)) !== before)
         throw Error("La copia cambió durante la comprobación.");
       pick.hash = before;
@@ -509,6 +553,9 @@ export class DesktopBackups {
     // Safety copy is a separate operation; it must succeed before any replacement.
     const pick = this.picks.get(token);
     if (!pick?.hash) throw Error("Comprueba la copia antes de restaurarla.");
+    password ??= pick.keyId
+      ? (this.password(pick.keyId) ?? undefined)
+      : undefined;
     return this.operation(async () => {
       await this.callbacks.lockRestore();
       try {

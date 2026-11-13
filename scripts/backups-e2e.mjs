@@ -108,9 +108,17 @@ try {
     value: "# Fuente\n\n- Padre\n  - Hijo\n\n**Descripción histórica**",
   });
   await a.call("updateSettings", { mode: "dark" });
-  await a.call("updateConfigure", { automaticChecks: false, autoDownload: false, beta: true });
+  await a.call("updateConfigure", {
+    automaticChecks: false,
+    autoDownload: false,
+    beta: true,
+  });
   const secure = (await a.call("credentialsStatus")).encryptionAvailable;
-  if (secure) await a.call("setApiKey", {provider: "custom", key: "fixture-backup-key-no-network"});
+  if (secure)
+    await a.call("setApiKey", {
+      provider: "custom",
+      key: "fixture-backup-key-no-network",
+    });
   await a.page.evaluate(() =>
     localStorage.setItem(
       "imago.native.backup-view",
@@ -140,6 +148,12 @@ try {
   await a.page
     .getByLabel("Confirmar contraseña", { exact: true })
     .fill(password);
+  if (secure) {
+    await a.page
+      .getByRole("button", { name: "Guardar contraseña", exact: true })
+      .click();
+    await pollNative(async () => (await a.call("backupStatus")).passwordStored);
+  }
   const copy = path.join(folder, "source.imago");
   await a.app.evaluate(({ dialog }, file) => {
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: file });
@@ -169,8 +183,16 @@ try {
     .click();
   await verify.waitFor({ state: "hidden" });
   checks.push("UI creates encrypted copy and independently verifies it");
-  if (secure) await a.call("setApiKey", {provider: "custom", key: "fixture-current-key-preserved"});
-  const currentSecret = secure ? await fs.readFile(path.join(root,"source","secrets","ai_key_custom.bin")) : null;
+  if (secure)
+    await a.call("setApiKey", {
+      provider: "custom",
+      key: "fixture-current-key-preserved",
+    });
+  const currentSecret = secure
+    ? await fs.readFile(
+        path.join(root, "source", "secrets", "ai_key_custom.bin"),
+      )
+    : null;
   await a.call("setCell", {
     rowId: seed.rows[0],
     columnId: title.id,
@@ -195,13 +217,32 @@ try {
       return { response: 1, checkboxChecked: false };
     };
   });
-  await a.page.getByRole("button", {name: "Restaurar copia", exact: true}).click();
+  await a.page
+    .getByRole("button", { name: "Restaurar copia", exact: true })
+    .click();
   const restoreDialog = a.page.getByRole("dialog");
-  await restoreDialog.getByLabel("Contraseña original de la copia", {exact: true}).fill(password);
-  await restoreDialog.getByRole("button", {name: "Comprobar antes de restaurar", exact: true}).click();
-  await restoreDialog.getByRole("checkbox", {name: "Sustituir la colección actual conservando antes una copia cifrada y verificada", exact: true}).check();
-  await restoreDialog.getByRole("button", {name: "Restaurar datos comprobados", exact: true}).click();
-  await a.page.getByRole("heading", {name: "Tu espacio de investigación visual", exact: true}).waitFor();
+  if (!secure)
+    await restoreDialog
+      .getByLabel("Contraseña original de la copia", { exact: true })
+      .fill(password);
+  await restoreDialog
+    .getByRole("button", { name: "Comprobar antes de restaurar", exact: true })
+    .click();
+  await restoreDialog
+    .getByRole("checkbox", {
+      name: "Sustituir la colección actual conservando antes una copia cifrada y verificada",
+      exact: true,
+    })
+    .check();
+  await restoreDialog
+    .getByRole("button", { name: "Restaurar datos comprobados", exact: true })
+    .click();
+  await a.page
+    .getByRole("heading", {
+      name: "Tu espacio de investigación visual",
+      exact: true,
+    })
+    .waitFor();
   assert.equal(
     (await a.call("getRow", { id: seed.rows[0] })).title,
     before.title,
@@ -211,8 +252,18 @@ try {
     before.cells[rich.id],
   );
   assert.deepEqual(await originals(a, seed.rows), hashes);
-  if (secure) assert.deepEqual(await fs.readFile(path.join(root,"source","secrets","ai_key_custom.bin")),currentSecret);
-  assert.deepEqual((await a.call("updateStatus")).preferences,{automaticChecks:false,autoDownload:false,beta:false});
+  if (secure)
+    assert.deepEqual(
+      await fs.readFile(
+        path.join(root, "source", "secrets", "ai_key_custom.bin"),
+      ),
+      currentSecret,
+    );
+  assert.deepEqual((await a.call("updateStatus")).preferences, {
+    automaticChecks: false,
+    autoDownload: false,
+    beta: false,
+  });
   const safety = (await a.call("backupStatus")).entries.find(
     (e) => e.reason === "before-restore",
   );
@@ -259,9 +310,11 @@ try {
   );
   assert.deepEqual(await originals(b, seed.rows), hashes);
   if (secure) {
-    assert.equal((await b.call("credentialsStatus")).providers.custom,true);
-    const stored = await fs.readFile(path.join(root,"recovery","secrets","ai_key_custom.bin"));
-    assert.equal(stored.includes("fixture-current-key-preserved"),false);
+    assert.equal((await b.call("credentialsStatus")).providers.custom, true);
+    const stored = await fs.readFile(
+      path.join(root, "recovery", "secrets", "ai_key_custom.bin"),
+    );
+    assert.equal(stored.includes("fixture-current-key-preserved"), false);
   }
   checks.push(
     "Independent clean profile recovers the pre-replacement edited collection",

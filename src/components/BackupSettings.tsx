@@ -25,9 +25,11 @@ export function BackupSettings({
     [state, setState] = useState<BackupStatus | null>(null),
     [password, setPassword] = useState(""),
     [confirmation, setConfirmation] = useState(""),
-    [pick, setPick] = useState<{ token: string; encrypted: boolean } | null>(
-      null,
-    ),
+    [pick, setPick] = useState<{
+      token: string;
+      encrypted: boolean;
+      passwordStored: boolean;
+    } | null>(null),
     [restorePassword, setRestorePassword] = useState(""),
     [preview, setPreview] = useState<{
       databases: number;
@@ -461,6 +463,11 @@ export function BackupSettings({
                 <input
                   type="password"
                   autoComplete="off"
+                  placeholder={
+                    pick.passwordStored
+                      ? t("Dejar vacío para usar el almacén seguro")
+                      : ""
+                  }
                   value={restorePassword}
                   onChange={(e) => {
                     setRestorePassword(e.target.value);
@@ -470,7 +477,10 @@ export function BackupSettings({
               </label>
             )}
             <Button
-              disabled={busy || (pick.encrypted && !restorePassword)}
+              disabled={
+                busy ||
+                (pick.encrypted && !restorePassword && !pick.passwordStored)
+              }
               onClick={() =>
                 act(async () =>
                   setPreview(

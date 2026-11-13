@@ -2,7 +2,7 @@
 
 ## Revisión vigente de fiabilidad — 13 de noviembre de 2026
 
-Se han ampliado colas, copias y actualizaciones según el encargo reactivado. Suite local **164/164**, tipos, lint y build correctos; nueve recorridos de escritorio pasan en fuente. Restauración nativa entre tres perfiles, cifrado e integridad de originales y recuperación de cola con IA real sin Python comprobados. Ver [RELIABILITY-AUDIT-2026-11-13.md](RELIABILITY-AUDIT-2026-11-13.md) para cambios, evidencia y límites. La instalación entre releases firmadas queda reservada a la futura autorización de release. La nueva CI multiplataforma debe identificarse por su run; la CI histórica inferior corresponde al producto anterior.
+Se han ampliado colas, copias y actualizaciones según el encargo reactivado. Suite local **169/169**, tipos, lint y build correctos; nueve recorridos de escritorio pasan en fuente. Restauración nativa entre tres perfiles, cifrado e integridad de originales y recuperación de cola con IA real sin Python comprobados. Ver [RELIABILITY-AUDIT-2026-11-13.md](RELIABILITY-AUDIT-2026-11-13.md) para cambios, evidencia y límites. La instalación entre releases firmadas queda reservada a la futura autorización de release. La nueva CI multiplataforma debe identificarse por su run; la CI histórica inferior corresponde al producto anterior.
 
 
 ## Estado vigente del candidato `6af64a0` — 13 de noviembre de 2026
