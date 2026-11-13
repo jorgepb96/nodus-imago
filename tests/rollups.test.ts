@@ -4,6 +4,52 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Repository } from "../electron/db/repository";
+test("legacy formula-only cycles do not prevent rollups in the same or another database", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-rollup-legacy-")),
+    repo = new Repository(root);
+  try {
+    const d = repo.create("Legacy"),
+      target = repo.create("Target"),
+      n = repo.addColumn(target.database.id, "N", "number"),
+      a = repo.addColumn(d.database.id, "A", "formula"),
+      b = repo.addColumn(d.database.id, "B", "formula", {
+        formula: {
+          kind: "arithmetic",
+          op: "add",
+          operands: [
+            { kind: "column", columnId: a.id },
+            { kind: "number", value: 1 },
+          ],
+        },
+      });
+    repo.updateColumn(a.id, undefined, {
+      formula: {
+        kind: "arithmetic",
+        op: "add",
+        operands: [
+          { kind: "column", columnId: b.id },
+          { kind: "number", value: 1 },
+        ],
+      },
+    });
+    const link = repo.addColumn(d.database.id, "Links", "relation", {
+        relationTargetDatabaseId: target.database.id,
+      }),
+      row = repo.createRow(d.database.id);
+    const count = repo.addColumn(d.database.id, "Count", "rollup", {
+      rollupRelationColumnId: link.id,
+      rollupTargetColumnId: n.id,
+      rollupFunction: "count",
+    });
+    assert.equal(repo.getRow(row.id).cells[count.id], "0");
+    assert.equal(repo.getRow(row.id).cells[a.id] ?? null, null);
+    repo.setCell(row.id, d.columns[0].id, "Can still edit");
+    assert.equal(repo.getRow(row.id).title, "Can still edit");
+  } finally {
+    repo.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 test("live rollups use related records, propagate changes and deletions, feed formulas and reject cycles", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-rollups-")),
     repo = new Repository(root);

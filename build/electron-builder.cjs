@@ -25,10 +25,7 @@ module.exports = {
     // partial Developer ID signature would be worse than an unsigned artifact.
     identity: null,
     category: "public.app-category.education",
-    target: [
-      { target: "dmg", arch: ["arm64"] },
-      { target: "zip", arch: ["arm64"] },
-    ],
+    target: ["dmg", "zip"],
   },
   win: { target: [{ target: "nsis", arch: ["x64"] }] },
   nsis: { oneClick: false, allowToChangeInstallationDirectory: true },

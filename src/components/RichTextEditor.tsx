@@ -31,11 +31,24 @@ export function RichTextEditor({
 }) {
   const t = useT(),
     saved = useRef(value ?? ""),
-    saveRef = useRef(onSave);
+    saveRef = useRef(onSave),
+    pendingMarkdown = useRef<string | null>(null),
+    saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const [error, setError] = useState("");
   useEffect(() => {
     saveRef.current = onSave;
   }, [onSave]);
+  useEffect(
+    () => () => {
+      clearTimeout(saveTimer.current);
+      const pending = pendingMarkdown.current;
+      if (pending !== null && pending !== saved.current) {
+        saved.current = pending;
+        void saveRef.current(pending || null).catch(console.error);
+      }
+    },
+    [],
+  );
   const [sourceMode, setSourceMode] = useState(false),
     [source, setSource] = useState(value ?? ""),
     [preview, setPreview] = useState(false),
@@ -73,6 +86,15 @@ export function RichTextEditor({
     content: value ?? "",
     contentType: "markdown",
     editorProps: {
+      handleKeyDown: (view, event) => {
+        const dialog = view.dom.closest("dialog");
+        if (event.key === "Escape" && dialog) {
+          event.preventDefault();
+          dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+          return true;
+        }
+        return false;
+      },
       attributes: {
         role: "textbox",
         "aria-label": name,
@@ -91,7 +113,20 @@ export function RichTextEditor({
         return false;
       },
     },
-    onBlur: ({ editor }) => persist(editor.getMarkdown()),
+    onUpdate: ({ editor }) => {
+      const markdown = editor.getMarkdown();
+      pendingMarkdown.current = markdown;
+      clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        pendingMarkdown.current = null;
+        persist(markdown);
+      }, 350);
+    },
+    onBlur: ({ editor }) => {
+      clearTimeout(saveTimer.current);
+      pendingMarkdown.current = null;
+      persist(editor.getMarkdown());
+    },
   });
   useEffect(() => {
     if (editor && !editor.isFocused && (value ?? "") !== saved.current) {

@@ -84,12 +84,23 @@ export function recomputeRollups(repo: Repository, changedDatabase: string) {
     ),
     visiting = new Set<string>(),
     done = new Set<string>(),
-    ordered: DatabaseColumn[] = [];
+    ordered: DatabaseColumn[] = [],
+    stack: DatabaseColumn[] = [];
   const visit = (c: DatabaseColumn) => {
     if (done.has(c.id)) return;
-    if (visiting.has(c.id))
-      throw Error("Referencia circular entre fórmulas y rollups.");
+    if (visiting.has(c.id)) {
+      if (
+        stack
+          .slice(stack.findIndex((item) => item.id === c.id))
+          .some((item) => item.type === "rollup")
+      )
+        throw Error("Referencia circular entre fórmulas y rollups.");
+      // Existing formula-only cycles retain the formula engine's null/error
+      // result instead of preventing unrelated rollups or edits.
+      return;
+    }
     visiting.add(c.id);
+    stack.push(c);
     const dependencies =
       c.type === "formula"
         ? formulaDependencies(c.config.formula)
@@ -99,10 +110,11 @@ export function recomputeRollups(repo: Repository, changedDatabase: string) {
       if (dep && ["formula", "rollup"].includes(dep.type)) visit(dep);
     }
     visiting.delete(c.id);
+    stack.pop();
     done.add(c.id);
     ordered.push(c);
   };
-  computed.forEach(visit);
+  computed.filter((c) => affected.has(c.databaseId)).forEach(visit);
   const cache = new Map<string, RecordRow[]>(),
     dirty = new Map<string, RecordRow>();
   const rows = (databaseId: string) => {

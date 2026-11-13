@@ -40,6 +40,7 @@ export class Service {
   queue: JobQueue;
   csvPlans = new Map<string, ReturnType<typeof buildCsvImportPlan>>();
   queryImages = new Map<string, string>();
+  private derivedImages = new Map<string, Promise<string>>();
   constructor(
     root: string,
     script: string,
@@ -552,23 +553,36 @@ export class Service {
         } catch {
           throw new Error("Original ausente. Vuelve a vincularlo en la ficha.");
         }
-        try {
-          await fs.access(target);
-        } catch {
-          const image = await imagePipeline(a.original_path);
-          await writeAtomicImage(
-            image
-              .rotate()
-              .resize(
-                input.variant === "thumb" ? 480 : 2200,
-                input.variant === "thumb" ? 480 : 2200,
-                { fit: "inside", withoutEnlargement: true },
-              )
-              .webp(),
-            target,
-          );
+        let preparation = this.derivedImages.get(target);
+        if (!preparation) {
+          preparation = (async () => {
+            try {
+              await fs.access(target);
+            } catch {
+              const image = await imagePipeline(a.original_path);
+              await writeAtomicImage(
+                image
+                  .rotate()
+                  .resize(
+                    input.variant === "thumb" ? 480 : 2200,
+                    input.variant === "thumb" ? 480 : 2200,
+                    { fit: "inside", withoutEnlargement: true },
+                  )
+                  .webp(),
+                target,
+              );
+            }
+            return target;
+          })();
+          this.derivedImages.set(target, preparation);
+          void preparation
+            .finally(() => {
+              if (this.derivedImages.get(target) === preparation)
+                this.derivedImages.delete(target);
+            })
+            .catch(() => {});
         }
-        return target;
+        return preparation;
       }
       case "_settings":
         return this.repo.getSettings();

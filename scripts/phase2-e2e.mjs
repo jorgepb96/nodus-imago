@@ -88,8 +88,9 @@ try {
       (await call("getRow", { id: row.id })).cells[rich.id] ?? "",
     ),
   );
-  await editor.click();
-  await editor.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await editor.focus();
+  await editor.press("End");
+  await editor.press("Shift+ArrowLeft");
   await pollNative(async () =>
     editor.evaluate((e) => !e.editor.state.selection.empty),
   );
@@ -107,6 +108,16 @@ try {
       "https://example.org/source",
     ),
   );
+  await editor.fill("Guardado al cerrar");
+  await page.keyboard.press("Escape");
+  await pollNative(async () =>
+    (await call("getRow", { id: row.id })).cells[rich.id]?.includes(
+      "Guardado al cerrar",
+    ),
+  );
+  await page
+    .getByRole("button", { name: "Abrir registro", exact: true })
+    .click();
   await record.getByRole("button", { name: "Markdown", exact: true }).click();
   await record
     .getByLabel("Anotaciones", { exact: true })
