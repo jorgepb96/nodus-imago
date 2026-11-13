@@ -131,6 +131,11 @@ try {
     .locator(".sidebar-databases>button")
     .filter({ hasText: fixture.database.name })
     .click();
+  await page
+    .locator(".view-tabs")
+    .first()
+    .getByRole("button", { name: "Tabla", exact: true })
+    .waitFor();
   assert.deepEqual(
     await page
       .locator(".view-tabs")

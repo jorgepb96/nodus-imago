@@ -376,11 +376,20 @@ export class Models {
         )
       )
         throw new Error("Redirección de descarga no autorizada.");
-      response = await fetch(url, {
-        redirect: "manual",
-        signal,
-        headers: offset ? { Range: `bytes=${offset}-` } : {},
-      });
+      try {
+        response = await fetch(url, {
+          redirect: "manual",
+          signal,
+          headers: offset ? { Range: `bytes=${offset}-` } : {},
+        });
+      } catch (error) {
+        if (signal.aborted) throw error;
+        throw new Error(
+          "No se pudo descargar el modelo. Comprueba la conexión y pulsa Reanudar; se conservan los datos parciales. (" +
+            (error instanceof Error ? error.message : String(error)) +
+            ")",
+        );
+      }
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get("location");
         if (!location) throw new Error("Redirección sin destino.");

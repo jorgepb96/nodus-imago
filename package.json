@@ -42,7 +42,9 @@
     "test:onnx:parity": "node scripts/run-electron-script.mjs scripts/onnx-parity.ts",
     "test:onboarding:e2e": "node scripts/onboarding-e2e.mjs",
     "test:native-ai:e2e": "node scripts/native-ai-e2e.mjs",
-    "benchmark:research": "node scripts/run-electron-script.mjs scripts/research-benchmark.ts"
+    "benchmark:research": "node scripts/run-electron-script.mjs scripts/research-benchmark.ts",
+    "test:disk:e2e": "node scripts/disk-preflight-e2e.mjs",
+    "test:network:e2e": "node scripts/network-preflight-e2e.mjs"
   },
   "dependencies": {
     "@nodus/embeddinggemma-transformers": "npm:@huggingface/transformers@4.3.1",

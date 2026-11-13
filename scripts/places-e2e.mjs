@@ -60,6 +60,11 @@ async function openApp() {
       : route.fulfill({ status: 200, contentType: "image/png", body: tile });
   });
   page = await app.firstWindow();
+  // AppImage launches may reuse Chromium's disk cache across test sessions.
+  // Force this isolated test to exercise its tile route rather than cached data.
+  await app.evaluate(async ({ session }) => {
+    await session.defaultSession.clearCache();
+  });
   page.setDefaultTimeout(15000);
   page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
   await page

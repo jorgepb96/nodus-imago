@@ -9,6 +9,8 @@ if (process.env.IMAGO_TEST_PACKAGED_AI)
         : `release/linux${process.arch === "arm64" ? "-arm64" : ""}-unpacked/nodus-imago`,
   );
 for (const script of [
+  ...(process.platform === "darwin" ? ["scripts/disk-preflight-e2e.mjs"] : []),
+  "scripts/network-preflight-e2e.mjs",
   "scripts/onboarding-e2e.mjs",
   "scripts/migration-e2e.mjs",
   "scripts/native-ai-e2e.mjs",
