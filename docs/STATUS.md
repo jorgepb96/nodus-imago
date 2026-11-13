@@ -1,5 +1,18 @@
 # Estado verificable y trabajo pendiente
 
+## Estado vigente del candidato `6af64a0` — 13 de noviembre de 2026
+
+Implementadas las fases 0, 1 y 2; retirado el aviso del sidebar y anclado Ajustes abajo (8 px observados). Suite local **103/103**, lint, tipos y build correctos. Los DMG/ZIP actuales de `release/v1-validation-6af64a0` pasan los siete recorridos cada uno; IA real empaquetada ARM64 también pasa sin Python. Evidencia: `final-local-packaged-e2e.log`, `final-local-packaged-ai.log`, manifiesto y SHA en esa carpeta. Son artefactos de prueba sin firma.
+
+La auditoría autorizada de diez fotografías NASA y cinco modelos ha terminado: 100 respuestas reales, 96 propuestas admitidas y cuatro clasificaciones rechazadas correctamente. OpenRouter: **0,004380796 USD reportados**; Gemini: **0,001162600 USD estimados**, con máximo **1 USD independiente por API**. LFM3 y ONNX funcionan en CPU sin Python. Persistencia, procedencia, ensayos y exportación nativos correctos; estadísticas reales contrastadas con bibliotecas independientes a `1e-9`. Detalles, desacuerdos y límites en [AUTHORIZED-AI-AUDIT-2026-11-13.md](AUTHORIZED-AI-AUDIT-2026-11-13.md). No se inventa referencia humana ni se equipara cumplimiento de formato con precisión.
+
+**CI final verde: 10/10 jobs**, [run 43363652116](https://github.com/jorgepb96/nodus-imago/actions/runs/43363652116), producto `6af64a0`. Pasan fuente, paquetes instalados/extraídos e IA real en macOS ARM64, macOS Intel, Windows x64, Linux x64 y Linux ARM64. Publicados diez artefactos de CI vigentes: cinco grupos de instaladores y cinco de evidencia CPU, todos de ese commit. La documentación posterior no cambia el producto probado. Resumen y metadatos descargados en `test-results/ci-final-{run,summary,artifacts}.json`.
+
+Corrección del diagnóstico anterior: limpiar caché no resolvió las teselas en AppImage; el interceptor CDP no capturaba sus peticiones. La regresión aislada del paquete pasa al servir las teselas desde la sesión nativa de Electron, sin quitar aserciones (`scripts/map-tile-fixture.mjs`, run 43362233162). El run posterior pasó los siete recorridos AppImage de ambos Linux y detectó que `dpkg -i` no resolvía `libnotify4`; el instalador de pruebas ahora usa `apt-get install` del DEB para resolver sus dependencias. Los registros anteriores se conservan como historia y sus estados pendientes quedan subordinados a esta sección.
+
+Se mantienen los límites autorizados: sin release pública, firma/notarización, CUDA ni corpus privado. RPM se extrae y ejecuta en Ubuntu; no se afirma instalación en una distribución RPM. El recordatorio de reanudación ya se disparó y fue eliminado; no hay seguimiento programado recurrente.
+
+
 ## Cierre de recorridos y recursos — 13 de noviembre
 
 Run 43357893269: los cinco jobs de IA real empaquetada pasan. Desktop/instalador Windows NSIS y macOS ARM64 DMG/ZIP pasan completos. Intel pasó DMG y falló en ZIP una aserción que leía las pestañas antes de terminar la carga; Linux x64/ARM64 pasó fuente, construyó AppImage/DEB/RPM y falló en AppImage al no observar peticiones de teselas servidas desde caché. Se añaden espera de pestañas y limpieza de caché de la sesión de prueba antes de interceptar teselas; no se retira ninguna aserción. Se prepara otra ejecución para terminar esos instaladores.
