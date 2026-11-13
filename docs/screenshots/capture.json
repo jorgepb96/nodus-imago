@@ -1,0 +1,39 @@
+{
+  "applicationCommit": "9604621e55b88722c8865f865d0ffcd24ace19af",
+  "date": "2026-11-13",
+  "locale": "en",
+  "theme": "light",
+  "method": "Native Electron window capture, resized only",
+  "images": [
+    {
+      "file": "readme-agreement.png",
+      "width": 1600,
+      "height": 999,
+      "sha256": "7bf7c75036d0475ba93d97d6d1d8f005958cb593f44b9de598c7b81754db847a"
+    },
+    {
+      "file": "readme-gallery.png",
+      "width": 1600,
+      "height": 1453,
+      "sha256": "3275ebcaff0a3326e8dbfb6c4794b10bf92528c8492d7ea4881d7820b57e791f"
+    },
+    {
+      "file": "readme-record.png",
+      "width": 1600,
+      "height": 999,
+      "sha256": "8846240a8064ed2eb7535ffa6a16e14fe545986f9408ba66b76fe8a44401a160"
+    },
+    {
+      "file": "readme-settings.png",
+      "width": 1600,
+      "height": 850,
+      "sha256": "cf210375d0cae5be4fb73849231d5c523259e18f4fed34d02a0d99f552f9b9a2"
+    },
+    {
+      "file": "readme-table.png",
+      "width": 1600,
+      "height": 999,
+      "sha256": "d1e6d250c09a3c1140a4be463e185dcf69771577da44d207e4844aa7e5c96968"
+    }
+  ]
+}
