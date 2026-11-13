@@ -76,7 +76,7 @@ if (process.platform === "darwin") {
   });
   await exercise(path.join(extract, "squashfs-root", "AppRun"));
   evidence.push("AppImage extracted: all desktop flows");
-  await run("sudo", ["dpkg", "-i", pick(".deb")]);
+  await run("sudo", ["apt-get", "install", "-y", pick(".deb")]);
   await exercise("/opt/Nodus Imago/nodus-imago");
   evidence.push("DEB installed: all desktop flows");
   const rpm = path.join(temporary, "rpm");
