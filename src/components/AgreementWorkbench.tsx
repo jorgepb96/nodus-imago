@@ -309,6 +309,7 @@ export function AgreementWorkbench({
     <Modal
       title={`${t("Concordancia")} · ${detail.database.name}`}
       wide
+      layout="panels"
       onClose={onClose}
     >
       <div className="agreement-workbench">

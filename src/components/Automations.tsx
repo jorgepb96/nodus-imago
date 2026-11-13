@@ -99,13 +99,15 @@ export function Automations({
       actions: rule.actions.map((a, i) => (i === index ? action : a)),
     });
   return (
-    <Modal title={t("Automatizaciones")} onClose={onClose} wide>
-      <p className="hint">
-        {t(
-          "Las reglas solo actúan si las activas. Las acciones no disparan otras reglas. La IA genera propuestas para revisión; conserva los límites locales y de API de Ajustes.",
-        )}
-      </p>
-      {error && <p role="alert">{error}</p>}
+    <Modal title={t("Automatizaciones")} onClose={onClose} wide layout="panels">
+      <div className="modal-body automation-intro">
+        <p className="hint">
+          {t(
+            "Las reglas solo actúan si las activas. Las acciones no disparan otras reglas. La IA genera propuestas para revisión; conserva los límites locales y de API de Ajustes.",
+          )}
+        </p>
+        {error && <p role="alert">{error}</p>}
+      </div>
       <div className="property-layout">
         <div className="property-list">
           {rules.map((r) => (
@@ -382,7 +384,7 @@ export function Automations({
           )}
         </div>
       </div>
-      <details>
+      <details className="modal-body automation-history">
         <summary>{t("Historial de automatizaciones")}</summary>
         <table>
           <thead>

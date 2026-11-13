@@ -198,7 +198,7 @@ export function Properties({
     );
   };
   return (
-    <Modal title={t("Propiedades")} onClose={onClose} wide>
+    <Modal title={t("Propiedades")} onClose={onClose} wide layout="panels">
       <div className="property-layout">
         <div className="property-list">
           {detail.columns.map((c) => (

@@ -29,11 +29,14 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  layout = "standard",
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  /** Panel layouts provide their own padded body, navigation and footer areas. */
+  layout?: "standard" | "panels";
 }) {
   const ref = useRef<HTMLDialogElement>(null),
     t = useT();
@@ -78,7 +81,11 @@ export function Modal({
           <X size={18} />
         </Button>
       </header>
-      {children}
+      <div
+        className={`modal-content${layout === "panels" ? " modal-content-panels" : ""}`}
+      >
+        {children}
+      </div>
     </dialog>
   );
 }

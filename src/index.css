@@ -1641,6 +1641,7 @@ thead th:last-child {
   max-width: 300px;
 }
 .modal {
+  --modal-inset: 24px;
   position: fixed;
   border: 1px solid var(--line);
   background: var(--panel);
@@ -1648,9 +1649,10 @@ thead th:last-child {
   border-radius: 12px;
   box-shadow: 0 30px 100px #0003;
   width: min(510px, calc(100vw - 70px));
-  max-height: 85vh;
+  max-height: min(85vh, calc(100vh - 48px));
   padding: 0;
   overflow: auto;
+  scroll-padding-block: 76px 24px;
 }
 .modal::backdrop {
   background: #0005;
@@ -1668,6 +1670,9 @@ thead th:last-child {
 }
 .agreement-tabs button {
   flex-shrink: 0;
+}
+.agreement-workbench > .agreement-notice {
+  margin: 16px var(--modal-inset) 0;
 }
 .agreement-body {
   min-height: 320px;
@@ -1982,7 +1987,8 @@ thead th:last-child {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 22px;
+  gap: 16px;
+  padding: 16px var(--modal-inset);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -1990,25 +1996,78 @@ thead th:last-child {
   z-index: 2;
 }
 .modal h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 15px;
+  line-height: 1.4;
+}
+.modal > header > .button {
+  flex-shrink: 0;
+}
+.modal-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: var(--modal-inset);
+}
+.modal-content .button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+.modal-content > form {
+  min-width: 0;
+}
+.modal-content-panels {
+  padding: 0;
+}
+.modal-content:not(.modal-content-panels) .modal-body {
+  padding: 0;
+}
+.modal-content:not(.modal-content-panels) footer {
+  margin-top: 20px;
+  padding: 16px 0 0;
+  background: transparent;
+}
+.modal-content:not(.modal-content-panels) > .stack > footer {
+  margin-top: 4px;
 }
 .modal-body {
-  padding: 22px;
+  min-width: 0;
+  padding: var(--modal-inset, 24px);
 }
 .modal-body > p {
   margin-top: 12px;
 }
 .modal footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  padding: 14px 22px;
+  padding: 16px var(--modal-inset) 20px;
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
-.modal .modal-body > label > input {
+.modal footer .button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+.modal .modal-body > label > input:not([type="checkbox"]):not([type="radio"]),
+.modal-content > .stack > label > input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
+}
+.automation-intro {
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.automation-history {
+  border-top: 1px solid var(--line);
+  overflow-x: auto;
+}
+.automation-history[open] > summary {
+  margin-bottom: 16px;
 }
 .preview-table {
   margin-top: 18px;
@@ -2034,12 +2093,13 @@ thead th:last-child {
 }
 .property-layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 400px;
 }
 .property-list {
+  min-width: 0;
   border-right: 1px solid var(--line);
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -2073,17 +2133,20 @@ thead th:last-child {
   display: flex;
   flex-direction: column;
   gap: 17px;
-  padding: 23px;
+  min-width: 0;
+  padding: var(--modal-inset, 24px);
 }
 .property-hint {
+  padding: 24px;
+  text-align: center;
   display: grid;
   place-items: center;
   flex: 1;
   font-size: 12px;
 }
 .property-form footer {
-  margin: auto -23px -23px;
-  padding: 15px 23px;
+  margin: auto calc(-1 * var(--modal-inset)) calc(-1 * var(--modal-inset));
+  padding: 16px var(--modal-inset) 20px;
 }
 .option-edit {
   gap: 3px;

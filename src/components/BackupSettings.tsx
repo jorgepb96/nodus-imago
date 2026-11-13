@@ -430,22 +430,24 @@ export function BackupSettings({
                 onChange={(e) => setVerifyPassword(e.target.value)}
               />
             </label>
-            <Button
-              disabled={busy}
-              onClick={() =>
-                act(async () => {
-                  await window.imago.call("backupVerify", {
-                    id: verifyId,
-                    password: verifyPassword || undefined,
-                  });
-                  setVerifyId(null);
-                  setVerifyPassword("");
-                  setMessage(t("Integridad de la copia comprobada."));
-                })
-              }
-            >
-              {t("Comprobar integridad")}
-            </Button>
+            <footer>
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  act(async () => {
+                    await window.imago.call("backupVerify", {
+                      id: verifyId,
+                      password: verifyPassword || undefined,
+                    });
+                    setVerifyId(null);
+                    setVerifyPassword("");
+                    setMessage(t("Integridad de la copia comprobada."));
+                  })
+                }
+              >
+                {t("Comprobar integridad")}
+              </Button>
+            </footer>
           </div>
         </Modal>
       )}
@@ -527,33 +529,38 @@ export function BackupSettings({
                     "Las APIs, automatizaciones y copias automáticas quedan desactivadas al restaurar. Los trabajos se conservan en pausa.",
                   )}
                 </p>
-                <Button
-                  primary
-                  disabled={busy}
-                  onClick={() =>
-                    act(async () => {
-                      const result = await window.imago.call("backupRestore", {
-                        token: pick.token,
-                        password: restorePassword || undefined,
-                        replace,
-                        restoreCredentials:
-                          keys && state.secureStorageAvailable,
-                      });
-                      if (result) {
-                        setPick(null);
-                        setRestorePassword("");
-                        if (result.warnings.length)
-                          setMessage(result.warnings.join(" "));
-                        else
-                          void window.imago
-                            .call("reloadInterface")
-                            .catch(() => {});
-                      }
-                    })
-                  }
-                >
-                  {t("Restaurar datos comprobados")}
-                </Button>
+                <footer>
+                  <Button
+                    primary
+                    disabled={busy}
+                    onClick={() =>
+                      act(async () => {
+                        const result = await window.imago.call(
+                          "backupRestore",
+                          {
+                            token: pick.token,
+                            password: restorePassword || undefined,
+                            replace,
+                            restoreCredentials:
+                              keys && state.secureStorageAvailable,
+                          },
+                        );
+                        if (result) {
+                          setPick(null);
+                          setRestorePassword("");
+                          if (result.warnings.length)
+                            setMessage(result.warnings.join(" "));
+                          else
+                            void window.imago
+                              .call("reloadInterface")
+                              .catch(() => {});
+                        }
+                      })
+                    }
+                  >
+                    {t("Restaurar datos comprobados")}
+                  </Button>
+                </footer>
               </>
             )}
           </div>
