@@ -21,6 +21,11 @@ import { Gazetteer } from "./geo/gazetteer";
 import { isMapTileRequest } from "./geo/mapRequests";
 import { externalHttpsUrl } from "../shared/externalLinks";
 import { PROVIDERS } from "../shared/aiConfig";
+import { DesktopBackups } from "./export/desktopBackups";
+import { Updates } from "./updates";
+import { autoUpdater } from "electron-updater";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -40,6 +45,8 @@ let window: BrowserWindow | null = null,
   worker: Worker,
   nextId = 0,
   closing = false;
+let backups: DesktopBackups | undefined;
+let updates: Updates | undefined;
 const pending = new Map<
   number,
   { resolve: (v: any) => void; reject: (e: Error) => void }
@@ -207,6 +214,86 @@ app.whenReady().then(async () => {
     for (const p of pending.values()) p.reject(error);
     pending.clear();
   });
+  backups = new DesktopBackups(app.getPath("userData"), secrets, {
+    write: (file, application) => call("_writeBackup", { file, application }),
+    verify: (file) => call("_verifyBackup", { file }),
+    restore: (file, replace) => call("_restoreBackup", { file, replace }),
+    cancel: () => call("_cancelBackup"),
+    lockRestore: () => call("_beginRestore"),
+    unlockRestore: () => call("_endRestore"),
+    updates: () => updates?.status().preferences ?? { automaticChecks: true, autoDownload: true, beta: false },
+    applyUpdates: async (preferences) => updates?.configure(preferences),
+    client: async () =>
+      window
+        ? window.webContents.executeJavaScript(
+            `Object.fromEntries(Object.entries(localStorage).filter(([k])=>k.startsWith('imago.')))`,
+          )
+        : JSON.parse(await fs.readFile(path.join(app.getPath("userData"), "client-layout.json"), "utf8")),
+    applyClient: async (client) => {
+      if (window)
+        await window.webContents.executeJavaScript(
+          `for(const k of Object.keys(localStorage))if(k.startsWith('imago.'))localStorage.removeItem(k);for(const [k,v] of Object.entries(${JSON.stringify(client)}))if(k.startsWith('imago.')&&typeof v==='string')localStorage.setItem(k,v);`,
+        );
+    },
+    changed: () => window?.webContents.send("imago:changed"),
+  });
+  let updateLock = false;
+  let packageType = "AppImage";
+  if (process.platform === "linux")
+    packageType = await fs
+      .readFile(path.join(process.resourcesPath, "package-type"), "utf8")
+      .then((x) => x.trim())
+      .catch(() => "AppImage");
+  updates = new Updates(autoUpdater, {
+    userData: app.getPath("userData"),
+    version: app.getVersion(),
+    packaged: app.isPackaged,
+    disabled: process.env.IMAGO_DISABLE_UPDATES === "1",
+    platform: process.platform,
+    arch: process.arch,
+    packageType,
+    changed: () => window?.webContents.send("imago:changed"),
+    canInstall: async () => {
+      if (!app.isPackaged)
+        throw Error("Instala la versión empaquetada para actualizar.");
+      if (process.platform === "darwin") {
+        const bundle = path.dirname(
+          path.dirname(path.dirname(process.execPath)),
+        );
+        const signature = await promisify(execFile)("/usr/bin/codesign", [
+          "-dv",
+          "--verbose=4",
+          bundle,
+        ]).catch(() => ({ stdout: "", stderr: "" }));
+        if (
+          !/Authority=Developer ID Application:/.test(
+            signature.stdout + signature.stderr,
+          )
+        )
+          throw Error(
+            "Esta compilación de prueba de macOS no está firmada para actualización nativa. La instalación automática se validará con la release firmada.",
+          );
+      }
+    },
+    prepare: async (password) => {
+      await call("_beginRestore");
+      updateLock = true;
+      await backups!.create(undefined, "before-update", password);
+    },
+    finish: async (success) => {
+      if (success) {
+        await backups!.close();
+        await call("_close");
+        closing = true;
+      } else if (closing) {
+        app.relaunch();
+        app.exit();
+      } else if (updateLock) {
+        updateLock = false;
+        await call("_endRestore");
+      }
+    },
+  });
   worker.on("exit", () => {
     for (const p of pending.values())
       p.reject(new Error("El servicio local se ha detenido. Reinicia Imago."));
@@ -341,11 +428,14 @@ app.whenReady().then(async () => {
       }
       if (command === "modelLicense") {
         const model = await call("_modelInfo", safe);
-        const filename = model.id === "harrier-oss-v1-0.6b-q8_0" ? "MIT-harrier.txt" : model.license.startsWith("Apache")
-          ? "Apache-2.0.txt"
-          : model.license.startsWith("LFM")
-            ? "LFM-Open-License-1.0.txt"
-            : "MIT-llama.txt";
+        const filename =
+          model.id === "harrier-oss-v1-0.6b-q8_0"
+            ? "MIT-harrier.txt"
+            : model.license.startsWith("Apache")
+              ? "Apache-2.0.txt"
+              : model.license.startsWith("LFM")
+                ? "LFM-Open-License-1.0.txt"
+                : "MIT-llama.txt";
         const directory = app.isPackaged
           ? path.join(process.resourcesPath, "legal", "dependencies")
           : path.join(app.getAppPath(), "legal");
@@ -359,6 +449,98 @@ app.whenReady().then(async () => {
         };
       }
       if (command === "credentialsStatus") return providers.keyStatus();
+      if (command === "reloadInterface") { setTimeout(() => window?.webContents.reload(), 100); return; }
+      if (command === "updateStatus") return updates!.status();
+      if (command === "updateConfigure") return updates!.configure(safe as any);
+      if (command === "updateCheck") return updates!.check();
+      if (command === "updateDownload") {
+        await updates!.download();
+        return;
+      }
+      if (command === "updateInstall") {
+        const answer = await dialog.showMessageBox(window, {
+          type: "question",
+          title: "Instalar actualización",
+          message:
+            "Se creará una copia cifrada y verificada antes de cerrar e instalar la actualización.",
+          buttons: ["Ahora no", "Crear copia, instalar y reiniciar"],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (answer.response === 1)
+          await updates!.install((safe as any)?.password);
+        return;
+      }
+      if (command.startsWith("backup") && command !== "backup") {
+        const b = backups!,
+          data = safe as any;
+        if (command === "backupStatus") return b.status();
+        if (command === "backupConfigure") return b.configure(data);
+        if (command === "backupSetPassword")
+          return b.setPassword(data.password);
+        if (command === "backupChooseFolder") {
+          const result = await dialog.showOpenDialog(window, {
+            properties: ["openDirectory", "createDirectory"],
+          });
+          return result.canceled ? null : b.folder(result.filePaths[0]);
+        }
+        if (command === "backupRun") {
+          const result = await dialog.showSaveDialog(window, {
+            defaultPath: path.join(
+              (await b.status()).folder || app.getPath("documents"),
+              "Nodus Imago - " +
+                new Date().toISOString().slice(0, 10) +
+                ".imago",
+            ),
+            filters: [{ name: "Copia Imago", extensions: ["imago"] }],
+          });
+          return result.canceled || !result.filePath
+            ? null
+            : b.create(result.filePath, "manual", data?.password);
+        }
+        if (command === "backupPickRestore") {
+          const result = await dialog.showOpenDialog(window, {
+            properties: ["openFile"],
+            filters: [{ name: "Copia Imago", extensions: ["imago"] }],
+          });
+          return result.canceled ? null : b.pick(result.filePaths[0]);
+        }
+        if (command === "backupInspect")
+          return b.inspect(data.token, data.password);
+        if (command === "backupVerify") return b.verify(data.id, data.password);
+        if (command === "backupArchive")
+          return b.archive(data.id, data.archived);
+        if (command === "backupReveal") {
+          const file = data.id ? b.file(data.id) : (await b.status()).folder;
+          if (file) shell.showItemInFolder(file);
+          return;
+        }
+        if (command === "backupRestore") {
+          const status = await call("status");
+          if (status.databases) {
+            if (!data.replace)
+              throw Error("Confirma la sustitución de la colección actual.");
+            const answer = await dialog.showMessageBox(window, {
+              type: "warning",
+              title: "Restaurar colección",
+              message:
+                "Se sustituirá la colección actual por la copia comprobada.",
+              detail:
+                "Antes se creará una copia cifrada y verificada de la colección actual en la carpeta configurada. Las claves actuales se conservan.",
+              buttons: ["Cancelar", "Crear copia y restaurar"],
+              defaultId: 0,
+              cancelId: 0,
+            });
+            if (answer.response !== 1) return null;
+          }
+          return b.restore(
+            data.token,
+            data.password,
+            !!status.databases,
+            data.restoreCredentials,
+          );
+        }
+      }
       if (command === "setApiKey") {
         const data = safe as any;
         secrets.set(data.provider, data.key);
@@ -477,6 +659,16 @@ app.whenReady().then(async () => {
     });
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
+    let layoutSaved = false;
+    window.on("close", (event) => {
+      if (layoutSaved || closing || !window) return;
+      event.preventDefault();
+      const target = window;
+      void target.webContents.executeJavaScript(`Object.fromEntries(Object.entries(localStorage).filter(([k])=>k.startsWith('imago.')))`)
+        .then(client => fs.writeFile(path.join(app.getPath("userData"), "client-layout.json"), JSON.stringify(client), {mode: 0o600}))
+        .catch(() => {})
+        .finally(() => { layoutSaved = true; if (!target.isDestroyed()) target.close(); });
+    });
     window.on("closed", () => {
       window = null;
     });
@@ -484,6 +676,10 @@ app.whenReady().then(async () => {
     else void window.loadFile(path.join(__dirname, "../dist/index.html"));
   }
   createWindow();
+  window!.webContents.once("did-finish-load", () => {
+    backups?.start();
+    updates?.start();
+  });
   app.on("activate", () => {
     if (!window) createWindow();
   });
@@ -499,6 +695,10 @@ app.on("before-quit", (event) => {
   if (closing || !worker) return;
   event.preventDefault();
   closing = true;
-  void call("_close").finally(() => app.exit());
-  setTimeout(() => app.exit(), 3000).unref();
+  updates?.close();
+  void (async () => {
+    await backups?.close();
+    await call("_close");
+  })().finally(() => app.exit());
+  setTimeout(() => app.exit(), 30000).unref();
 });

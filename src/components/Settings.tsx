@@ -1,3 +1,5 @@
+import { UpdateSettings } from "./UpdateSettings";
+import { BackupSettings } from "./BackupSettings";
 import { ModelPreparation } from "./ModelPreparation";
 import { useState, useEffect } from "react";
 import {
@@ -46,6 +48,7 @@ export function Jobs({
       index: "Indexar imágenes",
       analyze: "Analizar",
       download: "Descargar",
+      prepare: "Preparar modelos",
     },
     states: Record<string, string> = {
       queued: "En espera",
@@ -133,7 +136,7 @@ export function Jobs({
             </span>
           </div>
           {j.message && (
-            <small className={j.failed ? "danger" : "muted"}>{j.message}</small>
+            <small className={j.state === "failed" || j.failed ? "danger" : "muted"}>{j.message}</small>
           )}
         </div>
       ))}
@@ -190,6 +193,7 @@ export function Settings({
       items: [
         { id: "appearance", label: "Interfaz", Icon: Palette },
         { id: "performance", label: "Rendimiento", Icon: Cpu },
+        {id:"updates",label:"Actualizaciones y novedades",Icon:RefreshCw},
       ],
     },
     {
@@ -242,6 +246,7 @@ export function Settings({
         ))}
       </aside>
       <div className="settings-content">
+        {tab === "updates" && <UpdateSettings perform={perform} />}
         {tab === "tasks" && (
           <div className="settings-section">
             <div className="settings-card-heading">
@@ -641,44 +646,7 @@ export function Settings({
                 <span>{t("imágenes")}</span>
               </div>
             </div>
-            <div className="row wrap">
-              <Button
-                onClick={() =>
-                  void perform(async () => {
-                    if (await window.imago.call("backup"))
-                      notify("Copia completa creada.");
-                  })
-                }
-              >
-                <Download size={15} />
-                {t("Crear copia completa")}
-              </Button>
-              <Button
-                disabled={
-                  status.databases > 0 ||
-                  status.jobs.some((job) =>
-                    ["queued", "running", "paused"].includes(job.state),
-                  )
-                }
-                onClick={() =>
-                  void perform(async () => {
-                    const n = await window.imago.call("restore");
-                    if (n !== null) {
-                      onChanged();
-                      notify(`${n} bases restauradas.`);
-                    }
-                  })
-                }
-              >
-                <Upload size={15} />
-                {t("Restaurar copia")}
-              </Button>
-            </div>
-            <p className="hint">
-              La restauración requiere una colección vacía. La copia incluye
-              originales, esquemas, opciones, relaciones, anotaciones, vectores
-              e historial. Los modelos se instalan por separado.
-            </p>
+            <BackupSettings perform={perform} onChanged={onChanged} notify={notify} />
             <div className="row">
               <Button
                 onClick={() =>

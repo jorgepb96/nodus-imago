@@ -38,7 +38,7 @@ fs.writeFileSync(
   "legal/dependency-inventory.json",
   JSON.stringify(inventory, null, 2) + "\n",
 );
-fs.writeFileSync("legal/THIRD_PARTY_LICENSES.txt", texts.join(""));
+fs.writeFileSync("legal/THIRD_PARTY_LICENSES.txt", texts.join("").replace(/[ \t]+$/gm, ""));
 console.log(
   `License inventory: ${inventory.length} installed production packages.`,
 );

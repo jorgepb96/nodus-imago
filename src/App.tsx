@@ -93,6 +93,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [toast, setToast] = useState<{ message: string; error: boolean } | null>(
       null,
     );
+  const [updateReady, setUpdateReady] = useState(false);
   const [collapsed, setCollapsed] = useState(false),
     [settingsTab, setSettingsTab] = useState("api"),
     [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
@@ -259,7 +260,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   );
   useEffect(() => {
     if (!api) return;
-    return api.onChange(refresh);
+    const update = () => void api.call("updateStatus").then(state => setUpdateReady(state.status === "downloaded")).catch(() => {});
+    update();
+    return api.onChange(() => { refresh(); update(); });
   }, [api, refresh]);
   useEffect(() => {
     if (!api) return;
@@ -696,6 +699,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </span>
         <div className="nodus-header-actions">
           {!!busy && <Spinner />}
+          {updateReady && <Button title={t("Actualización lista para instalar")} onClick={() => {setSettingsTab("updates");setArea("settings");}}><Download size={16}/>{t("Actualizar")}</Button>}
           <Button
             icon
             title={t("Búsqueda")}

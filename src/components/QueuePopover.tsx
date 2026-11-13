@@ -89,13 +89,7 @@ export function QueuePopover({
             title={t("Reanudar todas")}
             onClick={() =>
               void perform(async () => {
-                for (const j of jobs.filter((j) =>
-                  ["paused", "failed"].includes(j.state),
-                ))
-                  await window.imago.call("controlJob", {
-                    id: j.id,
-                    action: "resume",
-                  });
+                await window.imago.call("resumePausedJobs");
                 onChanged();
               })
             }
