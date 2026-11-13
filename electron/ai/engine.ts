@@ -273,6 +273,7 @@ export class Engine {
     )
       return "skipped" as const;
     const [vector] = await this.embed([{ image: asset.original_path }], signal);
+    signal.throwIfAborted();
     this.repo.db
       .prepare(
         "INSERT INTO embeddings VALUES(?,?,?) ON CONFLICT(content_hash,contract) DO NOTHING",
@@ -617,6 +618,7 @@ export class Engine {
           mediaType: "image/jpeg",
         });
       }
+      signal.throwIfAborted();
       result = await this.complete(
         {
           choice,
@@ -632,6 +634,7 @@ export class Engine {
       modelName = choice.provider + "/" + choice.model;
       revision = "API · " + providerBase(choice.provider, settings.apiProfiles);
     }
+    signal.throwIfAborted();
     if (typeof result !== "string" || !result.trim())
       throw new Error("El modelo no ha devuelto texto.");
     if (process.env.IMAGO_DEBUG_AI)

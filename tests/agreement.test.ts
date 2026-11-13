@@ -366,6 +366,7 @@ test("research snapshots survive native backup and old v1 backups without the op
     const restored = new AgreementResearch(target).load(saved.id); assert.deepEqual(restored.snapshot, run.snapshot); assert.deepEqual(restored.report, run.report);
     const zip = new AdmZip(backup), snapshotPath = path.join(root, "legacy.sqlite"); fs.writeFileSync(snapshotPath, zip.readFile("imago.sqlite")!);
     const old = new Database(snapshotPath); old.exec("DROP TABLE agreement_experiments"); old.close(); zip.updateFile("imago.sqlite", fs.readFileSync(snapshotPath));
+    const legacyManifest=JSON.parse(zip.readAsText("manifest.json"));delete legacyManifest.databaseHash;zip.updateFile("manifest.json",Buffer.from(JSON.stringify(legacyManifest)));
     const oldBackup = path.join(root, "old.imago"); zip.writeZip(oldBackup); await restoreBackup(legacy, oldBackup);
     assert.equal(legacy.stats().rows, 1); assert.equal(new AgreementResearch(legacy).list(db.database.id).length, 0);
     target.db.prepare("DELETE FROM db_databases WHERE id=?").run(db.database.id);

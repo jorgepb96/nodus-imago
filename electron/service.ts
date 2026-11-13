@@ -21,7 +21,7 @@ import {
   databaseToMatrix,
 } from "../shared/databaseExport";
 import { buildXlsx } from "./export/xlsx";
-import { writeBackup, restoreBackup } from "./export/backup";
+import { writeBackup, restoreBackup, verifyBackup } from "./export/backup";
 import { importNodus } from "./import/nodus";
 import { importNotion } from "./import/notion";
 import type { CompletionRequest } from "./ai/apiProviders";
@@ -30,6 +30,10 @@ import { AgreementResearch } from "./research/agreement";
 import { Automations } from "./automations";
 
 export class Service {
+  private storageTask: Promise<unknown> | null = null;
+  private backupAbort: AbortController | null = null;
+  private restoring = false;
+  private closing = false;
   automations: Automations;
   research: AgreementResearch;
   repo: Repository;
@@ -87,6 +91,8 @@ export class Service {
       .some((job) => ["queued", "running", "paused"].includes(job.state));
   }
   async run(command: string, input: any = undefined): Promise<any> {
+    if (this.closing && !["_close", "_cancelBackup"].includes(command)) throw Error("Imago se está cerrando.");
+    if (this.restoring && !["status","jobs","listDatabases","detail","getRow","_asset","_settings","_close","_cancelBackup","_writeBackup","_verifyBackup","_restoreBackup","_endRestore"].includes(command)) throw Error("Espera a que termine la restauración; no se han modificado los datos.");
     switch (command) {
       case "automationList":
         return this.automations.list(input.databaseId);
@@ -394,11 +400,34 @@ export class Service {
         await fs.writeFile(input.file, data);
         return true;
       }
+      case "_cancelBackup":
+        this.backupAbort?.abort();
+        return;
+      case "_beginRestore":
+        if(this.storageTask)throw Error("Ya hay una operación de copias en curso.");
+        this.restoring=true;this.automations.close();this.queue.pauseAll();await this.queue.task;return;
+      case "_endRestore":
+        this.restoring=false;if(!this.closing && !this.automations.timer)this.automations.start();return;
+      case "_verifyBackup": {
+        if (this.storageTask) throw Error("Ya hay una operación de copias en curso.");
+        const task=verifyBackup(this.repo,input.file);this.storageTask=task;
+        try{return await task;}finally{this.storageTask=null;}
+      }
       case "backup":
-        await writeBackup(this.repo, input.file);
-        return true;
+      case "_writeBackup": {
+        if (this.storageTask) throw Error("Ya hay una operación de copias en curso.");
+        this.backupAbort=new AbortController();const task=writeBackup(this.repo,input.file,{application:input.application,signal:this.backupAbort.signal});this.storageTask=task;
+        try{await task;return true;}finally{this.storageTask=null;this.backupAbort=null;}
+      }
+      case "_restoreBackup": {
+        if(this.storageTask)throw Error("Ya hay una operación de copias en curso.");
+        const ownLock=!this.restoring;this.restoring=true;this.automations.close();this.queue.pauseAll();
+        const task=(async()=>{await this.queue.task;return restoreBackup(this.repo,input.file,{replace:input.replace});})();this.storageTask=task;
+        try{return await task;}finally{this.storageTask=null;if(ownLock){this.restoring=false;if(!this.closing)this.automations.start();}}
+      }
       case "restore":
-        return restoreBackup(this.repo, input.file);
+        if(this.repo.stats().databases || this.unfinishedJobs()) throw Error("Restaura en una instalación vacía y sin trabajos activos para preservar todos los identificadores. Exporta primero tus datos actuales.");
+        return this.run("_restoreBackup",{file:input.file,replace:false});
       case "notionImport":
         return importNotion(this.repo, this.images, input.file);
       case "nodusImport":
@@ -437,6 +466,9 @@ export class Service {
         return this.queue.control(input.id, input.action);
       case "pauseAllJobs":
         this.queue.pauseAll();
+        return;
+      case "resumePausedJobs":
+        this.queue.resumeAll();
         return;
       case "rebuildText":
         return this.repo.rebuildText();
@@ -589,7 +621,11 @@ export class Service {
       case "_modelInfo":
         return this.models.get(input.id);
       case "_close":
+        if(this.closing)return;
+        this.closing=true;
         this.automations.close();
+        this.backupAbort?.abort();
+        await this.storageTask?.catch(()=>{});
         await this.queue.close();
         this.engine.close();
         this.repo.close();

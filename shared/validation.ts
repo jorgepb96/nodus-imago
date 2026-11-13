@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { backupPreferencesSchema } from "./backups";
+import { updatePreferencesSchema } from "./updates";
 import { isDatabaseColumnType } from "./databases";
 import { FILTER_LABELS } from "./viewCriteria";
 import { externalHttpsUrl } from "./externalLinks";
@@ -177,6 +179,16 @@ export const settingsSchema = z
   })
   .strict();
 export const schemas: Record<string, z.ZodTypeAny> = {
+  updateStatus:z.undefined(),updateConfigure:updatePreferencesSchema,updateCheck:z.undefined(),updateDownload:z.undefined(),updateInstall:z.union([z.undefined(),z.object({password:z.string().min(8).max(1024).optional()}).strict()]),
+  reloadInterface:z.undefined(),
+  backupStatus:z.undefined(), backupChooseFolder:z.undefined(), backupRun:z.union([z.undefined(),z.object({password:z.string().min(8).max(1024).optional()}).strict()]), backupPickRestore:z.undefined(),
+  backupConfigure:backupPreferencesSchema,
+  backupSetPassword:z.object({password:z.string().min(8).max(1024)}).strict(),
+  backupInspect:z.object({token:id,password:z.string().max(1024).optional()}).strict(),
+  backupRestore:z.object({token:id,password:z.string().max(1024).optional(),replace:z.boolean(),restoreCredentials:z.boolean()}).strict(),
+  backupVerify:z.object({id,password:z.string().max(1024).optional()}).strict(),
+  backupArchive:z.object({id,archived:z.boolean()}).strict(),
+  backupReveal:z.object({id:id.optional()}).strict(),
   inferenceDiagnostics: z.undefined(),
   modelPreparation: z.undefined(),
   prepareModels: z.object({ consent: z.literal(true) }).strict(),
@@ -377,6 +389,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({ id, action: z.enum(["pause", "resume", "cancel"]) })
     .strict(),
   pauseAllJobs: z.undefined(),
+  resumePausedJobs: z.undefined(),
   rebuildText: z.undefined(),
   indexImages: z.object({ databaseIds: ids.optional() }).strict(),
   downloadModel: z.object({ id }).strict(),

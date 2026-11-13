@@ -10,6 +10,8 @@ import { Repository } from "../db/repository";
 import { Archive } from "../import/archive";
 import { hashFile } from "../import/images";
 import { ensureDiskSpace } from "../storage/disk";
+import { settingsSchema } from "../../shared/validation";
+import { defaultEmbeddingModel } from "../../shared/embeddingBackends";
 
 export const BACKUP_TABLES = [
   "db_databases",
@@ -37,6 +39,14 @@ const manifestSchema = z
   .object({
     format: z.literal("nodus.imago/1"),
     createdAt: z.string(),
+    databaseHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    applicationHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     files: z.array(
       z
         .object({
@@ -49,17 +59,22 @@ const manifestSchema = z
   })
   .strict();
 
-export async function writeBackup(repo: Repository, destination: string) {
+export async function writeBackup(
+  repo: Repository,
+  destination: string,
+  options: { application?: string; signal?: AbortSignal } = {},
+) {
   const staging = path.join(repo.root, "staging", uuid());
-  await fsp.mkdir(staging);
+  await fsp.mkdir(staging,{mode:0o700});
   const temp = destination + ".partial-" + uuid();
+  let backupDb: Database.Database | undefined;
   try {
     const pageSize = repo.db.pragma("page_size", { simple: true }) as number,
       pageCount = repo.db.pragma("page_count", { simple: true }) as number;
     await ensureDiskSpace(staging, pageSize * pageCount);
     const snapshot = path.join(staging, "imago.sqlite");
     await repo.db.backup(snapshot);
-    const backupDb = new Database(snapshot, { readonly: true });
+    backupDb = new Database(snapshot);
     const assetSources = backupDb
       .prepare("SELECT original_path,content_hash FROM image_assets")
       .all() as { original_path: string; content_hash: string }[];
@@ -69,14 +84,32 @@ export async function writeBackup(repo: Repository, destination: string) {
     const sources = new Set(assetSources.map((a) => a.original_path));
     for (const job of backupDb
       .prepare(
-        "SELECT payload_json,done FROM jobs WHERE kind='images' AND state IN ('queued','paused','running')",
+        "SELECT id,payload_json,done FROM jobs WHERE kind='images' AND state IN ('queued','paused','running','failed')",
       )
-      .all() as any[])
-      for (const f of JSON.parse(job.payload_json).files.slice(job.done))
-        sources.add(f.path);
+      .all() as any[]) {
+      const payload = JSON.parse(job.payload_json);
+      for(const file of payload.files) file.originalName ??= path.basename(file.path);
+      backupDb.prepare("UPDATE jobs SET payload_json=? WHERE id=?").run(JSON.stringify(payload),job.id);
+      const errors = new Set(
+        (
+          backupDb
+            .prepare("SELECT item FROM job_errors WHERE job_id=?")
+            .all(job.id) as { item: number }[]
+        ).map((x) => x.item),
+      );
+      for (let i = 0; i < payload.files.length; i++)
+        if (
+          errors.has(i) ||
+          (i >= job.done &&
+            (!payload.retryItems || payload.retryItems.includes(i)))
+        )
+          sources.add(payload.files[i].path);
+    }
     backupDb.close();
+    backupDb=undefined;
     const files = [];
     for (const source of sources) {
+      options.signal?.throwIfAborted();
       const hash = await hashFile(source);
       if (expected.has(source) && expected.get(source) !== hash)
         throw new Error(
@@ -87,11 +120,20 @@ export async function writeBackup(repo: Repository, destination: string) {
     const manifest = {
       format: "nodus.imago/1",
       createdAt: new Date().toISOString(),
+      databaseHash: await hashFile(snapshot),
+      ...(options.application
+        ? {
+            applicationHash: createHash("sha256")
+              .update(options.application)
+              .digest("hex"),
+          }
+        : {}),
       files,
     };
     let archiveBytes =
       (await fsp.stat(snapshot)).size +
       Buffer.byteLength(JSON.stringify(manifest)) +
+      Buffer.byteLength(options.application ?? "") +
       1024 * 1024;
     for (const source of new Set(files.map((file) => file.source)))
       archiveBytes += (await fsp.stat(source)).size + 1024;
@@ -105,8 +147,15 @@ export async function writeBackup(repo: Repository, destination: string) {
       archive.on("warning", reject);
     });
     archive.pipe(out);
+    const abort = () => {
+      archive.abort();
+      out.destroy(new Error("Copia cancelada."));
+    };
+    options.signal?.addEventListener("abort", abort, { once: true });
     archive.file(snapshot, { name: "imago.sqlite" });
     archive.append(JSON.stringify(manifest), { name: "manifest.json" });
+    if (options.application)
+      archive.append(options.application, { name: "application.json" });
     const seen = new Set<string>();
     for (const file of files)
       if (!seen.has(file.entry)) {
@@ -114,6 +163,7 @@ export async function writeBackup(repo: Repository, destination: string) {
           (async function* () {
             const hash = createHash("sha256");
             for await (const chunk of fs.createReadStream(file.source)) {
+              options.signal?.throwIfAborted();
               hash.update(chunk);
               yield chunk;
             }
@@ -128,9 +178,15 @@ export async function writeBackup(repo: Repository, destination: string) {
         archive.append(content, { name: file.entry });
         seen.add(file.entry);
       }
-    await Promise.all([archive.finalize(), done]);
+    try {
+      await Promise.all([archive.finalize(), done]);
+      options.signal?.throwIfAborted();
+    } finally {
+      options.signal?.removeEventListener("abort", abort);
+    }
     await fsp.rename(temp, destination);
   } finally {
+    if(backupDb?.open)backupDb.close();
     await fsp.rm(staging, { recursive: true, force: true });
     await fsp.rm(temp, { force: true });
   }
@@ -138,18 +194,24 @@ export async function writeBackup(repo: Repository, destination: string) {
 export async function restoreBackup(
   repo: Repository,
   file: string,
+  options: { replace?: boolean } = {},
 ): Promise<number> {
   // A restore is deliberate and only accepts an empty collection. It never merges IDs.
   if (
-    repo.stats().databases ||
+    (!options.replace && repo.stats().databases) ||
     repo
       .jobs()
-      .some((job) => ["queued", "running", "paused"].includes(job.state))
+      .some((job) =>
+        (options.replace
+          ? ["queued", "running"]
+          : ["queued", "running", "paused"]
+        ).includes(job.state),
+      )
   )
     throw new Error(
       "Restaura en una instalación vacía y sin trabajos activos para preservar todos los identificadores. Exporta primero tus datos actuales.",
     );
-  const archive = await Archive.open(file),
+  const archive = await Archive.open(file, Number.MAX_SAFE_INTEGER),
     staging = path.join(repo.root, "staging", uuid());
   await fsp.mkdir(staging);
   let snapshot: Database.Database | undefined;
@@ -160,8 +222,14 @@ export async function restoreBackup(
     const manifest = manifestSchema.parse(
       JSON.parse((await archive.read("manifest.json")).toString("utf8")),
     );
+    checkManifest(manifest);
     const source = path.join(staging, "snapshot.sqlite");
     await archive.extract("imago.sqlite", source);
+    if (
+      manifest.databaseHash &&
+      (await hashFile(source)) !== manifest.databaseHash
+    )
+      throw new Error("Hash de la base de datos incorrecto.");
     snapshot = new Database(source, { readonly: true, fileMustExist: true });
     snapshot.pragma("trusted_schema=OFF");
     if (
@@ -213,14 +281,20 @@ export async function restoreBackup(
     // instead of failing on a UNIQUE/PRIMARY KEY collision.
     repo.db.transaction(() => {
       if (
-        repo.stats().databases ||
+        (!options.replace && repo.stats().databases) ||
         repo
           .jobs()
-          .some((job) => ["queued", "running", "paused"].includes(job.state))
+          .some((job) =>
+            (options.replace
+              ? ["queued", "running"]
+              : ["queued", "running", "paused"]
+            ).includes(job.state),
+          )
       )
         throw new Error(
           "La colección ha cambiado durante la restauración; no se ha sustituido ningún dato.",
         );
+      if (options.replace) repo.db.prepare("DELETE FROM db_databases").run();
       repo.db.prepare("DELETE FROM embeddings").run();
       repo.db.prepare("DELETE FROM image_captions").run();
       repo.db.prepare("DELETE FROM saved_searches").run();
@@ -228,6 +302,8 @@ export async function restoreBackup(
       repo.db.prepare("DELETE FROM history").run();
       repo.db.prepare("DELETE FROM proposals").run();
       repo.db.prepare("DELETE FROM jobs").run();
+      repo.db.prepare("DELETE FROM automation_events").run();
+      repo.db.prepare("DELETE FROM automation_runs").run();
       for (const table of BACKUP_TABLES) {
         if (table === "settings") continue;
         // Older v1 backups predate the optional research snapshots table.
@@ -270,7 +346,7 @@ export async function restoreBackup(
           }
           if (table === "jobs") {
             if (["running", "queued"].includes(r.state)) r.state = "paused";
-            if (r.kind === "images") {
+            if (r.kind === "images" && !["completed","cancelled"].includes(r.state)) {
               const p = JSON.parse(r.payload_json);
               for (const f of p.files)
                 f.path =
@@ -281,6 +357,28 @@ export async function restoreBackup(
           }
           insert.run(...expected.map((c) => r[c]));
         }
+      }
+      const saved = snapshot!
+        .prepare("SELECT value FROM settings WHERE key='preferences'")
+        .get() as { value: string } | undefined;
+      if (saved) {
+        const preferences = JSON.parse(saved.value);
+        const embeddingModel =
+          process.platform === "darwin" &&
+          process.arch === "x64" &&
+          preferences.embeddingModel === "embeddinggemma2-onnx"
+            ? defaultEmbeddingModel(process.platform, process.arch)
+            : (preferences.embeddingModel ?? repo.getSettings().embeddingModel);
+        repo.updateSettings(
+          settingsSchema.parse({
+            ...repo.getSettings(),
+            ...preferences,
+            embeddingModel,
+            python: repo.getSettings().python,
+            device: "cpu",
+            remoteEnabled: false,
+          }),
+        );
       }
       repo.rebuildText();
       if ((repo.db.pragma("foreign_key_check") as unknown[]).length)
@@ -302,5 +400,114 @@ export async function restoreBackup(
         )
           await fsp.rm(file, { force: true });
       }
+  }
+}
+
+function checkManifest(manifest: z.infer<typeof manifestSchema>) {
+  const sources = new Set<string>();
+  for (const file of manifest.files) {
+    if (sources.has(file.source) || file.entry !== "originals/" + file.hash)
+      throw new Error("Manifiesto ambiguo o incoherente.");
+    sources.add(file.source);
+  }
+}
+/** Fully inspect a backup without promoting files or mutating the collection. */
+export async function verifyBackup(repo: Repository, file: string) {
+  const archive = await Archive.open(file, Number.MAX_SAFE_INTEGER),
+    staging = path.join(repo.root, "staging", uuid());
+  let db: Database.Database | undefined;
+  await fsp.mkdir(staging, { mode: 0o700 });
+  try {
+    await archive.preflight(staging);
+    const manifest = manifestSchema.parse(
+      JSON.parse((await archive.read("manifest.json")).toString()),
+    );
+    checkManifest(manifest);
+    const snapshot = path.join(staging, "imago.sqlite");
+    await archive.extract("imago.sqlite", snapshot);
+    if (
+      manifest.databaseHash &&
+      (await hashFile(snapshot)) !== manifest.databaseHash
+    )
+      throw Error("Hash de la base de datos incorrecto.");
+    db = new Database(snapshot, { readonly: true, fileMustExist: true });
+    db.pragma("trusted_schema=OFF");
+    if (
+      db.pragma("integrity_check", { simple: true }) !== "ok" ||
+      (db.pragma("foreign_key_check") as unknown[]).length
+    )
+      throw Error("La copia no supera la comprobación de integridad.");
+    if (
+      (db.prepare("SELECT version FROM imago_schema").get() as any)?.version !==
+      1
+    )
+      throw Error("Versión de copia no compatible.");
+    const optional = new Set([
+      "agreement_experiments",
+      "image_captions",
+      "page_documents",
+      "automation_rules",
+      "automation_events",
+      "automation_runs",
+    ]);
+    for (const table of BACKUP_TABLES) {
+      const exists = db
+        .prepare("SELECT type,sql FROM sqlite_master WHERE name=?")
+        .get(table) as { type: string; sql: string } | undefined;
+      if (!exists && optional.has(table)) continue;
+      if (
+        !exists ||
+        exists.type !== "table" ||
+        /CREATE\s+VIRTUAL/i.test(exists.sql)
+      )
+        throw Error("Tabla de copia inválida: " + table);
+      const columns = (
+        repo.db.prepare(`PRAGMA table_info(${table})`).all() as any[]
+      ).map((c) => c.name);
+      db.prepare(`SELECT ${columns.join(",")} FROM ${table} LIMIT 0`).all();
+    }
+    const preferences = db.prepare("SELECT value FROM settings WHERE key='preferences'").get() as {value: string} | undefined;
+    if (preferences) settingsSchema.parse({...repo.getSettings(), ...JSON.parse(preferences.value)});
+    const map = new Map(manifest.files.map((f) => [f.source, f.hash]));
+    for (const asset of db
+      .prepare("SELECT original_path,content_hash FROM image_assets")
+      .all() as any[])
+      if (map.get(asset.original_path) !== asset.content_hash)
+        throw Error("La copia omite un original o sus metadatos no coinciden.");
+    const seen = new Set<string>();
+    for (const file of manifest.files) {
+      if (seen.has(file.hash)) continue;
+      const output = path.join(staging, file.hash);
+      await archive.extract(file.entry, output);
+      if ((await hashFile(output)) !== file.hash)
+        throw Error("Hash de archivo incorrecto.");
+      seen.add(file.hash);
+    }
+    let application: string | undefined;
+    if (manifest.applicationHash) {
+      application = (
+        await archive.read("application.json", 8 * 2 ** 20)
+      ).toString();
+      if (
+        createHash("sha256").update(application).digest("hex") !==
+        manifest.applicationHash
+      )
+        throw Error("Preferencias de copia dañadas.");
+    }
+    return {
+      databases: (
+        db.prepare("SELECT count(*) n FROM db_databases").get() as any
+      ).n as number,
+      rows: (db.prepare("SELECT count(*) n FROM db_rows").get() as any)
+        .n as number,
+      files: seen.size,
+      createdAt: manifest.createdAt,
+      application,
+      legacy: !manifest.databaseHash,
+    };
+  } finally {
+    db?.close();
+    archive.close();
+    await fsp.rm(staging, { recursive: true, force: true });
   }
 }

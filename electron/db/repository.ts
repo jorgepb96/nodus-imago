@@ -944,7 +944,7 @@ export class Repository {
   jobs(): Job[] {
     return this.db
       .prepare(
-        "SELECT id,kind,coalesce(json_extract(payload_json,'$.label'),'') label,state,done,total,failed,skipped,message,created_at createdAt,updated_at updatedAt FROM jobs WHERE state IN ('queued','running','paused','failed') OR id IN(SELECT id FROM jobs WHERE state IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 50) ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,created_at DESC",
+        "SELECT id,kind,CASE WHEN json_valid(payload_json) THEN coalesce(json_extract(payload_json,'$.label'),'') ELSE '' END label,state,done,total,failed,skipped,message,created_at createdAt,updated_at updatedAt FROM jobs WHERE state IN ('queued','running','paused','failed') OR id IN(SELECT id FROM jobs WHERE state IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 50) ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,created_at DESC",
       )
       .all() as Job[];
   }

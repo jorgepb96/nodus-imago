@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ApiProvider } from "../../shared/aiConfig";
+type StoredSecret = ApiProvider | `backup_${string}`;
 // Adapted from Nodus secretStore: one encrypted file per provider, shared across
 // collections, atomic writes and no plaintext fallback. Imago never reads Nodus keys.
 export interface SecretEncryption {
@@ -13,10 +14,11 @@ export class Secrets {
     public directory: string,
     public encryption: SecretEncryption,
   ) {}
-  private file(provider: ApiProvider) {
+  private file(provider: StoredSecret) {
+    if (!/^[a-z]+$/.test(provider) && !/^backup_[a-f0-9-]{36}$/.test(provider)) throw Error("Identificador de secreto inválido.");
     return path.join(this.directory, `ai_key_${provider}.bin`);
   }
-  get(provider: ApiProvider) {
+  get(provider: StoredSecret) {
     if (!this.encryption.available()) return null;
     try {
       return this.encryption.decrypt(fs.readFileSync(this.file(provider)));
@@ -24,7 +26,7 @@ export class Secrets {
       return null;
     }
   }
-  set(provider: ApiProvider, key: string) {
+  set(provider: StoredSecret, key: string) {
     if (!key.trim()) {
       this.clear(provider);
       return;
@@ -52,7 +54,7 @@ export class Secrets {
       fs.rmSync(temporary, { force: true });
     }
   }
-  clear(provider: ApiProvider) {
+  clear(provider: StoredSecret) {
     fs.rmSync(this.file(provider), { force: true });
   }
 }

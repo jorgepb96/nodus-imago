@@ -224,6 +224,23 @@ export type Status = {
 };
 export type SavedSearch = { id: string; name: string; input: SearchInput };
 export type Commands = {
+  updateStatus:{input:void;result:import("./updates").UpdateStatus};
+  updateConfigure:{input:import("./updates").UpdatePreferences;result:void};
+  updateCheck:{input:void;result:import("./updates").UpdateStatus};
+  updateDownload:{input:void;result:void};
+  updateInstall:{input:{password?:string}|void;result:void};
+  reloadInterface: {input:void;result:void};
+  backupStatus:{input:void;result:import("./backups").BackupStatus};
+  backupChooseFolder:{input:void;result:string|null};
+  backupConfigure:{input:import("./backups").BackupPreferences;result:void};
+  backupSetPassword:{input:{password:string};result:void};
+  backupRun:{input:{password?:string}|void;result:import("./backups").BackupEntry|null};
+  backupPickRestore:{input:void;result:{token:string;encrypted:boolean}|null};
+  backupInspect:{input:{token:string;password?:string};result:{databases:number;rows:number;files:number;createdAt:string;legacy:boolean}};
+  backupRestore:{input:{token:string;password?:string;replace:boolean;restoreCredentials:boolean};result:{databases:number;credentialsRestored:number;credentialsPreserved:number;warnings:string[]}|null};
+  backupVerify:{input:{id:string;password?:string};result:{databases:number;rows:number;files:number;legacy:boolean}};
+  backupArchive:{input:{id:string;archived:boolean};result:void};
+  backupReveal:{input:{id?:string};result:void};
   automationList: {
     input: { databaseId: string };
     result: import("./automations").AutomationRule[];
@@ -436,6 +453,7 @@ export type Commands = {
     result: void;
   };
   pauseAllJobs: { input: void; result: void };
+  resumePausedJobs: { input: void; result: void };
   rebuildText: { input: void; result: number };
   indexImages: { input: { databaseIds?: string[] }; result: string };
   downloadModel: { input: { id: string }; result: string };

@@ -11,6 +11,7 @@ const service = new Service(
   () => parentPort!.postMessage({ event: "changed" }),
   (input, signal) =>
     new Promise((resolve, reject) => {
+      if (signal.aborted) { reject(new Error("Solicitud cancelada.")); return; }
       const id = ++nextCompletion;
       const abort = () =>
         parentPort!.postMessage({ event: "abortCompletion", completionId: id });

@@ -65,7 +65,7 @@ export type ImageImportPayload = {
   columnId: string;
   storage: "copy" | "link";
   createUnmatched: boolean;
-  files: { path: string; rowId: string | null }[];
+  files: { path: string; rowId: string | null; originalName?: string }[];
 };
 export class Images {
   plans = new Map<
@@ -319,7 +319,7 @@ export class Images {
           this.repo.rawCell(
             rowId,
             title.id,
-            path.basename(file.path, path.extname(file.path)),
+            path.basename(file.originalName ?? file.path, path.extname(file.originalName ?? file.path)),
             title.type,
           );
       }
@@ -339,7 +339,7 @@ export class Images {
           payload.databaseId,
           rowId,
           payload.columnId,
-          path.basename(file.path),
+          file.originalName ?? path.basename(file.path),
           original,
           payload.storage === "copy" ? 1 : 0,
           hash,

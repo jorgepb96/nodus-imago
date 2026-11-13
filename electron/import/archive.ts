@@ -13,7 +13,7 @@ export class Archive {
     public zip: ZipFile,
     public entries: Map<string, Entry>,
   ) {}
-  static async open(file: string) {
+  static async open(file: string, maxBytes = 32 * 2 ** 30) {
     const zip = await new Promise<ZipFile>((resolve, reject) =>
       yauzl.open(file, { lazyEntries: true, autoClose: false }, (error, zip) =>
         error ? reject(error) : resolve(zip!),
@@ -30,7 +30,7 @@ export class Archive {
           bytes += entry.uncompressedSize;
           if (
             entries.size >= 100000 ||
-            bytes > 32 * 2 ** 30 ||
+            !Number.isSafeInteger(bytes) || bytes > maxBytes ||
             name.startsWith("/") ||
             /^[a-z]:/i.test(name) ||
             name.split("/").includes("..") ||
@@ -88,13 +88,14 @@ export class Archive {
     await ensureDiskSpace(path.dirname(destination), entry.uncompressedSize);
     let bytes = 0,
       created = false;
+    const input = await this.stream(name);
     const output = fs.createWriteStream(destination, { flags: "wx" });
     output.once("open", () => {
       created = true;
     });
     try {
       await pipeline(
-        (await this.stream(name)) as any,
+        input as any,
         new Transform({
           transform(chunk, _encoding, callback) {
             bytes += chunk.length;

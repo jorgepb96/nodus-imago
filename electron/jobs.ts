@@ -34,26 +34,53 @@ export class JobQueue {
       memory,
     );
   }
-  control(
-    id: string,
-    action: "pause" | "resume" | "cancel",
-    pump = true,
-  ) {
+  control(id: string, action: "pause" | "resume" | "cancel", pump = true) {
     const job = this.repo.db
-      .prepare("SELECT state,done,total,kind FROM jobs WHERE id=?")
-      .get(id) as { state: string; done: number; total: number; kind: string } | undefined;
+      .prepare("SELECT state,done,total,kind,payload_json FROM jobs WHERE id=?")
+      .get(id) as
+      | {
+          state: string;
+          done: number;
+          total: number;
+          kind: string;
+          payload_json: string;
+        }
+      | undefined;
     if (!job) throw new Error("Tarea no encontrada.");
     if (["completed", "cancelled"].includes(job.state)) return;
-    if (
-      action === "resume" &&
-      job.state === "failed" &&
-      (job.done === job.total || ["prepare", "download"].includes(job.kind))
-    ) {
+    if (this.closed) return;
+    if (action === "resume" && !["paused", "failed"].includes(job.state))
+      return;
+    if (action === "pause" && !["queued", "running"].includes(job.state))
+      return;
+    if (action === "resume" && job.state === "failed") {
+      const payload = JSON.parse(job.payload_json);
+      if (!["prepare", "download"].includes(job.kind)) {
+        const previous = payload.retryItems
+          ? new Set<number>(payload.retryItems)
+          : null;
+        const errors = (
+          this.repo.db
+            .prepare("SELECT item FROM job_errors WHERE job_id=?")
+            .all(id) as { item: number }[]
+        ).map((x) => x.item);
+        payload.retryItems = [
+          ...new Set([
+            ...errors,
+            ...Array.from(
+              { length: job.total - job.done },
+              (_, i) => i + job.done,
+            ).filter((i) => !previous || previous.has(i)),
+          ]),
+        ]
+          .filter((i) => i >= 0 && i < job.total)
+          .sort((a, b) => a - b);
+      }
       this.repo.db
         .prepare(
-          "UPDATE jobs SET done=0,failed=0,skipped=0,message=NULL WHERE id=?",
+          "UPDATE jobs SET done=0,failed=0,skipped=0,message=NULL,payload_json=? WHERE id=?",
         )
-        .run(id);
+        .run(JSON.stringify(payload), id);
       this.repo.db.prepare("DELETE FROM job_errors WHERE job_id=?").run(id);
     }
     this.repo.db
@@ -79,6 +106,11 @@ export class JobQueue {
       if (["queued", "running"].includes(job.state))
         this.control(job.id, "pause", false);
   }
+  resumeAll() {
+    for (const job of this.repo.jobs())
+      if (job.state === "paused") this.control(job.id, "resume", false);
+    this.pump();
+  }
   async close() {
     this.closed = true;
     for (const item of this.running.values()) item.controller.abort();
@@ -86,15 +118,60 @@ export class JobQueue {
     await this.task;
   }
   private resources(job: any) {
+    if (
+      !Number.isSafeInteger(job.total) ||
+      job.total < 0 ||
+      !Number.isSafeInteger(job.done) ||
+      job.done < 0 ||
+      job.done > job.total
+    )
+      throw new Error("Progreso de tarea inválido.");
+    if (
+      !["images", "download", "prepare", "index", "analyze"].includes(job.kind)
+    )
+      throw new Error("Tipo de tarea desconocido.");
     const payload = JSON.parse(job.payload_json),
       resources = new Set<string>();
+    const field = (
+      {
+        images: "files",
+        index: "assets",
+        analyze: "items",
+        prepare: "steps",
+      } as Record<string, string>
+    )[job.kind];
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      (field &&
+        (!Array.isArray(payload[field]) || payload[field].length !== job.total))
+    )
+      throw new Error("Contenido de tarea inválido.");
+    if (payload.retryItems !== undefined && (!Array.isArray(payload.retryItems) ||
+        payload.retryItems.some((i: unknown) => !Number.isSafeInteger(i) || Number(i) < 0 || Number(i) >= job.total) ||
+        new Set(payload.retryItems).size !== payload.retryItems.length))
+      throw new Error("Selección de reintento inválida.");
     if (job.kind === "images") resources.add("image-import");
     if (job.kind === "download") resources.add("model:" + payload.id);
-    if (job.kind === "prepare") for (const step of payload.steps) resources.add("model:" + step.id);
-    if (job.kind === "index") resources.add("python-inference");
+    if (job.kind === "prepare")
+      for (const step of payload.steps) resources.add("model:" + step.id);
+    if (job.kind === "index") {
+      resources.add("python-inference");
+      const id = this.repo.getSettings().embeddingModel;
+      resources.add("uses:" + id);
+      if (id === "harrier-oss-v1-0.6b-q8_0") {
+        resources.add("uses:lfm3-vl-2b");
+        resources.add("uses:llama-runtime");
+      }
+    }
     if (job.kind === "analyze")
       for (const item of payload.items) {
         resources.add("column:" + item.columnId);
+        if (item.choice?.provider === "local") {
+          resources.add("uses:" + item.choice.model);
+          if (this.models.get(item.choice.model).backend === "llama")
+            resources.add("uses:llama-runtime");
+        }
         if (
           item.choice?.provider === "local" &&
           this.models.get(item.choice.model).backend !== "llama"
@@ -106,7 +183,7 @@ export class JobQueue {
   pump() {
     if (this.closed) return;
     const queued = this.repo.db
-      .prepare("SELECT * FROM jobs WHERE state='queued' ORDER BY created_at,id")
+      .prepare("SELECT * FROM jobs WHERE state='queued' ORDER BY rowid")
       .all() as any[];
     for (const job of queued) {
       if (this.running.size >= this.concurrency()) break;
@@ -116,14 +193,29 @@ export class JobQueue {
         resources = this.resources(job);
       } catch (error) {
         this.repo.db
-          .prepare("UPDATE jobs SET state='failed',message=? WHERE id=?")
-          .run(error instanceof Error ? error.message : String(error), job.id);
+          .prepare(
+            "UPDATE jobs SET state='failed',message=?,updated_at=? WHERE id=?",
+          )
+          .run(
+            error instanceof Error ? error.message : String(error),
+            now(),
+            job.id,
+          );
+        this.changed();
         continue;
       }
       const occupied = new Set(
         [...this.running.values()].flatMap((r) => [...r.resources]),
       );
-      if ([...resources].some((r) => occupied.has(r))) continue;
+      if (
+        [...resources].some(
+          (r) =>
+            (!r.startsWith("uses:") && occupied.has(r)) ||
+            (r.startsWith("uses:") && occupied.has("model:" + r.slice(5))) ||
+            (r.startsWith("model:") && occupied.has("uses:" + r.slice(6))),
+        )
+      )
+        continue;
       const controller = new AbortController(),
         slot: RunningJob = { controller, resources, task: Promise.resolve() };
       this.running.set(job.id, slot);
@@ -140,6 +232,9 @@ export class JobQueue {
       .run(now(), job.id);
     this.changed();
     const payload = JSON.parse(job.payload_json);
+    const retryItems: Set<number> | null = payload.retryItems
+      ? new Set(payload.retryItems)
+      : null;
     let done = job.done,
       failed = job.failed,
       skipped = job.skipped;
@@ -148,44 +243,51 @@ export class JobQueue {
         if (signal.aborted || this.closed) break;
         try {
           let outcome: "imported" | "skipped" = "imported";
-          if (job.kind === "images")
+          if (retryItems && !retryItems.has(done)) outcome = "skipped";
+          else if (job.kind === "images")
             outcome = await this.images.importOne(payload, done);
           else if (job.kind === "index")
             outcome = await this.engine.indexOne(payload, done, signal);
           else if (job.kind === "analyze")
             outcome = await this.engine.analyzeOne(payload, done, signal);
           else if (job.kind === "download" || job.kind === "prepare") {
-            const step = job.kind === "prepare" ? payload.steps[done] : { id: payload.id, fileIndex: done };
+            const step =
+              job.kind === "prepare"
+                ? payload.steps[done]
+                : { id: payload.id, fileIndex: done };
             if (step.fileIndex === null) {
               await this.models.verify(step.id);
             } else {
-            let last = 0;
-            await this.models.downloadFile(
-              step.id,
-              step.fileIndex,
-              signal,
-              (bytes, total) => {
-                if (Date.now() - last > 500) {
-                  last = Date.now();
-                  this.repo.db
-                    .prepare(
-                      "UPDATE jobs SET message=?,updated_at=? WHERE id=?",
-                    )
-                    .run(
-                      `${this.models.get(step.id).label} · ${Math.round(bytes / 1e6)} / ${Math.round(total / 1e6)} MB`,
-                      now(),
-                      job.id,
-                    );
-                  this.changed();
-                }
-              },
-            );
+              let last = 0;
+              await this.models.downloadFile(
+                step.id,
+                step.fileIndex,
+                signal,
+                (bytes, total) => {
+                  if (Date.now() - last > 500) {
+                    last = Date.now();
+                    this.repo.db
+                      .prepare(
+                        "UPDATE jobs SET message=?,updated_at=? WHERE id=?",
+                      )
+                      .run(
+                        `${this.models.get(step.id).label} · ${Math.round(bytes / 1e6)} / ${Math.round(total / 1e6)} MB`,
+                        now(),
+                        job.id,
+                      );
+                    this.changed();
+                  }
+                },
+              );
             }
           } else throw new Error("Tipo de tarea desconocido.");
           if (outcome === "skipped") skipped++;
         } catch (error) {
           if (signal.aborted) break;
-          if ((error as { fatal?: boolean })?.fatal || ["download", "prepare"].includes(job.kind))
+          if (
+            (error as { fatal?: boolean })?.fatal ||
+            ["download", "prepare"].includes(job.kind)
+          )
             throw error;
           failed++;
           const message =
@@ -219,16 +321,27 @@ export class JobQueue {
           .run(failed > 0 ? "failed" : "completed", now(), job.id);
       }
     } catch (error) {
-      if (!signal.aborted)
+      if (!signal.aborted) {
+        if (done < job.total)
+          this.repo.db
+            .prepare(
+              "INSERT INTO job_errors(job_id,item,message) VALUES(?,?,?)",
+            )
+            .run(
+              job.id,
+              done,
+              error instanceof Error ? error.message : String(error),
+            );
         this.repo.db
           .prepare(
-            "UPDATE jobs SET state='failed',message=?,updated_at=? WHERE id=?",
+            "UPDATE jobs SET state='failed',failed=failed+1,message=?,updated_at=? WHERE id=?",
           )
           .run(
             error instanceof Error ? error.message : String(error),
             now(),
             job.id,
           );
+      }
     }
   }
 }

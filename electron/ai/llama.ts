@@ -192,6 +192,7 @@ type Slot = {
 };
 
 type Waiter = {
+  assigned?: Slot;
   key: string;
   modelId: string;
   mode: "text" | "json";
@@ -264,6 +265,8 @@ export class LlamaPool {
       directory = this.models.directory(slot.modelId),
       model = this.models.get(slot.modelId),
       settings = this.settings();
+    if (this.closed || !this.slots.includes(slot))
+      throw new Error("Análisis cancelado antes de iniciar el motor.");
     const weights = model.files.find(
         (file) =>
           file.path.endsWith(".gguf") && !file.path.startsWith("mmproj"),
@@ -303,6 +306,7 @@ export class LlamaPool {
         JSON.stringify({ type: "array", items: { type: "string" } }),
       );
     const session = new LlamaSession(executable, args);
+    slot.session = session;
     try {
       await session.ready;
       if (this.closed || !this.slots.includes(slot)) {
@@ -340,6 +344,7 @@ export class LlamaPool {
           busy: true,
         };
         this.slots.push(slot);
+        waiter.assigned = slot;
         this.waiting.shift()!;
         void this.create(slot).then(
           () => waiter.resolve(slot),
@@ -365,11 +370,17 @@ export class LlamaPool {
     }
   }
 
-  private acquire(waiter: Waiter): Promise<Slot> {
+  private acquire(waiter: Waiter, signal?: AbortSignal): Promise<Slot> {
     if (this.closed)
       return Promise.reject(new Error("El motor de visión está cerrado."));
     return new Promise((resolve, reject) => {
-      this.waiting.push({ ...waiter, resolve, reject });
+      let settled=false;
+      const cleanup=()=>signal?.removeEventListener("abort",abort);
+      const entry:Waiter={...waiter,resolve:slot=>{if(settled){this.retire(slot);return;}settled=true;cleanup();resolve(slot)},reject:error=>{if(settled)return;settled=true;cleanup();reject(error)}};
+      const abort=()=>{if(settled)return;settled=true;cleanup();const index=this.waiting.indexOf(entry);if(index>=0)this.waiting.splice(index,1);if(entry.assigned)this.retire(entry.assigned);reject(new Error("Análisis cancelado."));this.fill();};
+      signal?.addEventListener("abort",abort,{once:true});
+      if(signal?.aborted){abort();return;}
+      this.waiting.push(entry);
       this.fill();
     });
   }
@@ -395,7 +406,7 @@ export class LlamaPool {
       mode,
       resolve: () => {},
       reject: () => {},
-    });
+    },signal);
     try {
       if (!slot.session)
         throw new Error("No se pudo iniciar el motor de visión.");
