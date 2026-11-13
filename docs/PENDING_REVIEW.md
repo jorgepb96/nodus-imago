@@ -1,5 +1,13 @@
 # Cambios acumulados para revisión final
 
+## Reanudación — 13 de noviembre, 04 h (Europe/Madrid)
+
+El run [43328859188](https://github.com/jorgepb96/nodus-imago/actions/runs/43328859188) confirma inferencia real sin Python desde la app empaquetada en LOS CINCO targets: ONNX/LFM3 en macOS ARM64, Windows x64, Linux x64 y Linux ARM64; Harrier/LFM3 en Mac Intel. Desktop ARM64 completo también pasó. El run global no pasó: Windows encontró una carrera al reconstruir miniaturas compartidas tras restaurar, Linux falló una selección de texto del nuevo E2E y el paquete Intel produjo dos DMG por una arquitectura arm64 fijada en el target.
+
+Corregidos: reconstrucción única por hash/variante con promesa compartida (regresión de concurrencia); targets macOS con arquitectura nativa/CLI; selección de texto con teclas de flecha, prueba de contenido Markdown que conserva negrita y guardado al salir con Escape. Se conserva el manejo previo de ciclos solo de fórmulas al calcular rollups y se ignoran bases no afectadas. `test-results/resumed-verify.log`: 103/103, tipos/lint/build correctos. `resumed-phase2.log`: recorrido ampliado correcto, incluyendo enlace visual y cierre inmediato de ficha. Falta la nueva CI de este árbol y los instaladores actuales; no se afirma cierre total.
+
+La autorización posterior para auditoría externa es de 1 USD POR API (OpenRouter y Gemini), con límites separados. No cambia la prohibición de release/firma/CUDA. Las credenciales permanecen cifradas y fuera de Git.
+
 **Evidencia adicional de CI (13 de noviembre):** el run 43326874728 pasa IA real desde aplicación empaquetada en macOS ARM64, Windows x64, Linux ARM64 y macOS Intel. Harrier Intel: 108.250 ms para dos imágenes mediante descripciones LFM3; máximo RSS observado del proceso de embeddings 1.671.184.384 bytes (51 muestras de un segundo, no memoria total de todos los procesos); consulta posterior 3.735 ms. No hace falta el fallback BGE-M3 para este recorrido. Evidencia descargada bajo `test-results/ci-first-*-evidence/` (ignorada en Git).
 
 La suite completa de ese primer run NO pasa: referencia Python sin preparar, SQLite precompilado incompatible con glibc 2.35 en Ubuntu 22.04 y tres fixtures de Windows/Intel. Se corrigen mediante entorno estadístico de test explícito, compilación nativa SQLite con clang-15, nombres .exe en fixtures, fixture de descarga independiente del backend y desactivación de la caché de archivos libvips en Windows. Se prepara una nueva ejecución; no se presentan instaladores antiguos como actuales.
