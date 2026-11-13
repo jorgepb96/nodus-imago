@@ -1,5 +1,10 @@
 # Estado verificable y trabajo pendiente
 
+## Auditoría posterior de modales — 13 de noviembre de 2026
+
+Márgenes, pies de acciones y desbordamientos corregidos en el producto **`3b4edc7`**. **CI 10/10**, [run 43448339087](https://github.com/jorgepb96/nodus-imago/actions/runs/43448339087): los 27 escenarios de modales pasan en fuente y paquetes de los cinco targets (16 ejecuciones), además de las 173 pruebas por target y los recorridos anteriores. Ver [MODAL-AUDIT-2026-11-13.md](MODAL-AUDIT-2026-11-13.md). La documentación de cierre posterior no modifica el producto probado.
+
+
 ## Revisión vigente de fiabilidad — 13 de noviembre de 2026
 
 Producto revisado: **`d72e716`**. Suite **173/173 en los cinco targets**, tipos, lint, build y nueve recorridos de escritorio correctos. **CI final 10/10**: [run 43424372795](https://github.com/jorgepb96/nodus-imago/actions/runs/43424372795). Pasan los paquetes actuales y la IA real sin Python en macOS ARM64, macOS Intel, Windows x64, Linux x64 y Linux ARM64. La última restauración completa de copias también pasa desde el paquete final. Ver [RELIABILITY-AUDIT-2026-11-13.md](RELIABILITY-AUDIT-2026-11-13.md) para evidencia y límites. La instalación entre releases firmadas sigue reservada a la autorización de release; RPM se extrae y ejecuta en Ubuntu, sin afirmar instalación en una distribución RPM. Los apartados inferiores se conservan como historial.
