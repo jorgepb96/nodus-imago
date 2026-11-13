@@ -3,7 +3,7 @@
   "desktopName": "app.nodus.imago.desktop",
   "version": "0.1.0",
   "description": "Local visual research databases. Research through images.",
-  "author": "Jorge Pérez Burgueño",
+  "author": "Jorge P\u00e9rez Burgue\u00f1o",
   "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
@@ -46,7 +46,8 @@
     "test:disk:e2e": "node scripts/disk-preflight-e2e.mjs",
     "test:network:e2e": "node scripts/network-preflight-e2e.mjs",
     "test:backups:e2e": "node scripts/backups-e2e.mjs",
-    "test:updates:e2e": "node scripts/update-protocol-e2e.mjs"
+    "test:updates:e2e": "node scripts/update-protocol-e2e.mjs",
+    "test:modals:e2e": "node scripts/modals-e2e.mjs"
   },
   "dependencies": {
     "@nodus/embeddinggemma-transformers": "npm:@huggingface/transformers@4.3.1",
