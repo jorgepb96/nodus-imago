@@ -15,13 +15,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only-6d28d9" alt="License: AGPL-3.0-only"></a>
 </p>
 
-Nodus Imago is an open-source desktop application for people who research with images, for example in history, art history or archives. It stores your images and their catalogue records in databases on your computer. With them you can describe each image, classify it, search for it by words or by what it shows, and analyse the collection.
+Nodus Imago is an open-source desktop application for historians, art historians and archivists who work with photographs, engravings and other images. It keeps your images and their catalogue records together, and helps you date, compare, search and analyse them.
 
-Imago is a separate application from [Nodus Research](https://github.com/jorgepb96/nodus). It uses the same interface, settings and themes, but you do not need Nodus to use it.
+Everything stays on your computer. There is no account and no server. AI features can run locally, and external providers are used only if you turn them on. Imago is part of the [Nodus](https://github.com/jorgepb96/nodus) family and works on its own.
 
-Everything is stored on your computer. You do not need an account or a server. AI features can run locally without Python; external AI providers are only used if you turn them on.
-
-![Nodus Imago in English and light mode, showing a gallery of historical photographs from the Biblioteca Nacional de España](docs/screenshots/readme-gallery.png)
+![A gallery of nineteenth-century photographs by Jean Laurent in Nodus Imago](docs/screenshots/readme-gallery.png)
 
 ## Install Nodus Imago
 
@@ -43,196 +41,110 @@ Download the installer for your computer and open it. There is no server to conf
 
 Imago checks for new versions and installs them when you choose to; in **Settings › Updates and news** you can also let it download them automatically. Every version, with its notes and all files, is on the [releases page](https://github.com/jorgepb96/nodus-imago/releases). You can also [run Imago from source](#development).
 
-## Get started
+## Catalogue a collection
 
-The first time you open Imago, an introduction asks you to choose the language (Spanish or English), explains the main features and asks how you want to turn on semantic search: with a model on your computer, with an external provider, or not for now. A guided tour then points out each part of the screen, including the chat. You can repeat both from **Settings › Interface**.
+Bring in a CSV or TSV file, a Notion export, a Nodus database, a Tropy project or a IIIF manifest from a digital library. Images are matched to their records by file name, and originals are never modified.
 
-## Import your catalogue
+Dates stay as cataloguers write them: “c. 1860”, “[1930]”, “1950s”, “before 1936”. Imago reads the period and how certain it is, and uses it in filters, sorting, the timeline and statistics.
 
-A database is a table: each row is a record and each column is a property (title, date, place, subjects, and so on). Each record can have one or more images.
+![A record with a historical date, its period and a Copy citation button](docs/screenshots/readme-record.png)
 
-- **From a table.** Import a CSV or TSV file, a Notion export or a compatible Nodus database. When you import a CSV, Imago suggests a type for each column (text, number, date, select, multi-select, location…) and you can change any of them before importing.
-- **Images.** Import image files or a folder, or drag them into an open database. Imago matches each image to the record whose identifier matches the file or folder name; images without a clear match are listed for you to review. You choose whether Imago keeps its own copy or links to your original file. Imago never modifies originals: it reads their EXIF metadata, creates thumbnails and uses file hashes to detect duplicates. Supported formats: JPEG, PNG, WebP, TIFF, BMP, HEIC and HEIF.
+## Find images by words, by likeness or by a detail
 
-## Work with a database
+Search by exact words, by meaning (“procession with lanterns”) or with an image. Mark a region of a photograph, write a note, and search for that detail inside every other image: Imago shows where it appears.
 
-Each database has eight views of the same records:
+![A detail of the Court of the Lions searched for inside other photographs](docs/screenshots/readme-detail-search.png)
 
-| View | What it shows |
-| --- | --- |
-| **Table** | One row per record and one column per property. You can edit cells directly. |
-| **Gallery** | One card per record with its main image. |
-| **Map** | Records that have a location property, grouped by place, with the camera direction when it is known. The **Repeated views** tab groups photographs taken from the same point and facing the same way. |
-| **Timeline** | Records ordered by year, using a date property that Imago detects or you choose. |
-| **Statistics** | Calculations on the records shown: see [Analyse the collection](#analyse-the-collection). |
-| **Variants** | The same image in different records (copies, reproductions, other scans, crops), each group in date order: see [Compare images](#compare-images). |
-| **Network** | Which values of two or three properties (photographers, places, subjects) appear together in the same records: see [Analyse the collection](#analyse-the-collection). |
-| **Visual map** | Every image placed by visual similarity, so that images that look alike appear together: see [Analyse the collection](#analyse-the-collection). |
+## See the whole collection at once
 
-![A research table with photographs, photographers, dates, thematic categories, visual notes and source links](docs/screenshots/readme-table.png)
+The visual map places every image by likeness, so similar photographs sit together. Colour it by place, subject or year, zoom in to see the images and select an area to compare or analyse it.
 
-In the table you can drag a column name to move the column and drag its edge to change its width. Right-clicking a column name opens a menu to rename it, change its type, filter, sort, calculate a total for the column, freeze it, hide it, wrap its text, insert a column, duplicate it or delete it. The **Visible properties** button lists every property with a switch to show or hide it.
+![The visual map of the collection, coloured by place](docs/screenshots/readme-visual-map.png)
 
-Opening a record shows its images, properties and notes in a side panel. You can attach several images to a record and write notes in a text editor with formatting.
+## Follow a photograph through its copies
 
-Clicking a record's image opens it full screen, with zoom. With **Annotate** you drag over a part of the image (a person, an inscription, a building) and write a note with tags. A record can have several annotated regions. Notes are listed beside the image with a crop of each region, and they are part of the record's text, so the literal search finds them at once and the semantic search after the next indexing.
+The Variants view finds the same photograph in different records: other prints, scans and crops, in date order. The comparison table puts up to six images side by side with shared zoom, or lays one over another to show what changed.
 
-**Historical dates.** The *Historical date* property keeps a date as the cataloguer wrote it (“c. 1930”, “[1930]”, “1930?”, “before 1936”, “1930–35”, “1950s”, “late 19th century”, also in Spanish) and reads from it the period it refers to and how certain it is: exact, approximate, attributed (in brackets) or doubtful (with a question mark). Filters (“overlaps the period”, “includes the year”, “ends before”, “starts after”), sorting, the timeline, statistics and the chat use the period; you can correct it by hand. A text column can be converted to this type from its menu, and CSV imports suggest it for columns of catalogue dates.
+![Two prints of the same view of Toledo laid over each other on the comparison table](docs/screenshots/readme-compare-overlay.png)
 
-For locations, you can choose a place from an offline list, type your own name or enter coordinates, and set the direction the camera was facing. The map shows place names and coordinates offline; the OpenStreetMap background needs a connection or previously stored tiles. **Then and now** looks for present-day photographs taken near a place on Wikimedia Commons (only the coordinates are sent) and lays one over the historical image with a transparency slider, or opens both on a comparison table.
+![Variants: a portrait and its cropped version found as the same photograph](docs/screenshots/readme-variants.png)
 
-**Complete from similar images.** For a property with empty records (a date, a place, a photographer, a category), Imago finds the most similar images that have a value and proposes one, with the images it is based on and a confidence level. Dates are proposed as an attributed period in brackets, for example “[1950–1955]”. Nothing is saved until you accept the proposals, and accepting them can be undone in one step. It needs the image vectors of semantic search.
+## Places, viewpoints and then and now
 
-**Find a detail.** In the full-screen image, a selected region (a uniform, a shop sign, a monument) can be searched for in the other images. The quick search compares the detail with each whole image; the search inside the images also divides the most similar ones into nine parts and marks the part where the detail appears.
+Place records on a map with the direction the camera faced, and find photographs taken from the same spot. Then and now shows present-day photographs of the place from Wikimedia Commons next to the historical one.
 
-**Filter and sort** applies to all views, and you can save a set of criteria to return to it later.
+![Then and now: the Puerta del Sol in the 1860s next to present-day photographs from Wikimedia Commons](docs/screenshots/readme-then-and-now.png)
 
-**Unify similar values.** From a column's menu, Imago groups the values that are probably the same thing written differently: capitals, accents, punctuation, word order (“Muller, Nicolás”), initials (“N. Muller”) or a slip of one letter in a long word. Equal ones come marked; similar ones are left for you to check, since two names can differ by one letter and be different places. The chosen name is kept and the records of the others move to it. «Undo» brings everything back.
+## Dates, patterns and relations
 
-**Link values to authorities.** The values of a property with options can be linked to Wikidata, which also gives the Getty identifiers (ULAN for people, TGN for places, AAT for concepts) when they exist, the years of a person and the coordinates of a place, or to Iconclass for iconographic subjects. You search value by value, or ask for proposals for all of them and accept them; only the text of the values searched is sent. Linked places can fill a new location property, which places their records on the map. Exports add a column with the URI and identifiers of each linked property.
+The timeline orders records by period and marks approximate and attributed dates. Statistics give frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence and trends. The network shows which places, people and subjects appear together.
 
-## Search
-
-Imago has two search boxes: **Search** in the left menu looks in all your databases, and the box at the top of each database looks only in that database and narrows its views to the matching records. Both offer three types of search:
-
-- **Literal:** finds the records that contain every word you type, ignoring accents and capital letters.
-- **Semantic:** compares a description, for example “night procession with lanterns”, with the content of the images and with the text of the records, and sorts the results by similarity. In the global search you can also attach an image to find similar ones.
-- **Hybrid:** shows the records that contain the words together with those closest in meaning.
-
-Semantic search needs an embedding model, which converts each image and each record into a numerical representation that can be compared. Imago indexes new and edited records automatically. The index is stored on your computer. Literal search always works, with or without models.
-
-## Describe and classify with AI
-
-AI features work on your database properties. For a selection of records or a whole column, you can ask a model to write a description or to assign categories from the vocabulary you defined for that property. You choose the model and the instructions for each property. For example, one column can hold descriptions and several other columns can hold the categories assigned by different models to the same images.
-
-The **Analyse** dialog can also **transcribe** the visible text of the images: the back of a photograph, studio stamps, inscriptions, signatures and printed captions. It reads every image of the record (front and back), keeps the original spelling and marks illegible parts as [ilegible].
-
-AI results are saved as **proposals**. You review and approve them one by one or in batches with **Review proposals**; nothing changes in your data until you approve it. Imago records which model and which instructions produced each proposal.
-
-Long operations (imports, model downloads, indexing, AI analysis) run in the background as tasks. The **Tasks** button in the top bar shows their progress and lets you pause, resume or cancel them.
-
-**Automations** can fill in values, copy properties or start an AI analysis when records change or on a schedule. An execution history shows what ran and its result.
-
-## Compare models and your own classification
-
-The **Agreement** tool shows how consistently your records have been classified. It compares the categories assigned by several models with each other and, if you provide one, with your own classification. It shows how often all models agree, the agreement between each pair and the agreement of each model with you, and lists the records where they differ so you can open them.
-
-The available measures are Cohen’s kappa, Fleiss’ kappa, nominal Krippendorff’s alpha and comparisons for properties with several labels. You choose how missing values are handled, and each result shows how many records it is based on, including results per category. Saving an analysis keeps a copy of its data and settings, which you can export as CSV or JSON; later changes to the database do not change a saved analysis.
+![The network of places and subjects in the collection](docs/screenshots/readme-network.png)
 
 ![The Agreement workspace comparing three demonstration raters with a reference classification](docs/screenshots/readme-agreement.png)
 
-*The screenshot uses illustrative labels entered for the demo. Its figures are not an evaluation of any AI model or a research finding.*
+The Agreement tool compares the categories assigned by several AI models with each other and with your own classification (Cohen’s and Fleiss’ kappa, Krippendorff’s alpha). *The screenshot uses illustrative labels; its figures are not an evaluation of any model.*
 
-## Analyse the collection
+## Clean and link your catalogue
 
-The **Statistics** view calculates the following on the records currently shown, after filters and the database search box:
+Unify values written in different ways (“N. Muller”, “Muller, Nicolás”) in one step, and undo it if needed. Link people, places and subjects to Wikidata, with their Getty identifiers, and to Iconclass. Linked places can place every record on the map.
 
-- **Frequencies:** how many records have each value of a property.
-- **Cross-tab:** how two properties relate, with Pearson’s chi-square test, its p-value, degrees of freedom and Cramér’s V. A heatmap can show counts, row percentages or standardised residuals (cells beyond ±1.96 differ significantly from what independence would give).
-- **Co-occurrence:** which labels of a multi-select property appear together in the same records, with the Jaccard index and lift.
-- **Trend:** the number of records per year or decade, optionally split by a property.
-- **Numeric:** mean, median, standard deviation and a histogram of a number property.
+![Places of the collection with proposed links to Wikidata, Getty TGN identifiers and coordinates](docs/screenshots/readme-authorities.png)
 
-Each result includes its data table, which you can copy. You can save calculations with the database to open them again later.
+Complete empty fields from the most similar images: Imago proposes a value, such as an attributed period “[1950–1955]”, and shows the images it is based on.
 
-The **Visual map** places every image with semantic-search vectors on a plane, so that images that look alike appear together, and can colour them by a property (categories, or years on a single-hue scale). Zooming in shows the images themselves; clicking one opens its record. Records outside the filters stay in place, greyed, so the map keeps its shape. **Select an area** selects the records of a region to compare them, make plates or analyse them. The layout is calculated on your computer the first time (seconds for a few thousand images) and kept until the indexed images change.
+## Describe, transcribe and classify with AI
 
-The **Network** view draws the values of two or three properties as points joined by lines when they appear in the same records: the size of a point is its number of records and the width of a line is how many records two values share. It uses the records shown after filters and can be limited to a period. Clicking a value lists the values it appears with, and **Show its records** filters the gallery.
+Ask a model to describe images, to classify them with your own vocabulary, or to transcribe backs, stamps, inscriptions and captions. Results are proposals: nothing changes until you approve them.
 
-## Compare images
+## Restore without touching the original
 
-The **Comparison table** in the left menu puts up to six images from any database side by side. Zoom and panning move in all of them at once, or each one separately. **Overlay** puts one image over another with a transparency slider, or shows the difference between them, which makes changes between two states of an engraving or two prints easy to see. Tables are saved. You can also select records in the gallery and press **Compare**.
-
-The **Variants** view of each database groups the images that are the same photograph or engraving in different records: copies, reproductions in the press, other scans, crops and retouched versions. Imago calculates a visual fingerprint of each image once, on your computer, and also uses the image vectors of semantic search when they exist. Each group is ordered by date, which shows the first dated appearance of an image and how it was reused. A group can be opened on a comparison table.
-
-## Restore images
-
-The **Restorations** section creates restored, repaired, sharpened or colourised versions of an image with an image model from OpenAI, Google Gemini, OpenRouter or a compatible server. You choose a task (its instructions can be edited) and a model, and you can mark models as favourites. To restore only one part, mark it first as an annotated region: only that crop is sent and the result is pasted back in place, so the rest of the image stays exactly as it was.
-
-The original is never modified. Each version is kept apart, linked to the original, with the model, the instructions and the date, and versions do not enter searches or statistics. A slider compares the original and the version. Versions can be downloaded as JPEG or PNG with a watermark in a corner (“AI modified” or your own text), which is on by default. The image is sent to the provider you choose.
+Create restored, repaired or colourised versions of an image, or of one region, with an image model from OpenAI, Gemini or OpenRouter. Versions are kept apart from the original and can be downloaded with an “AI modified” watermark.
 
 ## Cite and publish
 
-**Copy citation** in a record copies a reference made from a template of the database, for example `{Author}, «{Title}», {Place}, {Date}. {Archive}, {Reference}.` Empty properties disappear with their punctuation. Templates in Chicago, ISO 690 and APA style are filled in from the property names, and you can edit them.
-
-With records selected, **Plates** creates a PDF with one figure per page, numbered (“Fig. 4.”) and with its caption from the same template, followed by the list of figures. The captions can also be copied as text.
-
-## Exchange with other tools
-
-- **Tropy:** import a project exported from Tropy as JSON-LD. Each item becomes a record with its metadata, tags, notes and photos, and Tropy selections become annotated regions.
-- **IIIF:** paste the link of a IIIF manifest or collection from a digital library or archive. Imago creates a database with its metadata and downloads the images, one record per image or per object.
-- **W3C annotations:** export the annotated regions of a database as a W3C Web Annotation collection, which other IIIF and annotation tools can read. The file contains no local paths.
+Copy a citation built from a template (Chicago, ISO 690 or APA). Export a PDF of plates with numbered figures and captions, and export annotations as W3C Web Annotations.
 
 ## Ask questions in the chat
 
-The **Chat** section answers questions about your databases in writing, with tables and charts. Each conversation reads only the databases you choose for it. You can also open the chat beside a database with the **Chat** button in its header; drag the left edge of the panel to change its width.
+Ask about your databases in plain language. When an answer needs an exact figure, the model writes a calculation that runs over every record in an isolated process on your computer, and the answer shows it.
 
-The model receives a summary computed over every record (how many records have each value, ranges of dates and numbers, records per decade) and a few example records. When an answer needs an exact figure that the summary does not contain, the model writes a short calculation in JavaScript. Imago runs it over all the records in an isolated process on your computer: the process cannot read or write files, start other programs or use the network, and it is stopped if it takes too long. Each answer shows the calculations it ran, with their code and results. **Fast** allows up to two calculations per answer and **Extended** up to four, with more example records.
-
-Conversations are saved with the database and can be renamed, highlighted, archived, deleted and organised in folders and subfolders. The chat needs a model from a provider or from a server on your computer, such as Ollama or LM Studio; with a local server, nothing leaves your computer.
-
-## Choose local AI or an external provider
+## Local AI or a provider of your choice
 
 | Purpose | Local model |
 | --- | --- |
 | Image descriptions and classification | LFM3-VL-2B through llama.cpp |
 | Text and image embeddings | EmbeddingGemma 2 through Transformers.js / ONNX Runtime |
-| Embeddings on Intel Macs | Harrier OSS v1 0.6B through llama.cpp; images are searched through local LFM3 descriptions |
+| Embeddings on Intel Macs | Harrier OSS v1 0.6B through llama.cpp |
 
-Models are **downloaded when you ask for them**, not included in the installer. Before a download starts, the model manager shows where the files come from, their license, size and destination, and checks that there is enough disk space. Downloads can be cancelled and resumed, and files are verified with SHA-256 before use. Local models do not need Python.
-
-Instead of a local model, you can use OpenRouter, Google Gemini or another supported provider, or connect Ollama, LM Studio or an OpenAI-compatible server. This also applies to embeddings for semantic search, which is useful on computers with little memory. External providers are disabled until you turn them on; when you use one, the images or texts it processes are sent to it. Provider keys are stored in the operating system’s encrypted storage, separately from the keys you use in Nodus Research.
+Models download only when you ask, are verified before use and do not need Python. You can also use OpenRouter, Google Gemini, Ollama, LM Studio or another OpenAI-compatible server. Provider keys are stored in the operating system’s encrypted storage.
 
 ![English provider settings in light mode, with remote APIs disabled](docs/screenshots/readme-settings.png)
 
 ## Back up and export
 
-You can export tables as CSV, JSON or XLSX. A full `.imago` backup keeps the database structure, the available originals, relations, notes, suggestions, history and search index. In **Settings › Storage and backups** you choose a folder and a schedule; backups can be encrypted and are checked after they are written. If backups are set up, Imago makes one and checks it before installing an update. After restoring a backup, automations and external AI stay disabled until you turn them on again.
-
-When importing from Notion, Imago keeps the exported Markdown pages and their nested blocks along with tables and images. When importing from Nodus, it works from a copy and does not change the original database. In both cases, what can be imported depends on what the export contains.
+Export tables as CSV, JSON or XLSX. Full `.imago` backups keep the structure, originals, notes, history and search index; they can be scheduled and encrypted. When backups are set up, Imago makes one before installing an update.
 
 ## Development
 
-To work on Imago you need **Node.js 22.12 or later** and npm. If no prebuilt SQLite module is available for your platform, you may also need its native build tools. Install the dependencies and start the development application with:
+You need **Node.js 22.12 or later** and npm.
 
 ```sh
 npm ci
-npm run dev
+npm run dev                # development application
+npm run verify             # typecheck, lint, unit tests and build
+npm run test:desktop:all   # desktop flows; needs a graphical session
 ```
 
-To build and run the compiled application:
-
-```sh
-npm run build
-npm start
-```
-
-Imago is built with Electron, React, TypeScript and SQLite. Installing the dependencies prepares the native modules for Electron. The main checks are:
-
-```sh
-npm run verify             # Typecheck, lint, unit tests and build
-npm run test:desktop:all   # Desktop flows; requires a graphical session
-npm run test:native-ai:e2e # Real local AI; see the test setup below
-```
-
-The [CI workflow](.github/workflows/ci.yml) tests the source and the packaged applications, including real CPU inference, on all five platforms and architectures. Tests with real models need an isolated profile and explicitly downloaded dependencies; the workflow shows how that environment is prepared. To build installers, run the command for your system:
-
-```sh
-npm run dist:mac       # macOS Apple silicon: DMG and ZIP
-npm run dist:mac:x64   # macOS Intel: DMG and ZIP
-npm run dist:win       # Windows x64: NSIS
-npm run dist:linux     # Linux native architecture: AppImage, DEB and RPM
-```
-
-The [verification record](docs/VERIFICATION.md) describes what has been tested and what has not. RPM executables have been extracted and tested on Ubuntu, but native installation on an RPM distribution and updating between signed releases have not been verified yet. Some engineering reports are in Spanish.
+Imago is built with Electron, React, TypeScript and SQLite. The [CI workflow](.github/workflows/ci.yml) tests the source and the packaged applications on macOS, Windows and Linux. Releases are built, signed and published by the [release workflow](.github/workflows/release-draft.yml); the macOS Intel build is added afterwards by [its own workflow](.github/workflows/release-macos-intel.yml). The [verification record](docs/VERIFICATION.md) describes what has been tested.
 
 ## Report a problem
 
-To report a problem or suggest a feature, [open an issue](https://github.com/jorgepb96/nodus-imago/issues). For a problem, please include your app version and platform, the steps that reproduce it and what you expected to happen. A small anonymised example helps; do not include private research material or API keys.
+[Open an issue](https://github.com/jorgepb96/nodus-imago/issues) with your app version, your platform and the steps that reproduce it. Do not include private research material or API keys.
 
 ## Image credits
 
-**Images taken from the holdings of the Biblioteca Nacional de España.** The historical photographs shown here come from the Biblioteca Digital Hispánica and were retrieved through Wikimedia Commons. Their [individual sources, rights and screenshot notes](docs/screenshots/README.md) are documented separately. English display titles and research annotations were prepared for the demonstration. The BNE does not sponsor or endorse Nodus Imago.
+The screenshots show photographs by Jean Laurent and his studio (1850s–1880s) from the **Rijksmuseum** (CC0), the **Library of Congress** and other holdings on Wikimedia Commons (public domain), and from the **Biblioteca Nacional de España** (public domain or CC BY 4.0), retrieved through Wikimedia Commons. Every image, its source and its rights are listed in the [screenshot notes](docs/screenshots/README.md). Titles, places and subjects were entered for the demonstration. None of these institutions sponsors or endorses Nodus Imago.
 
 ## License
 

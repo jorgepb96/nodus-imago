@@ -1,9 +1,9 @@
 {
-  "applicationCommit": "9604621e55b88722c8865f865d0ffcd24ace19af",
-  "date": "2026-11-13",
+  "applicationCommit": "c2111f0a6b776f4f44d93d0b27357e007be4060d",
+  "date": "2026-11-14",
   "locale": "en",
   "theme": "light",
-  "method": "Native Electron window capture, resized only",
+  "method": "Native Electron window capture, resized to 1600 px and palette-compressed",
   "images": [
     {
       "file": "readme-agreement.png",
@@ -12,16 +12,40 @@
       "sha256": "7bf7c75036d0475ba93d97d6d1d8f005958cb593f44b9de598c7b81754db847a"
     },
     {
+      "file": "readme-authorities.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "d677334860f348d4684cece13d1a63735be159c887f44c458d9af07e01ed6621"
+    },
+    {
+      "file": "readme-compare-overlay.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "d7c1e37661b0cb9a325a35f647b0ec537f557feafcaad3c0be76706ba239f746"
+    },
+    {
+      "file": "readme-detail-search.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "5b55042f01b7f2af995327d1cb84ee0c280ac92779874d9800981d3eb176642f"
+    },
+    {
       "file": "readme-gallery.png",
       "width": 1600,
-      "height": 1453,
-      "sha256": "3275ebcaff0a3326e8dbfb6c4794b10bf92528c8492d7ea4881d7820b57e791f"
+      "height": 1000,
+      "sha256": "e26f18e38d7982b40df07068a5345d00754e8e6248e0e95fefa6a1b30a1f0ce9"
+    },
+    {
+      "file": "readme-network.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "526d6243be87d4d37327a73cc66f742c6dd59e0c453efeb311345208fec73a6b"
     },
     {
       "file": "readme-record.png",
       "width": 1600,
-      "height": 999,
-      "sha256": "8846240a8064ed2eb7535ffa6a16e14fe545986f9408ba66b76fe8a44401a160"
+      "height": 1000,
+      "sha256": "3b3f3b0d0d030a6eb980dc34c8176531a9a2e59959723e6a088f8d12d67c4b8f"
     },
     {
       "file": "readme-settings.png",
@@ -30,10 +54,22 @@
       "sha256": "cf210375d0cae5be4fb73849231d5c523259e18f4fed34d02a0d99f552f9b9a2"
     },
     {
-      "file": "readme-table.png",
+      "file": "readme-then-and-now.png",
       "width": 1600,
-      "height": 999,
-      "sha256": "d1e6d250c09a3c1140a4be463e185dcf69771577da44d207e4844aa7e5c96968"
+      "height": 1000,
+      "sha256": "09e578e277a5c3eee080c33ffa60c89f15ab9a0f4a0cccbfe2a807cb851c5aa2"
+    },
+    {
+      "file": "readme-variants.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "9fa472b54b79108a298cdf44cdede79eb900177e58b320ca5db13894d7f3487f"
+    },
+    {
+      "file": "readme-visual-map.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "8ce718fb1bcca6b41c08d317aa37a307b26ef1de01d31f86e81c7eab1757bdf2"
     }
   ]
 }

@@ -1,62 +1,554 @@
 [
   {
-    "id": 54317939,
-    "title": "Ariza Bridge, Úbeda",
-    "author": "Jean Laurent",
-    "date": "1867",
-    "download": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0b/Jean_Laurent_-_Puente_Ariza%2C_%C3%9Abeda_%281867%29.jpg/1280px-Jean_Laurent_-_Puente_Ariza%2C_%C3%9Abeda_%281867%29.jpg",
-    "commons": "https://commons.wikimedia.org/wiki/File%3AJean%20Laurent%20-%20Puente%20Ariza%2C%20%C3%9Abeda%20(1867).jpg",
-    "source": "https://bdh.bne.es/bnesearch/detalle/bdh0000047500",
+    "title": "Segovia. Acueducto romano",
+    "author": "Juan Laurent",
+    "date": "c. 1875–1900",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Aquaduct_van_Segovia_door_Juan_Laurent_(titel_op_object),_RP-F-00-8031.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Toledo. Patio de una casa",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Binnenplaats_van_een_huis_in_Toledo,_met_een_zittende_man_in_een_lange_mantel_TOL%C3%88DE.-_Cour_int%C3%A9rieure_d%27une_maison._(d%27apr%C3%A8s_nature)_(titel_op_object),_RP-F-F01098-BH.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Toledo. Puente de Alcántara",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Brug_Puente_de_Alc%C3%A1ntara_over_de_Taag_in_Toledo_TOLEDO.-_Puente_de_Alc%C3%A1ntara._(titel_op_object),_RP-F-F01098-T.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Burgos. El Arco de Santa María",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Burgos-El_Arco_de_Sta._Maria,_RP-F-F01139-P.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Burgos. La plaza mayor",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Burgos-La_plaza_mayor,_RP-F-F01139-O.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Catedral de Burgos. Puerta de la Pellejería",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Catedral_de_Burgos-Puerta_de_la_Pellejeria,_RP-F-F01139-N.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Córdoba. Puerta de entrada a la Mezquita",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Cordoba-Puerta_de_entrada_a_la_Mezquita,_RP-F-F80104.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Córdoba. Vista interior de la Mezquita",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Cordoba-Vista_interior_de_la_Mezquita_o_Catedral,_RP-F-F01139-AC.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "El Escorial. Vista del monasterio desde la presa",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1900",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:El_Escorial_gezicht_op_het_klooster_El_Escorial_nr._49_Vista_del_monasterio_desde_la_presa_(serietitel),_RP-F-00-34.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Escorial. Vista del monasterio desde la estación",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Escorial._Vista_del_Monasterio_desde_la_Estacion,_RP-F-F01139-CF.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Toledo. La Puerta del Sol",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Exterieur_van_de_Puerta_del_Sol_in_Toledo_TOLEDO.-_La_puerta_del_Sol._(titel_op_object),_RP-F-F01098-R.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Toledo. La catedral",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Exterieur_van_de_kathedraal_van_Toledo_TOLEDO.-_La_catedral._(titel_op_object),_RP-F-F01098-S.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Córdoba. Puerta del Puente y Triunfo de San Rafael",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Gezicht_op_Puerta_del_Puente_in_C%C3%B3rdoba_met_links_de_Triunfo_de_San_Rafael_en_rechts_de_kathedraal_(Mezquita)_CORDOBA.-_Puerta_de_entrada_de_la_Ciudad,_el_triunfo_y_la_Mezquita_desde_el_puente._(titel_op_object),_RP-F-F01098-X.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Madrid. La Puerta del Sol",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Gezicht_op_de_Puerta_del_Sol_en_het_Ministerie_van_Binnenlandse_Zaken_in_Madrid_MADRID.-_La_puerta_del_Sol_con_el_Ministerio_de_la_Gobernacion._(titel_op_object),_RP-F-F01098-AC.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Sevilla. Interior de la catedral",
+    "author": "Juan Laurent",
+    "date": "c. 1850–1900",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Gezicht_op_het_interieur_van_de_Kathedraal_van_Sevilla,_vanaf_de_tribune_boven_de_hoofdingang,_RP-F-00-6078.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Granada. Galería y templete de poniente del Patio de los Leones",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada-Interior_de_la_galeria_y_del_templete_poniente_del_patio_de_los_Leones.(Alhambra).,_RP-F-F01139-BO.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Toledo. Carreta de bueyes del carbonero",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Handelaar_in_steenkolen_met_ossenkar_in_Toledo_TOL%C3%88DE_-_La_charrette_de_boeufs_des_charbonniers_(d%27apr%C3%A9s_nature)._(titel_op_object),_RP-F-F01098-BG.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Córdoba. Interior del mihrab",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Interieur_van_de_Mihrab_in_de_Mezquita_van_C%C3%B3rdoba_CORDOBA_-_Vista_interior_del_Mihrab_%C3%B3_Santuario_de_la_Mezquita._(titel_op_object),_RP-F-F01098-Y.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Madrid. Salón del Congreso",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Interieur_van_het_Spaanse_congres_MADRID.-_Vista_interior_del_Salon_del_Congreso.,_RP-F-F01098-M.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Toledo. Claustro de San Juan de los Reyes",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Kloostergang_van_het_Monasterio_de_San_Juan_de_los_Reyes_in_Toledo_TOLEDO.-_Claustro_de_San_Juan_de_los_Reyes,_visto_de_frente._(titel_op_object),_RP-F-F01098-W.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Sevilla. La Torre del Oro",
+    "author": "Juan Laurent",
+    "date": "c. 1850–1900",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:La_torre_del_Oro,_Sevilla,_Spanje,_RP-F-00-6077.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Granada. El Patio de los Leones",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Leeuwenhof_met_de_Leeuwenfontein_in_het_Alhambra_van_Granada_GRANADA.-_El_patio_de_los_Leones_en_la_Alhambra._(titel_op_object),_RP-F-F01098-AA.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Murcia. Paisaje de la huerta",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Murcia._Paisaje_de_la_huerta,_RP-F-F01139-CG.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Valencia. Barca de pescadores varada por bueyes",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Ossen_trekken_vissersboot_het_strand_op_in_Valencia_VALENCE.-_Barque_de_p%C3%AAcheurs_tir%C3%A9e_sur_le_sable._(d%27ap%C3%A8s_nature)_(titel_op_object),_RP-F-F01098-BF.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Banderillero con banderillas",
+    "author": "Juan Laurent",
+    "date": "c. 1860–1875",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Portret_van_een_onbekende_stierenvechter_(banderillero),_met_sierstokken_en_stierenkop,_RP-F-F01215-F.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Matador con capote",
+    "author": "Juan Laurent",
+    "date": "c. 1860–1875",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Portret_van_een_onbekende_stierenvechter_(matador)_met_stok,_doek_en_stierenkop,_RP-F-F01215-G.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Picador con lanza",
+    "author": "Juan Laurent",
+    "date": "c. 1860–1875",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Portret_van_een_onbekende_stierenvechter_(picador),_staand_met_lans,_RP-F-F01215-D.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Salamanca. Catedral, puerta de San Clemente",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Salamanca._Catedral._Puerta_de_San_Clemente.,_RP-F-F01139-CJ.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Salamanca. Puente romano sobre el Tormes",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Salamanca._Puente_romano_sobre_el_Tormes.,_RP-F-F01139-CH.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Segovia. El Alcázar y la catedral desde la Fuencisla",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Segovia._El_Alcazar_y_la_Catedral_vistos_desde_la_Fuencisla.,_RP-F-F01139-CN.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Sevilla. Plaza del Triunfo, la catedral y la Lonja",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Sevilla._Plaza_del_Triunfo,_la_Catedral_y_la_Lonja,_desde_la_puerta_del_Leon,_RP-F-F01139-CP.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Toledo. Vista a orillas del Tajo",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Toledo._Vista_a_orillas_del_Tajo,_RP-F-F01139-DA.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Toledo. Vista de la ciudad desde el Alcázar",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Toledo._Vista_de_la_ciudad_desde_el_Alcazar.,_RP-F-F01139-DF.jpg",
     "rights": "Public domain"
   },
   {
-    "id": 117021615,
-    "title": "Cibeles Fountain, Madrid",
+    "title": "Toledo. Puente de San Martín y San Juan de los Reyes",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Toledo._Vista_del_puente_de_San_Martin_y_de_San_Juan_de_los_Reyes,_RP-F-F01139-DB.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Toledo. Puente de San Martín y San Juan de los Reyes (otra prueba)",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Toledo._Vista_del_puente_de_San_Martin_y_de_San_Juan_de_los_Reyes.,_RP-F-F01139-DE.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Toledo. Santa María la Blanca, antigua sinagoga",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Toledo._Vista_interior_de_Sta._Maria_la_Blanca,_antigua_sinagoga.,_RP-F-F01139-DN.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Valladolid. Galería del patio de San Gregorio",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Valladolid._Galeria_del_patio_de_San_Gregorio.,_RP-F-F01139-DT.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Vista general de Córdoba",
+    "author": "Juan Laurent",
+    "date": "c. 1860–1890",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Vista_general_de_Cordoba,_RP-F-F24820.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Córdoba. El panadero",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Vrouw_koopt_brood_van_bakker_te_paard_in_C%C3%B3rdoba_CORDOUE.-_Le_boulanger._(d%27apr%C3%A8s_nature)._(titel_op_object),_RP-F-F01098-BE.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Córdoba. El aguador",
+    "author": "Juan Laurent",
+    "date": "c. 1857–1880",
+    "holding": "Rijksmuseum",
+    "commons": "https://commons.wikimedia.org/wiki/File:Waterdrager_met_ezel_in_C%C3%B3rdoba_CORDOUE.-_Le_porteur_d%27eau,_aguador._(d%27apr%C3%A8s_nature)._(titel_op_object),_RP-F-F01098-BD.jpg",
+    "rights": "CC0"
+  },
+  {
+    "title": "Granada. Ajimez en la Sala de Embajadores",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._Ajimez_en_la_Sala_de_Embajadores_(Alhambra)_-_J._Laurent._Madrid._LCCN94512021.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. El Patio de los Leones desde la Sala de los Escudos",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._El_Patio_de_los_Leones_desde_la_Sala_de_los_Escudos_(Alhambra)_-_J._Laurent._Madrid._LCCN94512096.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. El mirador de Lindaraja",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._El_mirador_de_Lindaraja_en_la_Sala_de_las_Dos_Hermanas_(Alhambra)_-_J._Laurent._Madrid._LCCN94512087.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. Fuente del Patio de los Leones",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._Fuente_del_Patio_de_los_Leones_(Alhambra)_-_J._Laurent._Madrid._LCCN94512113.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. Interior de la galería y del templete poniente del Patio de los Leones",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._Interior_de_la_galeria_y_del_templete_poniente_del_Patio_de_los_Leones_(Alhambra)_-_-J._Laurent._LCCN94512102.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. La Puerta del Vino",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._La_Puerta_del_Vino,_por_la_parte_de_poniente_-_J._Laurent._Madrid._LCCN94512016.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. La Torre de Justicia",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._La_Torre_de_Justicia_(entrada_de_la_Alhambra)_-_J._Laurent._Madrid._LCCN94512088.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. Vista del Generalife y de la Alhambra desde San Nicolás",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._Vista_de_Generalife_y_de_la_Alhambra_desde_la_plaza_de_S._Nicol%C3%A1s_-_J._Laurent._Madrid._LCCN94511988.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. Los adarves y la torre de la Vela",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._Vista_de_los_adarves_y_de_la_torre_de_la_Vela_(Alhambra)_-_J._Laurent._Madrid._LCCN94512005.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. Vista general de la Alhambra desde la torre del Homenaje",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Granada._Vista_general_de_la_Alhambra_desde_la_torre_del_Homenaje_-_J._Laurent._Madrid._LCCN94511995.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Granada. Patio de los Arrayanes y torre de Comares",
+    "author": "J. Laurent",
+    "date": "1860s",
+    "holding": "Library of Congress",
+    "commons": "https://commons.wikimedia.org/wiki/File:Vista_general_del_Patio_de_los_Arrayanes_y_de_la_Torre_de_Comares_(izquierda)_(Alhambra)_-_J._Laurent._Madrid._LCCN94512073.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Cecilio Pizarro (recorte)",
+    "author": "Jean Laurent",
+    "date": "c. 1863",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Cecilio_Pizarro,_Juan_Laurent_(cropped).JPG",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Cecilio Pizarro",
+    "author": "Jean Laurent",
+    "date": "c. 1863",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Cecilio_Pizarro,_Juan_Laurent.JPG",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Cúchares",
+    "author": "Jean Laurent",
+    "date": "1861–1868",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:C%C3%BAchares_por_Juan_Laurent.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Enrique de Borbón (recorte)",
+    "author": "Jean Laurent",
+    "date": "1860s",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Enrique_de_Borb%C3%B3n_(1823-1870)_03_(cropped).jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Enrique de Borbón",
+    "author": "Jean Laurent",
+    "date": "1860–1870",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Enrique_de_Borb%C3%B3n_(1823-1870)_03.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "El Gobierno Provisional",
+    "author": "Jean Laurent",
+    "date": "1869",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Gobierno_Provisional_1869_(J.Laurent).jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Joan Prim con uniforme militar",
+    "author": "Jean Laurent",
+    "date": "1861–1865",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Joan_Prim_i_Prats_amb_uniforme_militar_ANC1-59-N-492.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Arderius y Caltañazor",
+    "author": "Jean Laurent",
+    "date": "c. 1860",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Laurent-arderius_y_calta%C3%B1azor.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Eusebio Valldeperas",
+    "author": "Jean Laurent",
+    "date": "1862",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Laurent-eusebio_valldeperas.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Francisco Bushell",
+    "author": "Jean Laurent",
+    "date": "1862",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Laurent-francisco_bushell.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Ramón Romea",
+    "author": "Jean Laurent",
+    "date": "c. 1863",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Laurent-ram%C3%B3n_romea.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Pepete",
+    "author": "Jean Laurent",
+    "date": "1861–1862",
+    "holding": "Various holdings (see the Commons record)",
+    "commons": "https://commons.wikimedia.org/wiki/File:Pepete.jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Úbeda. Puente de Ariza",
+    "author": "Jean Laurent",
+    "date": "1867",
+    "holding": "Biblioteca Nacional de España",
+    "commons": "https://commons.wikimedia.org/wiki/File%3AJean%20Laurent%20-%20Puente%20Ariza%2C%20%C3%9Abeda%20(1867).jpg",
+    "rights": "Public domain"
+  },
+  {
+    "title": "Madrid. La Cibeles y el Ministerio de la Guerra",
     "author": "Jean Laurent",
     "date": "1870s",
-    "download": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3d/El_Ministerio_de_la_Guerra_%28J._Laurent%29.jpg/1280px-El_Ministerio_de_la_Guerra_%28J._Laurent%29.jpg",
+    "holding": "Biblioteca Nacional de España",
     "commons": "https://commons.wikimedia.org/wiki/File%3AEl%20Ministerio%20de%20la%20Guerra%20(J.%20Laurent).jpg",
-    "source": "https://bdh.bne.es/bnesearch/detalle/bdh0000069082",
     "rights": "CC BY 4.0"
   },
   {
-    "id": 65987648,
-    "title": "La Latina Hospital, Madrid",
+    "title": "Madrid. Escalera del hospital de La Latina",
     "author": "Jean Laurent",
     "date": "c. 1870",
-    "download": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/Madrid%2C_escalera_de_La_Latina%2C_Laurent.jpg/1280px-Madrid%2C_escalera_de_La_Latina%2C_Laurent.jpg",
+    "holding": "Biblioteca Nacional de España",
     "commons": "https://commons.wikimedia.org/wiki/File%3AMadrid%2C%20escalera%20de%20La%20Latina%2C%20Laurent.jpg",
-    "source": "https://bdh.bne.es/bnesearch/detalle/bdh0000025609",
     "rights": "Public domain"
   },
   {
-    "id": 108401076,
-    "title": "San Dionisio, Riotinto",
+    "title": "Minas de Río Tinto. San Dionisio",
     "author": "Hauser y Menet",
     "date": "1892",
-    "download": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/eb/Minas_de_R%C3%ADo_Tinto-San_Dionisio.jpg/1280px-Minas_de_R%C3%ADo_Tinto-San_Dionisio.jpg",
+    "holding": "Biblioteca Nacional de España",
     "commons": "https://commons.wikimedia.org/wiki/File%3AMinas%20de%20R%C3%ADo%20Tinto-San%20Dionisio.jpg",
-    "source": "https://bdh.bne.es/bnesearch/Search.do?text=r%C3%ADo+tinto",
     "rights": "Public domain"
   },
   {
-    "id": 108406691,
-    "title": "The teleras, Riotinto",
+    "title": "Minas de Río Tinto. Las teleras",
     "author": "Hauser y Menet",
     "date": "1892",
-    "download": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Las_Teleras-Minas_de_R%C3%ADo_Tinto.jpg/1280px-Las_Teleras-Minas_de_R%C3%ADo_Tinto.jpg",
+    "holding": "Biblioteca Nacional de España",
     "commons": "https://commons.wikimedia.org/wiki/File%3ALas%20Teleras-Minas%20de%20R%C3%ADo%20Tinto.jpg",
-    "source": "https://bdh.bne.es/bnesearch/Search.do?text=r%C3%ADo+tinto",
     "rights": "Public domain"
   },
   {
-    "id": 108409435,
-    "title": "Machinery at Riotinto",
+    "title": "Minas de Río Tinto. La maquinaria",
     "author": "Hauser y Menet",
     "date": "1892",
-    "download": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b1/La_Maquinaria-Minas_de_R%C3%ADo_Tinto.jpg/1280px-La_Maquinaria-Minas_de_R%C3%ADo_Tinto.jpg",
+    "holding": "Biblioteca Nacional de España",
     "commons": "https://commons.wikimedia.org/wiki/File%3ALa%20Maquinaria-Minas%20de%20R%C3%ADo%20Tinto.jpg",
-    "source": "https://bdh.bne.es/bnesearch/Search.do?text=r%C3%ADo+tinto",
     "rights": "Public domain"
   }
 ]
