@@ -367,10 +367,18 @@
 .chat-context-note > svg { flex-shrink: 0; margin-top: 2px; color: var(--accent); }
 
 /* The panel beside a database. */
+/* Two rows: history, title, databases and the panel's buttons; then model and depth. */
 .chat-view.is-compact .research-assistant-header { gap: 6px; padding: 10px 12px; }
-.chat-view.is-compact .chat-model { width: 100%; order: 10; flex-basis: 100%; }
-.chat-view.is-compact .chat-context-trigger { max-width: 150px; }
-.chat-view.is-compact .research-chat-history { width: 210px; }
+.chat-view.is-compact .chat-header-break { flex-basis: 100%; height: 0; order: 9; }
+.chat-view.is-compact .chat-model { order: 10; flex: 1 1 0; width: auto; min-width: 0; }
+.chat-view.is-compact .chat-mode { order: 11; }
+.chat-view.is-compact .chat-context-trigger { min-width: 0; max-width: none; flex: 0 1 auto; }
+/* The history opens over the conversation instead of squeezing it. */
+.chat-view.is-compact .chat-body { position: relative; }
+.chat-view.is-compact .research-chat-history { position: absolute; left: 0; top: 0; bottom: 0; z-index: 20; width: min(260px, 85%); background: var(--chat-bg); box-shadow: 8px 0 24px #0000002e; }
+.chat-view.is-compact .chat-message.is-assistant { max-width: 100%; padding: 30px 12px 10px; }
+.chat-view.is-compact .chat-message-actions { top: 6px; }
+.chat-view.is-compact .chat-scroll { padding: 12px; }
 .chat-view.is-compact .research-composer-footer { padding: 10px 12px 8px; }
 .chat-view.is-compact .research-composer { min-height: 54px; padding-left: 16px; }
 .chat-view.is-compact .research-composer-send { width: 38px; height: 38px; }
