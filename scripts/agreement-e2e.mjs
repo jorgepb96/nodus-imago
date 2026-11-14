@@ -142,7 +142,7 @@ try {
       .first()
       .getByRole("button")
       .allTextContents(),
-    ["Tabla", "Galería", "Mapa"],
+    ["Tabla", "Galería", "Mapa", "Cronología", "Estadísticas"],
   );
   await page.getByRole("button", { name: "Concordancia", exact: true }).click();
   const dialog = page.getByRole("dialog", {
