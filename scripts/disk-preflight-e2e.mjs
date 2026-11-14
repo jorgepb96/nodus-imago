@@ -2,6 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import assert from "node:assert/strict";
 import { launchNative } from "./native-test-support.mjs";
 if (process.platform !== "darwin")
@@ -114,10 +115,23 @@ try {
 
 /**
  * The volume can stay busy for a moment while the app's helper processes
- * exit (seen on the Intel macOS runners): try again, then force it.
+ * exit, and macOS may then detach it by itself (both seen on the Intel macOS
+ * runners): check whether it is still mounted before each try, then force it.
  */
+function mounted() {
+  const listing = execFileSync("mount", { encoding: "utf8" });
+  return [mount, realpath(mount)].some((p) => p && listing.includes(` on ${p} (`));
+}
+function realpath(p) {
+  try {
+    return realpathSync(p);
+  } catch {
+    return null;
+  }
+}
 async function detach() {
   for (let attempt = 1; attempt <= 5; attempt++) {
+    if (!mounted()) return;
     try {
       execFileSync("hdiutil", ["detach", mount], { stdio: "inherit" });
       return;
@@ -125,5 +139,5 @@ async function detach() {
       await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
     }
   }
-  execFileSync("hdiutil", ["detach", "-force", mount], { stdio: "inherit" });
+  if (mounted()) execFileSync("hdiutil", ["detach", "-force", mount], { stdio: "inherit" });
 }
