@@ -28,6 +28,8 @@ import type { CompletionRequest, EmbeddingRequest } from "./ai/apiProviders";
 import { embeddingApiMultimodal } from "../shared/embeddingApi";
 import { AutoIndexer } from "./autoIndex";
 import { Statistics } from "./db/statistics";
+import { ChatStore } from "./chat/store";
+import { ChatData } from "./chat/data";
 import type { SearchInput } from "../shared/imago";
 
 /** Statistics and the timeline describe one database at a time. */
@@ -59,6 +61,8 @@ export class Service {
   research: AgreementResearch;
   repo: Repository;
   statistics: Statistics;
+  chats: ChatStore;
+  chatData: ChatData;
   images: Images;
   models: Models;
   host: InferenceHost;
@@ -89,6 +93,8 @@ export class Service {
   ) {
     this.repo = new Repository(root);
     this.statistics = new Statistics(this.repo);
+    this.chats = new ChatStore(this.repo.db);
+    this.chatData = new ChatData(this.repo);
     this.research = new AgreementResearch(this.repo);
     this.images = new Images(this.repo);
     this.models = new Models(this.repo);
@@ -295,6 +301,7 @@ export class Service {
             .prepare("DELETE FROM db_databases WHERE id=?")
             .run(input.id);
           this.repo.pruneEquivalences(removedColumns);
+          this.chats.pruneDatabase(input.id);
           for (const database of this.repo.list())
             this.repo.recompute(database.id);
           this.repo.db
@@ -806,6 +813,30 @@ export class Service {
         }
         return preparation;
       }
+      case "chatList":
+        return {
+          conversations: this.chats.list(!!input?.includeArchived),
+          folders: this.chats.folders(),
+          archivedCount: this.chats.archivedCount(),
+        };
+      case "chatGet":
+        return this.chats.get(input.id);
+      case "chatCreate":
+        return this.chats.create(input);
+      case "chatUpdate":
+        return this.chats.update(input);
+      case "chatDelete":
+        return this.chats.delete(input.ids);
+      case "chatFolderSave":
+        return this.chats.saveFolder(input);
+      case "chatFolderDelete":
+        return this.chats.deleteFolder(input.id);
+      case "_chatSaveMessages":
+        return this.chats.saveMessages(input.id, input.messages, input.title);
+      case "_chatContext":
+        return this.chatData.context(input.databaseIds, input.mode, input.language);
+      case "_chatDataset":
+        return this.chatData.dataset(input.databaseIds);
       case "_settings":
         return this.repo.getSettings();
       case "_modelInfo":

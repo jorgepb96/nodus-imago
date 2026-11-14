@@ -5,6 +5,7 @@ await build({
     "electron/preload.ts",
     "electron/worker.ts",
     "electron/ai/onnxWorker.ts",
+    "electron/chat/sandboxChild.ts",
   ],
   outdir: "dist-electron",
   bundle: true,

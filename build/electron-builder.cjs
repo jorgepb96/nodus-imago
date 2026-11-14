@@ -7,7 +7,7 @@ module.exports = {
   artifactName: "Nodus-Imago-${version}-${arch}.${ext}",
   directories: { output: "release" },
   files: ["dist/**/*", "dist-electron/**/*", "electron/assets/gazetteer/**/*", "package.json"],
-  asarUnpack: ["**/*.node", "**/sharp/**/*", "**/@img/**/*", "**/onnxruntime-node/**/*"],
+  asarUnpack: ["**/*.node", "**/sharp/**/*", "**/@img/**/*", "**/onnxruntime-node/**/*", "dist-electron/chat/sandboxChild.cjs"],
   afterPack: "scripts/after-pack.cjs",
   extraResources: [
     { from: "build/icon.png", to: "icons/icon.png" },

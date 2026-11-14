@@ -43,6 +43,7 @@ import {
   Map as MapIcon,
   BarChart3,
   GripVertical,
+  MessageSquare,
 } from "lucide-react";
 import type { DatabaseDetail, DatabaseSummary } from "../shared/databases";
 import { decodeMultiSelect } from "../shared/databases";
@@ -70,6 +71,7 @@ import { Properties, type Perform } from "./components/Properties";
 import { CsvImport, ImageImport } from "./components/ImportDialogs";
 import { ViewControls } from "./components/ViewControls";
 import { CriteriaSelect } from "./components/CriteriaSelect";
+import { ChatView } from "./components/chat/ChatView";
 import {
   filterOperators,
   pruneViewCriteria,
@@ -123,7 +125,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const t = useT(),
     api = window.imago;
   const [area, setArea] = useState<
-      "home" | "databases" | "search" | "settings"
+      "home" | "databases" | "search" | "settings" | "chat"
     >("home"),
     [databases, setDatabases] = useState<DatabaseSummary[]>([]),
     [databaseId, setDatabaseId] = useState(""),
@@ -412,6 +414,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       !api ||
       area === "settings" ||
       area === "home" ||
+      area === "chat" ||
       (area === "databases" && !databaseId) ||
       criteriaContext !== criteriaKey
     ) {
@@ -494,6 +497,43 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     if (!status.automated && (status.settings.welcomeVersion ?? 0) < WELCOME_VERSION)
       setWelcomeOpen(true);
   }, [status]);
+  const openApiSettings = () => {
+    setSettingsTab("api");
+    setArea("settings");
+  };
+  // The chat beside a database: open or closed, and its width, are remembered.
+  const [chatPanel, setChatPanel] = useState(() => {
+    try {
+      return localStorage.getItem("imago.chat.panelOpen") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [chatWidth, setChatWidth] = useState(() => {
+    try {
+      return Number(localStorage.getItem("imago.chat.panelWidth")) || 440;
+    } catch {
+      return 440;
+    }
+  });
+  const toggleChatPanel = (open: boolean) => {
+    setChatPanel(open);
+    try {
+      localStorage.setItem("imago.chat.panelOpen", open ? "1" : "0");
+    } catch {
+      /* A preference only. */
+    }
+  };
+  const resizeChat = (width: number, save = true) => {
+    const next = Math.round(Math.max(340, Math.min(width, window.innerWidth * 0.7)));
+    setChatWidth(next);
+    if (save)
+      try {
+        localStorage.setItem("imago.chat.panelWidth", String(next));
+      } catch {
+        /* A preference only. */
+      }
+  };
   const openEmbeddingSettings = () => {
     setSettingsTab("models");
     setArea("settings");
@@ -1089,6 +1129,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <Search size={18} />
               <span className="nav-title">{t("Búsqueda")}</span>
             </button>
+            <button
+              title={t("Chat")}
+              data-tour="nav-chat"
+              className={area === "chat" ? "active" : ""}
+              onClick={() => setArea("chat")}
+            >
+              <MessageSquare size={18} />
+              <span className="nav-title">{t("Chat")}</span>
+            </button>
           </nav>
           <div className="sidebar-databases" data-tour="collections" data-tour-fit="content">
             <div className="row">
@@ -1161,6 +1210,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               onSearch={() => setArea("search")}
               onQueue={() => setQueueFilter("all")}
             />
+          ) : area === "chat" ? (
+            status && (
+              <div className="chat-page">
+                <ChatView
+                  settings={status.settings}
+                  databases={databases}
+                  initialDatabaseIds={databaseId ? [databaseId] : undefined}
+                  onOpenSettings={openApiSettings}
+                />
+              </div>
+            )
           ) : area === "settings" ? (
             status && (
               <Settings
@@ -1589,6 +1649,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           </p>
                         </div>
                         <div className="row">
+                          <Button
+                            data-tour="db-chat"
+                            aria-pressed={chatPanel}
+                            className={chatPanel ? "is-active" : ""}
+                            data-tooltip={t(chatPanel ? "Cerrar el chat" : "Abrir el chat junto a la base de datos")}
+                            onClick={() => toggleChatPanel(!chatPanel)}
+                          >
+                            <MessageSquare size={15} />
+                            {t("Chat")}
+                          </Button>
                           <Button onClick={() => setModal("properties")}>
                             <SlidersHorizontal size={15} />
                             {t("Propiedades")}
@@ -2417,6 +2487,46 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             </>
           )}
         </main>
+        {area === "databases" && detail && chatPanel && status && (
+          <aside className="chat-side" style={{ width: chatWidth }} data-testid="chat-side">
+            <div
+              className="chat-side-resize"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("Cambiar el ancho del chat")}
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft") resizeChat(chatWidth + 24);
+                if (event.key === "ArrowRight") resizeChat(chatWidth - 24);
+              }}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                const start = event.clientX,
+                  width = chatWidth,
+                  handle = event.currentTarget;
+                handle.classList.add("is-dragging");
+                const move = (e: PointerEvent) => resizeChat(width + start - e.clientX, false);
+                const up = (e: PointerEvent) => {
+                  handle.classList.remove("is-dragging");
+                  resizeChat(width + start - e.clientX);
+                  window.removeEventListener("pointermove", move);
+                  window.removeEventListener("pointerup", up);
+                };
+                window.addEventListener("pointermove", move);
+                window.addEventListener("pointerup", up);
+              }}
+            />
+            <ChatView
+              compact
+              settings={status.settings}
+              databases={databases}
+              initialDatabaseIds={[detail.database.id]}
+              onClose={() => toggleChatPanel(false)}
+              onExpand={() => setArea("chat")}
+              onOpenSettings={openApiSettings}
+            />
+          </aside>
+        )}
       </div>
       {queueFilter && (
         <QueuePopover

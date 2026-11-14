@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,state TEX
 CREATE TABLE IF NOT EXISTS job_errors(id INTEGER PRIMARY KEY,job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,item INTEGER NOT NULL,message TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS db_statistics(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,name TEXT NOT NULL,spec_json TEXT NOT NULL,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS statistics_database ON db_statistics(database_id,position);
+CREATE TABLE IF NOT EXISTS chat_folders(id TEXT PRIMARY KEY,parent_id TEXT REFERENCES chat_folders(id) ON DELETE CASCADE,name TEXT NOT NULL,color TEXT,icon TEXT,position INTEGER NOT NULL,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS chat_conversations(id TEXT PRIMARY KEY,title TEXT NOT NULL,folder_id TEXT REFERENCES chat_folders(id) ON DELETE SET NULL,database_ids_json TEXT NOT NULL,model_json TEXT,mode TEXT NOT NULL DEFAULT 'fast',pinned_at TEXT,archived INTEGER NOT NULL DEFAULT 0,messages_json TEXT NOT NULL DEFAULT '[]',message_count INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS chat_conversations_updated ON chat_conversations(archived,updated_at);
 CREATE TABLE IF NOT EXISTS embeddings(content_hash TEXT NOT NULL,contract TEXT NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(content_hash,contract));
 CREATE TABLE IF NOT EXISTS record_embeddings(row_id TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,contract TEXT NOT NULL,text_hash TEXT NOT NULL,vector BLOB NOT NULL,stale INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(row_id,contract));
 CREATE TABLE IF NOT EXISTS image_captions(content_hash TEXT NOT NULL,contract TEXT NOT NULL,text TEXT NOT NULL,PRIMARY KEY(content_hash,contract));

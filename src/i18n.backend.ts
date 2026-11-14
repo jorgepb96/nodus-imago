@@ -273,7 +273,20 @@ export const backendEn: Record<string, string> = {
   "El modelo devolvió una clasificación no válida.": "The model returned an invalid classification.",
   "El modelo devolvió JSON en lugar de una descripción.": "The model returned JSON instead of a description.",
   "El modelo devolvió un sobre de herramienta incompleto en lugar de una descripción.": "The model returned an incomplete tool envelope instead of a description.",
-  "El modelo no devolvió una descripción utilizable.": "The model did not return a usable description."
+  "El modelo no devolvió una descripción utilizable.": "The model did not return a usable description.",
+  // Database chat.
+  "Carpeta no encontrada.": "Folder not found.",
+  "Conversación no encontrada.": "Conversation not found.",
+  "El chat usa un modelo de un proveedor o de un servidor local (Ollama, LM Studio).": "The chat uses a model from a provider or from a local server (Ollama, LM Studio).",
+  "El cálculo no devolvió un valor JSON.": "The calculation did not return a JSON value.",
+  "El resultado es demasiado grande; devuelve un resumen o los primeros elementos.": "The result is too large; return a summary or the first items.",
+  "Escribe una pregunta.": "Write a question.",
+  "Esta conversación ya está respondiendo.": "This conversation is already answering.",
+  "No hay ninguna pregunta que repetir.": "There is no question to repeat.",
+  "Una carpeta no puede ir dentro de sí misma.": "A folder cannot go inside itself.",
+  "Cálculo cancelado.": "Calculation cancelled.",
+  "El cálculo ha superado el tiempo máximo.": "The calculation exceeded the maximum time.",
+  "El cálculo ha superado la memoria disponible.": "The calculation exceeded the available memory.",
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */
@@ -353,5 +366,7 @@ export const backendPatterns: [string, string][] = [
   [
     "El modelo propuso {0} opciones y el campo admite como máximo {1}.",
     "The model proposed {0} options and the field allows at most {1}."
-  ]
+  ],
+  ["No se pudo iniciar el entorno de cálculo: {0}", "Could not start the calculation environment: {0}"],
+  ["El entorno de cálculo se cerró (código {0}).", "The calculation environment closed (code {0})."]
 ];

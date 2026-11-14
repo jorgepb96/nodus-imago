@@ -11,6 +11,7 @@ const entries = [
   "scripts/backups-e2e.mjs",
   "scripts/modals-e2e.mjs",
   "scripts/update-protocol-e2e.mjs",
+  "scripts/chat-e2e.mjs",
 ];
 for (const entry of entries) {
   const args =

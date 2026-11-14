@@ -27,7 +27,7 @@ test("introduction and tour texts have English", () => {
     ...SLIDES.flatMap((s) => [s.eyebrow, s.title, s.summary, s.tip ?? "", ...(s.points ?? []).flatMap((p) => [p.title, p.body])]),
     ...TOUR_STEPS.flatMap((s) => [s.title, s.body, ...(s.items ?? [])]),
   ].filter(Boolean);
-  const untranslated = texts.filter((s) => translate(s, "en") === s && s !== "Literal");
+  const untranslated = texts.filter((s) => translate(s, "en") === s && !["Literal", "Chat"].includes(s));
   assert.deepEqual(untranslated, []);
 });
 
