@@ -76,7 +76,7 @@ Semantic search needs an embedding model, which converts each image and each rec
 
 AI features work on your database properties. For a selection of records or a whole column, you can ask a model to write a description or to assign categories from the vocabulary you defined for that property. You choose the model and the instructions for each property. For example, one column can hold descriptions and several other columns can hold the categories assigned by different models to the same images.
 
-AI results are saved as **suggestions**. You review and approve them one by one or in batches; nothing changes in your data until you approve it. Imago records which model and which instructions produced each suggestion.
+AI results are saved as **proposals**. You review and approve them one by one or in batches with **Review proposals**; nothing changes in your data until you approve it. Imago records which model and which instructions produced each proposal.
 
 Long operations (imports, model downloads, indexing, AI analysis) run in the background as tasks. The **Tasks** button in the top bar shows their progress and lets you pause, resume or cancel them.
 

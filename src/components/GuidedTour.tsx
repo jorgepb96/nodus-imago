@@ -12,7 +12,7 @@ export type TourStep = {
   /** `data-tour` value of the control to highlight; none: a centred card. */
   target?: string;
   /** Where the app should be for this step. */
-  area?: "home" | "databases" | "search";
+  area?: "home" | "databases" | "search" | "settings";
   title: string;
   body: string;
   /** One line per item when the highlighted control groups several things. */
@@ -24,18 +24,18 @@ export type TourStep = {
 export const TOUR_STEPS: TourStep[] = [
   {
     title: "Recorrido por la pantalla",
-    body: "Este recorrido señala las partes principales de Nodus Imago y explica para qué sirve cada una. Pulsa Siguiente o usa las flechas ← → del teclado. Puedes cerrarlo en cualquier momento con Saltar.",
+    body: "Este recorrido señala las partes de la pantalla de Nodus Imago y explica para qué sirve cada una. Pulsa Siguiente o usa las flechas ← → del teclado. Puedes cerrarlo en cualquier momento con Saltar.",
   },
   {
     target: "nav-home",
     area: "home",
     title: "Inicio",
-    body: "Muestra un resumen de tu colección: cuántas bases de datos, registros e imágenes tienes, cuántas imágenes están preparadas para la búsqueda semántica y qué paso conviene hacer a continuación.",
+    body: "La página de inicio muestra el siguiente paso recomendado y el estado de tu colección: número de bases de datos, de imágenes, de imágenes preparadas para la búsqueda semántica y de tareas en curso.",
   },
   {
     target: "collections",
     title: "Lista de bases de datos",
-    body: "Aquí aparecen todas tus bases de datos. Pulsa sobre una para abrirla. El botón + crea una base de datos nueva.",
+    body: "Aquí aparecen todas tus bases de datos con su número de registros. Pulsa sobre una para abrirla. El botón + crea una base de datos nueva.",
   },
   {
     target: "db-views",
@@ -51,16 +51,24 @@ export const TOUR_STEPS: TourStep[] = [
     ],
   },
   {
+    target: "db-toolbar",
+    area: "databases",
+    title: "Botones de la base de datos",
+    body: "Estos botones actúan sobre la base de datos abierta:",
+    items: [
+      "Concordancia: compara las categorías asignadas por varios modelos de IA con las que has asignado tú.",
+      "Automatizaciones: hace que un modelo de IA rellene una propiedad en muchos registros a la vez. Los valores quedan como propuestas hasta que los apruebas.",
+      "Propiedades visibles: elige qué columnas se muestran en la tabla y en la galería.",
+      "Filtrar y ordenar: muestra solo los registros que cumplen unas condiciones y cambia su orden.",
+      "Importar: añade imágenes (archivos sueltos o una carpeta) o registros desde un archivo CSV.",
+      "Añadir registros: crea registros vacíos para rellenarlos a mano.",
+    ],
+  },
+  {
     target: "db-search",
     area: "databases",
     title: "Buscador de la base de datos",
     body: "Busca solo dentro de la base de datos abierta y muestra únicamente los registros que coinciden. Con los botones de la derecha eliges el tipo de búsqueda: Literal (palabras exactas), Semántica (por significado) o Híbrida (las dos).",
-  },
-  {
-    target: "db-import",
-    area: "databases",
-    title: "Importar",
-    body: "Abre un menú para añadir imágenes a esta base de datos (archivos sueltos o una carpeta completa) o para importar registros desde un archivo CSV.",
   },
   {
     target: "db-columns",
@@ -69,36 +77,52 @@ export const TOUR_STEPS: TourStep[] = [
     body: "Cada columna es una propiedad. Arrastra el nombre de una columna para cambiarla de sitio y arrastra su borde derecho para cambiar el ancho. Con clic derecho sobre el nombre puedes renombrarla, cambiar su tipo, filtrar, ordenar, calcular un total, fijarla u ocultarla.",
   },
   {
-    target: "db-automations",
-    area: "databases",
-    title: "Automatizaciones",
-    body: "Configura un modelo de IA para que rellene una propiedad en muchos registros a la vez, por ejemplo una descripción o un tema. Los valores aparecen como propuestas y solo se guardan cuando los apruebas.",
-  },
-  {
-    target: "db-agreement",
-    area: "databases",
-    title: "Concordancia",
-    body: "Compara las categorías asignadas por varios modelos de IA con las que has asignado tú. Muestra el porcentaje de acuerdo, índices como kappa y los registros en los que no coinciden.",
-  },
-  {
     target: "nav-search",
     area: "search",
     title: "Búsqueda global",
     body: "Busca en todas tus bases de datos a la vez. Además de escribir, puedes adjuntar una imagen para encontrar otras parecidas y añadir filtros por propiedades.",
   },
   {
-    target: "header-queue",
-    title: "Tareas",
-    body: "Las operaciones largas, como importar imágenes, descargar modelos o preparar la búsqueda semántica, se ejecutan en segundo plano. Este botón muestra su progreso y permite pausarlas o cancelarlas.",
+    target: "header-sidebar",
+    title: "Mostrar u ocultar el menú lateral",
+    body: "El logotipo de la esquina superior izquierda oculta el menú lateral para dejar más espacio a la tabla. Púlsalo otra vez para mostrarlo.",
   },
   {
-    target: "nav-settings",
-    title: "Ajustes",
-    body: "Aquí configuras los modelos de IA, los proveedores externos, las copias de seguridad, el idioma y la apariencia. En Ajustes › Interfaz puedes volver a ver la introducción y este recorrido.",
+    target: "header-interface",
+    title: "Interfaz",
+    body: "Abre Ajustes › Interfaz, donde cambias el idioma, el modo claro u oscuro y los colores de la aplicación.",
+  },
+  {
+    target: "header-actions",
+    title: "Botones de la barra superior",
+    body: "Estos botones están siempre disponibles:",
+    items: [
+      "Lupa: abre la búsqueda global.",
+      "Luna o sol: cambia entre el modo oscuro y el modo claro.",
+      "Reloj: muestra las tareas en segundo plano (importaciones, descargas de modelos, preparación de la búsqueda) y permite pausarlas o cancelarlas. El número indica cuántas hay en curso.",
+      "Engranaje: abre los Ajustes.",
+    ],
+  },
+  {
+    target: "settings-nav",
+    area: "settings",
+    title: "Secciones de Ajustes",
+    body: "Los Ajustes están organizados en estas secciones:",
+    items: [
+      "Proveedores: activa las APIs externas y guarda sus claves.",
+      "Modelos IA: elige qué modelo describe las imágenes, cuál clasifica y cuál se usa para la búsqueda semántica.",
+      "Modelos locales: descarga, verifica y elimina los modelos que se ejecutan en este ordenador.",
+      "Interfaz: idioma, modo claro u oscuro, colores, y botones para repetir la introducción y este recorrido.",
+      "Rendimiento: cuántas tareas se ejecutan a la vez y cuántos recursos del ordenador pueden usar (perfil ligero, equilibrado o avanzado).",
+      "Actualizaciones y novedades: comprueba si hay versiones nuevas y elige si se descargan automáticamente.",
+      "Equivalencias de campos: agrupa columnas de bases de datos distintas que guardan el mismo dato, para filtrar por todas a la vez en la búsqueda global.",
+      "Almacenamiento y copias: carpeta de la colección, reconstrucción de índices y copias de seguridad.",
+      "Colas y tareas: lista de todas las tareas con su estado (en espera, en curso, completada o fallida). Desde aquí puedes pausarlas, reanudarlas o cancelarlas.",
+    ],
   },
   {
     title: "Fin del recorrido",
-    body: "Para empezar, crea una base de datos con el botón + de la lista de bases de datos, o importa un archivo CSV desde Inicio.",
+    body: "Para empezar, crea una base de datos con el botón + de la lista de bases de datos, o importa un archivo CSV desde Inicio. Puedes repetir este recorrido en Ajustes › Interfaz.",
   },
 ];
 
