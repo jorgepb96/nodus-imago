@@ -287,6 +287,30 @@ export const backendEn: Record<string, string> = {
   "Cálculo cancelado.": "Calculation cancelled.",
   "El cálculo ha superado el tiempo máximo.": "The calculation exceeded the maximum time.",
   "El cálculo ha superado la memoria disponible.": "The calculation exceeded the available memory.",
+  // Visual tools.
+  "Anotación no encontrada.": "Annotation not found.",
+  "La zona es demasiado pequeña.": "The region is too small.",
+  "Mesa no encontrada.": "Table not found.",
+  "Una mesa admite como máximo seis imágenes.": "A table holds at most six images.",
+  "Escribe un año.": "Enter a year.",
+  "El año inicial debe ser anterior o igual al final.": "The first year must be earlier than or equal to the last.",
+  "Este proveedor no genera imágenes. Elige OpenAI, Gemini, OpenRouter o un servidor compatible.": "This provider does not generate images. Choose OpenAI, Gemini, OpenRouter or a compatible server.",
+  "La imagen recibida está vacía o dañada.": "The image received is empty or damaged.",
+  "Versión no encontrada.": "Version not found.",
+  "Los registros seleccionados no tienen imágenes.": "The selected records have no images.",
+  // Historians' tools.
+  "El archivo no contiene elementos de Tropy.": "The file contains no Tropy items.",
+  "El enlace IIIF debe empezar por https://.": "The IIIF link must start with https://.",
+  "El manifiesto no contiene imágenes.": "The manifest contains no images.",
+  "Esta propiedad no admite propuestas a partir de imágenes parecidas.": "This property does not take proposals from similar images.",
+  "Imagen sin HTTPS.": "Image without HTTPS.",
+  "Indexa las imágenes para la búsqueda semántica: la búsqueda de detalles usa sus vectores.": "Index the images for semantic search: the detail search uses their vectors.",
+  "Indexa las imágenes para la búsqueda semántica: las propuestas se basan en los vectores de imagen.": "Index the images for semantic search: the proposals are based on the image vectors.",
+  "La imagen no está disponible.": "The image is not available.",
+  "No se pudo calcular la huella visual.": "The visual fingerprint could not be calculated.",
+  "No se pudo conectar con Wikimedia Commons.": "Could not connect to Wikimedia Commons.",
+  "No se pudo descargar el manifiesto IIIF.": "The IIIF manifest could not be downloaded.",
+  "Imagen demasiado grande.": "Image too large."
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */
@@ -368,5 +392,8 @@ export const backendPatterns: [string, string][] = [
     "The model proposed {0} options and the field allows at most {1}."
   ],
   ["No se pudo iniciar el entorno de cálculo: {0}", "Could not start the calculation environment: {0}"],
-  ["El entorno de cálculo se cerró (código {0}).", "The calculation environment closed (code {0})."]
+  ["El entorno de cálculo se cerró (código {0}).", "The calculation environment closed (code {0})."],
+  ["{0}: el modelo no devolvió ninguna imagen. Comprueba que el modelo genera imágenes.", "{0}: the model returned no image. Check that the model generates images."],
+  ["IIIF: HTTP {0}", "IIIF: HTTP {0}"],
+  ["Wikimedia Commons: HTTP {0}", "Wikimedia Commons: HTTP {0}"]
 ];

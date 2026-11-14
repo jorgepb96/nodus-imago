@@ -45,8 +45,10 @@ export function LocationCell({
     saving = useRef(false);
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [bearing, setBearing] = useState("");
   useEffect(() => {
     const next = decodeDatabaseLocation(value);
+    setBearing(next?.bearing == null ? "" : String(next.bearing));
     setDraft(next?.name ?? "");
     setLatitude(next?.latitude == null ? "" : String(next.latitude));
     setLongitude(next?.longitude == null ? "" : String(next.longitude));
@@ -309,7 +311,8 @@ export function LocationCell({
               </Button>
             </div>
           )}
-          <details className="location-coordinates">
+          {/* Open when the place has coordinates: the camera direction is there. */}
+          <details className="location-coordinates" open={place?.latitude != null || undefined}>
             <summary>{t("Coordenadas (opcional)")}</summary>
             <div className="row">
               <label>
@@ -337,12 +340,40 @@ export function LocationCell({
                 />
               </label>
             </div>
+            <div className="camera-bearing" role="group" aria-label={t("Dirección de la cámara")}>
+              <span>{t("Dirección de la cámara")}</span>
+              <span className="camera-rose">
+                {(["N", "NE", "E", "SE", "S", "SO", "O", "NO"] as const).map((point, i) => (
+                  <button
+                    key={point}
+                    type="button"
+                    className={bearing !== "" && Math.round(Number(bearing) / 45) % 8 === i ? "is-on" : ""}
+                    aria-label={`${t("Hacia")} ${t(point)}`}
+                    onClick={() => setBearing(String(i * 45))}
+                  >
+                    {t(point)}
+                  </button>
+                ))}
+              </span>
+              <input
+                aria-label={`${name} · ${t("Grados")}`}
+                type="number"
+                min="0"
+                max="359"
+                step="1"
+                placeholder={t("Grados")}
+                value={bearing}
+                onChange={(e) => setBearing(e.target.value)}
+              />
+              <small>{t("Hacia dónde miraba la cámara, en grados desde el norte. Sirve para encontrar vistas tomadas desde el mismo punto.")}</small>
+            </div>
             <Button
               disabled={busy}
               onClick={() => {
                 const next = {
                   latitude: latitude.trim() ? Number(latitude) : null,
                   longitude: longitude.trim() ? Number(longitude) : null,
+                  bearing: bearing.trim() ? Number(bearing) : null,
                 };
                 if (!draft.trim()) {
                   setError(t("Escribe primero un nombre para el lugar."));

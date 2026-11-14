@@ -1,6 +1,7 @@
 // Timeline view: every record the view selects, placed by the year of a
 // property (detected, or chosen by the user), with an overview of how many
 // records fall in each year or decade.
+import { CERTAINTY_LABELS, type Certainty } from "../../shared/historicalDate";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarRange, ChevronDown } from "lucide-react";
 import type { DatabaseDetail } from "../../shared/databases";
@@ -241,7 +242,19 @@ export function TimelineView({
                   >
                     <Thumbnail id={item.imageId ?? undefined} revision={item.revision} alt={item.title} />
                     <span className="timeline-card-title">{item.title}</span>
-                    {bucket === "decade" && <small>{item.year}</small>}
+                    {item.period ? (
+                      <small
+                        className={`timeline-period certainty-${item.certainty}`}
+                        data-tooltip={`${t("Periodo")}: ${item.period} · ${t(CERTAINTY_LABELS[item.certainty as Certainty] ?? "")}`}
+                      >
+                        {/* The cataloguing conventions: [1930] attributed, 1930? doubtful, ≈ approximate. */}
+                        {item.certainty === "inferred" ? `[${item.period}]` : item.period}
+                        {item.certainty === "uncertain" && "?"}
+                        {item.certainty === "approx" && <span aria-hidden="true"> ≈</span>}
+                      </small>
+                    ) : (
+                      bucket === "decade" && <small>{item.year}</small>
+                    )}
                   </button>
                 ))}
               </div>

@@ -861,6 +861,8 @@ export class Engine {
     columnIds: string[];
     language: string;
     detailed: boolean;
+    /** For text properties: describe the image, or transcribe the text visible in it. */
+    task?: "describe" | "transcribe";
   }) {
     const settings = this.repo.getSettings();
     const verifiedModels = new Set(
@@ -960,6 +962,7 @@ export class Engine {
     payload: {
       language: string;
       detailed: boolean;
+      task?: "describe" | "transcribe";
       items: { rowId: string; columnId: string; choice: ModelChoice }[];
     },
     index: number,
@@ -990,9 +993,12 @@ export class Engine {
     if ((await hashFile(asset.original_path)) !== asset.content_hash)
       throw new Error("El original cambió.");
     const options = ["select", "multi_select", "status"].includes(column.type);
+    const transcribe = !options && payload.task === "transcribe";
     const instruction =
       (column.config.aiPrompt ? column.config.aiPrompt + "\n\n" : "") +
-      (options
+      (transcribe
+        ? `Transcribe literally all the text visible in this image: inscriptions, stamps and seals, signatures, handwritten notes (for example on the back of a photograph), printed captions, labels and numbers. Keep the original language, spelling, abbreviations and line breaks; do not translate or correct anything. Write [ilegible] for parts that cannot be read. Separate different texts (for example a stamp and a note) with a blank line. Do not describe the image. If there is no text at all, answer exactly: [sin texto]`
+        : options
         ? `Classify the visible image for the field ${JSON.stringify(column.name)}. Choose only from this exact list of labels: ${JSON.stringify(column.options.map((o) => o.label))}. Return ONLY a JSON array of exact label strings, at most ${column.type === "multi_select" ? "5" : "1"}. Return [] if none applies. Do not invent labels, do not explain, and do not use any other format.`
         : `Describe only directly observable details of this photograph in ${targetLanguage(payload.language)}. ${payload.detailed ? "Write a detailed paragraph." : "Write one or two brief sentences."} Answer exclusively in ${targetLanguage(payload.language)}, even if text in the image uses another language. Do not guess identities, dates, locations or historical context. State uncertainty explicitly. Return only the description, with no reasoning, labels, JSON or preamble.`);
     const settings = this.repo.getSettings(),
@@ -1009,36 +1015,35 @@ export class Engine {
       const model = this.models.get(choice.model);
       modelName = model.repository;
       revision = model.revision;
-      if (model.backend === "llama") {
-        result = await withInferenceImage(
-          this.repo.root,
-          asset.original_path,
-          (file) =>
-            this.llama.describe(
-              choice.model,
-              file,
-              prompt,
-              signal,
-              options ? "json" : "text",
-            ),
-        );
+      // A transcription reads every image of the record (the front and the
+      // back of a photograph); a description reads the first one.
+      const local = async (path: string) =>
+        model.backend === "llama"
+          ? withInferenceImage(this.repo.root, path, (file) =>
+              this.llama.describe(choice.model, file, prompt, signal, options ? "json" : "text"),
+            )
+          : withInferenceImage(this.repo.root, path, (file) =>
+              this.host.request(
+                {
+                  task: "vision",
+                  directory: this.models.directory(choice.model),
+                  device: settings.device,
+                  threads: settings.profile === "light" ? 1 : 2,
+                  image: file,
+                  prompt,
+                },
+                signal,
+              ),
+            );
+      if (transcribe && sourceImages.length > 1) {
+        const texts: string[] = [];
+        for (const [i, source] of sourceImages.slice(0, 3).entries()) {
+          const text = parseDescription(String(await local(this.repo.asset(source.id).original_path)));
+          if (text && !/^\[?sin texto\]?$/i.test(text.trim())) texts.push(`[${i + 1}] ${text}`);
+        }
+        result = texts.join("\n\n") || "[sin texto]";
       } else
-        result = await withInferenceImage(
-          this.repo.root,
-          asset.original_path,
-          (file) =>
-            this.host.request(
-              {
-                task: "vision",
-                directory: this.models.directory(choice.model),
-                device: settings.device,
-                threads: settings.profile === "light" ? 1 : 2,
-                image: file,
-                prompt,
-              },
-              signal,
-            ),
-        );
+        result = await local(asset.original_path);
     } else {
       const parts = [];
       for (const source of sourceImages.slice(0, 2)) {
@@ -1099,6 +1104,8 @@ export class Engine {
           : (selected[0] ?? null);
     } else {
       value = parseDescription(result);
+      // Nothing to transcribe: no proposal.
+      if (transcribe && /^\[?sin texto\]?\.?$/i.test((value ?? "").trim())) return "skipped" as const;
     }
     this.repo.db
       .prepare(

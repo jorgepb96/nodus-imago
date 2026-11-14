@@ -29,6 +29,15 @@ import { embeddingApiMultimodal } from "../shared/embeddingApi";
 import { AutoIndexer } from "./autoIndex";
 import { Statistics } from "./db/statistics";
 import { ChatStore } from "./chat/store";
+import { Annotations } from "./db/annotations";
+import { CompareBoards } from "./db/compare";
+import { Variants } from "./db/variants";
+import { Restorations } from "./db/restorations";
+import { NeighbourSuggestions } from "./db/suggest";
+import { DetailSearch } from "./ai/detailSearch";
+import { preparePlates } from "./export/plates";
+import { annotationsW3c, importIiif, importTropy } from "./import/standards";
+import { buildNetwork } from "./db/network";
 import { ChatData } from "./chat/data";
 import type { SearchInput } from "../shared/imago";
 
@@ -46,7 +55,7 @@ const CONTENT_WRITES = new Set([
   "undo", "addColumn", "updateColumn", "deleteColumn", "saveOptions", "deleteImage",
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "setPrimary",
-  "automationRun", "renameDatabase", "rebuildText",
+  "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -62,6 +71,12 @@ export class Service {
   repo: Repository;
   statistics: Statistics;
   chats: ChatStore;
+  annotations: Annotations;
+  boards: CompareBoards;
+  variants: Variants;
+  restorations: Restorations;
+  suggestions: NeighbourSuggestions;
+  details: DetailSearch;
   chatData: ChatData;
   images: Images;
   models: Models;
@@ -94,6 +109,9 @@ export class Service {
     this.repo = new Repository(root);
     this.statistics = new Statistics(this.repo);
     this.chats = new ChatStore(this.repo.db);
+    this.annotations = new Annotations(this.repo);
+    this.boards = new CompareBoards(this.repo);
+    this.restorations = new Restorations(this.repo);
     this.chatData = new ChatData(this.repo);
     this.research = new AgreementResearch(this.repo);
     this.images = new Images(this.repo);
@@ -117,6 +135,22 @@ export class Service {
       this.engine,
       changed,
     );
+    this.variants = new Variants(this.repo, this.boards, () => {
+      try {
+        return this.engine.contract();
+      } catch {
+        return null;
+      }
+    });
+    this.queue.fingerprint = (payload, index) => this.variants.fingerprintOne(payload, index);
+    this.details = new DetailSearch(this.repo, this.engine);
+    this.suggestions = new NeighbourSuggestions(this.repo, () => {
+      try {
+        return this.engine.contract();
+      } catch {
+        return null;
+      }
+    });
     this.automations = new Automations(
       this.repo,
       (rowId, columnIds) =>
@@ -813,6 +847,66 @@ export class Service {
         }
         return preparation;
       }
+      case "network": {
+        const databaseId = singleDatabase(input.search);
+        return buildNetwork(this.repo, databaseId, await this.selected(input.search), input);
+      }
+      case "_annotationsW3c":
+        return annotationsW3c(this.repo, input.databaseId);
+      case "_tropyImport":
+        return importTropy(this.repo, this.images, input.file);
+      case "iiifImport":
+        return importIiif(this.repo, this.images, input);
+      case "_platesPrepare":
+        return preparePlates(this.repo, input);
+      case "detailSearch":
+        return this.details.search(input);
+      case "neighbourSuggestions":
+        return this.suggestions.suggest(input);
+      case "neighbourSuggestionsApply":
+        return this.suggestions.apply(input.items);
+      case "restorationsList":
+        return this.restorations.list(input ?? {});
+      case "restorationDelete":
+        return this.restorations.delete(input.id);
+      case "_restorationInput":
+        return this.restorations.input(input.assetId, input.region);
+      case "_restorationStore":
+        return this.restorations.store(input);
+      case "_restorationFile":
+        return this.restorations.file(input.id);
+      case "_restorationExport":
+        return this.restorations.export(input);
+      case "variantsStatus":
+        return this.variants.status(input.databaseIds);
+      case "variantsPrepare": {
+        const id = this.variants.prepare(input.databaseIds);
+        this.queue.pump();
+        this.changed();
+        return id;
+      }
+      case "variantFamilies":
+        return this.variants.families(input);
+      case "variantsOf":
+        return this.variants.of(input.assetId, input.sensitivity);
+      case "boardsList":
+        return this.boards.list();
+      case "boardGet":
+        return this.boards.get(input.id);
+      case "boardSave":
+        return this.boards.save(input);
+      case "boardDelete":
+        return this.boards.delete(input.id);
+      case "compareItems":
+        return this.boards.items(input.assetIds);
+      case "annotationsList":
+        return this.annotations.list(input);
+      case "annotationSave":
+        return this.annotations.save(input);
+      case "annotationDelete":
+        return this.annotations.delete(input.id);
+      case "annotationTags":
+        return this.annotations.tags(input.databaseId);
       case "chatList":
         return {
           conversations: this.chats.list(!!input?.includeArchived),

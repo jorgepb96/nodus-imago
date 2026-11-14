@@ -244,7 +244,7 @@ export function comparableType(column: DatabaseColumn): DatabaseColumnType {
   if (column.type === 'comparison') return 'text';
   if (column.type === 'rich_text' || column.type === 'url' || column.type === 'email' || column.type === 'phone'
     || column.type === 'location' || column.type === 'person' || column.type === 'created_by'
-    || column.type === 'last_edited_by' || column.type === 'unique_id') return 'text';
+    || column.type === 'last_edited_by' || column.type === 'unique_id' || column.type === 'historical_date') return 'text';
   if (column.type === 'status') return 'select';
   if (column.type === 'files') return 'attachment';
   if (column.type === 'created_time' || column.type === 'last_edited_time') return 'date';

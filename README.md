@@ -42,15 +42,17 @@ A database is a table: each row is a record and each column is a property (title
 
 ## Work with a database
 
-Each database has five views of the same records:
+Each database has seven views of the same records:
 
 | View | What it shows |
 | --- | --- |
 | **Table** | One row per record and one column per property. You can edit cells directly. |
 | **Gallery** | One card per record with its main image. |
-| **Map** | Records that have a location property, grouped by place. |
+| **Map** | Records that have a location property, grouped by place, with the camera direction when it is known. The **Repeated views** tab groups photographs taken from the same point and facing the same way. |
 | **Timeline** | Records ordered by year, using a date property that Imago detects or you choose. |
 | **Statistics** | Calculations on the records shown: see [Analyse the collection](#analyse-the-collection). |
+| **Variants** | The same image in different records (copies, reproductions, other scans, crops), each group in date order: see [Compare images](#compare-images). |
+| **Network** | Which values of two or three properties (photographers, places, subjects) appear together in the same records: see [Analyse the collection](#analyse-the-collection). |
 
 ![A research table with photographs, photographers, dates, thematic categories, visual notes and source links](docs/screenshots/readme-table.png)
 
@@ -58,7 +60,15 @@ In the table you can drag a column name to move the column and drag its edge to 
 
 Opening a record shows its images, properties and notes in a side panel. You can attach several images to a record and write notes in a text editor with formatting.
 
-For locations, you can choose a place from an offline list, type your own name or enter coordinates. The map shows place names and coordinates offline; the OpenStreetMap background needs a connection or previously stored tiles.
+Clicking a record's image opens it full screen, with zoom. With **Annotate** you drag over a part of the image (a person, an inscription, a building) and write a note with tags. A record can have several annotated regions. Notes are listed beside the image with a crop of each region, and they are part of the record's text, so the literal search finds them at once and the semantic search after the next indexing.
+
+**Historical dates.** The *Historical date* property keeps a date as the cataloguer wrote it (“c. 1930”, “[1930]”, “1930?”, “before 1936”, “1930–35”, “1950s”, “late 19th century”, also in Spanish) and reads from it the period it refers to and how certain it is: exact, approximate, attributed (in brackets) or doubtful (with a question mark). Filters (“overlaps the period”, “includes the year”, “ends before”, “starts after”), sorting, the timeline, statistics and the chat use the period; you can correct it by hand. A text column can be converted to this type from its menu, and CSV imports suggest it for columns of catalogue dates.
+
+For locations, you can choose a place from an offline list, type your own name or enter coordinates, and set the direction the camera was facing. The map shows place names and coordinates offline; the OpenStreetMap background needs a connection or previously stored tiles. **Then and now** looks for present-day photographs taken near a place on Wikimedia Commons (only the coordinates are sent) and lays one over the historical image with a transparency slider, or opens both on a comparison table.
+
+**Complete from similar images.** For a property with empty records (a date, a place, a photographer, a category), Imago finds the most similar images that have a value and proposes one, with the images it is based on and a confidence level. Dates are proposed as an attributed period in brackets, for example “[1950–1955]”. Nothing is saved until you accept the proposals, and accepting them can be undone in one step. It needs the image vectors of semantic search.
+
+**Find a detail.** In the full-screen image, a selected region (a uniform, a shop sign, a monument) can be searched for in the other images. The quick search compares the detail with each whole image; the search inside the images also divides the most similar ones into nine parts and marks the part where the detail appears.
 
 **Filter and sort** applies to all views, and you can save a set of criteria to return to it later.
 
@@ -75,6 +85,8 @@ Semantic search needs an embedding model, which converts each image and each rec
 ## Describe and classify with AI
 
 AI features work on your database properties. For a selection of records or a whole column, you can ask a model to write a description or to assign categories from the vocabulary you defined for that property. You choose the model and the instructions for each property. For example, one column can hold descriptions and several other columns can hold the categories assigned by different models to the same images.
+
+The **Analyse** dialog can also **transcribe** the visible text of the images: the back of a photograph, studio stamps, inscriptions, signatures and printed captions. It reads every image of the record (front and back), keeps the original spelling and marks illegible parts as [ilegible].
 
 AI results are saved as **proposals**. You review and approve them one by one or in batches with **Review proposals**; nothing changes in your data until you approve it. Imago records which model and which instructions produced each proposal.
 
@@ -103,6 +115,32 @@ The **Statistics** view calculates the following on the records currently shown,
 - **Numeric:** mean, median, standard deviation and a histogram of a number property.
 
 Each result includes its data table, which you can copy. You can save calculations with the database to open them again later.
+
+The **Network** view draws the values of two or three properties as points joined by lines when they appear in the same records: the size of a point is its number of records and the width of a line is how many records two values share. It uses the records shown after filters and can be limited to a period. Clicking a value lists the values it appears with, and **Show its records** filters the gallery.
+
+## Compare images
+
+The **Comparison table** in the left menu puts up to six images from any database side by side. Zoom and panning move in all of them at once, or each one separately. **Overlay** puts one image over another with a transparency slider, or shows the difference between them, which makes changes between two states of an engraving or two prints easy to see. Tables are saved. You can also select records in the gallery and press **Compare**.
+
+The **Variants** view of each database groups the images that are the same photograph or engraving in different records: copies, reproductions in the press, other scans, crops and retouched versions. Imago calculates a visual fingerprint of each image once, on your computer, and also uses the image vectors of semantic search when they exist. Each group is ordered by date, which shows the first dated appearance of an image and how it was reused. A group can be opened on a comparison table.
+
+## Restore images
+
+The **Restorations** section creates restored, repaired, sharpened or colourised versions of an image with an image model from OpenAI, Google Gemini, OpenRouter or a compatible server. You choose a task (its instructions can be edited) and a model, and you can mark models as favourites. To restore only one part, mark it first as an annotated region: only that crop is sent and the result is pasted back in place, so the rest of the image stays exactly as it was.
+
+The original is never modified. Each version is kept apart, linked to the original, with the model, the instructions and the date, and versions do not enter searches or statistics. A slider compares the original and the version. Versions can be downloaded as JPEG or PNG with a watermark in a corner (“AI modified” or your own text), which is on by default. The image is sent to the provider you choose.
+
+## Cite and publish
+
+**Copy citation** in a record copies a reference made from a template of the database, for example `{Author}, «{Title}», {Place}, {Date}. {Archive}, {Reference}.` Empty properties disappear with their punctuation. Templates in Chicago, ISO 690 and APA style are filled in from the property names, and you can edit them.
+
+With records selected, **Plates** creates a PDF with one figure per page, numbered (“Fig. 4.”) and with its caption from the same template, followed by the list of figures. The captions can also be copied as text.
+
+## Exchange with other tools
+
+- **Tropy:** import a project exported from Tropy as JSON-LD. Each item becomes a record with its metadata, tags, notes and photos, and Tropy selections become annotated regions.
+- **IIIF:** paste the link of a IIIF manifest or collection from a digital library or archive. Imago creates a database with its metadata and downloads the images, one record per image or per object.
+- **W3C annotations:** export the annotated regions of a database as a W3C Web Annotation collection, which other IIIF and annotation tools can read. The file contains no local paths.
 
 ## Ask questions in the chat
 

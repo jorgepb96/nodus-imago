@@ -16,6 +16,7 @@ const EMBEDDED_TYPES = new Set([
   "person",
   "ai",
   "date",
+  "historical_date",
   "number",
   "formula",
 ]);
@@ -46,6 +47,11 @@ export function recordEmbeddingText(
       .trim();
     if (!value || isNullMarker(value) || FILE_PATH.test(value)) continue;
     lines.push(column.type === "title" ? value : `${column.name}: ${value}`);
+  }
+  // Notes written on regions of the images say what the record shows.
+  for (const annotation of (row as { annotations?: { note: string; tags: string[] }[] }).annotations ?? []) {
+    const value = [annotation.note.trim(), annotation.tags.join(", ")].filter(Boolean).join(" · ");
+    if (value) lines.push(`Detalle: ${value}`);
   }
   const text = lines.join("\n");
   return text.length > RECORD_EMBEDDING_MAX_CHARS

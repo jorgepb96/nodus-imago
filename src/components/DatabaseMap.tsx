@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Focus, MapPin, X } from "lucide-react";
+import { Columns2, Focus, History, MapPin, X } from "lucide-react";
+import { repeatedViews } from "../../shared/viewpoints";
+import { ThenNow } from "./ThenNow";
 import type { DatabaseDetail } from "../../shared/databases";
 import type {
   MapRecord,
@@ -143,6 +145,14 @@ function RecordMapCanvas({
           };
           pin.append(img);
         } else pin.classList.add("without-image");
+        // The direction the camera faced, for a single photograph.
+        const bearing = group.records.length === 1 ? group.records[0].location?.bearing : null;
+        if (typeof bearing === "number") {
+          const arrow = document.createElement("i");
+          arrow.className = "map-bearing";
+          arrow.style.setProperty("--bearing", `${bearing}deg`);
+          pin.append(arrow);
+        }
         if (group.records.length > 1) {
           const count = document.createElement("b");
           count.textContent = String(group.records.length);
@@ -272,6 +282,7 @@ export function DatabaseMap({
   revision,
   onOpen,
   onProperties,
+  onCompare,
 }: {
   detail: DatabaseDetail;
   filters: PropertyFilter[];
@@ -281,6 +292,8 @@ export function DatabaseMap({
   revision: number;
   onOpen: (id: string) => void;
   onProperties: () => void;
+  /** Opens images on a comparison table. */
+  onCompare?: (assetIds: string[]) => void;
 }) {
   const t = useT(),
     columns = detail.columns.filter((column) => column.type === "location");
@@ -300,7 +313,9 @@ export function DatabaseMap({
     [loading, setLoading] = useState(false),
     [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null),
-    [unlocated, setUnlocated] = useState(false);
+    [unlocated, setUnlocated] = useState(false),
+    [viewsTab, setViewsTab] = useState(false),
+    [thenNow, setThenNow] = useState<MapRecord | null>(null);
   const [query, setQuery] = useState(""),
     [limit, setLimit] = useState(50),
     [fitRequest, setFitRequest] = useState(0);
@@ -351,10 +366,11 @@ export function DatabaseMap({
     setData([]);
   }, [columnId]);
   const mapped = useMemo(() => locatedRecords(data), [data]);
-  const mappedIds = useMemo(
-    () => new Set(mapped.map((record) => record.id)),
+  const mappedById = useMemo(
+    () => new Map(mapped.map((record) => [record.id, record])),
     [mapped],
   );
+  const mappedIds = mappedById;
   useEffect(() => {
     setSelectedIds((previous) => {
       if (!previous) return previous;
@@ -381,9 +397,11 @@ export function DatabaseMap({
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
   );
+  const views = useMemo(() => repeatedViews(mapped), [mapped]);
   const select = (ids: string[]) => {
     setSelectedIds(ids);
     setUnlocated(false);
+    setViewsTab(false);
     setQuery("");
     setLimit(50);
   };
@@ -479,13 +497,66 @@ export function DatabaseMap({
               className={unlocated ? "selected" : ""}
               onClick={() => {
                 setUnlocated(true);
+                setViewsTab(false);
                 setSelectedIds(null);
                 setLimit(50);
               }}
             >
               {t("Sin coordenadas")} ({data.length - mapped.length})
             </Button>
+            <Button
+              className={viewsTab ? "selected" : ""}
+              data-tooltip={t("Fotografías tomadas desde el mismo punto y mirando en la misma dirección")}
+              onClick={() => {
+                setViewsTab(true);
+                setUnlocated(false);
+                setSelectedIds(null);
+              }}
+            >
+              {t("Vistas repetidas")} ({views.length})
+            </Button>
           </div>
+          {viewsTab && (
+            <div className="map-views" data-testid="repeated-views">
+              <p className="hint">
+                {t("Grupos de fotografías tomadas a menos de 80 m entre sí y, si consta la dirección de la cámara, mirando hacia el mismo lado (±40°).")}
+              </p>
+              {!views.length && <p className="hint">{t("No hay vistas repetidas. Indica la dirección de la cámara en la ubicación para afinar los grupos.")}</p>}
+              {views.slice(0, 60).map((group) => (
+                <div key={group[0].id} className="map-view-group">
+                  <div className="map-view-thumbs">
+                    {group.slice(0, 4).map((r) => (
+                      <button key={r.id} type="button" onClick={() => onOpen(r.id)} aria-label={`${t("Abrir registro")} ${r.title}`}>
+                        <Thumbnail id={r.image?.id} revision={r.image?.revision} alt={r.title} />
+                      </button>
+                    ))}
+                  </div>
+                  <span>
+                    <strong>{group[0].location.name}</strong>
+                    <small>
+                      {group.length} {t("registros")}
+                      {group.some((r) => r.location.bearing != null) ? ` · ${t("con dirección")}` : ""}
+                    </small>
+                  </span>
+                  <span className="map-view-actions">
+                    <Button icon aria-label={t("Ver en el mapa")} data-tooltip={t("Ver en el mapa")} onClick={() => { setFocusIds(group.map((r) => r.id)); setFitRequest((n) => n + 1); }}>
+                      <Focus size={14} />
+                    </Button>
+                    {onCompare && (
+                      <Button
+                        icon
+                        aria-label={t("Comparar")}
+                        data-tooltip={t("Abrir en la mesa de comparación")}
+                        onClick={() => onCompare(group.flatMap((r) => (r.image ? [r.image.id] : [])).slice(0, 6))}
+                      >
+                        <Columns2 size={14} />
+                      </Button>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           <input
             aria-label={t("Buscar en los registros del mapa")}
             placeholder={t("Buscar en los registros del mapa")}
@@ -515,9 +586,20 @@ export function DatabaseMap({
               >
                 {t("Acercar al grupo")}
               </Button>
+              {selectedIds.length === 1 && (
+                <Button
+                  data-testid="then-now-open"
+                  data-tooltip={t("Busca fotografías actuales tomadas cerca en Wikimedia Commons")}
+                  onClick={() => setThenNow(mapped.find((r) => r.id === selectedIds[0]) ?? null)}
+                >
+                  <History size={14} />
+                  {t("Entonces y ahora")}
+                </Button>
+              )}
             </div>
           )}
-          {!visible.length && !loading && (
+          {thenNow && <ThenNow record={thenNow} onClose={() => setThenNow(null)} />}
+          {!viewsTab && !visible.length && !loading && (
             <p className="hint">
               {t(
                 unlocated && !query
@@ -526,28 +608,44 @@ export function DatabaseMap({
               )}
             </p>
           )}
-          <div className="map-record-list">
-            {visible.slice(0, limit).map((record) => (
-              <button
-                className="map-record-card"
-                key={record.id}
-                onClick={() => onOpen(record.id)}
-                aria-label={`${t("Abrir registro")} ${record.title}`}
-              >
-                <Thumbnail
-                  id={record.image?.id}
-                  revision={record.image?.revision}
-                  alt={record.title}
-                />
-                <span>
-                  <strong>{record.title}</strong>
-                  <small>{record.location?.name ?? t("Sin ubicación")}</small>
-                  <small>
-                    {record.imageCount} {t("Imágenes")}
-                  </small>
-                </span>
-              </button>
-            ))}
+          <div className="map-record-list" hidden={viewsTab}>
+            {visible.slice(0, limit).map((record) => {
+              const located = mappedById.get(record.id);
+              return (
+                <div className="map-record-item" key={record.id}>
+                  <button
+                    className="map-record-card"
+                    onClick={() => onOpen(record.id)}
+                    aria-label={`${t("Abrir registro")} ${record.title}`}
+                  >
+                    <Thumbnail
+                      id={record.image?.id}
+                      revision={record.image?.revision}
+                      alt={record.title}
+                    />
+                    <span>
+                      <strong>{record.title}</strong>
+                      <small>{record.location?.name ?? t("Sin ubicación")}</small>
+                      <small>
+                        {record.imageCount} {t(record.imageCount === 1 ? "imagen" : "imágenes")}
+                      </small>
+                    </span>
+                  </button>
+                  {located && (
+                    <Button
+                      icon
+                      className="map-record-then-now"
+                      data-testid="then-now-record"
+                      aria-label={`${t("Entonces y ahora")}: ${record.title}`}
+                      data-tooltip={t("Busca fotografías actuales tomadas cerca en Wikimedia Commons")}
+                      onClick={() => setThenNow(located)}
+                    >
+                      <History size={14} />
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {visible.length > limit && (
             <Button onClick={() => setLimit((n) => n + 50)}>

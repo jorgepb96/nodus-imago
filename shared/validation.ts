@@ -229,6 +229,17 @@ export const settingsSchema = z
         .strict(),
     ),
     apiDelayMs: z.number().int().min(0).max(60000),
+    imageModels: z.array(z.string().max(400)).max(200).optional(),
+    citationTemplates: z.record(id, z.string().max(1000)).optional(),
+    favoriteImageModels: z.array(z.string().max(400)).max(200).optional(),
+    watermark: z
+      .object({
+        enabled: z.boolean(),
+        text: z.string().max(80),
+        position: z.enum(["bottom-right", "bottom-left", "top-right", "top-left"]),
+      })
+      .strict()
+      .optional(),
     parallelJobs: z.number().int().min(1).max(4),
     fieldEquivalences: z
       .array(
@@ -394,6 +405,86 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .strict(),
   statisticDelete: z.object({ id }).strict(),
   statisticCompute: z.object({ search: searchSchema, spec: statSpec }).strict(),
+  detailSearch: z
+    .object({
+      assetId: id,
+      region: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0.01).max(1), h: z.number().min(0.01).max(1) }).strict(),
+      databaseIds: z.array(id).max(50).optional(),
+      inside: z.boolean().optional(),
+    })
+    .strict(),
+  neighbourSuggestions: z.object({ databaseId: id, columnId: id, limit: z.number().int().min(1).max(5000).optional() }).strict(),
+  neighbourSuggestionsApply: z
+    .object({ items: z.array(z.object({ rowId: id, columnId: id, value: z.string().max(100000) }).strict()).min(1).max(5000) })
+    .strict(),
+  restorationsList: z.object({ assetId: id.optional() }).strict(),
+  restorationDelete: z.object({ id }).strict(),
+  restorationRun: z
+    .object({
+      assetId: id,
+      region: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0.005).max(1), h: z.number().min(0.005).max(1) }).strict().nullable(),
+      provider: providerSchema,
+      model: z.string().trim().min(1).max(300),
+      task: z.enum(["restore", "repair", "sharpen", "colorize", "custom"]),
+      prompt: z.string().trim().min(1).max(8000),
+    })
+    .strict(),
+  restorationCancel: z.undefined(),
+  annotationsExport: z.object({ databaseId: id }).strict(),
+  tropyImport: z.undefined(),
+  iiifImport: z.object({ url: z.string().url().max(2000).refine((u) => u.startsWith("https://")), perCanvas: z.boolean() }).strict(),
+  platesExport: z
+    .object({
+      rowIds: z.array(id).min(1).max(500),
+      template: z.string().max(1000),
+      title: z.string().max(300),
+      label: z.string().max(40),
+      listTitle: z.string().max(200),
+      start: z.number().int().min(1).max(100000),
+    })
+    .strict(),
+  commonsNearby: z
+    .object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180), radius: z.number().min(10).max(10000).optional() })
+    .strict(),
+  restorationExport: z
+    .object({
+      id,
+      format: z.enum(["png", "jpeg"]),
+      watermark: z.object({ enabled: z.boolean(), text: z.string().max(80), position: z.enum(["bottom-right", "bottom-left", "top-right", "top-left"]) }).strict(),
+    })
+    .strict(),
+  variantsStatus: z.object({ databaseIds: z.array(id).max(50).optional() }).strict(),
+  variantsPrepare: z.object({ databaseIds: z.array(id).max(50).optional() }).strict(),
+  variantFamilies: z
+    .object({ databaseIds: z.array(id).max(50).optional(), sensitivity: z.enum(["strict", "balanced", "broad"]) })
+    .strict(),
+  variantsOf: z.object({ assetId: id, sensitivity: z.enum(["strict", "balanced", "broad"]).optional() }).strict(),
+  boardsList: z.undefined(),
+  boardGet: z.object({ id }).strict(),
+  boardSave: z
+    .object({ id: id.optional(), name: z.string().max(200).optional(), assetIds: z.array(id).max(6).optional() })
+    .strict(),
+  boardDelete: z.object({ id }).strict(),
+  compareItems: z.object({ assetIds: z.array(id).max(6) }).strict(),
+  annotationsList: z
+    .object({ assetId: id.optional(), rowId: id.optional() })
+    .strict()
+    .refine((v) => !!v.assetId !== !!v.rowId),
+  annotationSave: z
+    .object({
+      id: id.optional(),
+      assetId: id,
+      x: z.number().min(0).max(1),
+      y: z.number().min(0).max(1),
+      w: z.number().min(0).max(1),
+      h: z.number().min(0).max(1),
+      note: z.string().max(20000),
+      tags: z.array(z.string().max(120)).max(50),
+      color: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional(),
+    })
+    .strict(),
+  annotationDelete: z.object({ id }).strict(),
+  annotationTags: z.object({ databaseId: id }).strict(),
   chatList: z.object({ includeArchived: z.boolean().optional() }).strict(),
   chatGet: z.object({ id }).strict(),
   chatCreate: z
@@ -430,6 +521,17 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   chatFolderDelete: z.object({ id }).strict(),
   timelineCandidates: z.object({ databaseId: id }).strict(),
   timeline: z.object({ search: searchSchema, columnId: id }).strict(),
+  network: z
+    .object({
+      search: searchSchema,
+      columnIds: z.array(id).min(2).max(3),
+      minWeight: z.number().int().min(1).max(10000).optional(),
+      maxNodes: z.number().int().min(10).max(200).optional(),
+      yearColumnId: id.nullable().optional(),
+      from: z.number().int().min(-3000).max(2200).nullable().optional(),
+      to: z.number().int().min(-3000).max(2200).nullable().optional(),
+    })
+    .strict(),
   saveOptions: z
     .object({
       columnId: id,
@@ -541,6 +643,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       columnIds: ids,
       language: z.string().max(100),
       detailed: z.boolean(),
+      task: z.enum(["describe", "transcribe"]).optional(),
     })
     .strict(),
   provenance: z.object({ rowId: id }).strict(),

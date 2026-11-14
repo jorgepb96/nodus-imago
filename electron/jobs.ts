@@ -127,7 +127,7 @@ export class JobQueue {
     )
       throw new Error("Progreso de tarea inválido.");
     if (
-      !["images", "download", "prepare", "index", "analyze"].includes(job.kind)
+      !["images", "download", "prepare", "index", "analyze", "fingerprints"].includes(job.kind)
     )
       throw new Error("Tipo de tarea desconocido.");
     const payload = JSON.parse(job.payload_json),
@@ -138,6 +138,7 @@ export class JobQueue {
         index: "assets",
         analyze: "items",
         prepare: "steps",
+        fingerprints: "hashes",
       } as Record<string, string>
     )[job.kind];
     // Index jobs carry record texts before images; older ones only images.
@@ -196,6 +197,8 @@ export class JobQueue {
       }
     return resources;
   }
+  /** Fingerprints one image for the variants view (set by the service). */
+  fingerprint?: (payload: { hashes: string[] }, index: number) => Promise<"imported" | "skipped">;
   pump() {
     if (this.closed) return;
     const queued = this.repo.db
@@ -269,6 +272,8 @@ export class JobQueue {
             outcome = await this.engine.indexOne(payload, done, signal);
           else if (job.kind === "analyze")
             outcome = await this.engine.analyzeOne(payload, done, signal);
+          else if (job.kind === "fingerprints" && this.fingerprint)
+            outcome = await this.fingerprint(payload, done);
           else if (job.kind === "download" || job.kind === "prepare") {
             const step =
               job.kind === "prepare"

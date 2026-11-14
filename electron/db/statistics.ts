@@ -4,6 +4,7 @@ import { randomUUID as uuid } from "node:crypto";
 import type { Repository } from "./repository";
 import type { DatabaseColumn } from "../../shared/databases";
 import { exportCellText } from "../../shared/databaseExport";
+import { decodeHistoricalDate, periodLabel } from "../../shared/historicalDate";
 import {
   categoryValues,
   cooccurrence,
@@ -112,7 +113,7 @@ export class Statistics {
     const columns = this.repo
       .detail(databaseId)
       .columns.filter((c) =>
-        ["date", "number", "text", "select", "status", "multi_select", "created_time", "rich_text"].includes(c.type),
+        ["historical_date", "date", "number", "text", "select", "status", "multi_select", "created_time", "rich_text"].includes(c.type),
       );
     // A sample is enough to rank them; the timeline itself reads every record.
     const ids = (
@@ -129,7 +130,16 @@ export class Statistics {
 
   timeline(databaseId: string, ids: string[], columnId: string) {
     const [column] = this.columns(databaseId, [columnId]);
-    const items: { id: string; title: string; year: number; imageId: string | null; revision?: string }[] = [];
+    const items: {
+      id: string;
+      title: string;
+      year: number;
+      imageId: string | null;
+      revision?: string;
+      /** For a historical date: the period and how certain it is. */
+      period?: string;
+      certainty?: string;
+    }[] = [];
     let undated = 0;
     for (let i = 0; i < ids.length; i += 500)
       for (const row of this.repo.hydrate(ids.slice(i, i + 500))) {
@@ -139,12 +149,17 @@ export class Statistics {
           continue;
         }
         const image = row.images.find((a) => a.width > 0) ?? row.images[0];
+        const historical =
+          column.type === "historical_date" ? decodeHistoricalDate(row.cells[column.id] ?? null) : null;
         items.push({
           id: row.id,
           title: row.title,
           year,
           imageId: image?.id ?? null,
           revision: image?.revision,
+          ...(historical
+            ? { period: periodLabel(historical), certainty: historical.certainty }
+            : {}),
         });
       }
     items.sort((a, b) => a.year - b.year || a.title.localeCompare(b.title, "es", { numeric: true }));

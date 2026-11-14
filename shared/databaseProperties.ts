@@ -1,5 +1,6 @@
 // Adapted from Nodus Research, © Jorge Pérez Burgueño. AGPL-3.0-only.
 /** Lossless codecs for the structured values carried through the legacy string cell API. */
+import { decodeHistoricalDate } from './historicalDate';
 
 export type DatabaseDateRecurrence = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
@@ -24,6 +25,8 @@ export interface DatabaseLocationValue {
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** Direction the camera faced, in degrees clockwise from north (0–359). */
+  bearing?: number | null;
 }
 
 export interface DatabaseButtonState {
@@ -124,6 +127,7 @@ export function encodeDatabaseLocation(value: DatabaseLocationValue | null): str
     typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= min && candidate <= max ? candidate : null;
   return JSON.stringify({ name: value.name.trim(), address: value.address?.trim() || null,
     latitude: coordinate(value.latitude, -90, 90), longitude: coordinate(value.longitude, -180, 180),
+    ...(typeof value.bearing === 'number' && Number.isFinite(value.bearing) ? { bearing: ((Math.round(value.bearing) % 360) + 360) % 360 } : {}),
     ...(value.gazetteerId ? { gazetteerId: value.gazetteerId } : {}) });
 }
 
@@ -135,6 +139,7 @@ export function decodeDatabaseLocation(raw: string | null): DatabaseLocationValu
   return { name: object.name, address: typeof object.address === 'string' ? object.address : null,
     latitude: typeof object.latitude === 'number' ? object.latitude : null,
     longitude: typeof object.longitude === 'number' ? object.longitude : null,
+    ...(typeof object.bearing === 'number' ? { bearing: object.bearing } : {}),
     ...(typeof object.gazetteerId === 'string' ? { gazetteerId: object.gazetteerId } : {}) };
 }
 
@@ -175,5 +180,6 @@ export function databasePropertyPlainText(type: string, raw: string | null): str
     return date ? [date.start, date.end].filter(Boolean).join(' – ') : '';
   }
   if (type === 'button') return String(decodeDatabaseButton(raw).clicks);
+  if (type === 'historical_date') return decodeHistoricalDate(raw)?.text ?? '';
   return raw;
 }

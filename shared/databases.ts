@@ -13,6 +13,7 @@
 
 // Type-only (erased at compile time), so this module stays runtime-dependency-free even
 // though databaseFormula.ts imports its column types back.
+import { normalizeHistoricalDate } from './historicalDate';
 import type { FormulaColorRule, FormulaSpec } from './databaseFormula';
 // Preserve legacy AI configuration as data; Imago never uses remote providers.
 type ImageProvider = string;
@@ -36,6 +37,7 @@ export type DatabaseColumnType =
   | 'text'
   | 'number'
   | 'date'
+  | 'historical_date'
   | 'time'
   | 'select'
   | 'status'
@@ -80,6 +82,7 @@ export const COLUMN_TYPES: ColumnTypeDef[] = [
   { id: 'text', label: 'Texto simple', icon: 'notebook', hasOptions: false, available: true },
   { id: 'number', label: 'Número', icon: 'hash', hasOptions: false, available: true },
   { id: 'date', label: 'Fecha', icon: 'calendar', hasOptions: false, available: true },
+  { id: 'historical_date', label: 'Fecha histórica', icon: 'calendar', hasOptions: false, available: true },
   { id: 'time', label: 'Hora', icon: 'clock', hasOptions: false, available: true },
   { id: 'select', label: 'Selección', icon: 'tag', hasOptions: true, available: true },
   { id: 'status', label: 'Estado', icon: 'status', hasOptions: true, available: true },
@@ -580,6 +583,8 @@ export function normalizeCellValue(type: DatabaseColumnType, raw: string | null)
       // exact representation; only the new structured range form is canonicalised.
       return value.startsWith('{') ? encodeDatabaseDate(decodeDatabaseDate(value)) : value || null;
     }
+    case 'historical_date':
+      return normalizeHistoricalDate(raw);
     case 'person':
       return encodeDatabasePeople(decodeDatabasePeople(raw));
     case 'location':

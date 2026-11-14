@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,state TEX
 CREATE TABLE IF NOT EXISTS job_errors(id INTEGER PRIMARY KEY,job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,item INTEGER NOT NULL,message TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS db_statistics(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,name TEXT NOT NULL,spec_json TEXT NOT NULL,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS statistics_database ON db_statistics(database_id,position);
+CREATE TABLE IF NOT EXISTS image_annotations(id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES image_assets(id) ON DELETE CASCADE,row_id TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,x REAL NOT NULL,y REAL NOT NULL,w REAL NOT NULL,h REAL NOT NULL,note TEXT NOT NULL DEFAULT '',tags_json TEXT NOT NULL DEFAULT '[]',color TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS annotations_asset ON image_annotations(asset_id);
+CREATE INDEX IF NOT EXISTS annotations_row ON image_annotations(row_id);
+CREATE TRIGGER IF NOT EXISTS annotations_follow_asset AFTER UPDATE OF row_id ON image_assets WHEN new.row_id IS NOT old.row_id BEGIN UPDATE image_annotations SET row_id=new.row_id WHERE asset_id=new.id; END;
+CREATE TABLE IF NOT EXISTS restorations(id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES image_assets(id) ON DELETE CASCADE,row_id TEXT NOT NULL,provider TEXT NOT NULL,model TEXT NOT NULL,task TEXT NOT NULL,prompt TEXT NOT NULL,region_json TEXT,file TEXT NOT NULL,width INTEGER NOT NULL,height INTEGER NOT NULL,created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS restorations_asset ON restorations(asset_id,created_at);
+CREATE TABLE IF NOT EXISTS tile_embeddings(content_hash TEXT NOT NULL,contract TEXT NOT NULL,tile INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(content_hash,contract,tile));
+CREATE TABLE IF NOT EXISTS image_fingerprints(content_hash TEXT PRIMARY KEY,hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS compare_boards(id TEXT PRIMARY KEY,name TEXT NOT NULL,asset_ids_json TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS chat_folders(id TEXT PRIMARY KEY,parent_id TEXT REFERENCES chat_folders(id) ON DELETE CASCADE,name TEXT NOT NULL,color TEXT,icon TEXT,position INTEGER NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS chat_conversations(id TEXT PRIMARY KEY,title TEXT NOT NULL,folder_id TEXT REFERENCES chat_folders(id) ON DELETE SET NULL,database_ids_json TEXT NOT NULL,model_json TEXT,mode TEXT NOT NULL DEFAULT 'fast',pinned_at TEXT,archived INTEGER NOT NULL DEFAULT 0,messages_json TEXT NOT NULL DEFAULT '[]',message_count INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS chat_conversations_updated ON chat_conversations(archived,updated_at);

@@ -9,6 +9,11 @@ import {
   Link2,
   MoveRight,
   Trash2,
+  Maximize2,
+  SquareDashedMousePointer,
+  Wand2,
+  Quote,
+  Check,
 } from "lucide-react";
 import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
 import type { Provenance, RecordRow } from "../../shared/imago";
@@ -17,6 +22,8 @@ import { Cell } from "./Cell";
 import { BlockOutline } from "./BlockOutline";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
+import { ImageViewer } from "./ImageViewer";
+import { renderCitation } from "../../shared/citation";
 function RelationEditor({
   row,
   column,
@@ -126,6 +133,10 @@ export function RecordPanel({
   onClose,
   onChanged,
   onSimilar,
+  onRestore,
+  onOpenRecord,
+  onCompare,
+  citation,
   perform,
 }: {
   row: RecordRow;
@@ -133,10 +144,18 @@ export function RecordPanel({
   onClose: () => void;
   onChanged: () => void;
   onSimilar: (id: string) => void;
+  /** Opens the restoration workshop with this image. */
+  onRestore?: (assetId: string) => void;
+  onOpenRecord?: (rowId: string) => void;
+  onCompare?: (assetIds: string[]) => void;
+  /** The database's citation template. */
+  citation?: string;
   perform: Perform;
 }) {
   const t = useT(),
     [imageIndex, setImageIndex] = useState(0),
+    [viewer, setViewer] = useState(false),
+    [copied, setCopied] = useState(false),
     [provenance, setProvenance] = useState<Provenance[]>([]),
     [moving, setMoving] = useState(false),
     [bulkMove, setBulkMove] = useState(false),
@@ -176,6 +195,7 @@ export function RecordPanel({
     };
   }, []);
   const image = row.images[Math.min(imageIndex, row.images.length - 1)];
+  const regions = image ? (row.annotations ?? []).filter((a) => a.assetId === image.id).length : 0;
   return (
     <dialog ref={dialog} className="record-overlay" aria-label={row.title}>
       <button
@@ -189,17 +209,63 @@ export function RecordPanel({
             <span className="muted">{row.databaseName}</span>
             <strong>{row.title}</strong>
           </span>
+          {citation && (
+            <Button
+              data-testid="copy-citation"
+              data-tooltip={renderCitation(citation, detail.columns, row)}
+              onClick={() =>
+                void navigator.clipboard.writeText(renderCitation(citation, detail.columns, row)).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                })
+              }
+            >
+              {copied ? <Check size={14} /> : <Quote size={14} />}
+              {t(copied ? "Cita copiada" : "Copiar cita")}
+            </Button>
+          )}
           <Button icon aria-label={t("Cerrar")} onClick={onClose}>
             <X size={19} />
           </Button>
         </header>
         <div className="record-body">
-          <Thumbnail
-            id={image?.width ? image.id : undefined}
-            revision={image?.revision}
-            large
-            alt={row.title}
-          />
+          <button
+            type="button"
+            className="record-image-open"
+            disabled={!image?.width}
+            aria-label={t("Ampliar y anotar")}
+            data-testid="record-image-open"
+            onClick={() => setViewer(true)}
+          >
+            <Thumbnail
+              id={image?.width ? image.id : undefined}
+              revision={image?.revision}
+              large
+              alt={row.title}
+            />
+            {image?.width ? (
+              <span className="record-image-hint">
+                <Maximize2 size={13} />
+                {t("Ampliar y anotar")}
+              </span>
+            ) : null}
+            {regions > 0 && (
+              <span className="record-image-regions" data-tooltip={t("Zonas anotadas en esta imagen")}>
+                <SquareDashedMousePointer size={12} />
+                {regions}
+              </span>
+            )}
+          </button>
+          {viewer && (
+            <ImageViewer
+              row={row}
+              initialIndex={imageIndex}
+              onClose={() => setViewer(false)}
+              onChanged={onChanged}
+              onOpenRecord={onOpenRecord}
+              onCompare={onCompare}
+            />
+          )}
           {image && (
             <>
               <div className="image-toolbar">
@@ -252,6 +318,15 @@ export function RecordPanel({
                   <ScanSearch size={15} />
                   {t("Buscar imágenes similares")}
                 </Button>
+                {onRestore && (
+                  <Button
+                    data-tooltip={t("Abre el taller de restauración con esta imagen. El original no se modifica.")}
+                    onClick={() => onRestore(image.id)}
+                  >
+                    <Wand2 size={15} />
+                    {t("Restaurar con IA")}
+                  </Button>
+                )}
                 <Button
                   onClick={() =>
                     void perform(async () => {

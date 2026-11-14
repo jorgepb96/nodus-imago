@@ -51,6 +51,7 @@ export function Jobs({
       analyze: "Analizar",
       download: "Descargar",
       prepare: "Preparar modelos",
+      fingerprints: "Calcular huellas visuales",
     },
     states: Record<string, string> = {
       queued: "En espera",

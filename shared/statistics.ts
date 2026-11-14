@@ -2,6 +2,7 @@
 // with a chi-square test, co-occurrence of tags, trends over time and
 // numeric summaries. Pure functions over already-extracted values, so the
 // maths is unit-tested apart from storage.
+import { decodeHistoricalDate, representativeYear } from "./historicalDate";
 import { decodeCheckbox, decodeMultiSelect, type DatabaseColumn } from "./databases";
 import { decodeDatabaseDate } from "./databaseProperties";
 
@@ -148,6 +149,7 @@ export function yearOf(
   display = raw ?? "",
 ): number | null {
   if (raw == null || raw === "") return null;
+  if (column.type === "historical_date") return representativeYear(decodeHistoricalDate(raw));
   if (["date", "created_time", "last_edited_time"].includes(column.type)) {
     const start = column.type === "date" ? decodeDatabaseDate(raw)?.start : raw;
     const year = start ? Number(/^-?\d{4}/.exec(start)?.[0]) : NaN;
@@ -179,7 +181,7 @@ export function yearCoverage(
   const named = /a[ñn]o|year|fecha|date|periodo|período|cronolog|década|decada|siglo|época|epoca/i.test(
     column.name,
   );
-  const typed = ["date", "number"].includes(column.type) ? 0.05 : 0;
+  const typed = column.type === "historical_date" ? 0.3 : ["date", "number"].includes(column.type) ? 0.05 : 0;
   return { columnId: column.id, dated, share, score: share + (named ? 0.15 : 0) + typed };
 }
 

@@ -35,6 +35,7 @@ import type { CsvImportOptions } from "../../shared/databaseCsv";
 import { recordEmbeddingText } from "../../shared/recordEmbedding";
 import { computeFormulas } from "../../shared/databaseFormulaEval";
 import type {
+  ImageAnnotation,
   ImageAsset,
   Job,
   Page,
@@ -294,7 +295,7 @@ export class Repository {
   convertColumn(id: string, type: DatabaseColumnType, apply: boolean) {
     const column = this.column(id);
     const convertible = new Set<DatabaseColumnType>([
-      "text", "rich_text", "number", "date", "time", "select", "status",
+      "text", "rich_text", "number", "date", "historical_date", "time", "select", "status",
       "multi_select", "checkbox", "url", "email", "phone", "location",
     ]);
     if (!convertible.has(column.type) || !convertible.has(type))
@@ -809,6 +810,17 @@ export class Repository {
         "SELECT id,database_id,type,config_json FROM db_columns WHERE type IN ('unique_id','created_time','last_edited_time')",
       )
       .all() as any[];
+    const annotations = this.db
+      .prepare(
+        `SELECT id,asset_id assetId,row_id rowId,x,y,w,h,note,tags_json,color,created_at createdAt,updated_at updatedAt FROM image_annotations WHERE row_id IN (${p}) ORDER BY created_at`,
+      )
+      .all(...ids) as (Omit<ImageAnnotation, "tags"> & { tags_json: string })[];
+    const annotationsByRow = new Map<string, ImageAnnotation[]>();
+    for (const { tags_json, ...a } of annotations)
+      (annotationsByRow.get(a.rowId) ?? annotationsByRow.set(a.rowId, []).get(a.rowId)!).push({
+        ...a,
+        tags: JSON.parse(tags_json),
+      });
     // Grouped once: filtering every cell for every record was quadratic.
     const cellsByRow = new Map<string, Record<string, string | null>>(),
       assetsByRow = new Map<string, any[]>();
@@ -819,6 +831,7 @@ export class Repository {
       (assetsByRow.get(a.rowId) ?? assetsByRow.set(a.rowId, []).get(a.rowId)!).push(a);
     for (const row of rows) {
       row.cells = cellsByRow.get(row.id) ?? {};
+      row.annotations = annotationsByRow.get(row.id) ?? [];
       for (const column of systemColumns.filter(
         (c) => c.database_id === row.databaseId,
       ))
@@ -884,6 +897,7 @@ export class Repository {
             .filter(Boolean)
             .join(" "),
         ),
+        (row.annotations ?? []).map((a) => [a.note, ...a.tags].filter(Boolean).join(" ")),
       )
       .join("\n");
     this.statement(

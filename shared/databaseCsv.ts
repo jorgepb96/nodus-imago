@@ -6,6 +6,7 @@
  * in electron/extraction/tabular.ts; the DB creation lives in databasesRepo.ts.
  */
 
+import { looksHistoricalDate, normalizeHistoricalDate } from './historicalDate';
 import type { DatabaseColumnType } from './databases';
 
 const NUMBER_RE = /^-?\d{1,3}(?:[.,]?\d{3})*(?:[.,]\d+)?$|^-?\d+(?:\.\d+)?$/;
@@ -31,7 +32,7 @@ export function isNullMarker(raw: string): boolean {
 
 /** Column types that can receive text from a CSV cell. */
 const TEXT_BACKED_TYPES = new Set<DatabaseColumnType>([
-  'title', 'rich_text', 'text', 'number', 'date', 'time', 'select', 'status', 'multi_select', 'checkbox',
+  'title', 'rich_text', 'text', 'number', 'date', 'historical_date', 'time', 'select', 'status', 'multi_select', 'checkbox',
   'person', 'url', 'email', 'phone', 'location', 'ai',
 ]);
 
@@ -245,6 +246,7 @@ export function suggestColumn(header: string, values: string[], index: number): 
 
   const lowered = real.map((v) => v.toLowerCase());
   if (real.every((v) => ISO_DATE_RE.test(v))) return pick('date', 'Todos los valores son fechas ISO');
+  if (looksHistoricalDate(real)) return pick('historical_date', 'Fechas de catálogo: aproximadas, rangos, décadas o siglos');
   if (real.every((v) => TIME_RE.test(v))) return pick('time', 'Todos los valores son horas');
   if (real.every((v) => NUMBER_RE.test(v))) {
     // A numeric-looking identifier is not a quantity: keep the digits verbatim.
@@ -323,6 +325,10 @@ export function normalizeCsvValue(type: DatabaseColumnType, raw: string): string
     return null;
   }
   if (type === 'date') return ISO_DATE_RE.test(v) ? v : null;
+  if (type === 'historical_date') {
+    // The text is kept even when no period can be read from it ("sin fechar", "véase reverso").
+    return isNullMarker(v) ? null : normalizeHistoricalDate(v);
+  }
   if (type === 'time') return TIME_RE.test(v) ? v : null;
   return v;
 }

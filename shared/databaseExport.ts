@@ -6,6 +6,7 @@
 
 import { decodeCheckbox, decodeMultiSelect, decodeNumber } from './databases';
 import type { DatabaseColumn, DatabaseRow } from './databases';
+import { decodeHistoricalDate } from './historicalDate';
 import {
   decodeDatabaseButton,
   decodeDatabaseDate,
@@ -34,6 +35,8 @@ export function exportCellText(col: DatabaseColumn, row: DatabaseRow): string {
       return (row.attachments?.[col.id] ?? []).map((a) => a.fileName ?? '').filter(Boolean).join(', ');
     case 'relation':
       return String(row.relationCounts?.[col.id] ?? 0);
+    case 'historical_date':
+      return decodeHistoricalDate(raw)?.text ?? '';
     case 'date': {
       const value = decodeDatabaseDate(raw);
       return value ? [value.start, value.end].filter(Boolean).join(' – ') : '';

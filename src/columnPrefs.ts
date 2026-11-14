@@ -112,6 +112,7 @@ export const CONVERTIBLE_TYPES = [
   "rich_text",
   "number",
   "date",
+  "historical_date",
   "time",
   "select",
   "status",

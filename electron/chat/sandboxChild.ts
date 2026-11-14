@@ -19,6 +19,12 @@ const __roman = { I: 1, V: 5, X: 10, L: 50, C: 100 };
 globalThis.yearOf = (value) => {
   if (value == null || value === "") return null;
   if (typeof value === "number") return Number.isInteger(value) && value >= 1000 && value <= 2200 ? value : null;
+  // A historical date: the middle of its period, or its known end.
+  if (typeof value === "object" && !Array.isArray(value) && ("start" in value || "end" in value)) {
+    const { start, end } = value;
+    if (start != null && end != null) return Math.round((start + end) / 2);
+    return start ?? end ?? null;
+  }
   const text = Array.isArray(value) ? value.join(" ") : String(value);
   let m = /^(-?\\d{4})-\\d{2}/.exec(text);
   if (m) return Number(m[1]);

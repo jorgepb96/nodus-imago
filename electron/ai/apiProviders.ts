@@ -20,6 +20,7 @@ import {
   type EmbeddingApiProvider,
 } from "../../shared/embeddingApi";
 import { splitSse, sseData, streamDelta } from "../../shared/chat";
+import { IMAGE_API } from "../../shared/restoration";
 export type CompletionRequest = {
   choice: ModelChoice;
   profiles: Partial<Record<ApiProvider, ApiProfile>>;
@@ -74,14 +75,15 @@ export class ApiProviders {
     body: unknown,
     signal: AbortSignal,
     expectedBase?: string,
+    limits: { bytes: number; timeoutMs: number } = { bytes: 8 * 2 ** 20, timeoutMs: 120_000 },
   ) {
-    const response = await this.open(provider, base, route, body, signal, expectedBase);
+    const response = await this.open(provider, base, route, body, signal, expectedBase, limits.timeoutMs);
     let bytes = 0;
     const chunks: Uint8Array[] = [];
     if (!response.body) throw new ApiFailure("Respuesta vacía.");
     for await (const chunk of response.body as any) {
       bytes += chunk.length;
-      if (bytes > 8 * 2 ** 20)
+      if (bytes > limits.bytes)
         throw new ApiFailure("Respuesta del proveedor demasiado grande.");
       chunks.push(chunk);
     }
@@ -112,9 +114,8 @@ export class ApiProviders {
     }
     if (!key && !isLoopbackUrl(base))
       throw new ApiFailure("Configura la clave del proveedor en Ajustes.");
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+    const form = typeof FormData !== "undefined" && body instanceof FormData;
+    const headers: Record<string, string> = form ? {} : { "Content-Type": "application/json" };
     if (provider === "anthropic") {
       if (key) headers["x-api-key"] = key;
       headers["anthropic-version"] = "2023-06-01";
@@ -130,7 +131,7 @@ export class ApiProviders {
         response = await this.fetcher(base + route, {
           method: body ? "POST" : "GET",
           headers,
-          body: body ? JSON.stringify(body) : undefined,
+          body: form ? (body as FormData) : body ? JSON.stringify(body) : undefined,
           signal: combined,
           redirect: "error",
         });
@@ -345,6 +346,94 @@ export class ApiProviders {
       throw error;
     }
     return text;
+  }
+  /**
+   * An edited image: OpenAI's image edits, Gemini's native image output, or
+   * the chat completions with image output of OpenRouter and compatible
+   * servers. Returns the image bytes.
+   */
+  async editImage(
+    input: {
+      choice: { provider: ApiProvider; model: string };
+      profiles: Partial<Record<ApiProvider, ApiProfile>>;
+      remoteEnabled: boolean;
+      prompt: string;
+      image: Buffer;
+      mimeType: "image/jpeg" | "image/png";
+    },
+    signal: AbortSignal,
+  ): Promise<Buffer> {
+    const { provider, model } = input.choice,
+      style = IMAGE_API[provider];
+    if (!style) throw new ApiFailure("Este proveedor no genera imágenes. Elige OpenAI, Gemini, OpenRouter o un servidor compatible.");
+    const base = providerBase(provider, input.profiles);
+    if (!input.remoteEnabled && !isLoopbackUrl(base))
+      throw new ApiFailure("Las APIs remotas están desactivadas. No se ha enviado ningún dato.");
+    const limits = { bytes: 64 * 2 ** 20, timeoutMs: 5 * 60_000 };
+    const b64 = input.image.toString("base64");
+    let out: string | undefined;
+    if (style === "openai-images") {
+      const form = new FormData();
+      form.append("model", model);
+      form.append("prompt", input.prompt);
+      form.append("n", "1");
+      form.append("image", new Blob([new Uint8Array(input.image)], { type: input.mimeType }), input.mimeType === "image/png" ? "image.png" : "image.jpg");
+      const result = await this.request(provider, base, "/images/edits", form, signal, undefined, limits);
+      out = result.data?.[0]?.b64_json;
+    } else if (style === "gemini") {
+      const native = geminiNativeBase(base),
+        id = model.trim().replace(/^models\//, "");
+      const result = await this.request(
+        provider,
+        native,
+        `/models/${encodeURIComponent(id)}:generateContent`,
+        {
+          contents: [{ role: "user", parts: [{ text: input.prompt }, { inline_data: { mime_type: input.mimeType, data: b64 } }] }],
+          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+        },
+        signal,
+        geminiNativeBase(providerBase(provider, {})),
+        limits,
+      );
+      for (const part of result.candidates?.[0]?.content?.parts ?? []) {
+        const data = part.inline_data?.data ?? part.inlineData?.data;
+        if (typeof data === "string") out = data;
+      }
+    } else {
+      const result = await this.request(
+        provider,
+        base,
+        "/chat/completions",
+        {
+          model,
+          modalities: ["image", "text"],
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: input.prompt },
+                { type: "image_url", image_url: { url: `data:${input.mimeType};base64,${b64}` } },
+              ],
+            },
+          ],
+        },
+        signal,
+        undefined,
+        limits,
+      );
+      const message = result.choices?.[0]?.message;
+      const url: unknown = message?.images?.[0]?.image_url?.url ?? message?.images?.[0]?.url;
+      if (typeof url === "string") out = /^data:image\/[a-z+]+;base64,/.exec(url) ? url.slice(url.indexOf(",") + 1) : undefined;
+      if (!out && Array.isArray(message?.content))
+        for (const part of message.content) {
+          const u = part?.image_url?.url;
+          if (typeof u === "string" && u.startsWith("data:image/")) out = u.slice(u.indexOf(",") + 1);
+        }
+    }
+    if (!out) throw new ApiFailure(`${PROVIDERS[provider].label}: el modelo no devolvió ninguna imagen. Comprueba que el modelo genera imágenes.`);
+    const bytes = Buffer.from(out, "base64");
+    if (bytes.length < 100) throw new ApiFailure("La imagen recibida está vacía o dañada.");
+    return bytes;
   }
   async embed(
     input: EmbeddingRequest,

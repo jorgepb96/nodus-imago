@@ -65,7 +65,9 @@ export function filterKind(
   | "files"
   | "relation"
   | "person"
-  | "location" {
+  | "location"
+  | "period" {
+  if (column.type === "historical_date") return "period";
   if (
     column.type === "location" ||
     column.type === "person" ||
@@ -120,6 +122,10 @@ export function filterOperators(column: DatabaseColumn): PropertyFilterOp[] {
       ];
     case "time":
       return ["equals", "not_equals", "lt", "gt", "between", ...empty];
+    case "period":
+      // equals: the period includes the year; lt: it ends before; gt: it starts after;
+      // between: it shares at least one year with the interval.
+      return ["between", "equals", "lt", "gt", ...empty];
     case "options":
       return [
         "any",

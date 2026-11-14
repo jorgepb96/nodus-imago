@@ -7,6 +7,7 @@ import { decodeCheckbox, decodeMultiSelect, decodeNumber } from "../../shared/da
 import { decodeDatabaseDate } from "../../shared/databaseProperties";
 import { exportCellText } from "../../shared/databaseExport";
 import { categoryValues, yearOf } from "../../shared/statistics";
+import { decodeHistoricalDate, representativeYear } from "../../shared/historicalDate";
 import type { RecordRow } from "../../shared/imago";
 import {
   PROFILE_VALUES,
@@ -50,6 +51,8 @@ const COPY = {
     min: "mín.",
     max: "máx.",
     others: "otros",
+    certainty: "certeza",
+    middle: "año central del periodo",
   },
   en: {
     records: "Records",
@@ -70,6 +73,8 @@ const COPY = {
     min: "min",
     max: "max",
     others: "others",
+    certainty: "certainty",
+    middle: "middle year of the period",
   },
 };
 
@@ -148,6 +153,19 @@ export class ChatData {
           median = values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
         lines.push(
           `${head}: ${copy.filled} ${values.length}/${total}; ${copy.min} ${values[0]}, ${copy.max} ${values[values.length - 1]}, ${copy.mean} ${round(sum / values.length)}, ${copy.median} ${round(median)}, ${copy.sum} ${round(sum)}`,
+        );
+      } else if (column.type === "historical_date") {
+        const values = raw.map(decodeHistoricalDate).filter((v): v is NonNullable<typeof v> => !!v);
+        const certainty = new Map<string, number>();
+        for (const v of values) certainty.set(v.certainty, (certainty.get(v.certainty) ?? 0) + 1);
+        const years = values.map(representativeYear).filter((y): y is number => y != null).sort((a, b) => a - b);
+        const decades = new Map<number, number>();
+        for (const y of years) decades.set(Math.floor(y / 10) * 10, (decades.get(Math.floor(y / 10) * 10) ?? 0) + 1);
+        lines.push(
+          `${head}: ${copy.filled} ${values.length}/${total}; ${copy.certainty}: ${[...certainty].map(([k, n]) => `${k} (${n})`).join(", ")}` +
+            (years.length
+              ? `; ${copy.years} ${years[0]}–${years[years.length - 1]}; ${copy.perDecade} (${copy.middle}): ${[...decades].map(([d, n]) => `${d}s (${n})`).join(", ")}`
+              : ""),
         );
       } else if (column.type === "checkbox") {
         const yes = raw.filter((v) => decodeCheckbox(v)).length;
@@ -238,6 +256,10 @@ function plainValue(column: DatabaseColumn, raw: string | null, row: RecordRow):
         .filter((l): l is string => !!l);
     case "date":
       return decodeDatabaseDate(raw)?.start ?? null;
+    case "historical_date": {
+      const value = decodeHistoricalDate(raw);
+      return value ? { text: value.text, start: value.start, end: value.end, certainty: value.certainty } : null;
+    }
     default: {
       const text = exportCellText(column, row).trim();
       return text ? clip(text, TEXT_LIMIT) : null;

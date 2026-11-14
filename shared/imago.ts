@@ -48,8 +48,27 @@ export type ImageAsset = {
   metadata: Record<string, unknown>;
   description: string | null;
 };
+/** A region of an image, in fractions of its width and height (0–1). */
+export type ImageAnnotation = {
+  id: string;
+  assetId: string;
+  rowId: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  note: string;
+  tags: string[];
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+/** What an import from Tropy or IIIF created. */
+export type StandardImport = { databaseId: string; records: number; photos: number; failed: number; annotations: number };
 export type RecordRow = DatabaseRow & {
   images: ImageAsset[];
+  /** Regions marked on the record's images, with their notes. */
+  annotations?: ImageAnnotation[];
   databaseName: string;
   title: string;
   snippet?: string;
@@ -227,6 +246,13 @@ export type Settings = {
   apiDelayMs: number;
   parallelJobs: number;
   fieldEquivalences: EquivalenceGroup[];
+  /** Image models of the restoration workshop ("provider|model") and the favourites. */
+  imageModels?: string[];
+  favoriteImageModels?: string[];
+  /** Citation template of each database (property names in braces). */
+  citationTemplates?: Record<string, string>;
+  /** Mark added to restored images when they are downloaded. */
+  watermark?: import("./restoration").Watermark;
 };
 export type Status = {
   root: string;
@@ -382,6 +408,87 @@ export type Commands = {
     input: { databaseId: string };
     result: { columnId: string; name: string; type: string; dated: number; share: number; score: number }[];
   };
+  detailSearch: {
+    input: { assetId: string; region: { x: number; y: number; w: number; h: number }; databaseIds?: string[]; inside?: boolean };
+    result: import("./detailSearch").DetailMatch[];
+  };
+  neighbourSuggestions: {
+    input: { databaseId: string; columnId: string; limit?: number };
+    result: { items: import("./suggest").NeighbourSuggestion[]; withVectors: number; known: number; missing: number };
+  };
+  neighbourSuggestionsApply: { input: { items: { rowId: string; columnId: string; value: string }[] }; result: number };
+  restorationsList: { input: { assetId?: string }; result: import("./restoration").Restoration[] };
+  restorationDelete: { input: { id: string }; result: void };
+  /** Handled in the main process, which holds the keys. */
+  restorationRun: {
+    input: {
+      assetId: string;
+      region: { x: number; y: number; w: number; h: number } | null;
+      provider: ApiProvider;
+      model: string;
+      task: import("./restoration").RestorationTask;
+      prompt: string;
+    };
+    result: import("./restoration").Restoration;
+  };
+  restorationCancel: { input: void; result: void };
+  /** Handled in the main process: W3C Web Annotations of a database, saved as JSON-LD. */
+  annotationsExport: { input: { databaseId: string }; result: { file: string; total: number } | null };
+  /** Handled in the main process: a Tropy JSON-LD export, chosen in a dialog. */
+  tropyImport: { input: void; result: StandardImport | null };
+  iiifImport: { input: { url: string; perCanvas: boolean }; result: StandardImport };
+  /** Handled in the main process: numbered figures with captions, as PDF. */
+  platesExport: {
+    input: { rowIds: string[]; template: string; title: string; label: string; listTitle: string; start: number };
+    result: { file: string; figures: number } | null;
+  };
+  /** Handled in the main process: present-day photographs near a place. */
+  commonsNearby: {
+    input: { latitude: number; longitude: number; radius?: number };
+    result: import("./commons").CommonsPhoto[];
+  };
+  restorationExport: {
+    input: { id: string; format: "png" | "jpeg"; watermark: import("./restoration").Watermark };
+    result: string | null;
+  };
+  variantsStatus: { input: { databaseIds?: string[] }; result: import("./variants").VariantStatus };
+  variantsPrepare: { input: { databaseIds?: string[] }; result: string | null };
+  variantFamilies: {
+    input: { databaseIds?: string[]; sensitivity: import("./variants").Sensitivity };
+    result: import("./variants").VariantFamily[];
+  };
+  variantsOf: {
+    input: { assetId: string; sensitivity?: import("./variants").Sensitivity };
+    result: import("./variants").VariantFamily | null;
+  };
+  boardsList: { input: void; result: import("./compare").CompareBoard[] };
+  boardGet: {
+    input: { id: string };
+    result: import("./compare").CompareBoard & { items: import("./compare").CompareItem[] };
+  };
+  boardSave: {
+    input: { id?: string; name?: string; assetIds?: string[] };
+    result: import("./compare").CompareBoard;
+  };
+  boardDelete: { input: { id: string }; result: void };
+  compareItems: { input: { assetIds: string[] }; result: import("./compare").CompareItem[] };
+  annotationsList: { input: { assetId?: string; rowId?: string }; result: ImageAnnotation[] };
+  annotationSave: {
+    input: {
+      id?: string;
+      assetId: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      note: string;
+      tags: string[];
+      color?: string | null;
+    };
+    result: ImageAnnotation;
+  };
+  annotationDelete: { input: { id: string }; result: void };
+  annotationTags: { input: { databaseId: string }; result: string[] };
   chatList: {
     input: { includeArchived?: boolean };
     result: {
@@ -420,10 +527,30 @@ export type Commands = {
     result: import("./chat").ChatFolder;
   };
   chatFolderDelete: { input: { id: string }; result: void };
+  network: {
+    input: {
+      search: SearchInput;
+      columnIds: string[];
+      minWeight?: number;
+      maxNodes?: number;
+      yearColumnId?: string | null;
+      from?: number | null;
+      to?: number | null;
+    };
+    result: import("./network").Network;
+  };
   timeline: {
     input: { search: SearchInput; columnId: string };
     result: {
-      items: { id: string; title: string; year: number; imageId: string | null; revision?: string }[];
+      items: {
+        id: string;
+        title: string;
+        year: number;
+        imageId: string | null;
+        revision?: string;
+        period?: string;
+        certainty?: string;
+      }[];
       undated: number;
       total: number;
     };
@@ -586,6 +713,7 @@ export type Commands = {
       columnIds: string[];
       language: string;
       detailed: boolean;
+      task?: "describe" | "transcribe";
     };
     result: string;
   };

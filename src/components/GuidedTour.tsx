@@ -45,9 +45,11 @@ export const TOUR_STEPS: TourStep[] = [
     items: [
       "Tabla: una fila por registro y una columna por propiedad. Puedes editar las celdas directamente.",
       "Galería: una tarjeta por registro con su imagen principal.",
-      "Mapa: sitúa en un mapa los registros que tienen una propiedad de ubicación.",
-      "Cronología: ordena los registros por año según una propiedad de fecha.",
+      "Mapa: sitúa los registros que tienen una ubicación. La pestaña Vistas repetidas reúne las fotografías tomadas desde el mismo punto, y «Entonces y ahora» busca fotografías actuales del lugar en Wikimedia Commons.",
+      "Cronología: ordena los registros por año según una propiedad de fecha. Con una fecha histórica («c. 1930», «años 50») usa su periodo y muestra si es aproximada.",
       "Estadísticas: calcula frecuencias, tablas cruzadas y otros análisis, y permite guardarlos.",
+      "Variantes: agrupa la misma imagen en distintos registros (copias, reproducciones, recortes) en orden de fecha.",
+      "Red: muestra qué valores de dos o tres propiedades (por ejemplo, fotógrafo y lugar) aparecen juntos en los mismos registros.",
     ],
   },
   {
@@ -58,9 +60,10 @@ export const TOUR_STEPS: TourStep[] = [
     items: [
       "Concordancia: compara las categorías asignadas por varios modelos de IA con las que has asignado tú.",
       "Automatizaciones: hace que un modelo de IA rellene una propiedad en muchos registros a la vez. Los valores quedan como propuestas hasta que los apruebas.",
+      "Completar: propone valores para los registros vacíos de una propiedad a partir de las imágenes más parecidas que sí lo tienen. Nada se guarda hasta que lo aceptas.",
       "Propiedades visibles: elige qué columnas se muestran en la tabla y en la galería.",
       "Filtrar y ordenar: muestra solo los registros que cumplen unas condiciones y cambia su orden.",
-      "Importar: añade imágenes (archivos sueltos o una carpeta) o registros desde un archivo CSV.",
+      "Importar: añade imágenes (archivos sueltos o una carpeta), registros desde un archivo CSV, un proyecto de Tropy o un manifiesto IIIF de una biblioteca digital.",
       "Añadir registros: crea registros vacíos para rellenarlos a mano.",
     ],
   },
@@ -92,6 +95,16 @@ export const TOUR_STEPS: TourStep[] = [
     target: "nav-chat",
     title: "Chat",
     body: "La sección Chat guarda tus conversaciones y te deja organizarlas en carpetas. Cada conversación lee solo las bases de datos que elijas. Cuando hace falta una cifra exacta, el modelo escribe un cálculo que se ejecuta sobre todos los registros en un entorno aislado de este ordenador. Necesita un modelo de un proveedor o de Ollama o LM Studio.",
+  },
+  {
+    target: "nav-compare",
+    title: "Mesa de comparación",
+    body: "Pon hasta seis imágenes de cualquier base de datos juntas, con el zoom sincronizado, o superpón dos para ver qué cambia entre ellas. También puedes seleccionar registros en la galería y pulsar «Comparar».",
+  },
+  {
+    target: "nav-restorations",
+    title: "Restauraciones",
+    body: "Crea versiones restauradas, reparadas o coloreadas con un modelo de imagen de OpenAI, Gemini u OpenRouter. El original no se modifica: cada versión se guarda aparte y se puede descargar con una marca de agua.",
   },
   {
     target: "header-sidebar",

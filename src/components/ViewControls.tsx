@@ -200,7 +200,7 @@ function Operand({
     );
   }
   const type =
-    kind === "number" || kind === "files"
+    kind === "number" || kind === "files" || kind === "period"
       ? "number"
       : kind === "date"
         ? "date"
@@ -359,7 +359,23 @@ function FilterEditor({
             )
           : [];
         const opLabel = (op: keyof typeof FILTER_LABELS) =>
-          column && filterKind(column) === "date"
+          column && filterKind(column) === "period"
+            ? t(
+                op === "between"
+                  ? "Coincide con el periodo"
+                  : op === "equals"
+                    ? "Incluye el año"
+                    : op === "lt"
+                      ? "Termina antes del año"
+                      : op === "gt"
+                        ? "Empieza después del año"
+                        : op === "empty"
+                          ? "No tiene periodo"
+                          : op === "not_empty"
+                            ? "Tiene periodo"
+                            : FILTER_LABELS[op],
+              )
+            : column && filterKind(column) === "date"
             ? op === "lt"
               ? t("Es anterior a")
               : op === "gt"
@@ -621,7 +637,7 @@ function SortEditor({
         const column = columns.find((column) => column.id === sort.columnId),
           kind = column ? filterKind(column) : "text";
         const dated =
-          ["$created", "$modified"].includes(sort.columnId) || kind === "date";
+          ["$created", "$modified"].includes(sort.columnId) || kind === "date" || kind === "period";
         const asc = dated
           ? t("Más antiguos primero")
           : kind === "checkbox"

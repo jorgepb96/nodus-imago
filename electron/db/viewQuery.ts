@@ -1,3 +1,4 @@
+import { decodeHistoricalDate } from "../../shared/historicalDate";
 import type Database from "better-sqlite3";
 import type { DatabaseColumn } from "../../shared/databases";
 import {
@@ -52,6 +53,15 @@ export function installViewFunctions(db: Database.Database) {
     (raw: unknown) =>
       decodeDatabaseDate(raw == null ? null : String(raw))?.start ?? null,
   );
+  // A historical date's period; open ends reach the earliest/latest year.
+  db.function("imago_period_start", { deterministic: true }, (raw: unknown) => {
+    const value = decodeHistoricalDate(raw == null ? null : String(raw));
+    return value && (value.start != null || value.end != null) ? (value.start ?? -100000) : null;
+  });
+  db.function("imago_period_end", { deterministic: true }, (raw: unknown) => {
+    const value = decodeHistoricalDate(raw == null ? null : String(raw));
+    return value && (value.start != null || value.end != null) ? (value.end ?? 100000) : null;
+  });
   db.function("imago_people", { deterministic: true }, (raw: unknown) =>
     JSON.stringify(decodeDatabasePeople(raw == null ? null : String(raw))),
   );
@@ -112,6 +122,7 @@ function valueExpression(column: DatabaseColumn) {
       ? `date(${raw},'localtime')`
       : `substr(imago_date(${raw}),1,10)`;
   if (kind === "options") return raw;
+  if (kind === "period") return `imago_period_start(${raw})`;
   return `imago_text(${quote(column.type)},${raw})`;
 }
 type Clause = { sql: string; applies: string };
@@ -152,6 +163,28 @@ export function compileViewFilters(
       return `imago_coordinates(${raw})=${op === "has_coordinates" ? 1 : 0}`;
     if (op === "checked" || op === "unchecked")
       return `coalesce(${expr},0)${op === "checked" ? "<>" : "="}0`;
+    if (kind === "period" && !["empty", "not_empty"].includes(op)) {
+      const year = (value: string) => {
+        const n = Number(value);
+        if (!value?.trim() || !Number.isInteger(n)) throw new Error("Escribe un año.");
+        return n;
+      };
+      const start = `imago_period_start(${raw})`,
+        end = `imago_period_end(${raw})`;
+      if (op === "between") {
+        const from = year(values[0]),
+          to = year(values[1]);
+        if (from > to) throw new Error("El inicio del intervalo debe ser anterior o igual al final.");
+        return `(${start} <= ${bind(to)} AND ${end} >= ${bind(from)})`;
+      }
+      if (op === "equals") {
+        const y = year(values[0]);
+        return `(${start} <= ${bind(y)} AND ${end} >= ${bind(y)})`;
+      }
+      if (op === "lt") return `${end} < ${bind(year(values[0]))}`;
+      if (op === "gt") return `${start} > ${bind(year(values[0]))}`;
+      throw new Error("Condición de filtro no válida.");
+    }
     if (op === "relative_date") {
       const [start, end] = relativeDateRange(values[0]);
       return `${expr} BETWEEN ${bind(start)} AND ${bind(end)}`;
@@ -331,6 +364,7 @@ export function compileViewSorts(
         kind = filterKind(column);
       let expr = valueExpression(column);
       if (kind === "date") expr = `julianday(imago_date(${raw}))`;
+      else if (kind === "period") expr = `imago_period_start(${raw})`;
       else if (kind === "options") {
         expr =
           column.type === "multi_select"

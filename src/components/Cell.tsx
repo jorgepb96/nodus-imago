@@ -10,6 +10,7 @@ import { useT } from "../i18n";
 import { MarkdownView } from "./MarkdownView";
 import { RichTextEditor } from "./RichTextEditor";
 import { LocationCell } from "./LocationCell";
+import { HistoricalDateCell } from "./HistoricalDateCell";
 export function Cell({
   column,
   value,
@@ -104,6 +105,8 @@ export function Cell({
         onChange={(e) => void save(e.target.value || null)}
       />
     );
+  if (column.type === "historical_date")
+    return <HistoricalDateCell name={column.name} value={value} onSave={onSave} compact={compact} />;
   if (column.type === "location")
     return (
       <LocationCell

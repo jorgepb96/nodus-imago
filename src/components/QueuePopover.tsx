@@ -5,7 +5,7 @@ import { Button } from "./ui";
 import { Jobs } from "./Settings";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
-export type QueueFilter = "all" | "images" | "analyze" | "index" | "download";
+export type QueueFilter = "all" | "images" | "analyze" | "index" | "fingerprints" | "download";
 export function QueuePopover({
   jobs,
   initialFilter,
@@ -104,6 +104,7 @@ export function QueuePopover({
           ["images", t("Imágenes")],
           ["analyze", t("IA")],
           ["index", t("Embeddings")],
+          ["fingerprints", t("Huellas")],
           ["download", t("Descargas")],
         ].map(([id, label]) => (
           <button

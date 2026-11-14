@@ -44,6 +44,15 @@ import {
   BarChart3,
   GripVertical,
   MessageSquare,
+  SquareDashedMousePointer,
+  Columns2,
+  Copy,
+  Wand2,
+  Lightbulb,
+  FileImage,
+  Globe,
+  Images,
+  Share2,
 } from "lucide-react";
 import type { DatabaseDetail, DatabaseSummary } from "../shared/databases";
 import { decodeMultiSelect } from "../shared/databases";
@@ -60,6 +69,7 @@ import type {
   SearchInput,
   Settings as Preferences,
   Status,
+  StandardImport,
 } from "../shared/imago";
 import { LanguageContext, uiLocale, useT } from "./i18n";
 import { UpdateBanner } from "./components/UpdateBanner";
@@ -72,6 +82,14 @@ import { CsvImport, ImageImport } from "./components/ImportDialogs";
 import { ViewControls } from "./components/ViewControls";
 import { CriteriaSelect } from "./components/CriteriaSelect";
 import { ChatView } from "./components/chat/ChatView";
+import { CompareView } from "./components/CompareView";
+import { VariantsView } from "./components/VariantsView";
+import { RestorationsView } from "./components/RestorationsView";
+import { SuggestDialog } from "./components/SuggestDialog";
+import { PlatesDialog } from "./components/PlatesDialog";
+import { IiifDialog } from "./components/IiifDialog";
+import { NetworkView } from "./components/NetworkView";
+import { citationTemplate } from "../shared/citation";
 import {
   filterOperators,
   pruneViewCriteria,
@@ -125,7 +143,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const t = useT(),
     api = window.imago;
   const [area, setArea] = useState<
-      "home" | "databases" | "search" | "settings" | "chat"
+      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "restorations"
     >("home"),
     [databases, setDatabases] = useState<DatabaseSummary[]>([]),
     [databaseId, setDatabaseId] = useState(""),
@@ -142,7 +160,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const [page, setPage] = useState<Page>({ rows: [], total: 0 }),
     [loading, setLoading] = useState(false),
     [view, setView] = useState<
-      "gallery" | "table" | "tree" | "map" | "timeline" | "stats"
+      "gallery" | "table" | "tree" | "map" | "timeline" | "stats" | "variants" | "network"
     >("gallery"),
     [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(""),
@@ -171,6 +189,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "properties"
       | "agreement"
       | "automations"
+      | "suggest"
+      | "plates"
+      | "iiif"
       | "deleteRows"
       | "deleteDatabase"
       | "saveSearch"
@@ -415,6 +436,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       area === "settings" ||
       area === "home" ||
       area === "chat" ||
+      area === "compare" ||
+      area === "restorations" ||
       (area === "databases" && !databaseId) ||
       criteriaContext !== criteriaKey
     ) {
@@ -497,6 +520,23 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     if (!status.automated && (status.settings.welcomeVersion ?? 0) < WELCOME_VERSION)
       setWelcomeOpen(true);
   }, [status]);
+  const [compareSeed, setCompareSeed] = useState<string[] | null>(null);
+  const finishStandardImport = (result: StandardImport) => {
+    notify(
+      t("Importados {r} registros con {p} imágenes y {a} anotaciones.")
+        .replace("{r}", String(result.records))
+        .replace("{p}", String(result.photos))
+        .replace("{a}", String(result.annotations)) +
+        (result.failed ? " " + t("{n} imágenes no se pudieron leer.").replace("{n}", String(result.failed)) : ""),
+      result.failed > 0,
+    );
+    refresh();
+    navigate(result.databaseId);
+  };
+  const [analysisTask, setAnalysisTask] = useState<"describe" | "transcribe">("describe");
+  const [restoreSeed, setRestoreSeed] = useState<string | null>(null);
+  const clearRestoreSeed = useCallback(() => setRestoreSeed(null), [setRestoreSeed]);
+  const clearCompareSeed = useCallback(() => setCompareSeed(null), [setCompareSeed]);
   const openApiSettings = () => {
     setSettingsTab("api");
     setArea("settings");
@@ -936,7 +976,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     ),
     effectiveView =
       (view === "tree" && (!hierarchyColumn || area !== "databases")) ||
-      (["map", "timeline", "stats"].includes(view) && area !== "databases")
+      (["map", "timeline", "stats", "variants", "network"].includes(view) && area !== "databases")
         ? "table"
         : view,
     hierarchy = useMemo(
@@ -1138,6 +1178,24 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <MessageSquare size={18} />
               <span className="nav-title">{t("Chat")}</span>
             </button>
+            <button
+              title={t("Mesa de comparación")}
+              data-tour="nav-compare"
+              className={area === "compare" ? "active" : ""}
+              onClick={() => setArea("compare")}
+            >
+              <Columns2 size={18} />
+              <span className="nav-title">{t("Mesa de comparación")}</span>
+            </button>
+            <button
+              title={t("Restauraciones")}
+              data-tour="nav-restorations"
+              className={area === "restorations" ? "active" : ""}
+              onClick={() => setArea("restorations")}
+            >
+              <Wand2 size={18} />
+              <span className="nav-title">{t("Restauraciones")}</span>
+            </button>
           </nav>
           <div className="sidebar-databases" data-tour="collections" data-tour-fit="content">
             <div className="row">
@@ -1209,6 +1267,32 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               }}
               onSearch={() => setArea("search")}
               onQueue={() => setQueueFilter("all")}
+            />
+          ) : area === "restorations" ? (
+            status && (
+              <RestorationsView
+                settings={status.settings}
+                databases={databases}
+                seed={restoreSeed}
+                onSeedUsed={clearRestoreSeed}
+                onSettings={async (patch) => {
+                  await api.call("updateSettings", patch);
+                  refresh();
+                }}
+                onOpenSettings={openApiSettings}
+              />
+            )
+          ) : area === "compare" ? (
+            <CompareView
+              databases={databases}
+              seed={compareSeed}
+              onSeedUsed={clearCompareSeed}
+              onOpenRecord={(rowId) =>
+                void perform(async () => {
+                  const row = await api.call("getRow", { id: rowId });
+                  await open(row);
+                })
+              }
             />
           ) : area === "chat" ? (
             status && (
@@ -1343,6 +1427,30 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       <span>
                         <strong>{t("ZIP de Notion")}</strong>
                         <small>{t("Tablas y archivos de imagen")}</small>
+                      </span>
+                      <ArrowUpRight size={16} />
+                    </button>
+                    <button
+                      data-testid="import-tropy"
+                      onClick={() =>
+                        void perform(async () => {
+                          const result = await api.call("tropyImport");
+                          if (result) finishStandardImport(result);
+                        })
+                      }
+                    >
+                      <Images size={19} />
+                      <span>
+                        <strong>{t("Proyecto de Tropy")}</strong>
+                        <small>{t("Metadatos, notas, etiquetas, fotos y selecciones (JSON-LD)")}</small>
+                      </span>
+                      <ArrowUpRight size={16} />
+                    </button>
+                    <button data-testid="import-iiif" onClick={() => setModal("iiif")}>
+                      <Globe size={19} />
+                      <span>
+                        <strong>{t("Manifiesto IIIF")}</strong>
+                        <small>{t("Objetos de bibliotecas y archivos digitales (BNE, Gallica, Europeana…)")}</small>
                       </span>
                       <ArrowUpRight size={16} />
                     </button>
@@ -1684,6 +1792,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 {t("Nombre")}
                               </button>
                               <button
+                                onClick={() =>
+                                  void perform(async () => {
+                                    const result = await api.call("annotationsExport", { databaseId: detail.database.id });
+                                    if (result)
+                                      notify(t("{n} anotaciones exportadas.").replace("{n}", String(result.total)));
+                                  })
+                                }
+                              >
+                                {t("Exportar anotaciones (W3C)")}
+                              </button>
+                              <button
                                 onClick={() => setModal("deleteDatabase")}
                               >
                                 {t("Eliminar")}
@@ -1755,6 +1874,32 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           {t("Estadísticas")}
                         </button>
                       )}
+                      {area === "databases" && (
+                        <button
+                          className={effectiveView === "variants" ? "active" : ""}
+                          data-tooltip={t("La misma imagen en varios registros: copias, reproducciones y recortes")}
+                          onClick={() => {
+                            setView("variants");
+                            setSelected(new Set());
+                          }}
+                        >
+                          <Copy size={15} />
+                          {t("Variantes")}
+                        </button>
+                      )}
+                      {area === "databases" && (
+                        <button
+                          className={effectiveView === "network" ? "active" : ""}
+                          data-tooltip={t("Qué fotógrafos, lugares y temas aparecen juntos en los mismos registros")}
+                          onClick={() => {
+                            setView("network");
+                            setSelected(new Set());
+                          }}
+                        >
+                          <Share2 size={15} />
+                          {t("Red")}
+                        </button>
+                      )}
                     </div>
                     <div
                       className="row toolbar-actions"
@@ -1771,6 +1916,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         >
                           <BarChart3 size={14} />
                           {t("Concordancia")}
+                        </Button>
+                      )}
+                      {area === "databases" && detail && (
+                        <Button
+                          data-tour="db-suggest"
+                          data-tooltip={t("Propone valores para los registros vacíos a partir de las imágenes más parecidas")}
+                          onClick={() => setModal("suggest")}
+                        >
+                          <Lightbulb size={14} />
+                          {t("Completar")}
                         </Button>
                       )}
                       {area === "databases" && detail && (
@@ -1849,6 +2004,21 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               </button>
                               <button onClick={startCsv}>
                                 {t("CSV o TSV")}
+                              </button>
+                              <span className="option-menu-label">{t("Como base de datos nueva")}</span>
+                              <button
+                                data-testid="menu-import-tropy"
+                                onClick={() =>
+                                  void perform(async () => {
+                                    const result = await api.call("tropyImport");
+                                    if (result) finishStandardImport(result);
+                                  })
+                                }
+                              >
+                                {t("Proyecto de Tropy")}
+                              </button>
+                              <button data-testid="menu-import-iiif" onClick={() => setModal("iiif")}>
+                                {t("Manifiesto IIIF")}
                               </button>
                             </div>
                           </details>
@@ -1939,6 +2109,40 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         <Sparkles size={14} />
                         {t("Analizar")}
                       </Button>
+                      <Button
+                        data-tooltip={t("Abre las imágenes principales en una mesa de comparación (hasta seis)")}
+                        onClick={() =>
+                          void perform(async () => {
+                            const ids = [...selected].slice(0, 6);
+                            const rows = await Promise.all(
+                              ids.map(
+                                (id) =>
+                                  page.rows.find((r) => r.id === id) ??
+                                  api.call("getRow", { id }),
+                              ),
+                            );
+                            const assets = rows
+                              .map((r) => r.images.find((i) => i.width > 0)?.id)
+                              .filter((id): id is string => !!id);
+                            if (!assets.length)
+                              throw new Error("Los registros seleccionados no tienen imágenes.");
+                            setCompareSeed(assets);
+                            setArea("compare");
+                          })
+                        }
+                      >
+                        <Columns2 size={14} />
+                        {t("Comparar")}
+                      </Button>
+                      {area === "databases" && detail && (
+                        <Button
+                          data-tooltip={t("PDF con las imágenes numeradas y sus pies, para un trabajo académico, un artículo o un libro")}
+                          onClick={() => setModal("plates")}
+                        >
+                          <FileImage size={14} />
+                          {t("Láminas")}
+                        </Button>
+                      )}
                       <Button onClick={() => setModal("deleteRows")}>
                         <Trash2 size={14} />
                         {t("Eliminar")}
@@ -1982,6 +2186,33 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       onOpen={(id) => void perform(async () => open(await api.call("getRow", { id })))}
                       onProperties={() => setModal("properties")}
                     />
+                  ) : effectiveView === "network" && detail && criteriaContext === criteriaKey ? (
+                    <NetworkView
+                      key={detail.database.id}
+                      detail={detail}
+                      search={viewSearch}
+                      revision={tick}
+                      onFilter={(node) => {
+                        setFilters((current) => [
+                          ...current,
+                          node.optionId
+                            ? { columnId: node.columnId, op: "any", value: [node.optionId] }
+                            : { columnId: node.columnId, op: "equals", value: node.label },
+                        ]);
+                        setView("gallery");
+                      }}
+                    />
+                  ) : effectiveView === "variants" && detail ? (
+                    <VariantsView
+                      key={detail.database.id}
+                      databaseId={detail.database.id}
+                      jobs={status?.jobs ?? []}
+                      onOpenRecord={(id) => void perform(async () => open(await api.call("getRow", { id })))}
+                      onCompare={(assets) => {
+                        setCompareSeed(assets);
+                        setArea("compare");
+                      }}
+                    />
                   ) : effectiveView === "stats" && detail && criteriaContext === criteriaKey ? (
                     <StatisticsView
                       key={detail.database.id}
@@ -1998,6 +2229,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     <DatabaseMap
                       key={detail.database.id}
                       detail={detail}
+                      onCompare={(assets) => {
+                        setCompareSeed(assets);
+                        setArea("compare");
+                      }}
                       filters={filters}
                       groups={filterGroups}
                       sorts={sorts}
@@ -2089,6 +2324,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               <span className="image-count">
                                 <ImagePlus size={11} />
                                 {row.images.length}
+                              </span>
+                            )}
+                            {!!row.annotations?.length && (
+                              <span
+                                className="image-regions"
+                                data-tooltip={t("Zonas anotadas")}
+                              >
+                                <SquareDashedMousePointer size={11} />
+                                {row.annotations.length}
                               </span>
                             )}
                           </div>
@@ -2444,7 +2688,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     </>
                   )}
                   <div className="pagination">
-                    {!["map", "timeline", "stats"].includes(effectiveView) && (
+                    {!["map", "timeline", "stats", "variants", "network"].includes(effectiveView) && (
                       <>
                         <Button
                           icon
@@ -2831,6 +3075,45 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           }}
         />
       )}
+      {modal === "iiif" && (
+        <IiifDialog
+          onClose={() => setModal(null)}
+          onImported={(result) => {
+            setModal(null);
+            finishStandardImport(result);
+          }}
+        />
+      )}
+      {modal === "plates" && detail && status && (
+        <PlatesDialog
+          detail={detail}
+          rowIds={[...selected]}
+          template={status.settings.citationTemplates?.[detail.database.id]}
+          onTemplate={async (template) => {
+            await api.call("updateSettings", {
+              citationTemplates: { ...(status.settings.citationTemplates ?? {}), [detail.database.id]: template },
+            });
+            refresh();
+          }}
+          onClose={() => setModal(null)}
+          onDone={(message) => {
+            notify(message);
+            setModal(null);
+          }}
+        />
+      )}
+      {modal === "suggest" && detail && (
+        <SuggestDialog
+          key={detail.database.id}
+          detail={detail}
+          onClose={() => setModal(null)}
+          onApplied={(count) => {
+            setModal(null);
+            notify(t("{n} valores guardados. Puedes deshacerlo con «Deshacer».").replace("{n}", String(count)));
+            refresh();
+          }}
+        />
+      )}
       {modal === "automations" && detail && (
         <Automations
           key={detail.database.id}
@@ -2931,14 +3214,40 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 onChange={(e) => setAnalysisLanguage(e.target.value)}
               />
             </label>
-            <label className="check-label">
-              <input
-                type="checkbox"
-                checked={detailed}
-                onChange={(e) => setDetailed(e.target.checked)}
-              />
-              {t("Descripción detallada")}
-            </label>
+            <fieldset className="analysis-task">
+              <legend>{t("Para las propiedades de texto")}</legend>
+              <label className="check-label">
+                <input
+                  type="radio"
+                  name="analysis-task"
+                  checked={analysisTask === "describe"}
+                  onChange={() => setAnalysisTask("describe")}
+                />
+                {t("Describir lo que se ve en la imagen")}
+              </label>
+              <label className="check-label">
+                <input
+                  type="radio"
+                  name="analysis-task"
+                  checked={analysisTask === "transcribe"}
+                  onChange={() => setAnalysisTask("transcribe")}
+                />
+                {t("Transcribir el texto visible: reversos, sellos, inscripciones, firmas y pies de foto")}
+              </label>
+              <small className="hint">
+                {t("La transcripción lee todas las imágenes del registro (por ejemplo, el anverso y el reverso), conserva la ortografía original y marca lo que no se puede leer como [ilegible].")}
+              </small>
+            </fieldset>
+            {analysisTask === "describe" && (
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  checked={detailed}
+                  onChange={(e) => setDetailed(e.target.checked)}
+                />
+                {t("Descripción detallada")}
+              </label>
+            )}
           </div>
           <footer>
             <Button
@@ -2951,6 +3260,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     columnIds: analysisColumns,
                     language: analysisLanguage,
                     detailed,
+                    task: analysisTask,
                   });
                   refresh();
                   setModal("jobs");
@@ -3085,6 +3395,23 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onClose={() => setOpenRow(null)}
           onChanged={refresh}
           onSimilar={similar}
+          citation={
+            status?.settings.citationTemplates?.[recordDetail.database.id] ??
+            citationTemplate(recordDetail.columns, "chicago", [openRow])
+          }
+          onOpenRecord={(rowId) =>
+            void perform(async () => open(await api.call("getRow", { id: rowId })))
+          }
+          onCompare={(assets) => {
+            setOpenRow(null);
+            setCompareSeed(assets);
+            setArea("compare");
+          }}
+          onRestore={(assetId) => {
+            setOpenRow(null);
+            setRestoreSeed(assetId);
+            setArea("restorations");
+          }}
           perform={perform}
         />
       )}

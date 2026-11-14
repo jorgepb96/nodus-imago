@@ -12,6 +12,7 @@ import {
 } from "electron";
 import { Worker } from "node:worker_threads";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import fs from "node:fs/promises";
 import { chatTurnSchema, validateCommand } from "../shared/validation";
 import { IMAGE_EXTENSIONS } from "./import/images";
@@ -19,8 +20,11 @@ import { Secrets } from "./secrets/store";
 import { ApiProviders } from "./ai/apiProviders";
 import { ChatRunner } from "./chat/turn";
 import { sandboxScript } from "./chat/sandbox";
+import { commonsQuery, parseCommons } from "../shared/commons";
+import { platesHtml } from "./export/plates";
+import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
-import { isMapTileRequest } from "./geo/mapRequests";
+import { isCommonsImageRequest, isMapTileRequest } from "./geo/mapRequests";
 import { externalHttpsUrl } from "../shared/externalLinks";
 import { PROVIDERS } from "../shared/aiConfig";
 import { DesktopBackups } from "./export/desktopBackups";
@@ -50,6 +54,7 @@ let window: BrowserWindow | null = null,
 let backups: DesktopBackups | undefined;
 let updates: Updates | undefined;
 let chats: ChatRunner | undefined;
+let restorationAbort: AbortController | null = null;
 const pending = new Map<
   number,
   { resolve: (v: any) => void; reject: (e: Error) => void }
@@ -330,16 +335,22 @@ app.whenReady().then(async () => {
     process.env.IMAGO_DEV_URL === "http://127.0.0.1:5173"
       ? "http://127.0.0.1:5173"
       : null;
-  session.defaultSession.setPermissionRequestHandler(
-    (_wc, _permission, callback) => callback(false),
+  // Every permission is refused, except writing plain text to the clipboard
+  // from the app's own page («Copiar», «Copiar cita», «Copiar los pies»).
+  const appPage = dev ?? pathToFileURL(path.join(__dirname, "../dist/index.html")).href;
+  const allowed = (permission: string, url: string | undefined) =>
+    permission === "clipboard-sanitized-write" && !!url && url.startsWith(appPage);
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
+    callback(allowed(permission, wc?.getURL())),
   );
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => allowed(permission, wc?.getURL()));
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     const url = details.url;
     callback({
       cancel:
         /^https?:|^wss?:/i.test(url) &&
         !isMapTileRequest(url, details.resourceType) &&
+        !isCommonsImageRequest(url, details.resourceType) &&
         !(
           dev &&
           (url.startsWith(dev + "/") || url.startsWith("ws://127.0.0.1:5173/"))
@@ -360,6 +371,13 @@ app.whenReady().then(async () => {
     try {
       const u = new URL(request.url),
         parts = u.pathname.split("/").filter(Boolean);
+      // A restored version: imago://restoration/<id>.
+      if (u.hostname === "restoration" && parts.length === 1 && /^[a-z0-9-]{1,200}$/i.test(parts[0])) {
+        const file = await call("_restorationFile", { id: parts[0] });
+        return new Response(await fs.readFile(file), {
+          headers: { "Content-Type": "image/png", "Cache-Control": "private, max-age=86400" },
+        });
+      }
       if (
         u.hostname !== "asset" ||
         parts.length !== 2 ||
@@ -596,6 +614,104 @@ app.whenReady().then(async () => {
       if (command === "clearApiKey") {
         secrets.clear((safe as any).provider);
         return;
+      }
+      if (command === "restorationRun") {
+        const data = safe as any,
+          settings = await call("_settings");
+        restorationAbort?.abort();
+        const abort = (restorationAbort = new AbortController());
+        try {
+          const source = await call("_restorationInput", { assetId: data.assetId, region: data.region });
+          const result = await providers.editImage(
+            {
+              choice: { provider: data.provider, model: data.model },
+              profiles: settings.apiProfiles,
+              remoteEnabled: settings.remoteEnabled,
+              prompt: data.prompt,
+              image: Buffer.from(source.image, "base64"),
+              mimeType: source.mimeType,
+            },
+            abort.signal,
+          );
+          return await call("_restorationStore", {
+            assetId: data.assetId,
+            provider: data.provider,
+            model: data.model,
+            task: data.task,
+            prompt: data.prompt,
+            region: data.region,
+            crop: source.crop,
+            result: result.toString("base64"),
+          });
+        } finally {
+          if (restorationAbort === abort) restorationAbort = null;
+        }
+      }
+      if (command === "commonsNearby") {
+        // Only the place's coordinates are sent, and only when the user asks.
+        const data = safe as { latitude: number; longitude: number; radius?: number };
+        const response = await fetch(commonsQuery(data.latitude, data.longitude, data.radius), {
+          headers: { "User-Agent": "NodusImago/0.1 (desktop research app)" },
+          signal: AbortSignal.timeout(20_000),
+        }).catch(() => {
+          throw new Error("No se pudo conectar con Wikimedia Commons.");
+        });
+        if (!response.ok) throw new Error(`Wikimedia Commons: HTTP ${response.status}`);
+        return parseCommons(await response.json(), data, metres);
+      }
+      if (command === "annotationsExport") {
+        const data = safe as { databaseId: string };
+        const collection = await call("_annotationsW3c", data);
+        const target = await dialog.showSaveDialog(window, {
+          defaultPath: path.join(app.getPath("documents"), `${String(collection.label).replace(/[\\/:*?"<>|]/g, "-")} - anotaciones.jsonld`),
+          filters: [{ name: "JSON-LD", extensions: ["jsonld", "json"] }],
+        });
+        if (target.canceled || !target.filePath) return null;
+        await fs.writeFile(target.filePath, JSON.stringify(collection, null, 2));
+        return { file: target.filePath, total: collection.total };
+      }
+      if (command === "tropyImport") {
+        const result = await dialog.showOpenDialog(window, {
+          properties: ["openFile"],
+          filters: [{ name: "Tropy JSON-LD", extensions: ["json", "jsonld"] }],
+        });
+        if (result.canceled || !result.filePaths[0]) return null;
+        return call("_tropyImport", { file: result.filePaths[0] });
+      }
+      if (command === "platesExport") {
+        const data = safe as { rowIds: string[]; template: string; title: string; label: string; listTitle: string; start: number };
+        const target = await dialog.showSaveDialog(window, {
+          defaultPath: path.join(app.getPath("documents"), (data.title || "Laminas").replace(/[\\/:*?"<>|]/g, "-") + ".pdf"),
+          filters: [{ name: "PDF", extensions: ["pdf"] }],
+        });
+        if (target.canceled || !target.filePath) return null;
+        const prepared = await call("_platesPrepare", { rowIds: data.rowIds, template: data.template });
+        const page = path.join(prepared.folder, "plates.html");
+        await fs.writeFile(page, platesHtml({ ...data, items: prepared.items }));
+        const printer = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true, contextIsolation: true } });
+        try {
+          await printer.loadFile(page);
+          const pdf = await printer.webContents.printToPDF({ pageSize: "A4", printBackground: false, preferCSSPageSize: true });
+          await fs.writeFile(target.filePath, pdf);
+        } finally {
+          printer.destroy();
+          await fs.rm(prepared.folder, { recursive: true, force: true });
+        }
+        return { file: target.filePath, figures: prepared.items.length };
+      }
+      if (command === "restorationCancel") {
+        restorationAbort?.abort();
+        return;
+      }
+      if (command === "restorationExport") {
+        const data = safe as any;
+        const result = await dialog.showSaveDialog(window, {
+          defaultPath: path.join(app.getPath("pictures"), `restauracion-${data.id.slice(0, 8)}.${data.format === "jpeg" ? "jpg" : "png"}`),
+          filters: [data.format === "jpeg" ? { name: "JPEG", extensions: ["jpg", "jpeg"] } : { name: "PNG", extensions: ["png"] }],
+        });
+        if (result.canceled || !result.filePath) return null;
+        await call("_restorationExport", { id: data.id, target: result.filePath, format: data.format, watermark: data.watermark });
+        return result.filePath;
       }
       if (command === "listProviderModels") {
         const settings = await call("_settings");
