@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { createHash } from "node:crypto";
-import { mergeUpdateFeeds } from "../scripts/merge-update-feeds.mjs";
+import { appendMacIntelFeed, mergeUpdateFeeds } from "../scripts/merge-update-feeds.mjs";
 import { load, dump } from "js-yaml";
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-feeds-")),
@@ -93,3 +93,37 @@ for (const fault of [
       await fs.rm(f.root, { recursive: true, force: true });
     }
   });
+
+test("a release can be prepared without Intel, and Intel appended to the published macOS feed later", async () => {
+  const f = await fixture();
+  try {
+    // The draft without Intel.
+    await fs.rm(path.join(f.input, "mac-x64"), { recursive: true });
+    await assert.rejects(mergeUpdateFeeds(f.input, f.output, "0.2.0"), /Missing architecture\/package x64/);
+    await mergeUpdateFeeds(f.input, f.output, "0.2.0", { macIntel: false });
+    const publishedText = await fs.readFile(path.join(f.output, "latest-mac.yml"), "utf8");
+    assert.deepEqual((load(publishedText) as any).files.map((x: any) => x.url), ["Nodus-Imago-mac-arm64.zip", "Nodus-Imago-mac-arm64.dmg"]);
+    // The Intel build, made afterwards.
+    const intelFolder = path.join(f.root, "intel");
+    await fs.mkdir(intelFolder);
+    const files = [];
+    for (const url of ["Nodus-Imago-mac-x64.zip", "Nodus-Imago-mac-x64.dmg"]) {
+      const bytes = Buffer.from("intel " + url);
+      await fs.writeFile(path.join(intelFolder, url), bytes);
+      files.push({ url, sha512: createHash("sha512").update(bytes).digest("base64"), size: bytes.length });
+    }
+    const intelText = dump({ version: "0.2.0", files, path: "Nodus-Imago-mac-x64.zip", sha512: files[0].sha512 });
+    const merged = load(await appendMacIntelFeed(publishedText, intelText, intelFolder, "0.2.0")) as any;
+    assert.deepEqual(merged.files.map((x: any) => x.url), ["Nodus-Imago-mac-arm64.zip", "Nodus-Imago-mac-arm64.dmg", "Nodus-Imago-mac-x64.zip", "Nodus-Imago-mac-x64.dmg"]);
+    assert.equal(merged.path, "Nodus-Imago-mac-arm64.zip", "Apple silicon stays the compatibility pointer");
+    // A retry replaces the Intel entries instead of duplicating them.
+    const again = load(await appendMacIntelFeed(dump(merged), intelText, intelFolder, "0.2.0")) as any;
+    assert.equal(again.files.length, 4);
+    // Damaged or mismatched Intel files are refused.
+    await fs.appendFile(path.join(intelFolder, "Nodus-Imago-mac-x64.dmg"), "damage");
+    await assert.rejects(appendMacIntelFeed(publishedText, intelText, intelFolder, "0.2.0"), /checksum/);
+    await assert.rejects(appendMacIntelFeed(publishedText, intelText, intelFolder, "0.3.0"), /version/);
+  } finally {
+    await fs.rm(f.root, { recursive: true, force: true });
+  }
+});

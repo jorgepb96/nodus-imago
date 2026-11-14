@@ -16,8 +16,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Intel is not in this matrix on purpose, as in Nodus Research:
+          # release-macos-intel.yml builds it from the same tag and appends it
+          # after publication, so the slower Intel runner never holds back
+          # Apple silicon, Windows and Linux.
           - { os: macos-latest, target: mac, arch: arm64 }
-          - { os: macos-15-intel, target: mac, arch: x64 }
           - { os: windows-latest, target: win, arch: x64 }
           - { os: ubuntu-22.04, target: linux, arch: x64 }
           - { os: ubuntu-24.04-arm, target: linux, arch: arm64 }
@@ -152,7 +155,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { pattern: "signed-*", path: artifacts }
       - name: Verify all bytes and merge architecture feeds
-        run: node scripts/assemble-update-feeds.mjs artifacts feeds "${IMAGO_RELEASE_TAG#v}"
+        run: node scripts/assemble-update-feeds.mjs artifacts feeds "${IMAGO_RELEASE_TAG#v}" --without-mac-intel
       - name: Create draft only; publication remains a separate explicit step
         shell: bash
         run: |

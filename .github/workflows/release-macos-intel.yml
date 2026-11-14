@@ -1,0 +1,182 @@
+name: macOS Intel release
+
+# As in Nodus Research, the Intel build is appended to a release after it
+# has been published, so the slower Intel runner never holds back Apple
+# silicon, Windows and Linux. It starts when a release is published and can
+# be started by hand to retry or to add Intel to a release published without
+# it.
+#
+# The application comes from the release tag itself. Nothing published is
+# rebuilt or moved: the arm64 files stay as they are and the macOS update
+# feed keeps its arm64 entries and its compatibility pointer on the arm64
+# ZIP. Until this finishes, Intel installs see no update and stay where they
+# are.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag (vX.Y.Z or vX.Y.Z-beta.N)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: imago-release-macos-intel-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  intel:
+    # npm resolves native optional dependencies from the host architecture,
+    # so the Intel product can only be packed on an Intel host.
+    runs-on: macos-15-intel
+    environment: release-signing
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    env:
+      IMAGO_RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+      IMAGO_DISABLE_UPDATES: "1"
+      ONNXRUNTIME_NODE_INSTALL: skip
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - name: Validate the tag and the published release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e 'import fs from "node:fs"; const v=JSON.parse(fs.readFileSync("package.json")).version; if(process.env.IMAGO_RELEASE_TAG!=="v"+v)throw Error("Tag/version mismatch"); fs.appendFileSync(process.env.GITHUB_ENV,"IMAGO_RELEASE_CHANNEL="+(v.includes("-")?"beta":"latest")+"\n");'
+          test "$(git describe --tags --exact-match HEAD)" = "$IMAGO_RELEASE_TAG"
+          channel="$(node -p 'require("./package.json").version.includes("-") ? "beta" : "latest"')"
+          # A draft has not passed its own publication step: nothing to append to.
+          if [[ "$(gh release view "$IMAGO_RELEASE_TAG" --json isDraft --jq .isDraft)" != false ]]; then
+            echo "::error::$IMAGO_RELEASE_TAG is not published; Intel is only appended to a published release"
+            exit 1
+          fi
+          assets="$(gh release view "$IMAGO_RELEASE_TAG" --json assets --jq '.assets[].name')"
+          for required in Nodus-Imago-mac-arm64.dmg Nodus-Imago-mac-arm64.zip "${channel}-mac.yml"; do
+            grep -Fxq "$required" <<< "$assets" || { echo "::error::$IMAGO_RELEASE_TAG is missing $required"; exit 1; }
+          done
+          # A publication that already carries Intel (built with the release)
+          # needs nothing; a manual start rebuilds it.
+          if [[ "$GITHUB_EVENT_NAME" == release ]] && grep -Fxq Nodus-Imago-mac-x64.dmg <<< "$assets"; then
+            echo "Intel is already in $IMAGO_RELEASE_TAG"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.release.outputs.skip != 'true'
+        run: npm ci
+      - if: steps.release.outputs.skip != 'true'
+        run: npm run verify
+      - if: steps.release.outputs.skip != 'true'
+        run: npm run test:desktop:all
+      - name: Import macOS signing certificate and notary key
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          for name in MACOS_CERTIFICATE_BASE64 MACOS_CERTIFICATE_PASSWORD APPLE_API_KEY_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Required macOS release secret is not configured: $name"
+              exit 1
+            fi
+          done
+          certificate_path="$RUNNER_TEMP/imago-signing-certificate.p12"
+          api_key_path="$RUNNER_TEMP/imago-notary-api-key.p8"
+          keychain_path="$RUNNER_TEMP/imago-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          echo "::add-mask::$keychain_password"
+          printf '%s' "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$api_key_path"
+          chmod 600 "$certificate_path" "$api_key_path"
+          openssl pkey -in "$api_key_path" -noout
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -k "$keychain_path" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain_path" >/dev/null
+          search_keychains=("$keychain_path")
+          while IFS= read -r existing; do
+            if [[ -n "$existing" && "$existing" != "$keychain_path" ]]; then search_keychains+=("$existing"); fi
+          done < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"([^"]+)".*/\1/')
+          security list-keychains -d user -s "${search_keychains[@]}"
+          identities="$(security find-identity -v -p codesigning "$keychain_path")"
+          if [[ "$identities" != *'"Developer ID Application:'* ]]; then
+            echo "::error::The imported .p12 does not contain a valid Developer ID Application identity and private key"
+            exit 1
+          fi
+          # Fail before the long build if codesign cannot use the key here.
+          identity_hash="$(awk '/"Developer ID Application:/ { print $2; exit }' <<< "$identities")"
+          probe="$RUNNER_TEMP/imago-codesign-probe"
+          cp /usr/bin/true "$probe"
+          codesign --force --sign "$identity_hash" --keychain "$keychain_path" --timestamp --options runtime "$probe"
+          codesign --verify --strict "$probe"
+          rm -f "$probe"
+          {
+            echo "CSC_KEYCHAIN=$keychain_path"
+            echo "APPLE_API_KEY=$api_key_path"
+          } >> "$GITHUB_ENV"
+      - name: Build, sign and notarize the Intel artifacts
+        if: steps.release.outputs.skip != 'true'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: true
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: npx electron-builder --mac --x64 --config build/electron-builder.release.cjs --publish never
+      - name: Validate the installed package
+        if: steps.release.outputs.skip != 'true'
+        run: node scripts/packaged-e2e.mjs
+      - name: Remove temporary macOS credentials
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          keychain_path="${CSC_KEYCHAIN:-$RUNNER_TEMP/imago-signing.keychain-db}"
+          security lock-keychain "$keychain_path" >/dev/null 2>&1
+          security delete-keychain "$keychain_path" >/dev/null 2>&1
+          rm -f "$keychain_path" "$RUNNER_TEMP/imago-signing-certificate.p12" "$RUNNER_TEMP/imago-notary-api-key.p8" "$RUNNER_TEMP/imago-codesign-probe"
+      - name: Upload the Intel files and add them to the published update feed
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          channel="$IMAGO_RELEASE_CHANNEL"
+          gh release upload "$IMAGO_RELEASE_TAG" \
+            release/Nodus-Imago-mac-x64.dmg release/Nodus-Imago-mac-x64.zip \
+            release/Nodus-Imago-mac-x64.dmg.blockmap release/Nodus-Imago-mac-x64.zip.blockmap \
+            --clobber
+          work="$(mktemp -d)"
+          gh release download "$IMAGO_RELEASE_TAG" --pattern "${channel}-mac.yml" --dir "$work"
+          node scripts/append-mac-intel-feed.mjs "$work/${channel}-mac.yml" "release/${channel}-mac.yml" release "${IMAGO_RELEASE_TAG#v}" "$work/merged.yml"
+          cp "$work/merged.yml" "$work/${channel}-mac.yml"
+          gh release upload "$IMAGO_RELEASE_TAG" "$work/${channel}-mac.yml" --clobber
+      - name: Verify that the release now serves both architectures
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          channel="$IMAGO_RELEASE_CHANNEL"
+          assets="$(gh release view "$IMAGO_RELEASE_TAG" --json assets --jq '.assets[].name')"
+          for asset in Nodus-Imago-mac-arm64.dmg Nodus-Imago-mac-arm64.zip Nodus-Imago-mac-x64.dmg Nodus-Imago-mac-x64.zip; do
+            grep -Fxq "$asset" <<< "$assets" || { echo "::error::$IMAGO_RELEASE_TAG is missing $asset"; exit 1; }
+          done
+          check="$(mktemp -d)"
+          gh release download "$IMAGO_RELEASE_TAG" --pattern "${channel}-mac.yml" --dir "$check"
+          for arch in arm64 x64; do
+            grep -q "Nodus-Imago-mac-${arch}.zip" "$check/${channel}-mac.yml" || { echo "::error::The macOS feed does not list the ${arch} ZIP"; exit 1; }
+          done
+          grep -qx "path: Nodus-Imago-mac-arm64.zip" "$check/${channel}-mac.yml" || { echo "::error::The macOS compatibility pointer moved off the arm64 ZIP"; exit 1; }
