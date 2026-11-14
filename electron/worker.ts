@@ -3,7 +3,7 @@ import { Service } from "./service";
 let nextCompletion = 0;
 const completions = new Map<
   number,
-  { resolve: (v: string) => void; reject: (error: Error) => void }
+  { resolve: (v: any) => void; reject: (error: Error) => void }
 >();
 const service = new Service(
   workerData.root,

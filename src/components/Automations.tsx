@@ -401,7 +401,10 @@ export function Automations({
                 <td>{new Date(run.createdAt).toLocaleString()}</td>
                 <td>{rules.find((r) => r.id === run.ruleId)?.name}</td>
                 <td>
-                  {run.state} {run.message}
+                  {t(
+                    ({ completed: "Completada", skipped: "Omitida", failed: "Fallida" } as Record<string, string>)[run.state] ?? run.state,
+                  )}{" "}
+                  {t(run.message)}
                 </td>
                 <td>{run.rowId}</td>
               </tr>

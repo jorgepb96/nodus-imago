@@ -15,11 +15,14 @@ export function Cell({
   value,
   onSave,
   compact = false,
+  wrap = false,
 }: {
   column: DatabaseColumn;
   value: string | null;
   onSave: (v: string | null) => Promise<void>;
   compact?: boolean;
+  /** Table cell showing its whole text over several lines. */
+  wrap?: boolean;
 }) {
   const [draft, setDraft] = useState(value ?? ""),
     [busy, setBusy] = useState(false),
@@ -45,60 +48,24 @@ export function Cell({
           ? [value]
           : [];
     return (
-      <details className="option-picker">
-        <summary aria-label={column.name}>
-          <span className="chips">
-            {selected.length ? (
-              column.options
-                .filter((o) => selected.includes(o.id))
-                .map((o) => (
-                  <span
-                    className="chip"
-                    key={o.id}
-                    style={
-                      { "--chip": o.color ?? "#6366f1" } as React.CSSProperties
-                    }
-                  >
-                    {o.label}
-                  </span>
-                ))
-            ) : (
-              <span className="muted">—</span>
-            )}
-          </span>
-        </summary>
-        <div className="option-menu">
-          {column.options.map((o) => (
-            <label key={o.id}>
-              <input
-                type="checkbox"
-                checked={selected.includes(o.id)}
-                disabled={busy}
-                onChange={() =>
-                  void save(
-                    column.type === "multi_select"
-                      ? encodeMultiSelect(
-                          selected.includes(o.id)
-                            ? selected.filter((id) => id !== o.id)
-                            : [...selected, o.id],
-                        )
-                      : selected.includes(o.id)
-                        ? null
-                        : o.id,
-                  )
-                }
-              />
-              <i style={{ background: o.color ?? "#6366f1" }} />
-              {o.label}
-            </label>
-          ))}
-          {!column.options.length && (
-            <p>
-              {t("Añadir opción")}: {t("Propiedades")}
-            </p>
-          )}
-        </div>
-      </details>
+      <OptionPicker
+        column={column}
+        selected={selected}
+        busy={busy}
+        onToggle={(id) =>
+          void save(
+            column.type === "multi_select"
+              ? encodeMultiSelect(
+                  selected.includes(id)
+                    ? selected.filter((x) => x !== id)
+                    : [...selected, id],
+                )
+              : selected.includes(id)
+                ? null
+                : id,
+          )
+        }
+      />
     );
   }
   if (column.type === "checkbox")
@@ -286,6 +253,21 @@ export function Cell({
       </div>
     );
   }
+  if (wrap && !["number", "time"].includes(column.type))
+    return (
+      <textarea
+        {...props}
+        className="cell-input cell-wrap"
+        rows={1}
+        onKeyDown={(e) => {
+          // Enter saves as in a single-line cell; Shift+Enter adds a line.
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    );
   return (
     <input
       {...props}
@@ -297,5 +279,117 @@ export function Cell({
             : "text"
       }
     />
+  );
+}
+
+/** Normalised text for option search: case- and accent-insensitive. */
+const fold = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+/** How many matching options the open menu draws at once. */
+const OPTION_RENDER_LIMIT = 200;
+
+/**
+ * Option list for select-like cells. The menu is only rendered while open: a
+ * grid page with a 600-option vocabulary would otherwise mount every option in
+ * every row. Large vocabularies get a search box.
+ */
+function OptionPicker({
+  column,
+  selected,
+  busy,
+  onToggle,
+}: {
+  column: DatabaseColumn;
+  selected: string[];
+  busy: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const t = useT(),
+    [open, setOpen] = useState(false),
+    [query, setQuery] = useState("");
+  const needle = fold(query.trim());
+  const matches = open
+    ? column.options.filter((o) => !needle || fold(o.label).includes(needle))
+    : [];
+  // Selected options first, so a long list never hides what the cell holds.
+  const ordered = [
+    ...matches.filter((o) => selected.includes(o.id)),
+    ...matches.filter((o) => !selected.includes(o.id)),
+  ];
+  return (
+    <details
+      className="option-picker"
+      open={open}
+      onToggle={(e) => {
+        setOpen(e.currentTarget.open);
+        if (!e.currentTarget.open) setQuery("");
+      }}
+    >
+      <summary aria-label={column.name}>
+        <span className="chips">
+          {selected.length ? (
+            column.options
+              .filter((o) => selected.includes(o.id))
+              .map((o) => (
+                <span
+                  className="chip"
+                  key={o.id}
+                  style={
+                    { "--chip": o.color ?? "#6366f1" } as React.CSSProperties
+                  }
+                >
+                  {o.label}
+                </span>
+              ))
+          ) : (
+            <span className="muted">—</span>
+          )}
+        </span>
+      </summary>
+      {open && (
+        <div className="option-menu">
+          {column.options.length > 10 && (
+            <input
+              className="option-search"
+              type="search"
+              autoFocus
+              aria-label={t("Buscar opción")}
+              placeholder={t("Buscar opción")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          )}
+          {ordered.slice(0, OPTION_RENDER_LIMIT).map((o) => (
+            <label key={o.id}>
+              <input
+                type="checkbox"
+                checked={selected.includes(o.id)}
+                disabled={busy}
+                onChange={() => onToggle(o.id)}
+              />
+              <i style={{ background: o.color ?? "#6366f1" }} />
+              {o.label}
+            </label>
+          ))}
+          {ordered.length > OPTION_RENDER_LIMIT && (
+            <p className="muted">
+              {(ordered.length - OPTION_RENDER_LIMIT).toLocaleString()}{" "}
+              {t("opciones más: escribe para filtrar")}
+            </p>
+          )}
+          {column.options.length > 0 && !ordered.length && (
+            <p className="muted">{t("Sin coincidencias")}</p>
+          )}
+          {!column.options.length && (
+            <p>
+              {t("Añadir opción")}: {t("Propiedades")}
+            </p>
+          )}
+        </div>
+      )}
+    </details>
   );
 }

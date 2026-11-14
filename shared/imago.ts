@@ -106,7 +106,8 @@ export type SearchInput = {
   databaseIds?: string[];
   query?: string;
   mode?: "literal" | "semantic" | "hybrid";
-  match?: "words" | "phrase" | "partial";
+  /** "any" (any significant word, ranked) is used by the lexical lane of hybrid search. */
+  match?: "words" | "phrase" | "partial" | "any";
   filters?: PropertyFilter[];
   filterLogic?: "and" | "or";
   filterGroups?: PropertyFilterGroup[];
@@ -118,8 +119,18 @@ export type SearchInput = {
   imageToken?: string;
   similarAssetId?: string;
   semanticWeight?: number;
+  /** What a text query is compared with: images, the records' own text, or both (default). */
+  semanticSources?: "both" | "images" | "text";
+  /** Keep only the N closest records by meaning (a database's search box). */
+  semanticLimit?: number;
 };
-export type Page = { rows: RecordRow[]; total: number; indexed?: number };
+export type Page = {
+  rows: RecordRow[];
+  total: number;
+  indexed?: number;
+  /** Records whose text has a vector for the current model. */
+  textIndexed?: number;
+};
 export type ImageMatch = {
   pathToken: string;
   fileName: string;
@@ -191,6 +202,12 @@ export type ModelInfo = {
 };
 export type Settings = {
   embeddingModel: string;
+  /** Provider and model when embeddingModel is "api-embedding". */
+  embeddingApi?: import("./embeddingApi").EmbeddingApiChoice;
+  /** Index new and edited content on its own; local on and API off when absent. */
+  autoIndex?: { local?: boolean; api?: boolean };
+  /** EmbeddingGemma 2 visual token budget (Gemma 4 sizes); 280 when absent. */
+  visionBudget?: 70 | 140 | 280;
   mode: "light" | "dark" | "system";
   theme: string;
   accent: string;
@@ -214,6 +231,11 @@ export type Status = {
   rows: number;
   images: number;
   indexed: number;
+  /** Records whose own text has a vector for the active model. */
+  textIndexed: number;
+  /** Whether the active embedding backend can answer semantic queries now. */
+  semanticReady: boolean;
+  autoIndex: import("../electron/autoIndex").AutoIndexState;
   platform: string;
   memoryGB: number;
   parallelCapacity: number;
@@ -258,6 +280,10 @@ export type Commands = {
   pageDocument: {
     input: { rowId: string; columnId: string };
     result: import("./pageBlocks").PageDocument;
+  };
+  embeddingApiProbe: {
+    input: import("./embeddingApi").EmbeddingApiChoice;
+    result: { dimensions: number; multimodal: boolean; ms: number };
   };
   inferenceDiagnostics: {
     input: void;
@@ -326,6 +352,51 @@ export type Commands = {
     result: void;
   };
   deleteColumn: { input: { id: string }; result: void };
+  convertColumn: {
+    input: { id: string; type: DatabaseColumnType; apply: boolean };
+    result: { total: number; lost: number };
+  };
+  duplicateColumn: {
+    input: { id: string; copy?: string };
+    result: DatabaseColumn;
+  };
+  statisticsList: {
+    input: { databaseId: string };
+    result: import("./statistics").SavedStatistic[];
+  };
+  statisticSave: {
+    input: { id?: string; databaseId: string; name: string; spec: import("./statistics").StatSpec };
+    result: import("./statistics").SavedStatistic;
+  };
+  statisticDelete: { input: { id: string }; result: void };
+  statisticCompute: {
+    input: { search: SearchInput; spec: import("./statistics").StatSpec };
+    result: import("./statistics").StatResult;
+  };
+  timelineCandidates: {
+    input: { databaseId: string };
+    result: { columnId: string; name: string; type: string; dated: number; share: number; score: number }[];
+  };
+  timeline: {
+    input: { search: SearchInput; columnId: string };
+    result: {
+      items: { id: string; title: string; year: number; imageId: string | null; revision?: string }[];
+      undated: number;
+      total: number;
+    };
+  };
+  columnSummary: {
+    input: {
+      search: SearchInput;
+      columnId: string;
+      fn: import("./databases").RollupFunction;
+    };
+    result: { value: string; records: number };
+  };
+  reorderColumns: {
+    input: { databaseId: string; columnIds: string[] };
+    result: DatabaseDetail;
+  };
   saveOptions: {
     input: {
       columnId: string;
@@ -352,6 +423,7 @@ export type Commands = {
       name: string;
       types: DatabaseColumnType[];
       headers: string[];
+      nullMarkersAsEmpty?: boolean;
     };
     result: DatabaseDetail;
   };

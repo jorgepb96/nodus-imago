@@ -136,21 +136,20 @@ async function run() {
   checks.push(
     "Real HTTP feed and 1 MiB download verified by electron-updater SHA-512 and Imago",
   );
+  // Nodus contract for stable releases: a configured copy is attempted first;
+  // if it fails the release still installs and the warning is kept.
   backupFailure = true;
-  await assert.rejects(manager.install(), /Backup unavailable/);
-  assert.equal(events.includes("controlled-install-boundary"), false);
-  checks.push("Failed backup blocks installation boundary and unlocks storage");
-  backupFailure = false;
-  await manager.check();
   await manager.install();
+  assert.match(manager.status().backupWarning ?? "", /Backup unavailable/);
   assert.deepEqual(events.slice(-3), [
     "backup-gate",
     "data-closed",
     "controlled-install-boundary",
   ]);
   checks.push(
-    "Explicit successful handoff occurs after backup and data close only",
+    "Stable handoff happens after the backup attempt and data close; a failed copy is reported, not blocking (betas are fail-closed, unit-tested)",
   );
+  backupFailure = false;
   manager.close();
   mode = "corrupt";
   manager = await setup("corrupt");

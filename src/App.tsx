@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Database,
   Search,
@@ -11,6 +18,8 @@ import {
   LayoutGrid,
   Table2,
   ListTree,
+  CalendarRange,
+  ChartColumn,
   SlidersHorizontal,
   FolderInput,
   ImagePlus,
@@ -33,6 +42,7 @@ import {
   KeyRound,
   Map as MapIcon,
   BarChart3,
+  GripVertical,
 } from "lucide-react";
 import type { DatabaseDetail, DatabaseSummary } from "../shared/databases";
 import { decodeMultiSelect } from "../shared/databases";
@@ -50,7 +60,8 @@ import type {
   Settings as Preferences,
   Status,
 } from "../shared/imago";
-import { LanguageContext, useT } from "./i18n";
+import { LanguageContext, uiLocale, useT } from "./i18n";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { applyTheme } from "./theme/apply";
 import { applyAppIcon } from "./theme/appIcon";
 import { Button, Empty, Modal, Spinner, Thumbnail } from "./components/ui";
@@ -59,7 +70,24 @@ import { Properties, type Perform } from "./components/Properties";
 import { CsvImport, ImageImport } from "./components/ImportDialogs";
 import { ViewControls } from "./components/ViewControls";
 import { CriteriaSelect } from "./components/CriteriaSelect";
-import { pruneViewCriteria, restoreViewCriteria } from "../shared/viewCriteria";
+import {
+  filterOperators,
+  pruneViewCriteria,
+  restoreViewCriteria,
+} from "../shared/viewCriteria";
+import { ColumnMenu } from "./components/ColumnMenu";
+import { ColumnVisibility } from "./components/ColumnVisibility";
+import { StickyScrollbar } from "./components/StickyScrollbar";
+import { TimelineView } from "./components/TimelineView";
+import { StatisticsView } from "./components/StatisticsView";
+import {
+  DatabaseSearch,
+  EMPTY_DATABASE_SEARCH,
+  type DatabaseSearchState,
+} from "./components/DatabaseSearch";
+import { useColumnPrefs, visibleColumns } from "./columnPrefs";
+import { decodeDatabaseDate } from "../shared/databaseProperties";
+import { ROLLUP_FUNCTIONS } from "../shared/databases";
 import { RecordPanel } from "./components/RecordPanel";
 import { Settings, Jobs } from "./components/Settings";
 import { Home } from "./components/Home";
@@ -72,11 +100,22 @@ import { Automations } from "./components/Automations";
 
 export default function App() {
   const [language, setLanguage] = useState<"es" | "en">("es");
+  // Numbers and dates follow the interface language, not the system's.
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
   return (
     <LanguageContext.Provider value={language}>
       <Workspace onLanguage={setLanguage} />
     </LanguageContext.Provider>
   );
+}
+/** A stored date (YYYY-MM-DD…) as the reader's short date. */
+function formatDay(value: string) {
+  const day = /^\d{4}-\d{2}-\d{2}/.exec(value)?.[0];
+  if (!day) return value;
+  const date = new Date(`${day}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(uiLocale());
 }
 function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const t = useT(),
@@ -93,17 +132,19 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [toast, setToast] = useState<{ message: string; error: boolean } | null>(
       null,
     );
-  const [updateReady, setUpdateReady] = useState(false);
   const [collapsed, setCollapsed] = useState(false),
     [settingsTab, setSettingsTab] = useState("api"),
     [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   const [page, setPage] = useState<Page>({ rows: [], total: 0 }),
     [loading, setLoading] = useState(false),
-    [view, setView] = useState<"gallery" | "table" | "tree" | "map">("gallery"),
+    [view, setView] = useState<
+      "gallery" | "table" | "tree" | "map" | "timeline" | "stats"
+    >("gallery"),
     [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(""),
     [mode, setMode] = useState<"literal" | "semantic" | "hybrid">("literal"),
     [match, setMatch] = useState<"words" | "phrase" | "partial">("words"),
+    [sources, setSources] = useState<"both" | "images" | "text">("both"),
     [scope, setScope] = useState<string[] | undefined>(),
     [imageQuery, setImageQuery] = useState<{
       token: string;
@@ -148,6 +189,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(),
     sequence = useRef(0);
   const refresh = useCallback(() => setTick((n) => n + 1), []);
+  // The database's own search box (literal, semantic or both).
+  const [dbSearch, setDbSearch] = useState<DatabaseSearchState>(EMPTY_DATABASE_SEARCH);
+  useEffect(() => {
+    setDbSearch((current) => (current.query ? { ...current, query: "" } : current));
+  }, [databaseId]);
   const criteriaKey =
     area === "databases" && databaseId
       ? `database:${databaseId}`
@@ -260,9 +306,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   );
   useEffect(() => {
     if (!api) return;
-    const update = () => void api.call("updateStatus").then(state => setUpdateReady(state.status === "downloaded")).catch(() => {});
-    update();
-    return api.onChange(() => { refresh(); update(); });
+    return api.onChange(() => refresh());
   }, [api, refresh]);
   useEffect(() => {
     if (!api) return;
@@ -336,6 +380,30 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setSelected(new Set());
     setOffset(0);
   }, [area, databaseId]);
+  // What a database view shows: its filters plus its search box. The table,
+  // gallery, timeline, statistics and column calculations all use it.
+  const viewSearch = useMemo<SearchInput>(() => {
+    const query = dbSearch.query.trim(),
+      semantic = query && dbSearch.mode !== "literal" && !!status?.semanticReady;
+    return {
+      databaseIds: [databaseId],
+      filters,
+      filterLogic: logic,
+      filterGroups,
+      ...(query
+        ? semantic
+          ? {
+              query,
+              mode: dbSearch.mode,
+              semanticSources: dbSearch.sources,
+              semanticLimit: dbSearch.limit,
+              match: "words" as const,
+            }
+          : { query, match: "words" as const }
+        : {}),
+    };
+  }, [databaseId, filters, logic, filterGroups, dbSearch, status?.semanticReady]);
+  const viewSearchKey = JSON.stringify(viewSearch);
   useEffect(() => {
     const id = ++sequence.current;
     if (
@@ -354,10 +422,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       area === "search"
         ? { ...executed, offset, limit: 100 }
         : {
-            databaseIds: [databaseId],
-            filters,
-            filterLogic: logic,
-            filterGroups,
+            ...viewSearch,
             sorts,
             offset,
             limit: 100,
@@ -386,6 +451,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     filterGroups,
     sorts,
     tick,
+    viewSearch,
     notify,
   ]);
   useEffect(() => {
@@ -510,6 +576,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       imageToken: imageQuery?.token,
       similarAssetId: similarId,
       semanticWeight: weight,
+      semanticSources: sources,
     });
   };
   const similar = (id: string) => {
@@ -531,9 +598,194 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       sorts,
     });
   };
-  const modelReady = status?.models.some(
-    (m) => m.task === "embedding" && m.verified,
-  );
+  const modelReady = !!status?.semanticReady;
+  // Notion-style table columns: drag a header to move it (the order is saved
+  // with the database, so the record panel and exports follow it), drag its
+  // right edge to resize (width kept per database on this device), or move it
+  // with Alt+←/→ from the keyboard.
+  const [dragColumn, setDragColumn] = useState<string | null>(null),
+    [dropColumn, setDropColumn] = useState<{
+      id: string;
+      side: "before" | "after";
+    } | null>(null),
+    [columnMenu, setColumnMenu] = useState<string | null>(null),
+    [menuView, setMenuView] = useState<"main" | "calc">("main"),
+    [editColumn, setEditColumn] = useState<string | null>(null),
+    [filterRequest, setFilterRequest] = useState(0),
+    [summaries, setSummaries] = useState<Record<string, string>>({}),
+    [stickyLeft, setStickyLeft] = useState<Record<string, number>>({});
+  const [prefs, updatePrefs] = useColumnPrefs(detail?.database.id ?? null),
+    columnWidths = prefs.widths,
+    menuAnchor = useRef<HTMLElement | null>(null),
+    tableRef = useRef<HTMLTableElement>(null),
+    tableScrollRef = useRef<HTMLDivElement>(null),
+    shownColumns = detail ? visibleColumns(detail.columns, prefs) : [],
+    // Frozen columns: the selection box and every shown column up to the one
+    // chosen stay put while the table scrolls sideways.
+    frozenAt = shownColumns.findIndex((c) => c.id === prefs.freezeThrough),
+    frozenIds = frozenAt < 0 ? [] : shownColumns.slice(0, frozenAt + 1).map((c) => c.id),
+    frozenKey = frozenIds.join("|");
+  const saveWidths = (next: Record<string, number>) =>
+    updatePrefs((p) => ({ ...p, widths: next }));
+  const columnStyle = (id: string): React.CSSProperties | undefined => {
+    const width = columnWidths[id],
+      left = stickyLeft[id];
+    if (!width && left === undefined) return undefined;
+    return {
+      ...(width ? { width, minWidth: width, maxWidth: width } : {}),
+      ...(left !== undefined ? { left } : {}),
+    };
+  };
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    const ids = frozenKey ? frozenKey.split("|") : [];
+    if (!table || !ids.length) {
+      setStickyLeft((current) => (Object.keys(current).length ? {} : current));
+      return;
+    }
+    const measure = () => {
+      // Each frozen column sticks after the widths before it (offsetLeft
+      // would include the sticky shift while the table is scrolled).
+      const next: Record<string, number> = {};
+      let left =
+        table.querySelector<HTMLElement>("thead th.select-col")?.getBoundingClientRect().width ?? 0;
+      for (const id of ids) {
+        const th = table.querySelector<HTMLElement>(`th[data-column="${id}"]`);
+        if (!th) continue;
+        next[id] = Math.round(left * 100) / 100;
+        left += th.getBoundingClientRect().width;
+      }
+      setStickyLeft((current) =>
+        JSON.stringify(current) === JSON.stringify(next) ? current : next,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    table.querySelectorAll("thead th").forEach((th) => observer.observe(th));
+    return () => observer.disconnect();
+  }, [frozenKey, columnWidths, page.rows]);
+  // Column calculations follow the rows the table shows: same filters,
+  // every page.
+  const summaryKey = JSON.stringify([
+    detail?.database.id,
+    prefs.calc,
+    viewSearchKey,
+    tick,
+    area,
+  ]);
+  useEffect(() => {
+    const entries = Object.entries(prefs.calc).filter(([id]) =>
+      detail?.columns.some((c) => c.id === id),
+    );
+    if (!api || !detail || area !== "databases" || !entries.length) {
+      setSummaries({});
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void Promise.all(
+        entries.map(([columnId, fn]) =>
+          api
+            .call("columnSummary", {
+              search: viewSearch,
+              columnId,
+              fn,
+            })
+            .then((r) => [columnId, r.value] as const)
+            .catch(() => [columnId, ""] as const),
+        ),
+      ).then((results) => {
+        if (!cancelled) setSummaries(Object.fromEntries(results));
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // summaryKey carries every input that changes the result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, summaryKey]);
+  const summaryText = (fn: string, value: string) => {
+    if (!value) return "—";
+    if (fn === "date_range") {
+      const range = decodeDatabaseDate(value);
+      return range
+        ? `${formatDay(range.start)} → ${formatDay(range.end ?? range.start)}`
+        : value;
+    }
+    if (fn === "earliest_date" || fn === "latest_date") return formatDay(value);
+    const number = Number(value);
+    return Number.isFinite(number) && /^-?[\d.]+$/.test(value)
+      ? number.toLocaleString(uiLocale())
+      : value;
+  };
+  const openColumnMenu = (columnId: string, header: HTMLElement) => {
+    menuAnchor.current = header;
+    if (!header.matches("button")) setMenuView("main");
+    setColumnMenu(columnId);
+  };
+  const filterColumn = (columnId: string) => {
+    const column = detail?.columns.find((c) => c.id === columnId);
+    if (!column) return;
+    const op = filterOperators(column)[0];
+    if (op)
+      setFilters((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          columnId,
+          databaseId: column.databaseId,
+          op,
+          value: ["any", "all", "none"].includes(op) ? [] : "",
+        },
+      ]);
+    setFilterRequest((n) => n + 1);
+  };
+  const sortColumn = (columnId: string, direction: "asc" | "desc" | null) => {
+    setSorts((current) => {
+      const rest = current.filter((s) => s.columnId !== columnId);
+      return direction ? [{ columnId, direction }, ...rest] : rest;
+    });
+    setOffset(0);
+  };
+  const moveColumn = (id: string, target: string, side: "before" | "after") => {
+    if (!detail || id === target) return;
+    const ids = detail.columns.map((c) => c.id).filter((c) => c !== id);
+    ids.splice(ids.indexOf(target) + (side === "after" ? 1 : 0), 0, id);
+    if (ids.every((c, i) => detail.columns[i].id === c)) return;
+    const byId = new Map(detail.columns.map((c) => [c.id, c]));
+    setDetail({ ...detail, columns: ids.map((c) => byId.get(c)!) });
+    void perform(async () => {
+      setDetail(
+        await api.call("reorderColumns", {
+          databaseId: detail.database.id,
+          columnIds: ids,
+        }),
+      );
+      refresh();
+    });
+  };
+  const startResize = (id: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const header = (event.currentTarget as HTMLElement).parentElement!,
+      startX = event.clientX,
+      startWidth = header.getBoundingClientRect().width;
+    let latest = startWidth;
+    const move = (e: MouseEvent) => {
+      latest = Math.round(Math.min(800, Math.max(80, startWidth + e.clientX - startX)));
+      updatePrefs((p) => ({ ...p, widths: { ...p.widths, [id]: latest } }), false);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.classList.remove("resizing-column");
+      updatePrefs((p) => ({ ...p, widths: { ...p.widths, [id]: latest } }));
+    };
+    document.body.classList.add("resizing-column");
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
   const visibleDetails =
     area === "search"
       ? allDetails.filter(
@@ -592,7 +844,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     const d = allDetails.find((d) => d.database.id === row.databaseId);
     return (
       d?.columns
-        .filter((c) => ["multi_select", "select", "status"].includes(c.type))
+        .filter(
+          (c) =>
+            ["multi_select", "select", "status"].includes(c.type) &&
+            !(area === "databases" && prefs.hidden.includes(c.id)),
+        )
         .flatMap((c) => {
           const selected =
             c.type === "multi_select"
@@ -610,7 +866,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     ),
     effectiveView =
       (view === "tree" && (!hierarchyColumn || area !== "databases")) ||
-      (view === "map" && area !== "databases")
+      (["map", "timeline", "stats"].includes(view) && area !== "databases")
         ? "table"
         : view,
     hierarchy = useMemo(
@@ -629,9 +885,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       <div className="desktop-required">
         <ImagoMark size={56} />
         <h1>Nodus Imago</h1>
-        <p>
-          Abre la aplicación de escritorio para acceder a tu colección local.
-        </p>
+        <p>{t("Abre la aplicación de escritorio para acceder a tu colección local.")}</p>
         <code>npm run dev</code>
       </div>
     );
@@ -699,7 +953,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </span>
         <div className="nodus-header-actions">
           {!!busy && <Spinner />}
-          {updateReady && <Button title={t("Actualización lista para instalar")} onClick={() => {setSettingsTab("updates");setArea("settings");}}><Download size={16}/>{t("Actualizar")}</Button>}
           <Button
             icon
             title={t("Búsqueda")}
@@ -755,6 +1008,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           </Button>
         </div>
       </header>
+      {api && (
+        <UpdateBanner
+          onRecovery={() => {
+            setSettingsTab("storage");
+            setArea("settings");
+          }}
+          onError={(message) => notify(message, true)}
+        />
+      )}
       <div className="app-body">
         <aside className="sidebar">
           <nav>
@@ -1085,6 +1347,35 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               ),
                             )}
                           </div>
+                          {mode !== "literal" && (
+                            <div
+                              className="segmented semantic-sources"
+                              role="group"
+                              aria-label={t("Comparar la consulta con")}
+                              title={t(
+                                "Las imágenes muestran lo que se ve; la ficha, lo que el registro dice (título y propiedades). Ambas se combinan por posición, no por puntuación.",
+                              )}
+                            >
+                              {(["both", "images", "text"] as const).map(
+                                (s) => (
+                                  <button
+                                    key={s}
+                                    type="button"
+                                    className={sources === s ? "active" : ""}
+                                    onClick={() => setSources(s)}
+                                  >
+                                    {t(
+                                      s === "both"
+                                        ? "Imagen + ficha"
+                                        : s === "images"
+                                          ? "Solo imagen"
+                                          : "Solo ficha",
+                                    )}
+                                  </button>
+                                ),
+                              )}
+                            </div>
+                          )}
                           <div className="scope-picker">
                             <CriteriaSelect
                               label={t("Bases de datos de la búsqueda")}
@@ -1164,6 +1455,28 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           {t("para activar la búsqueda multimodal.")}
                         </p>
                       )}
+                      {modelReady && status?.autoIndex.held && (
+                        <p className="search-note" role="status">
+                          <RefreshCw size={14} />
+                          {status.autoIndex.held.items.toLocaleString()}{" "}
+                          {t("elementos por indexar")} (≈
+                          {Math.max(
+                            1,
+                            Math.round(status.autoIndex.held.seconds / 60),
+                          ).toLocaleString()}{" "}
+                          min). {t("Es largo, así que no empieza solo.")}{" "}
+                          <button
+                            onClick={() =>
+                              void perform(async () => {
+                                await api.call("indexImages", {});
+                                refresh();
+                              })
+                            }
+                          >
+                            {t("Indexar ahora")}
+                          </button>
+                        </p>
+                      )}
                       {!!saved.length && (
                         <div className="saved-searches">
                           <Bookmark size={13} />
@@ -1192,8 +1505,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                           ]
                                         : []),
                                   );
-                                  setMatch(i.match ?? "words");
+                                  setMatch(
+                                    !i.match || i.match === "any"
+                                      ? "words"
+                                      : i.match,
+                                  );
                                   setWeight(i.semanticWeight ?? 0.5);
+                                  setSources(i.semanticSources ?? "both");
                                   setImageQuery(null);
                                   setSimilarId(i.similarAssetId);
                                   setOffset(0);
@@ -1239,7 +1557,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             {t("Propiedades")}
                           </Button>
                           <details className="actions-menu">
-                            <summary className="button">
+                            <summary
+                              className="button"
+                              aria-label={t("Más acciones de la base")}
+                              title={t("Más acciones de la base")}
+                            >
                               <MoreHorizontal size={18} />
                             </summary>
                             <div className="option-menu">
@@ -1302,6 +1624,30 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           {t("Árbol")}
                         </button>
                       )}
+                      {area === "databases" && (
+                        <button
+                          className={effectiveView === "timeline" ? "active" : ""}
+                          onClick={() => {
+                            setView("timeline");
+                            setSelected(new Set());
+                          }}
+                        >
+                          <CalendarRange size={15} />
+                          {t("Cronología")}
+                        </button>
+                      )}
+                      {area === "databases" && (
+                        <button
+                          className={effectiveView === "stats" ? "active" : ""}
+                          onClick={() => {
+                            setView("stats");
+                            setSelected(new Set());
+                          }}
+                        >
+                          <ChartColumn size={15} />
+                          {t("Estadísticas")}
+                        </button>
+                      )}
                     </div>
                     <div className="row toolbar-actions">
                       {area === "databases" && detail && (
@@ -1322,7 +1668,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           {t("Automatizaciones")}
                         </Button>
                       )}
+                      {area === "databases" &&
+                        detail &&
+                        ["table", "gallery", "tree"].includes(effectiveView) && (
+                          <ColumnVisibility
+                            detail={detail}
+                            prefs={prefs}
+                            onPrefs={updatePrefs}
+                          />
+                        )}
                       <ViewControls
+                        openRequest={filterRequest}
                         deferred={area === "search"}
                         details={visibleDetails}
                         filters={filters}
@@ -1399,6 +1755,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                     </div>
                   </div>
+                  {area === "databases" && detail && effectiveView !== "map" && (
+                    <DatabaseSearch
+                      key={detail.database.id}
+                      value={dbSearch}
+                      onChange={(next) => {
+                        setDbSearch(next);
+                        setOffset(0);
+                        setSelected(new Set());
+                      }}
+                      modelReady={modelReady}
+                    />
+                  )}
                   <div className="result-meta">
                     <span>
                       {loading ? (
@@ -1412,8 +1780,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       {page.indexed !== undefined && (
                         <small>
                           {" "}
-                          · {page.indexed} imágenes indexadas · similitud ≠
-                          certeza
+                          · {page.indexed.toLocaleString()}{" "}
+                          {t("imágenes indexadas")}
+                          {page.textIndexed !== undefined &&
+                            ` · ${page.textIndexed.toLocaleString()} ${t("fichas indexadas")}`}{" "}
+                          {!!status?.autoIndex.pending &&
+                            ` · ${status.autoIndex.pending.toLocaleString()} ${t("pendientes de indexar (solo en la búsqueda literal)")}`}{" "}
+                          · {t("similitud ≠ certeza")}
                         </small>
                       )}
                     </span>
@@ -1487,7 +1860,28 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       </Button>
                     </div>
                   )}
-                  {effectiveView === "map" &&
+                  {effectiveView === "timeline" && detail && criteriaContext === criteriaKey ? (
+                    <TimelineView
+                      key={detail.database.id}
+                      detail={detail}
+                      search={viewSearch}
+                      prefs={prefs}
+                      onPrefs={updatePrefs}
+                      revision={tick}
+                      onOpen={(id) => void perform(async () => open(await api.call("getRow", { id })))}
+                      onProperties={() => setModal("properties")}
+                    />
+                  ) : effectiveView === "stats" && detail && criteriaContext === criteriaKey ? (
+                    <StatisticsView
+                      key={detail.database.id}
+                      detail={detail}
+                      search={viewSearch}
+                      prefs={prefs}
+                      onPrefs={updatePrefs}
+                      revision={tick}
+                      perform={perform}
+                    />
+                  ) : effectiveView === "map" &&
                   detail &&
                   criteriaContext === criteriaKey ? (
                     <DatabaseMap
@@ -1618,7 +2012,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             )}
                             {row.score !== undefined && (
                               <small className="similarity">
-                                Similitud {row.score.toFixed(3)}
+                                {t("Similitud")} {row.score.toFixed(3)}
                               </small>
                             )}
                           </button>
@@ -1626,11 +2020,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       ))}
                     </div>
                   ) : (
-                    <div className="table-scroll data-table">
-                      <table>
+                    <>
+                    <div className="table-scroll data-table" ref={tableScrollRef}>
+                      <table ref={tableRef}>
                         <thead>
                           <tr>
-                            <th className="select-col">
+                            <th
+                              className={
+                                "select-col" + (frozenIds.length ? " frozen" : "")
+                              }
+                            >
                               <input
                                 type="checkbox"
                                 aria-label={t("Incluir todas")}
@@ -1655,9 +2054,97 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 <th>{t("Resultados")}</th>
                               </>
                             ) : (
-                              detail?.columns.map((c) => (
-                                <th key={c.id}>
-                                  <span>{c.name}</span>
+                              shownColumns.map((c, index, all) => (
+                                <th
+                                  key={c.id}
+                                  data-column={c.id}
+                                  className={
+                                    "column-header" +
+                                    (frozenIds.includes(c.id) ? " frozen" : "") +
+                                    (frozenIds.at(-1) === c.id ? " frozen-edge" : "") +
+                                    (columnMenu === c.id ? " menu-open" : "") +
+                                    (dragColumn === c.id ? " dragging" : "") +
+                                    (dropColumn?.id === c.id
+                                      ? " drop-" + dropColumn.side
+                                      : "")
+                                  }
+                                  style={columnStyle(c.id)}
+                                  tabIndex={0}
+                                  aria-label={`${c.name} · ${t("Arrastra para mover la columna o usa Alt + flechas")}`}
+                                  aria-haspopup="menu"
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    openColumnMenu(c.id, e.currentTarget);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (
+                                      e.key === "ContextMenu" ||
+                                      (e.shiftKey && e.key === "F10")
+                                    ) {
+                                      e.preventDefault();
+                                      openColumnMenu(c.id, e.currentTarget);
+                                      return;
+                                    }
+                                    if (
+                                      !e.altKey ||
+                                      !["ArrowLeft", "ArrowRight"].includes(e.key)
+                                    )
+                                      return;
+                                    e.preventDefault();
+                                    const left = e.key === "ArrowLeft",
+                                      neighbour = all[index + (left ? -1 : 1)];
+                                    if (neighbour)
+                                      moveColumn(c.id, neighbour.id, left ? "before" : "after");
+                                  }}
+                                  onDragOver={(e) => {
+                                    if (!dragColumn || dragColumn === c.id) return;
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = "move";
+                                    const box = e.currentTarget.getBoundingClientRect(),
+                                      side =
+                                        e.clientX < box.left + box.width / 2
+                                          ? "before"
+                                          : "after";
+                                    if (dropColumn?.id !== c.id || dropColumn.side !== side)
+                                      setDropColumn({ id: c.id, side });
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    if (dragColumn && dropColumn)
+                                      moveColumn(dragColumn, dropColumn.id, dropColumn.side);
+                                    setDragColumn(null);
+                                    setDropColumn(null);
+                                  }}
+                                >
+                                  <span
+                                    className="column-header-label"
+                                    draggable
+                                    onDragStart={(e) => {
+                                      setDragColumn(c.id);
+                                      e.dataTransfer.effectAllowed = "move";
+                                      e.dataTransfer.setData("text/plain", c.name);
+                                    }}
+                                    onDragEnd={() => {
+                                      setDragColumn(null);
+                                      setDropColumn(null);
+                                    }}
+                                  >
+                                    <GripVertical size={10} className="column-grip" />
+                                    <span>{c.name}</span>
+                                  </span>
+                                  <span
+                                    className="column-resize"
+                                    role="separator"
+                                    aria-orientation="vertical"
+                                    aria-label={t("Cambiar el ancho de la columna")}
+                                    title={t("Arrastra para cambiar el ancho; doble clic para restablecerlo")}
+                                    onMouseDown={(e) => startResize(c.id, e)}
+                                    onDoubleClick={() => {
+                                      const next = { ...columnWidths };
+                                      delete next[c.id];
+                                      saveWidths(next);
+                                    }}
+                                  />
                                 </th>
                               ))
                             )}
@@ -1672,7 +2159,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 selected.has(row.id) ? "is-selected" : ""
                               }
                             >
-                              <td>
+                              <td className={frozenIds.length ? "frozen" : undefined}>
                                 <input
                                   type="checkbox"
                                   aria-label={
@@ -1704,8 +2191,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                   </td>
                                 </>
                               ) : (
-                                detail?.columns.map((c) => (
-                                  <td key={c.id}>
+                                shownColumns.map((c) => (
+                                  <td
+                                    key={c.id}
+                                    style={columnStyle(c.id)}
+                                    className={
+                                      (frozenIds.includes(c.id) ? "frozen" : "") +
+                                      (frozenIds.at(-1) === c.id ? " frozen-edge" : "") +
+                                      (prefs.wrap.includes(c.id) ? " wrap" : "")
+                                    }
+                                  >
                                     {["attachment", "files"].includes(
                                       c.type,
                                     ) ? (
@@ -1745,6 +2240,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                     ) : (
                                       <Cell
                                         compact
+                                        wrap={prefs.wrap.includes(c.id)}
                                         column={c}
                                         value={row.cells[c.id] ?? null}
                                         onSave={(v) =>
@@ -1782,11 +2278,62 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             </tr>
                           ))}
                         </tbody>
+                        {area === "databases" && detail && (
+                          <tfoot>
+                            <tr className="column-calcs">
+                              <td className={frozenIds.length ? "frozen" : undefined} />
+                              {shownColumns.map((c) => {
+                                const fn = prefs.calc[c.id],
+                                  label = fn
+                                    ? ROLLUP_FUNCTIONS.find((f) => f.id === fn)?.label
+                                    : undefined;
+                                return (
+                                  <td
+                                    key={c.id}
+                                    style={columnStyle(c.id)}
+                                    className={
+                                      (frozenIds.includes(c.id) ? "frozen" : "") +
+                                      (frozenIds.at(-1) === c.id ? " frozen-edge" : "")
+                                    }
+                                  >
+                                    <button
+                                      type="button"
+                                      className={"column-calc" + (fn ? " active" : "")}
+                                      aria-label={`${t("Calcular")} ${c.name}`}
+                                      onClick={(e) => {
+                                        setMenuView("calc");
+                                        openColumnMenu(c.id, e.currentTarget);
+                                      }}
+                                    >
+                                      {fn && label ? (
+                                        <>
+                                          <span>{t(label)}</span>
+                                          <strong>
+                                            {c.id in summaries
+                                              ? summaryText(fn, summaries[c.id])
+                                              : "…"}
+                                          </strong>
+                                        </>
+                                      ) : (
+                                        <span className="column-calc-hint">
+                                          {t("Calcular")}
+                                        </span>
+                                      )}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                              <td />
+                            </tr>
+                          </tfoot>
+                        )}
                       </table>
                     </div>
+                    <StickyScrollbar target={tableScrollRef} />
+                    </>
                   )}
                   <div className="pagination">
-                    {effectiveView !== "map" && (
+                    {!["map", "timeline", "stats"].includes(effectiveView) && (
                       <>
                         <Button
                           icon
@@ -1845,7 +2392,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           className={"toast " + (toast.error ? "error" : "")}
           role={toast.error ? "alert" : "status"}
         >
-          <span>{toast.message}</span>
+          <span>{t(toast.message)}</span>
           <Button icon aria-label={t("Cerrar")} onClick={() => setToast(null)}>
             <X size={14} />
           </Button>
@@ -1937,8 +2484,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               </label>
               {modal === "create" && (
                 <p className="hint">
-                  Define tus propias propiedades y clasificaciones. Puedes
-                  importar o añadir imágenes en cualquier momento.
+                  {t(
+                    "Define tus propias propiedades y clasificaciones. Puedes importar o añadir imágenes en cualquier momento.",
+                  )}
                 </p>
               )}
             </div>
@@ -1971,6 +2519,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     filterGroups,
                     sorts,
                     semanticWeight: weight,
+                    semanticSources: sources,
                   },
                 });
                 refresh();
@@ -2038,13 +2587,62 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           </footer>
         </Modal>
       )}
+      {columnMenu &&
+        detail &&
+        area === "databases" &&
+        detail.columns.some((c) => c.id === columnMenu) && (
+          <ColumnMenu
+            key={columnMenu + menuView}
+            detail={detail}
+            column={detail.columns.find((c) => c.id === columnMenu)!}
+            anchor={menuAnchor as React.RefObject<HTMLElement>}
+            initialView={menuView}
+            prefs={prefs}
+            sort={sorts.find((s) => s.columnId === columnMenu)?.direction ?? null}
+            perform={perform}
+            onClose={() => {
+              setColumnMenu(null);
+              setMenuView("main");
+            }}
+            onDetail={(next) => {
+              setDetail(next);
+              setAllDetails((all) =>
+                all.map((d) => (d.database.id === next.database.id ? next : d)),
+              );
+              refresh();
+            }}
+            onPrefs={updatePrefs}
+            onFilter={() => filterColumn(columnMenu)}
+            onSort={(direction) => sortColumn(columnMenu, direction)}
+            onEdit={() => {
+              setEditColumn(columnMenu);
+              setModal("properties");
+            }}
+            onInserted={(id) =>
+              // Wait for the new header to render, then name it from its menu.
+              requestAnimationFrame(() => {
+                const th = tableRef.current?.querySelector<HTMLElement>(
+                  `th[data-column="${id}"]`,
+                );
+                if (th) {
+                  th.scrollIntoView({ block: "nearest", inline: "nearest" });
+                  openColumnMenu(id, th);
+                }
+              })
+            }
+          />
+        )}
       {modal === "properties" && detail && (
         <Properties
+          initialColumnId={editColumn}
           detail={detail}
           status={status!}
           perform={perform}
           onChanged={refresh}
-          onClose={() => setModal(null)}
+          onClose={() => {
+            setModal(null);
+            setEditColumn(null);
+          }}
         />
       )}
       {modal === "automations" && detail && (
@@ -2109,8 +2707,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         <Modal title={t("Generar propuestas")} onClose={() => setModal(null)}>
           <div className="modal-body stack">
             <p>
-              {selected.size} {t("registros")} · Solo se proponen cambios en
-              propiedades vacías.
+              {selected.size} {t("registros")} ·{" "}
+              {t("Solo se proponen cambios en propiedades vacías.")}
             </p>
             {visibleDetails
               .flatMap((d) => d.columns)

@@ -99,7 +99,7 @@ export function ApiSettings({
       <label className="setting-row">
         <span>
           <strong>{t("Permitir APIs remotas")}</strong>
-<p className="hint">{t("Solo se envían imágenes y contexto cuando encolas una tarea con un modelo de API. No se usan para indexar ni buscar.")}</p>
+<p className="hint">{t("Solo se envían datos cuando encolas una tarea con un modelo de API o eliges embeddings por API para indexar y buscar.")}</p>
         </span>
         <input
           aria-label={t("Permitir APIs remotas")}

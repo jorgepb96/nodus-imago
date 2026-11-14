@@ -90,8 +90,44 @@ export const searchSchema = z
     imageToken: id.optional(),
     similarAssetId: id.optional(),
     semanticWeight: z.number().min(0).max(1).optional(),
+    semanticSources: z.enum(["both", "images", "text"]).optional(),
+    semanticLimit: z.number().int().min(1).max(5000).optional(),
   })
   .strict();
+const chart = z.enum(["bar", "column", "line", "heatmap", "table"]).optional();
+const limit = z.number().int().min(2).max(60).optional();
+export const statSpec = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart }).strict(),
+  z
+    .object({
+      kind: z.literal("crosstab"),
+      rowColumnId: id,
+      colColumnId: id,
+      limit,
+      measure: z.enum(["count", "row", "residual"]).optional(),
+      chart,
+    })
+    .strict(),
+  z.object({ kind: z.literal("cooccurrence"), columnId: id, limit, chart }).strict(),
+  z
+    .object({
+      kind: z.literal("trend"),
+      yearColumnId: id,
+      seriesColumnId: id.nullable().optional(),
+      bucket: z.enum(["year", "decade"]).optional(),
+      limit,
+      chart,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("numeric"),
+      columnId: id,
+      bins: z.number().int().min(2).max(60).optional(),
+      chart,
+    })
+    .strict(),
+]);
 export const automationRuleSchema = z
   .object({
     id,
@@ -141,7 +177,21 @@ export const settingsSchema = z
       "embeddinggemma2-onnx",
       "harrier-oss-v1-0.6b-q8_0",
       "embeddinggemma2",
+      "api-embedding",
     ]),
+    embeddingApi: z
+      .object({
+        provider: z.enum(["gemini", "openai", "openrouter", "ollama", "lmstudio", "custom"]),
+        model: z.string().trim().min(1).max(300),
+        dimensions: z.number().int().min(64).max(4096),
+      })
+      .strict()
+      .optional(),
+    visionBudget: z.union([z.literal(70), z.literal(140), z.literal(280)]).optional(),
+    autoIndex: z
+      .object({ local: z.boolean().optional(), api: z.boolean().optional() })
+      .strict()
+      .optional(),
     mode: z.enum(["light", "dark", "system"]),
     theme: z.string().max(100),
     accent: z.string().regex(/^#[0-9a-f]{6}$/i),
@@ -189,6 +239,13 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   backupVerify:z.object({id,password:z.string().max(1024).optional()}).strict(),
   backupArchive:z.object({id,archived:z.boolean()}).strict(),
   backupReveal:z.object({id:id.optional()}).strict(),
+  embeddingApiProbe: z
+    .object({
+      provider: z.enum(["gemini", "openai", "openrouter", "ollama", "lmstudio", "custom"]),
+      model: z.string().trim().min(1).max(300),
+      dimensions: z.number().int().min(64).max(4096),
+    })
+    .strict(),
   inferenceDiagnostics: z.undefined(),
   modelPreparation: z.undefined(),
   prepareModels: z.object({ consent: z.literal(true) }).strict(),
@@ -224,6 +281,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
           mode: z.enum(["nominal", "multilabel"]),
           delimiter: z.string().max(10),
           ignoreCase: z.boolean(),
+          placeholdersMissing: z.boolean().optional(),
           emptySetValid: z.boolean(),
           imagesOnly: z.boolean(),
           cohort: z.enum(["pairwise", "complete"]),
@@ -294,6 +352,35 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   deleteColumn: z.object({ id }).strict(),
+  convertColumn: z
+    .object({ id, type, apply: z.boolean() })
+    .strict(),
+  duplicateColumn: z
+    .object({ id, copy: z.string().trim().min(1).max(40).optional() })
+    .strict(),
+  columnSummary: z
+    .object({
+      search: searchSchema,
+      columnId: id,
+      fn: z.enum([
+        "show", "show_unique", "count", "count_values", "count_empty", "count_unique",
+        "percent_empty", "percent_not_empty", "sum", "average", "median", "min", "max",
+        "range", "earliest_date", "latest_date", "date_range", "checked", "unchecked",
+        "percent_checked", "percent_unchecked",
+      ]),
+    })
+    .strict(),
+  reorderColumns: z
+    .object({ databaseId: id, columnIds: z.array(id).min(1).max(500) })
+    .strict(),
+  statisticsList: z.object({ databaseId: id }).strict(),
+  statisticSave: z
+    .object({ id: id.optional(), databaseId: id, name, spec: statSpec })
+    .strict(),
+  statisticDelete: z.object({ id }).strict(),
+  statisticCompute: z.object({ search: searchSchema, spec: statSpec }).strict(),
+  timelineCandidates: z.object({ databaseId: id }).strict(),
+  timeline: z.object({ search: searchSchema, columnId: id }).strict(),
   saveOptions: z
     .object({
       columnId: id,
@@ -331,6 +418,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       name,
       types: z.array(type).max(500),
       headers: z.array(name).max(500),
+      nullMarkersAsEmpty: z.boolean().optional(),
     })
     .strict(),
   imagePreview: z

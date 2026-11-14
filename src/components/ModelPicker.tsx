@@ -61,8 +61,8 @@ export function ModelPicker({
           .filter((m) => m.task === "vision")
           .map((m) => (
             <option key={m.id} value={"local|" + m.id}>
-              {m.label}
-              {m.verified ? "" : " · no instalado"}
+              {t(m.label)}
+              {m.verified ? "" : ` · ${t("no instalado")}`}
             </option>
           ))}
       </optgroup>

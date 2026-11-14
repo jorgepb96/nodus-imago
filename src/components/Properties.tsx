@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2, ArrowUp, ArrowDown, Pencil } from "lucide-react";
 import type {
   DatabaseColumn,
@@ -55,7 +55,10 @@ export function Properties({
   onChanged,
   perform,
   status,
+  initialColumnId = null,
 }: {
+  /** Open with this property selected (from the column menu). */
+  initialColumnId?: string | null;
   detail: DatabaseDetail;
   onClose: () => void;
   onChanged: () => void;
@@ -69,7 +72,8 @@ export function Properties({
   const [selected, setSelected] = useState<DatabaseColumn | null>(null),
     [name, setName] = useState(""),
     [type, setType] = useState<DatabaseColumnType>("text"),
-    [creating, setCreating] = useState(false);
+    [creating, setCreating] = useState(false),
+    [confirmDelete, setConfirmDelete] = useState<DatabaseColumn | null>(null);
   const [options, setOptions] = useState<
       { id?: string; label: string; color: string | null }[]
     >([]),
@@ -178,6 +182,12 @@ export function Properties({
         : null,
     );
   };
+  // Opened from a column header: start on that property.
+  useEffect(() => {
+    const column = detail.columns.find((c) => c.id === initialColumnId);
+    if (column) edit(column);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const add = () => {
     setRollup({ rollupFunction: "count" });
     setSelected(null);
@@ -560,7 +570,7 @@ export function Properties({
                     />
                   </label>
                   <label>
-                    Imágenes de origen
+                    {t("Imágenes de origen")}
                     <select
                       value={source}
                       onChange={(e) => setSource(e.target.value)}
@@ -578,7 +588,7 @@ export function Properties({
                     </select>
                   </label>
                   <label>
-                    Instrucciones de la columna
+                    {t("Instrucciones de la columna")}
                     <textarea
                       rows={3}
                       value={prompt}
@@ -589,9 +599,9 @@ export function Properties({
                     />
                   </label>
                   <p className="hint">
-                    La clasificación respeta las opciones de esta propiedad. Las
-                    anotaciones existentes se conservan. Los resultados se
-                    presentan como propuestas.
+                    {t(
+                      "La clasificación respeta las opciones de esta propiedad. Las anotaciones existentes se conservan. Los resultados se presentan como propuestas.",
+                    )}
                   </p>
                   {selected && (
                     <Button
@@ -619,13 +629,15 @@ export function Properties({
                         }, "Celdas vacías añadidas a la cola de tareas.")
                       }
                     >
-                      Encolar celdas vacías ·{" "}
-                      {detail.database.rowCount.toLocaleString()} registros
+                      {t("Encolar celdas vacías")} ·{" "}
+                      {detail.database.rowCount.toLocaleString()}{" "}
+                      {t("registros")}
                     </Button>
                   )}
                   <p className="hint">
-                    Solo se completarán celdas vacías con imagen. Las
-                    anotaciones humanas y las opciones existentes se conservan.
+                    {t(
+                      "Solo se completarán celdas vacías con imagen. Las anotaciones humanas y las opciones existentes se conservan.",
+                    )}
                   </p>
                 </div>
               )}
@@ -637,23 +649,7 @@ export function Properties({
                   <Button
                     type="button"
                     className="danger"
-                    onClick={() => {
-                      if (
-                        !window.confirm(
-                          t(
-                            "¿Eliminar esta propiedad y todos sus valores? Esta operación no se puede deshacer.",
-                          ),
-                        )
-                      )
-                        return;
-                      void perform(async () => {
-                        await window.imago.call("deleteColumn", {
-                          id: selected.id,
-                        });
-                        onChanged();
-                        setSelected(null);
-                      });
-                    }}
+                    onClick={() => setConfirmDelete(selected)}
                   >
                     <Trash2 size={14} />
                     {t("Eliminar")}
@@ -664,6 +660,40 @@ export function Properties({
           )}
         </form>
       </div>
+      {confirmDelete && (
+        <Modal
+          title={t("Eliminar propiedad")}
+          onClose={() => setConfirmDelete(null)}
+        >
+          <div className="modal-body">
+            <h3>{confirmDelete.name}</h3>
+            <p>
+              {t(
+                "¿Eliminar esta propiedad y todos sus valores? Esta operación no se puede deshacer.",
+              )}
+            </p>
+          </div>
+          <footer>
+            <Button onClick={() => setConfirmDelete(null)}>{t("Cancelar")}</Button>
+            <Button
+              className="danger"
+              onClick={() =>
+                void perform(async () => {
+                  await window.imago.call("deleteColumn", {
+                    id: confirmDelete.id,
+                  });
+                  setConfirmDelete(null);
+                  onChanged();
+                  setSelected(null);
+                })
+              }
+            >
+              <Trash2 size={14} />
+              {t("Eliminar")}
+            </Button>
+          </footer>
+        </Modal>
+      )}
     </Modal>
   );
 }

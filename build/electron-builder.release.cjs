@@ -6,7 +6,9 @@ const mac = { ...base.mac };
 delete mac.identity;
 module.exports = {
   ...base,
-  forceCodeSigning: process.platform !== 'linux',
+  // macOS is always signed and notarized; Windows only when a certificate is
+  // configured (WIN_CSC_LINK), as in Nodus Research.
+  forceCodeSigning: process.platform === 'darwin' || (process.platform === 'win32' && !!process.env.WIN_CSC_LINK),
   mac: { ...mac, hardenedRuntime: true, strictVerify: true,
     entitlements: 'build/entitlements.mac.plist', entitlementsInherit: 'build/entitlements.mac.plist', notarize: true },
   publish: { ...base.publish, channel, releaseType: 'draft' },

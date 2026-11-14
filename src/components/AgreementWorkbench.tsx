@@ -40,6 +40,7 @@ const cohortSignature = (item: AgreementResult) =>
     mode: item.snapshot.input.config.mode,
     rules: {
       ignoreCase: item.snapshot.input.config.ignoreCase,
+      placeholdersMissing: item.snapshot.input.config.placeholdersMissing ?? false,
       delimiter: item.snapshot.input.config.delimiter,
       cohort: item.snapshot.input.config.cohort,
       emptySetValid: item.snapshot.input.config.emptySetValid,
@@ -490,6 +491,19 @@ export function AgreementWorkbench({
                     onChange={(e) => patch({ ignoreCase: e.target.checked })}
                   />
                   {t("Ignorar mayúsculas")}
+                </label>
+                <label
+                  className="check-label"
+                  title={t("«-», «s.d.», «n/a», «?» y similares cuentan como juicio ausente.")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={config.placeholdersMissing ?? false}
+                    onChange={(e) =>
+                      patch({ placeholdersMissing: e.target.checked })
+                    }
+                  />
+                  {t("Tratar marcadores de vacío como ausentes")}
                 </label>
                 <label className="check-label">
                   <input

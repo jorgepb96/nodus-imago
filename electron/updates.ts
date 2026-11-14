@@ -87,9 +87,12 @@ export class Updates {
       arch: string;
       packageType?: string;
       changed: () => void;
-      prepare: (password?: string) => Promise<void>;
+      /** Lock the collection and, when `backup` is true, write a verified copy. */
+      prepare: (password: string | undefined, backup: boolean) => Promise<void>;
       finish: (success: boolean) => Promise<void>;
       canInstall: () => Promise<void>;
+      /** Backups configured (folder) and usable unattended (folder + stored password). */
+      recovery?: () => Promise<{ configured: boolean; ready: boolean }>;
     },
   ) {
     let preferences = updatePreferencesSchema.parse({});
@@ -142,21 +145,29 @@ export class Updates {
         this.installation = false;
         void this.options.finish(false).catch(() => {});
       }
-      if (!this.closed) this.error(error);
+      if (!this.closed)
+        this.error(
+          error,
+          this.state.status === "downloading"
+            ? "update-download-failed"
+            : "update-check-failed",
+        );
     });
   }
   status() {
     return { ...this.state, preferences: { ...this.state.preferences } };
   }
   private emit(patch: Partial<UpdateStatus>) {
-    this.state = { ...this.state, ...patch };
+    // A new state carries its own error code; an old one never lingers.
+    this.state = { ...this.state, errorCode: undefined, ...patch };
     this.options.changed();
     return this.status();
   }
-  private error(error: unknown) {
+  private error(error: unknown, errorCode?: UpdateStatus["errorCode"]) {
     return this.emit({
       status: "error",
       progress: null,
+      errorCode,
       message: error instanceof Error ? error.message : String(error),
     });
   }
@@ -262,7 +273,8 @@ export class Updates {
           });
         return this.status();
       } catch (e) {
-        if (epoch === this.epoch && !this.closed) return this.error(e);
+        if (epoch === this.epoch && !this.closed)
+          return this.error(e, "update-check-failed");
         return this.status();
       }
     })();
@@ -292,7 +304,8 @@ export class Updates {
     try {
       await task;
     } catch (e) {
-      if (epoch === this.epoch && !this.closed) this.error(e);
+      if (epoch === this.epoch && !this.closed)
+        this.error(e, "update-download-failed");
       throw e;
     } finally {
       if (this.downloadTask === task) this.downloadTask = null;
@@ -334,6 +347,11 @@ export class Updates {
         "Actualización verificada. Puedes instalarla y reiniciar cuando quieras.",
     });
   }
+  /**
+   * Install the verified download, with Nodus Research's safety contract:
+   * a beta needs a verified copy (fail-closed); a stable release makes one
+   * whenever copies are configured, and a failed copy never blocks it.
+   */
   async install(password?: string) {
     if (this.installation) throw Error("La instalación ya está en curso.");
     if (
@@ -342,7 +360,24 @@ export class Updates {
       !this.accepts(this.downloaded.version)
     )
       throw Error("No hay una actualización verificada para instalar.");
+    const beta = !!prerelease(this.downloaded.version);
+    // Claimed before any await, so a second click cannot start a second install.
     this.installation = true;
+    const recovery = (this.options.recovery
+      ? await this.options.recovery().catch(() => null)
+      : null) ?? {
+      configured: true,
+      ready: true,
+    };
+    if (beta && !(recovery.configured && (recovery.ready || !!password))) {
+      this.installation = false;
+      const error = Error(
+        "La beta no se instalará hasta que configures las copias de seguridad con una carpeta y una contraseña.",
+      );
+      this.emit({ status: "downloaded", errorCode: "pre-update-backup-required", message: error.message, progress: 100 });
+      throw error;
+    }
+    const backup = beta || recovery.configured;
     let prepared = false;
     try {
       await this.options.canInstall();
@@ -352,17 +387,35 @@ export class Updates {
           "El paquete cambió después de verificarse. Vuelve a descargar la actualización.",
         );
       }
-      this.emit({
-        status: "backing-up",
-        message: "Creando una copia cifrada y verificada antes de actualizar…",
-      });
+      let backupWarning: string | undefined;
+      if (backup)
+        this.emit({
+          status: "backing-up",
+          message: "Creando una copia cifrada y verificada antes de actualizar…",
+        });
       prepared = true;
-      await this.options.prepare(password);
+      try {
+        await this.options.prepare(password, backup);
+      } catch (e) {
+        if (beta || !backup) {
+          if (beta)
+            throw Object.assign(
+              Error(
+                `La beta no se instaló porque no pudo crearse una copia de seguridad verificable: ${e instanceof Error ? e.message : String(e)}`,
+              ),
+              { code: "pre-update-backup-failed" },
+            );
+          throw e;
+        }
+        // Stable: the problem is reported, the release still installs.
+        backupWarning = e instanceof Error ? e.message : String(e);
+      }
       if ((await sha512File(this.downloaded.file)) !== this.downloaded.sha512)
         throw Error("El paquete cambió durante la copia de seguridad.");
       await this.options.finish(true);
       this.emit({
         status: "installing",
+        backupWarning,
         message: "Cerrando Imago para instalar la actualización…",
       });
       this.updater.autoInstallOnAppQuit = false;
@@ -370,19 +423,37 @@ export class Updates {
     } catch (e) {
       if (prepared) await this.options.finish(false);
       this.installation = false;
-      this.error(e);
+      const code =
+        (e as { code?: string })?.code === "pre-update-backup-failed"
+          ? "pre-update-backup-failed"
+          : "update-install-failed";
+      this.error(e, code);
+      // The verified download stays available for another attempt.
+      if (this.downloaded)
+        this.emit({
+          status: "downloaded",
+          errorCode: code,
+          progress: 100,
+          message: e instanceof Error ? e.message : String(e),
+        });
       throw e;
     }
   }
+  /**
+   * As in Nodus, the interface makes the startup check (once per session, with
+   * its progress bar) and the main process keeps the periodic one. The delayed
+   * fallback covers a window that never asks, without checking twice.
+   */
   start() {
     if (this.closed || this.state.status === "disabled" || this.timer) return;
     this.startup = setTimeout(() => {
-      if (this.state.preferences.automaticChecks) void this.check();
-    }, 10000);
+      if (this.state.preferences.automaticChecks && !this.state.checkedAt)
+        void this.check();
+    }, 60000);
     this.startup.unref?.();
     this.timer = setInterval(() => {
       if (this.state.preferences.automaticChecks) void this.check();
-    }, 2 * 3600000);
+    }, 4 * 3600000);
     this.timer.unref?.();
   }
   close() {

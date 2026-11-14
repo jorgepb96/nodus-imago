@@ -4,6 +4,7 @@ import type { UpdateStatus, UpdatePreferences } from "../../shared/updates";
 import type { Perform } from "./Properties";
 import { Button } from "./ui";
 import { useT } from "../i18n";
+import { updateStatusMessage } from "./UpdateBanner";
 export function UpdateSettings({ perform }: { perform: Perform }) {
   const t = useT(),
     [state, setState] = useState<UpdateStatus | null>(null);
@@ -70,10 +71,12 @@ export function UpdateSettings({ perform }: { perform: Perform }) {
           "Las versiones estables son el canal predeterminado. No se instalan versiones anteriores ni se instala una actualización por el simple hecho de cerrar Imago.",
         )}
       </p>
-      <div role="status">
-        {state.message}
-        {state.version && <strong> · {state.version}</strong>}
-      </div>
+      <div role="status">{updateStatusMessage(state, t)}</div>
+      {state.backupWarning && (
+        <p className="hint">
+          {t("La copia previa no pudo completarse:")} {state.backupWarning}
+        </p>
+      )}
       {state.progress !== null && <progress value={state.progress} max={100} />}
       <div className="row wrap">
         <Button
@@ -128,14 +131,14 @@ export function UpdateSettings({ perform }: { perform: Perform }) {
                 )
               }
             >
-              {t("Crear copia, instalar y reiniciar")}
+              {t("Instalar y reiniciar")}
             </Button>
           </>
         )}
       </div>
       <p className="hint">
         {t(
-          "Antes de instalar se pausan los trabajos y se crea una copia cifrada y verificada. Configura la carpeta y la contraseña en Almacenamiento y copias.",
+          "Antes de instalar se pausan los trabajos. Si las copias de seguridad están configuradas (Almacenamiento y copias), se crea antes una copia cifrada y verificada; para una beta es obligatoria.",
         )}
       </p>
     </section>

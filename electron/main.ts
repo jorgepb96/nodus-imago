@@ -167,13 +167,17 @@ app.whenReady().then(async () => {
         : path.join(app.getAppPath(), "runtime", "inference.py"),
     },
   });
-  let notified = 0;
+  let notified = 0,
+    trailing: ReturnType<typeof setTimeout> | undefined;
   worker.on("message", (message) => {
     if (message.event === "complete") {
       const abort = new AbortController();
       completionAborts.set(message.completionId, abort);
-      void providers
-        .complete(message.input, abort.signal)
+      void (
+        message.input?.embedding === true
+          ? providers.embed(message.input, abort.signal)
+          : providers.complete(message.input, abort.signal)
+      )
         .then(
           (result) =>
             worker.postMessage({
@@ -199,10 +203,16 @@ app.whenReady().then(async () => {
       return;
     }
     if (message.event === "changed") {
-      if (Date.now() - notified > 250) {
+      // At most one refresh every 250 ms, but never drop the last one: a job
+      // finishing right after another change must still reach the interface.
+      const send = () => {
         notified = Date.now();
+        trailing = undefined;
         window?.webContents.send("imago:changed");
-      }
+      };
+      const wait = 250 - (Date.now() - notified);
+      if (wait <= 0) send();
+      else trailing ??= setTimeout(send, wait);
       return;
     }
     const p = pending.get(message.id);
@@ -275,10 +285,17 @@ app.whenReady().then(async () => {
           );
       }
     },
-    prepare: async (password) => {
+    prepare: async (password, backup) => {
       await call("_beginRestore");
       updateLock = true;
-      await backups!.create(undefined, "before-update", password);
+      if (backup) await backups!.create(undefined, "before-update", password);
+    },
+    recovery: async () => {
+      const status = await backups!.status();
+      return {
+        configured: !!status.folder,
+        ready: !!status.folder && status.passwordStored,
+      };
     },
     finish: async (success) => {
       if (success) {
@@ -450,6 +467,20 @@ app.whenReady().then(async () => {
       }
       if (command === "credentialsStatus") return providers.keyStatus();
       if (command === "reloadInterface") { setTimeout(() => window?.webContents.reload(), 100); return; }
+      // Deterministic banner coverage in the unpackaged E2E profile, as in
+      // Nodus; a packaged build never reads this variable.
+      const simulated = !app.isPackaged && process.env.IMAGO_E2E_UPDATE_STATUS;
+      if (simulated && ["updateStatus", "updateCheck", "updateInstall"].includes(command)) {
+        const [status, errorCode] = simulated.split(":");
+        return {
+          ...updates!.status(),
+          status,
+          errorCode: errorCode || undefined,
+          version: "0.2.0",
+          progress: status === "downloading" ? 42 : status === "downloaded" ? 100 : null,
+          message: "",
+        };
+      }
       if (command === "updateStatus") return updates!.status();
       if (command === "updateConfigure") return updates!.configure(safe as any);
       if (command === "updateCheck") return updates!.check();
@@ -458,17 +489,8 @@ app.whenReady().then(async () => {
         return;
       }
       if (command === "updateInstall") {
-        const answer = await dialog.showMessageBox(window, {
-          type: "question",
-          title: "Instalar actualización",
-          message:
-            "Se creará una copia cifrada y verificada antes de cerrar e instalar la actualización.",
-          buttons: ["Ahora no", "Crear copia, instalar y reiniciar"],
-          defaultId: 0,
-          cancelId: 0,
-        });
-        if (answer.response === 1)
-          await updates!.install((safe as any)?.password);
+        // As in Nodus, "Instalar y reiniciar" is the confirmation itself.
+        await updates!.install((safe as any)?.password);
         return;
       }
       if (command.startsWith("backup") && command !== "backup") {

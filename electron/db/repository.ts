@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { randomUUID as uuid } from "node:crypto";
+import { createHash, randomUUID as uuid } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -11,6 +11,8 @@ import {
   isDatabaseColumnType,
   newDatabaseShortId,
   normalizeCellValue,
+  aggregateRollup,
+  type RollupFunction,
 } from "../../shared/databases";
 import type {
   DatabaseColumn,
@@ -22,7 +24,15 @@ import type {
 } from "../../shared/databases";
 import { databaseCellStorage } from "../../shared/databaseCellStorage";
 import { exportCellText } from "../../shared/databaseExport";
-import { splitMultiValue, normalizeCsvValue } from "../../shared/databaseCsv";
+import {
+  splitMultiValue,
+  normalizeCsvValue,
+  isNullMarker,
+  optionKey,
+  importedOptionColor,
+} from "../../shared/databaseCsv";
+import type { CsvImportOptions } from "../../shared/databaseCsv";
+import { recordEmbeddingText } from "../../shared/recordEmbedding";
 import { computeFormulas } from "../../shared/databaseFormulaEval";
 import type {
   ImageAsset,
@@ -73,6 +83,35 @@ export class Repository {
     )
       throw new Error("Esquema Imago incompatible.");
     this.db.exec(schema);
+    // Collections indexed before stale tracking existed gain the column.
+    if (
+      !(
+        this.db.prepare("PRAGMA table_info(record_embeddings)").all() as {
+          name: string;
+        }[]
+      ).some((c) => c.name === "stale")
+    )
+      this.db.exec(
+        "ALTER TABLE record_embeddings ADD COLUMN stale INTEGER NOT NULL DEFAULT 0",
+      );
+    // The full-text index used to be kept in step by row_id, an unindexed
+    // FTS column, so every record edit scanned the whole index (25 ms per
+    // record in a 7,000-record catalogue: minutes for a rename or a type
+    // change). It now shares search_documents' rowid; older collections are
+    // migrated once.
+    const trigger = this.db
+      .prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='search_delete'")
+      .get() as { sql: string } | undefined;
+    if (trigger && !trigger.sql.includes("rowid=old.rowid"))
+      this.db.transaction(() => {
+        this.db.exec(
+          "DROP TRIGGER search_insert; DROP TRIGGER search_delete; DROP TRIGGER search_update; DELETE FROM records_fts;",
+        );
+        this.db.exec(schema);
+        this.db.exec(
+          "INSERT INTO records_fts(rowid,row_id,database_id,body) SELECT rowid,row_id,database_id,body FROM search_documents",
+        );
+      })();
     // Interrupted work resumes at its last committed item. Cancellation remains final.
     this.db
       .prepare("UPDATE jobs SET state='queued' WHERE state='running'")
@@ -208,8 +247,11 @@ export class Repository {
           "UPDATE db_columns SET name=?,config_json=?,updated_at=? WHERE id=?",
         )
         .run(name ?? c.name, JSON.stringify(config ?? c.config), now(), id);
+      // Formulas may name the property; the search text holds values only,
+      // so a rename alone leaves it as it is. Record vectors that include the
+      // old name are refreshed as their records change.
       this.recompute(c.databaseId);
-      this.rebuildText(c.databaseId);
+      if (config) this.rebuildText(c.databaseId);
     })();
   }
   pruneEquivalences(removedColumnIds: string[]) {
@@ -241,6 +283,204 @@ export class Repository {
         )
         .run();
     })();
+  }
+  /**
+   * Convert a property to another type, as Notion's "Change type": each value
+   * is read as text and written in the new type. With `apply` false nothing
+   * changes and the result says how many values the new type cannot hold, so
+   * the interface can ask before losing them. Options are kept when moving
+   * between select, status and multi-select.
+   */
+  convertColumn(id: string, type: DatabaseColumnType, apply: boolean) {
+    const column = this.column(id);
+    const convertible = new Set<DatabaseColumnType>([
+      "text", "rich_text", "number", "date", "time", "select", "status",
+      "multi_select", "checkbox", "url", "email", "phone", "location",
+    ]);
+    if (!convertible.has(column.type) || !convertible.has(type))
+      throw new Error("Este tipo de propiedad no se puede convertir.");
+    if (column.type === type) return { total: 0, lost: 0 };
+    const ids = (
+      this.db
+        .prepare("SELECT id FROM db_rows WHERE database_id=? ORDER BY position")
+        .all(column.databaseId) as { id: string }[]
+    ).map((r) => r.id);
+    const optionTypes = (t: DatabaseColumnType) => columnTypeHasOptions(t);
+    const keepOptions = optionTypes(column.type) && optionTypes(type);
+    const labels = new Map(column.options.map((o) => [optionKey(o.label), o.id]));
+    const created: { id: string; label: string }[] = [];
+    const optionFor = (label: string) => {
+      const key = optionKey(label);
+      let found = labels.get(key);
+      if (!found) {
+        found = uuid();
+        labels.set(key, found);
+        created.push({ id: found, label: label.replace(/\s+/g, " ") });
+      }
+      return found;
+    };
+    let total = 0,
+      lost = 0;
+    const values: [string, string | null][] = [];
+    for (let i = 0; i < ids.length; i += 500)
+      for (const row of this.hydrate(ids.slice(i, i + 500))) {
+        const text = exportCellText(column, row).trim();
+        if (!text) {
+          values.push([row.id, null]);
+          continue;
+        }
+        total++;
+        let value: string | null;
+        if (optionTypes(type)) {
+          const parts =
+            type === "multi_select" ? splitMultiValue(text) : [text];
+          if (keepOptions && column.type === "multi_select" && type !== "multi_select") {
+            const selected = decodeMultiSelect(row.cells[column.id] ?? null);
+            if (selected.length > 1) lost++;
+            value = selected[0] ?? null;
+          } else if (keepOptions && type === "multi_select") {
+            value = encodeMultiSelect(
+              column.type === "multi_select"
+                ? decodeMultiSelect(row.cells[column.id] ?? null)
+                : [row.cells[column.id]!],
+            );
+          } else if (keepOptions) value = row.cells[column.id] ?? null;
+          else {
+            const ids = [...new Set(parts.filter(Boolean).map(optionFor))];
+            value = type === "multi_select" ? encodeMultiSelect(ids) : (ids[0] ?? null);
+          }
+        } else {
+          value = normalizeCsvValue(type, text);
+          if (value == null) lost++;
+        }
+        values.push([row.id, value]);
+      }
+    if (!apply) return { total, lost };
+    const at = now();
+    this.db.transaction(() => {
+      this.db
+        .prepare("UPDATE db_columns SET type=?,updated_at=? WHERE id=?")
+        .run(type, at, id);
+      if (!optionTypes(type))
+        this.db.prepare("DELETE FROM db_select_options WHERE column_id=?").run(id);
+      const insert = this.db.prepare(
+        "INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)",
+      );
+      const start = keepOptions ? column.options.length : 0;
+      if (!keepOptions && optionTypes(type))
+        this.db.prepare("DELETE FROM db_select_options WHERE column_id=?").run(id);
+      created.forEach((o, i) =>
+        insert.run(o.id, column.databaseId, id, o.label, importedOptionColor(start + i), start + i, at, at),
+      );
+      if (column.type === "rich_text")
+        this.db.prepare("DELETE FROM page_documents WHERE column_id=?").run(id);
+      for (const [rowId, value] of values) this.rawCell(rowId, id, value, type);
+      this.recompute(column.databaseId);
+      this.rebuildText(column.databaseId);
+    })();
+    return { total, lost };
+  }
+  /** Copy a property, its options and its values, right after the original. */
+  /** `copy` is the word for "copy" in the interface language. */
+  duplicateColumn(id: string, copy = "copia") {
+    const column = this.column(id);
+    if (["title", "attachment", "files", "relation", "ai_image"].includes(column.type))
+      throw new Error("Esta propiedad no se puede duplicar.");
+    const detail = this.detail(column.databaseId),
+      copyId = uuid(),
+      at = now();
+    this.db.transaction(() => {
+      this.db
+        .prepare("UPDATE db_columns SET position=position+1 WHERE database_id=? AND position>?")
+        .run(column.databaseId, column.position);
+      const names = new Set(detail.columns.map((c) => c.name));
+      let name = `${column.name} (${copy})`;
+      for (let n = 2; names.has(name); n++) name = `${column.name} (${copy} ${n})`;
+      this.db
+        .prepare("INSERT INTO db_columns VALUES(?,?,?,?,?,?,?,?)")
+        .run(copyId, column.databaseId, name, column.type, column.position + 1, JSON.stringify(column.config), at, at);
+      const map = new Map<string, string>();
+      for (const o of column.options) {
+        const optionId = uuid();
+        map.set(o.id, optionId);
+        this.db
+          .prepare("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)")
+          .run(optionId, column.databaseId, copyId, o.label, o.color, o.position, at, at);
+      }
+      const cells = this.db
+        .prepare("SELECT * FROM db_cells WHERE column_id=?")
+        .all(id) as Record<string, unknown>[];
+      const insert = this.db.prepare(
+        "INSERT INTO db_cells(row_id,column_id,value_text,value_type,value_number,value_integer,value_date,value_json,value_reference) VALUES(?,?,?,?,?,?,?,?,?)",
+      );
+      for (const cell of cells) {
+        let text = cell.value_text as string | null;
+        if (column.type === "select" || column.type === "status")
+          text = text ? (map.get(text) ?? null) : null;
+        if (column.type === "multi_select")
+          text = encodeMultiSelect(decodeMultiSelect(text).map((o) => map.get(o)!).filter(Boolean));
+        insert.run(cell.row_id, copyId, text, cell.value_type, cell.value_number, cell.value_integer, cell.value_date, cell.value_json, cell.value_reference);
+      }
+      if (column.type === "rich_text")
+        this.db
+          .prepare(
+            "INSERT INTO page_documents(row_id,column_id,format,source_markdown,imported_markdown,tree_json) SELECT row_id,?,format,source_markdown,imported_markdown,tree_json FROM page_documents WHERE column_id=?",
+          )
+          .run(copyId, id);
+      this.recompute(column.databaseId);
+      this.rebuildText(column.databaseId);
+    })();
+    return this.column(copyId);
+  }
+  /**
+   * A column summary for the table footer (Notion's "Calculate"), over every
+   * record that matches the current search and filters, not only the page.
+   */
+  columnSummary(input: SearchInput, columnId: string, fn: RollupFunction, selected?: string[]) {
+    const column = this.column(columnId);
+    // `selected` comes from a semantic search; otherwise the filters decide.
+    const ids =
+      selected ??
+      this.literalIds({ ...input, databaseIds: [column.databaseId], sorts: undefined, sortColumn: undefined });
+    const values: (string | null)[] = [];
+    for (let i = 0; i < ids.length; i += 500)
+      for (const row of this.hydrate(ids.slice(i, i + 500))) {
+        const raw = row.cells[column.id] ?? null;
+        values.push(
+          ["number", "date", "checkbox"].includes(column.type)
+            ? raw
+            : exportCellText(column, row) || null,
+        );
+      }
+    // Multi-select counts its labels as one value per record; unique counts labels.
+    if (fn === "count_unique" && column.type === "multi_select")
+      return {
+        value: String(new Set(values.flatMap((v) => (v ? v.split(", ") : []))).size),
+        records: ids.length,
+      };
+    return { value: aggregateRollup(fn, values), records: ids.length };
+  }
+  /** New property order for a database: exactly its columns, each once. */
+  reorderColumns(databaseId: string, columnIds: string[]) {
+    const current = this.detail(databaseId).columns.map((c) => c.id);
+    if (
+      columnIds.length !== current.length ||
+      new Set(columnIds).size !== columnIds.length ||
+      columnIds.some((id) => !current.includes(id))
+    )
+      throw new Error(
+        "El nuevo orden debe incluir cada propiedad de la base una sola vez.",
+      );
+    const at = now(),
+      update = this.db.prepare(
+        "UPDATE db_columns SET position=?,updated_at=? WHERE id=? AND database_id=?",
+      );
+    this.db.transaction(() =>
+      columnIds.forEach((id, position) =>
+        update.run(position, at, id, databaseId),
+      ),
+    )();
+    return this.detail(databaseId);
   }
   saveOptions(
     columnId: string,
@@ -349,6 +589,16 @@ export class Repository {
     })();
     return ids;
   }
+  private statements = new Map<string, Database.Statement>();
+  /** Prepared once per connection: rawCell runs for every cell of an import. */
+  private statement(sql: string) {
+    let prepared = this.statements.get(sql);
+    if (!prepared) {
+      prepared = this.db.prepare(sql);
+      this.statements.set(sql, prepared);
+    }
+    return prepared;
+  }
   rawCell(
     rowId: string,
     columnId: string,
@@ -357,44 +607,41 @@ export class Repository {
   ) {
     if (type === "rich_text") {
       if (value == null)
-        this.db
-          .prepare("DELETE FROM page_documents WHERE row_id=? AND column_id=?")
-          .run(rowId, columnId);
+        this.statement(
+          "DELETE FROM page_documents WHERE row_id=? AND column_id=?",
+        ).run(rowId, columnId);
       else
-        this.db
-          .prepare(
-            "INSERT INTO page_documents(row_id,column_id,format,source_markdown,tree_json) VALUES(?,?,?,?,?) ON CONFLICT(row_id,column_id) DO UPDATE SET source_markdown=excluded.source_markdown,tree_json=excluded.tree_json",
-          )
-          .run(
-            rowId,
-            columnId,
-            "imago.blocks/1",
-            value,
-            JSON.stringify(markdownBlocks(value)),
-          );
-    }
-    if (value == null)
-      this.db
-        .prepare("DELETE FROM db_cells WHERE row_id=? AND column_id=?")
-        .run(rowId, columnId);
-    else {
-      const v = databaseCellStorage(type, value);
-      this.db
-        .prepare(
-          `INSERT INTO db_cells(row_id,column_id,value_text,value_type,value_number,value_integer,value_date,value_json,value_reference) VALUES(?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(row_id,column_id) DO UPDATE SET value_text=excluded.value_text,value_type=excluded.value_type,value_number=excluded.value_number,value_integer=excluded.value_integer,value_date=excluded.value_date,value_json=excluded.value_json,value_reference=excluded.value_reference`,
-        )
-        .run(
+        this.statement(
+          "INSERT INTO page_documents(row_id,column_id,format,source_markdown,tree_json) VALUES(?,?,?,?,?) ON CONFLICT(row_id,column_id) DO UPDATE SET source_markdown=excluded.source_markdown,tree_json=excluded.tree_json",
+        ).run(
           rowId,
           columnId,
-          v.value_text,
-          v.value_type,
-          v.value_number,
-          v.value_integer,
-          v.value_date,
-          v.value_json,
-          v.value_reference,
+          "imago.blocks/1",
+          value,
+          JSON.stringify(markdownBlocks(value)),
         );
+    }
+    if (value == null)
+      this.statement("DELETE FROM db_cells WHERE row_id=? AND column_id=?").run(
+        rowId,
+        columnId,
+      );
+    else {
+      const v = databaseCellStorage(type, value);
+      this.statement(
+        `INSERT INTO db_cells(row_id,column_id,value_text,value_type,value_number,value_integer,value_date,value_json,value_reference) VALUES(?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(row_id,column_id) DO UPDATE SET value_text=excluded.value_text,value_type=excluded.value_type,value_number=excluded.value_number,value_integer=excluded.value_integer,value_date=excluded.value_date,value_json=excluded.value_json,value_reference=excluded.value_reference`,
+      ).run(
+        rowId,
+        columnId,
+        v.value_text,
+        v.value_type,
+        v.value_number,
+        v.value_integer,
+        v.value_date,
+        v.value_json,
+        v.value_reference,
+      );
     }
   }
   setCell(rowId: string, columnId: string, raw: string | null, history = true) {
@@ -562,12 +809,16 @@ export class Repository {
         "SELECT id,database_id,type,config_json FROM db_columns WHERE type IN ('unique_id','created_time','last_edited_time')",
       )
       .all() as any[];
+    // Grouped once: filtering every cell for every record was quadratic.
+    const cellsByRow = new Map<string, Record<string, string | null>>(),
+      assetsByRow = new Map<string, any[]>();
+    for (const c of cells)
+      (cellsByRow.get(c.row_id) ??
+        cellsByRow.set(c.row_id, {}).get(c.row_id)!)[c.column_id] = c.value_text;
+    for (const a of assets)
+      (assetsByRow.get(a.rowId) ?? assetsByRow.set(a.rowId, []).get(a.rowId)!).push(a);
     for (const row of rows) {
-      row.cells = Object.fromEntries(
-        cells
-          .filter((c) => c.row_id === row.id)
-          .map((c) => [c.column_id, c.value_text]),
-      );
+      row.cells = cellsByRow.get(row.id) ?? {};
       for (const column of systemColumns.filter(
         (c) => c.database_id === row.databaseId,
       ))
@@ -577,8 +828,7 @@ export class Repository {
             : column.type === "created_time"
               ? row.createdAt
               : row.updatedAt;
-      row.images = assets
-        .filter((a) => a.rowId === row.id)
+      row.images = (assetsByRow.get(row.id) ?? [])
         .map((a) => {
           const metadata = parse(a.metadata_json);
           return {
@@ -636,11 +886,16 @@ export class Repository {
         ),
       )
       .join("\n");
-    this.db
-      .prepare(
-        "INSERT INTO search_documents VALUES(?,?,?) ON CONFLICT(row_id) DO UPDATE SET body=excluded.body,database_id=excluded.database_id",
-      )
-      .run(id, row.databaseId, body);
+    this.statement(
+      "INSERT INTO search_documents VALUES(?,?,?) ON CONFLICT(row_id) DO UPDATE SET body=excluded.body,database_id=excluded.database_id WHERE body IS NOT excluded.body OR database_id IS NOT excluded.database_id",
+    ).run(id, row.databaseId, body);
+    // A text vector that no longer describes the record keeps serving searches
+    // but is marked for the next indexing pass (manual or automatic).
+    // Undoing an edit makes the old vector current again.
+    const hash = recordTextHash(recordEmbeddingText(columns, row));
+    this.statement(
+      "UPDATE record_embeddings SET stale=(text_hash<>?) WHERE row_id=? AND stale<>(text_hash<>?)",
+    ).run(hash, id, hash);
   }
   rebuildText(databaseId?: string) {
     return this.db.transaction(() => {
@@ -689,7 +944,8 @@ export class Repository {
         .run();
     })();
   }
-  literal(input: SearchInput, candidates?: string[]): Page {
+  /** SQL shared by the paged literal search and the id-only lanes of semantic search. */
+  private literalQuery(input: SearchInput, candidates?: string[]) {
     const where: string[] = [],
       params: unknown[] = [];
     const scope = input.databaseIds;
@@ -697,9 +953,9 @@ export class Repository {
       where.push(`r.database_id IN (${marks(scope)})`);
       params.push(...scope);
     }
-    if (scope && !scope.length) return { rows: [], total: 0 };
+    if (scope && !scope.length) return null;
     if (candidates) {
-      if (!candidates.length) return { rows: [], total: 0 };
+      if (!candidates.length) return null;
       where.push("r.id IN (SELECT value FROM json_each(?))");
       params.push(JSON.stringify(candidates));
     }
@@ -713,11 +969,8 @@ export class Repository {
         );
         params.push("%" + query.replace(/[\\%_]/g, "\\$&") + "%");
       } else {
-        const quote = (s: string) => '"' + s.replace(/"/g, '""') + '"';
-        const fts =
-          input.match === "phrase"
-            ? quote(query)
-            : query.split(/\s+/).map(quote).join(" AND ");
+        const fts = ftsExpression(query, input.match ?? "words");
+        if (!fts) return null;
         join = "JOIN records_fts ON records_fts.row_id=r.id";
         where.push("records_fts MATCH ?");
         params.push(fts);
@@ -742,30 +995,41 @@ export class Repository {
           ]
         : [];
     if (sorts.length) order = compileViewSorts(sorts, (id) => this.column(id));
-    const orderParams = params;
     const sql = `FROM db_rows r ${join} ${where.length ? "WHERE " + where.join(" AND ") : ""}`;
+    return { sql, params, order };
+  }
+  /** Every matching record id, in result order, without loading the records. */
+  literalIds(input: SearchInput, candidates?: string[]): string[] {
+    const built = this.literalQuery(input, candidates);
+    if (!built) return [];
+    return (
+      this.db
+        .prepare(`SELECT r.id ${built.sql} ORDER BY ${built.order}`)
+        .all(...built.params) as { id: string }[]
+    ).map((r) => r.id);
+  }
+  literal(input: SearchInput, candidates?: string[]): Page {
+    const built = this.literalQuery(input, candidates);
+    if (!built) return { rows: [], total: 0 };
+    const { sql, params, order } = built;
+    const query = input.query?.trim();
     const total = (
       this.db.prepare(`SELECT count(*) n ${sql}`).get(...params) as any
     ).n;
     const found = this.db
       .prepare(`SELECT r.id ${sql} ORDER BY ${order} LIMIT ? OFFSET ?`)
-      .all(...orderParams, input.limit ?? 100, input.offset ?? 0) as {
+      .all(...params, input.limit ?? 100, input.offset ?? 0) as {
       id: string;
     }[];
     const rows = this.hydrate(found.map((r) => r.id));
-    for (const row of rows) {
-      if (query) {
+    if (query) {
+      const snippetBody = this.db.prepare(
+        "SELECT body FROM search_documents WHERE row_id=?",
+      );
+      for (const row of rows) {
         const body =
-          (
-            this.db
-              .prepare("SELECT body FROM search_documents WHERE row_id=?")
-              .get(row.id) as any
-          )?.body ?? "";
-        const start = Math.max(
-          0,
-          body.toLowerCase().indexOf(query.toLowerCase()) - 35,
-        );
-        row.snippet = body.slice(start, start + 200);
+          (snippetBody.get(row.id) as { body: string } | undefined)?.body ?? "";
+        row.snippet = snippetAround(body, query);
       }
     }
     return { rows, total };
@@ -827,6 +1091,7 @@ export class Repository {
     headers: string[],
     types: DatabaseColumnType[],
     rows: string[][],
+    options: CsvImportOptions = {},
   ) {
     if (
       headers.length !== types.length ||
@@ -834,13 +1099,16 @@ export class Repository {
       types.filter((t) => t === "title").length !== 1
     )
       throw new Error("Selecciona exactamente una columna de título.");
+    const empty = (raw: string) =>
+      options.nullMarkersAsEmpty === true && isNullMarker(raw);
     // Never silently drop values when the user overrides detection.
     for (const row of rows)
       for (let i = 0; i < types.length; i++)
         if (
           row[i]?.trim() &&
           ["number", "date", "time", "checkbox"].includes(types[i]) &&
-          normalizeCsvValue(types[i], row[i]) == null
+          normalizeCsvValue(types[i], row[i]) == null &&
+          !isNullMarker(row[i])
         )
           throw new Error(
             `«${row[i]}» no se puede importar como ${types[i]} en «${headers[i]}».`,
@@ -854,8 +1122,11 @@ export class Repository {
       for (const c of columns.filter((c) => columnTypeHasOptions(c.type)))
         maps.set(c.id, new Map());
       const rowInsert = this.db.prepare(
-        "INSERT INTO db_rows VALUES(?,?,?,?,?)",
-      );
+          "INSERT INTO db_rows VALUES(?,?,?,?,?)",
+        ),
+        optionInsert = this.db.prepare(
+          "INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)",
+        );
       for (let position = 0; position < rows.length; position++) {
         const values = rows[position],
           rowId = uuid(),
@@ -865,42 +1136,43 @@ export class Repository {
           const c = columns[i],
             raw = values[i] ?? "";
           let value: string | null;
-          if (columnTypeHasOptions(c.type)) {
-            const labels =
+          if (empty(raw)) value = null;
+          else if (columnTypeHasOptions(c.type)) {
+            const labels = (
               c.type === "multi_select"
                 ? splitMultiValue(raw)
                 : raw.trim()
                   ? [raw.trim()]
-                  : [];
+                  : []
+            ).filter(
+              (label) => !options.nullMarkersAsEmpty || !isNullMarker(label),
+            );
             const map = maps.get(c.id)!;
-            const options = labels.map((label) => {
-              const key = label.normalize("NFKC").trim().toLowerCase();
+            const ids = labels.map((label) => {
+              const key = optionKey(label);
               if (!map.has(key)) {
                 const id = uuid();
                 map.set(key, id);
-                this.db
-                  .prepare(
-                    "INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)",
-                  )
-                  .run(
-                    id,
-                    c.databaseId,
-                    c.id,
-                    label,
-                    "#6366f1",
-                    map.size - 1,
-                    at,
-                    at,
-                  );
+                optionInsert.run(
+                  id,
+                  c.databaseId,
+                  c.id,
+                  label.replace(/\s+/g, " "),
+                  importedOptionColor(map.size - 1),
+                  map.size - 1,
+                  at,
+                  at,
+                );
               }
               return map.get(key)!;
             });
             value =
               c.type === "multi_select"
-                ? encodeMultiSelect([...new Set(options)])
-                : (options[0] ?? null);
+                ? encodeMultiSelect([...new Set(ids)])
+                : (ids[0] ?? null);
           } else value = normalizeCsvValue(c.type, raw);
-          this.rawCell(rowId, c.id, value, c.type);
+          // A new row has no cell to clear.
+          if (value !== null) this.rawCell(rowId, c.id, value, c.type);
         }
       }
       this.rebuildText(detail.database.id);
@@ -1164,4 +1436,63 @@ export class Repository {
       indexed: count("embeddings"),
     };
   }
+}
+export function recordTextHash(text: string) {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+const fold = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+/** Words that carry no meaning on their own in a Spanish, English or French query. */
+const STOPWORDS = new Set(
+  (
+    "a al ante bajo con contra de del desde durante en entre hacia hasta mediante para por segun sin so sobre tras " +
+    "el la los las lo un una unos unas y e o u ni que como cual cuando donde se su sus mas muy ya es son esta este " +
+    "esto estos estas ese esa eso hay le les me mi nos the of and or in on at to for with from by an is are this that " +
+    "le la les des du et ou un une en dans sur avec pour par"
+  ).split(" "),
+);
+/**
+ * FTS5 expression for a query. "words" requires every word, "phrase" the
+ * exact sequence, and "any" accepts any significant word with a light
+ * plural-insensitive prefix (nazarenos → nazareno*), ranked by BM25.
+ */
+export function ftsExpression(
+  query: string,
+  match: "words" | "phrase" | "any" | "partial",
+): string {
+  const quote = (s: string) => '"' + s.replace(/"/g, '""') + '"';
+  if (match === "phrase") return quote(query);
+  const words = query.split(/\s+/).filter(Boolean);
+  if (match !== "any") return words.map(quote).join(" AND ");
+  const terms = new Set<string>();
+  for (const word of words) {
+    const clean = fold(word).replace(/[^\p{L}\p{N}]+/gu, "");
+    if (clean.length < 2 || STOPWORDS.has(clean)) continue;
+    const stem =
+      clean.length >= 6 && clean.endsWith("es")
+        ? clean.slice(0, -2)
+        : clean.length >= 4 && clean.endsWith("s")
+          ? clean.slice(0, -1)
+          : clean;
+    terms.add(quote(stem) + (stem.length >= 3 ? "*" : ""));
+  }
+  return [...terms].join(" OR ");
+}
+/** A short excerpt around the first query word found in the text. */
+export function snippetAround(body: string, query: string): string {
+  const folded = fold(body);
+  let at = folded.indexOf(fold(query));
+  if (at < 0)
+    for (const word of query.split(/\s+/)) {
+      const w = fold(word).replace(/[^\p{L}\p{N}]+/gu, "");
+      if (w.length < 3 || STOPWORDS.has(w)) continue;
+      at = folded.indexOf(w.length > 5 ? w.slice(0, -1) : w);
+      if (at >= 0) break;
+    }
+  const start = Math.max(0, at - 35);
+  return body.slice(start, start + 200);
 }

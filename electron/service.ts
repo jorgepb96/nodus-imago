@@ -24,7 +24,28 @@ import { buildXlsx } from "./export/xlsx";
 import { writeBackup, restoreBackup, verifyBackup } from "./export/backup";
 import { importNodus } from "./import/nodus";
 import { importNotion } from "./import/notion";
-import type { CompletionRequest } from "./ai/apiProviders";
+import type { CompletionRequest, EmbeddingRequest } from "./ai/apiProviders";
+import { embeddingApiMultimodal } from "../shared/embeddingApi";
+import { AutoIndexer } from "./autoIndex";
+import { Statistics } from "./db/statistics";
+import type { SearchInput } from "../shared/imago";
+
+/** Statistics and the timeline describe one database at a time. */
+function singleDatabase(search: SearchInput): string {
+  if (search.databaseIds?.length !== 1)
+    throw new Error("Elige una sola base de datos.");
+  return search.databaseIds[0];
+}
+
+/** Commands that change what records say or which images they hold. */
+const CONTENT_WRITES = new Set([
+  "createRow", "createRows", "setCell", "deleteRows", "csvImport", "importImages",
+  "notionImport", "nodusImport", "restore", "_restoreBackup", "reviewProposals",
+  "undo", "addColumn", "updateColumn", "deleteColumn", "saveOptions", "deleteImage",
+  "convertColumn", "duplicateColumn", "reorderColumns",
+  "deleteImages", "reassignImage", "reassignImages", "relinkImage", "setPrimary",
+  "automationRun", "renameDatabase", "rebuildText",
+]);
 import { AgreementResearch } from "./research/agreement";
 
 import { Automations } from "./automations";
@@ -37,29 +58,52 @@ export class Service {
   automations: Automations;
   research: AgreementResearch;
   repo: Repository;
+  statistics: Statistics;
   images: Images;
   models: Models;
   host: InferenceHost;
   engine: Engine;
   queue: JobQueue;
+  autoIndex: AutoIndexer;
   csvPlans = new Map<string, ReturnType<typeof buildCsvImportPlan>>();
   queryImages = new Map<string, string>();
   private derivedImages = new Map<string, Promise<string>>();
+  /** Every record a view selects: its filters and its search box. */
+  private selected(search: SearchInput) {
+    return this.engine.matchIds({
+      ...search,
+      offset: undefined,
+      limit: undefined,
+      sorts: undefined,
+      sortColumn: undefined,
+    });
+  }
   constructor(
     root: string,
     script: string,
     public changed: () => void,
-    complete?: (
-      input: CompletionRequest,
+    remote?: (
+      input: CompletionRequest | EmbeddingRequest,
       signal: AbortSignal,
-    ) => Promise<string>,
+    ) => Promise<unknown>,
   ) {
     this.repo = new Repository(root);
+    this.statistics = new Statistics(this.repo);
     this.research = new AgreementResearch(this.repo);
     this.images = new Images(this.repo);
     this.models = new Models(this.repo);
     this.host = new InferenceHost(this.repo, script);
-    this.engine = new Engine(this.repo, this.models, this.host, complete);
+    this.engine = new Engine(
+      this.repo,
+      this.models,
+      this.host,
+      remote as
+        | ((input: CompletionRequest, signal: AbortSignal) => Promise<string>)
+        | undefined,
+    );
+    if (remote)
+      this.engine.remoteEmbed = (input, signal) =>
+        remote(input, signal) as Promise<number[][]>;
     this.queue = new JobQueue(
       this.repo,
       this.images,
@@ -78,11 +122,15 @@ export class Service {
           detailed: false,
         }),
       () => {
+        this.autoIndex.touch();
         this.queue.pump();
         changed();
       },
     );
     this.automations.start();
+    this.autoIndex = new AutoIndexer(this.repo, this.engine, this.queue);
+    this.autoIndex.suspended = () => this.restoring || this.closing;
+    this.autoIndex.start();
     this.queue.pump();
   }
   private unfinishedJobs() {
@@ -91,8 +139,30 @@ export class Service {
       .some((job) => ["queued", "running", "paused"].includes(job.state));
   }
   async run(command: string, input: any = undefined): Promise<any> {
-    if (this.closing && !["_close", "_cancelBackup"].includes(command)) throw Error("Imago se está cerrando.");
-    if (this.restoring && !["status","jobs","listDatabases","detail","getRow","_asset","_settings","_close","_cancelBackup","_writeBackup","_verifyBackup","_restoreBackup","_endRestore"].includes(command)) throw Error("Espera a que termine la restauración; no se han modificado los datos.");
+    if (this.closing && !["_close", "_cancelBackup"].includes(command))
+      throw Error("Imago se está cerrando.");
+    if (CONTENT_WRITES.has(command)) this.autoIndex.touch();
+    if (
+      this.restoring &&
+      ![
+        "status",
+        "jobs",
+        "listDatabases",
+        "detail",
+        "getRow",
+        "_asset",
+        "_settings",
+        "_close",
+        "_cancelBackup",
+        "_writeBackup",
+        "_verifyBackup",
+        "_restoreBackup",
+        "_endRestore",
+      ].includes(command)
+    )
+      throw Error(
+        "Espera a que termine la restauración; no se han modificado los datos.",
+      );
     switch (command) {
       case "automationList":
         return this.automations.list(input.databaseId);
@@ -104,6 +174,31 @@ export class Service {
         return this.automations.delete(input.id);
       case "automationRun":
         return this.automations.run(input.id);
+      case "embeddingApiProbe": {
+        // One short text, sent only after the user presses the button; the
+        // returned size tells the user which dimensions the model really gives.
+        const settings = this.repo.getSettings(),
+          started = Date.now();
+        const [vector] = await this.engine.remoteEmbed(
+          {
+            embedding: true,
+            provider: input.provider,
+            model: input.model.trim(),
+            dimensions: input.dimensions,
+            profiles: settings.apiProfiles,
+            remoteEnabled: settings.remoteEnabled,
+            inputs: [
+              { text: "Fotografía histórica de una plaza", role: "query" },
+            ],
+          },
+          new AbortController().signal,
+        );
+        return {
+          dimensions: vector.length,
+          multimodal: embeddingApiMultimodal(input),
+          ms: Date.now() - started,
+        };
+      }
       case "inferenceDiagnostics":
         return {
           backend: this.repo.getSettings().embeddingModel,
@@ -148,6 +243,22 @@ export class Service {
               )
               .get(this.engine.contract()) as any
           ).n,
+          textIndexed: (
+            this.repo.db
+              .prepare(
+                "SELECT count(*) n FROM record_embeddings WHERE contract=?",
+              )
+              .get(this.engine.textContract()) as { n: number }
+          ).n,
+          autoIndex: this.autoIndex.state(),
+          semanticReady: (() => {
+            try {
+              this.engine.ready(this.repo.getSettings().embeddingModel);
+              return true;
+            } catch {
+              return false;
+            }
+          })(),
           platform: process.platform + " " + process.arch,
           memoryGB: Math.round(os.totalmem() / 2 ** 30),
           parallelCapacity: this.queue.concurrency(),
@@ -208,6 +319,37 @@ export class Service {
         return this.repo.updateColumn(input.id, input.name, input.config);
       case "deleteColumn":
         return this.repo.deleteColumn(input.id);
+      case "convertColumn":
+        return this.repo.convertColumn(input.id, input.type, input.apply);
+      case "duplicateColumn":
+        return this.repo.duplicateColumn(input.id, input.copy);
+      case "statisticsList":
+        return this.statistics.list(input.databaseId);
+      case "statisticSave":
+        return this.statistics.save(input);
+      case "statisticDelete":
+        return this.statistics.delete(input.id);
+      case "statisticCompute": {
+        const databaseId = singleDatabase(input.search);
+        return this.statistics.compute(databaseId, await this.selected(input.search), input.spec);
+      }
+      case "timelineCandidates":
+        return this.statistics.yearCandidates(input.databaseId);
+      case "timeline": {
+        const databaseId = singleDatabase(input.search);
+        return this.statistics.timeline(databaseId, await this.selected(input.search), input.columnId);
+      }
+      case "columnSummary":
+        return this.repo.columnSummary(
+          input.search,
+          input.columnId,
+          input.fn,
+          input.search.mode && input.search.mode !== "literal"
+            ? await this.selected(input.search)
+            : undefined,
+        );
+      case "reorderColumns":
+        return this.repo.reorderColumns(input.databaseId, input.columnIds);
       case "saveOptions":
         return this.repo.saveOptions(input.columnId, input.options);
       case "createRow":
@@ -265,6 +407,7 @@ export class Service {
           input.headers,
           input.types,
           p.rows,
+          { nullMarkersAsEmpty: input.nullMarkersAsEmpty === true },
         );
         this.csvPlans.delete(input.token);
         return d;
@@ -404,30 +547,76 @@ export class Service {
         this.backupAbort?.abort();
         return;
       case "_beginRestore":
-        if(this.storageTask)throw Error("Ya hay una operación de copias en curso.");
-        this.restoring=true;this.automations.close();this.queue.pauseAll();await this.queue.task;return;
+        if (this.storageTask)
+          throw Error("Ya hay una operación de copias en curso.");
+        this.restoring = true;
+        this.automations.close();
+        this.queue.pauseAll();
+        await this.queue.task;
+        return;
       case "_endRestore":
-        this.restoring=false;if(!this.closing && !this.automations.timer)this.automations.start();return;
+        this.restoring = false;
+        if (!this.closing && !this.automations.timer) this.automations.start();
+        return;
       case "_verifyBackup": {
-        if (this.storageTask) throw Error("Ya hay una operación de copias en curso.");
-        const task=verifyBackup(this.repo,input.file);this.storageTask=task;
-        try{return await task;}finally{this.storageTask=null;}
+        if (this.storageTask)
+          throw Error("Ya hay una operación de copias en curso.");
+        const task = verifyBackup(this.repo, input.file);
+        this.storageTask = task;
+        try {
+          return await task;
+        } finally {
+          this.storageTask = null;
+        }
       }
       case "backup":
       case "_writeBackup": {
-        if (this.storageTask) throw Error("Ya hay una operación de copias en curso.");
-        this.backupAbort=new AbortController();const task=writeBackup(this.repo,input.file,{application:input.application,signal:this.backupAbort.signal});this.storageTask=task;
-        try{await task;return true;}finally{this.storageTask=null;this.backupAbort=null;}
+        if (this.storageTask)
+          throw Error("Ya hay una operación de copias en curso.");
+        this.backupAbort = new AbortController();
+        const task = writeBackup(this.repo, input.file, {
+          application: input.application,
+          signal: this.backupAbort.signal,
+        });
+        this.storageTask = task;
+        try {
+          await task;
+          return true;
+        } finally {
+          this.storageTask = null;
+          this.backupAbort = null;
+        }
       }
       case "_restoreBackup": {
-        if(this.storageTask)throw Error("Ya hay una operación de copias en curso.");
-        const ownLock=!this.restoring;this.restoring=true;this.automations.close();this.queue.pauseAll();
-        const task=(async()=>{await this.queue.task;return restoreBackup(this.repo,input.file,{replace:input.replace});})();this.storageTask=task;
-        try{return await task;}finally{this.storageTask=null;if(ownLock){this.restoring=false;if(!this.closing)this.automations.start();}}
+        if (this.storageTask)
+          throw Error("Ya hay una operación de copias en curso.");
+        const ownLock = !this.restoring;
+        this.restoring = true;
+        this.automations.close();
+        this.queue.pauseAll();
+        const task = (async () => {
+          await this.queue.task;
+          return restoreBackup(this.repo, input.file, {
+            replace: input.replace,
+          });
+        })();
+        this.storageTask = task;
+        try {
+          return await task;
+        } finally {
+          this.storageTask = null;
+          if (ownLock) {
+            this.restoring = false;
+            if (!this.closing) this.automations.start();
+          }
+        }
       }
       case "restore":
-        if(this.repo.stats().databases || this.unfinishedJobs()) throw Error("Restaura en una instalación vacía y sin trabajos activos para preservar todos los identificadores. Exporta primero tus datos actuales.");
-        return this.run("_restoreBackup",{file:input.file,replace:false});
+        if (this.repo.stats().databases || this.unfinishedJobs())
+          throw Error(
+            "Restaura en una instalación vacía y sin trabajos activos para preservar todos los identificadores. Exporta primero tus datos actuales.",
+          );
+        return this.run("_restoreBackup", { file: input.file, replace: false });
       case "notionImport":
         return importNotion(this.repo, this.images, input.file);
       case "nodusImport":
@@ -621,11 +810,12 @@ export class Service {
       case "_modelInfo":
         return this.models.get(input.id);
       case "_close":
-        if(this.closing)return;
-        this.closing=true;
+        if (this.closing) return;
+        this.closing = true;
+        this.autoIndex.stop();
         this.automations.close();
         this.backupAbort?.abort();
-        await this.storageTask?.catch(()=>{});
+        await this.storageTask?.catch(() => {});
         await this.queue.close();
         this.engine.close();
         this.repo.close();

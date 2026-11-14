@@ -1,5 +1,6 @@
 import type { DatabaseColumn } from "./databases";
 import type { PropertyFilter, PropertyFilterGroup } from "./imago";
+import { isNullMarker } from "./databaseCsv";
 
 /** Statistical contract v1. One database row is one sampling unit. No AI calls. */
 export type AgreementConfig = {
@@ -8,6 +9,9 @@ export type AgreementConfig = {
   mode: "nominal" | "multilabel";
   delimiter: string;
   ignoreCase: boolean;
+  /** Read placeholders such as "-", "s.d." or "n/a" as a missing judgment, not a category.
+   * Absent in experiments saved before the option existed, which keep reading them as labels. */
+  placeholdersMissing?: boolean;
   emptySetValid: boolean;
   imagesOnly: boolean;
   cohort: "pairwise" | "complete";
@@ -145,6 +149,7 @@ export const defaultAgreementConfig = (): AgreementConfig => ({
   mode: "nominal",
   delimiter: ";",
   ignoreCase: true,
+  placeholdersMissing: true,
   emptySetValid: false,
   imagesOnly: false,
   cohort: "pairwise",
@@ -224,6 +229,7 @@ function judgmentReader(
     values = [
       ...new Set(
         values
+          .filter((v) => !config.placeholdersMissing || !isNullMarker(v))
           .map(norm)
           .filter(Boolean)
           .map((v) => aliases.get(v) ?? v),

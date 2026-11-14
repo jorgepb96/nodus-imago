@@ -21,6 +21,10 @@ import type {
   ModelPreparationStep,
 } from "../../shared/modelPreparation";
 import { embeddingDimensions } from "../../shared/embeddingBackends";
+import {
+  API_EMBEDDING_ID,
+  DEFAULT_EMBEDDING_API,
+} from "../../shared/embeddingApi";
 
 export type CatalogModel = {
   id: string;
@@ -71,6 +75,7 @@ export class Models {
   }
   available(id: string) {
     const target = `${process.platform}-${process.arch}`;
+    if (id === API_EMBEDDING_ID) return true;
     return (
       [
         "darwin-arm64",
@@ -83,6 +88,8 @@ export class Models {
   }
   requirementIds() {
     const id = this.repo.getSettings().embeddingModel;
+    // An API model needs nothing downloaded; LFM3 captions stay optional.
+    if (id === API_EMBEDDING_ID) return [];
     return id === HARRIER_ID
       ? ["llama-runtime", "lfm3-vl-2b", HARRIER_ID]
       : [id];
@@ -122,21 +129,23 @@ export class Models {
         settings.embeddingModel !== "embeddinggemma2" &&
         requirements.length === this.requirementIds().length &&
         requirements.every((m) => m.verified),
-      activeDimensions: embeddingDimensions(
-        settings.embeddingModel,
-        settings.dimensions,
-      ),
+      activeDimensions:
+        settings.embeddingModel === API_EMBEDDING_ID
+          ? (settings.embeddingApi ?? DEFAULT_EMBEDDING_API).dimensions
+          : embeddingDimensions(settings.embeddingModel, settings.dimensions),
       priorVectors: (
         this.repo.db
           .prepare("SELECT count(*) n FROM embeddings WHERE contract<>?")
           .get(activeContract) as { n: number }
       ).n,
       runtime:
-        settings.embeddingModel === ONNX_ID
-          ? "onnx-cpu"
-          : settings.embeddingModel === HARRIER_ID
-            ? "llama-cpu"
-            : "python-experimental",
+        settings.embeddingModel === API_EMBEDDING_ID
+          ? "api"
+          : settings.embeddingModel === ONNX_ID
+            ? "onnx-cpu"
+            : settings.embeddingModel === HARRIER_ID
+              ? "llama-cpu"
+              : "python-experimental",
     };
   }
   async enqueuePreparation(activeContract: string) {

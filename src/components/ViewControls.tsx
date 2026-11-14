@@ -765,6 +765,7 @@ export function ViewControls({
   onSorts,
   equivalences = [],
   deferred = false,
+  openRequest = 0,
 }: {
   details: DatabaseDetail[];
   filters: PropertyFilter[];
@@ -779,11 +780,18 @@ export function ViewControls({
   onSorts: (sorts: ViewSort[]) => void;
   equivalences?: EquivalenceGroup[];
   deferred?: boolean;
+  /** Bumped by the column menu's "Filter" to open the panel on the filters. */
+  openRequest?: number;
 }) {
   const t = useT(),
     anchor = useRef<HTMLButtonElement>(null),
     [open, setOpen] = useState(false),
     [tab, setTab] = useState<"filters" | "sorts">("filters");
+  useEffect(() => {
+    if (!openRequest) return;
+    setTab("filters");
+    setOpen(true);
+  }, [openRequest]);
   const columns: FilterColumn[] = [
     ...details.flatMap((detail) =>
       detail.columns.map((column) => ({

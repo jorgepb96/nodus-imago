@@ -52,19 +52,72 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: npm run test:desktop:all
-      - name: Build with required signing (never unsigned fallback)
+      # Same secrets, names and method as Nodus Research (release-build.yml):
+      # Developer ID .p12 imported into an isolated keychain, notarization with
+      # an App Store Connect API key. Windows builds unsigned unless a
+      # certificate is provided, as in Nodus.
+      - name: Import macOS signing certificate and notary key
+        if: runner.os == 'macOS'
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          for name in MACOS_CERTIFICATE_BASE64 MACOS_CERTIFICATE_PASSWORD APPLE_API_KEY_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Required macOS release secret is not configured: $name"
+              exit 1
+            fi
+          done
+          certificate_path="$RUNNER_TEMP/imago-signing-certificate.p12"
+          api_key_path="$RUNNER_TEMP/imago-notary-api-key.p8"
+          keychain_path="$RUNNER_TEMP/imago-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          echo "::add-mask::$keychain_password"
+          printf '%s' "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$api_key_path"
+          chmod 600 "$certificate_path" "$api_key_path"
+          openssl pkey -in "$api_key_path" -noout
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -k "$keychain_path" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain_path" >/dev/null
+          search_keychains=("$keychain_path")
+          while IFS= read -r existing; do
+            if [[ -n "$existing" && "$existing" != "$keychain_path" ]]; then search_keychains+=("$existing"); fi
+          done < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"([^"]+)".*/\1/')
+          security list-keychains -d user -s "${search_keychains[@]}"
+          identities="$(security find-identity -v -p codesigning "$keychain_path")"
+          if [[ "$identities" != *'"Developer ID Application:'* ]]; then
+            echo "::error::The imported .p12 does not contain a valid Developer ID Application identity and private key"
+            exit 1
+          fi
+          # Fail before the long build if codesign cannot use the key here.
+          identity_hash="$(awk '/"Developer ID Application:/ { print $2; exit }' <<< "$identities")"
+          probe="$RUNNER_TEMP/imago-codesign-probe"
+          cp /usr/bin/true "$probe"
+          codesign --force --sign "$identity_hash" --keychain "$keychain_path" --timestamp --options runtime "$probe"
+          codesign --verify --strict "$probe"
+          rm -f "$probe"
+          {
+            echo "CSC_KEYCHAIN=$keychain_path"
+            echo "APPLE_API_KEY=$api_key_path"
+          } >> "$GITHUB_ENV"
+      - name: Build, sign and notarize (macOS) or build (Windows, Linux)
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ runner.os == 'macOS' }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Optional: with a Windows certificate the installer is signed.
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          node --input-type=module -e 'if(process.platform==="darwin"&&!["CSC_LINK","CSC_KEY_PASSWORD","APPLE_ID","APPLE_APP_SPECIFIC_PASSWORD","APPLE_TEAM_ID"].every(k=>process.env[k]))throw Error("Release signing/notarization credentials required"); if(process.platform==="win32"&&!["WIN_CSC_LINK","WIN_CSC_KEY_PASSWORD"].every(k=>process.env[k]))throw Error("Windows signing credentials required");'
-          npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --config build/electron-builder.release.cjs --publish never
+        run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --config build/electron-builder.release.cjs --publish never
       - name: Validate installed packages
         run: node scripts/packaged-e2e.mjs
       - uses: actions/upload-artifact@v4

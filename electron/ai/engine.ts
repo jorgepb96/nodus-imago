@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
-import { Repository, now } from "../db/repository";
+import { Repository, now, recordTextHash } from "../db/repository";
+import { recordEmbeddingText } from "../../shared/recordEmbedding";
 import { Models } from "./models";
 import { InferenceHost } from "./host";
 import { hashFile } from "../import/images";
-import { normalizeVector, fuseRanks } from "../../shared/vectors";
+import {
+  normalizeVector,
+  fuseRanks,
+  fuseRankLists,
+} from "../../shared/vectors";
 import type { Page, SearchInput } from "../../shared/imago";
 import { randomUUID as uuid } from "node:crypto";
 import {
@@ -17,7 +22,7 @@ import {
   isLoopbackUrl,
   type ModelChoice,
 } from "../../shared/aiConfig";
-import type { CompletionRequest } from "./apiProviders";
+import type { CompletionRequest, EmbeddingRequest } from "./apiProviders";
 import { imagePipeline, withInferenceImage } from "../import/images";
 import { LlamaPool } from "./llama";
 import {
@@ -26,6 +31,12 @@ import {
 } from "../../shared/visionOutput";
 import { OnnxHost } from "./onnxHost";
 import { HarrierHost } from "./harrier";
+import {
+  API_EMBEDDING_ID,
+  DEFAULT_EMBEDDING_API,
+  embeddingApiMultimodal,
+  type EmbeddingApiChoice,
+} from "../../shared/embeddingApi";
 import {
   ONNX_ID,
   HARRIER_ID,
@@ -61,6 +72,13 @@ function targetLanguage(value: string): string {
 export class Engine {
   llama: LlamaPool;
   onnx = new OnnxHost();
+  /** Embedding requests brokered by the main process (which holds the keys). */
+  remoteEmbed: (
+    input: EmbeddingRequest,
+    signal: AbortSignal,
+  ) => Promise<number[][]> = async () => {
+    throw new Error("Las APIs no están disponibles en este proceso.");
+  };
   harrier: HarrierHost;
   constructor(
     public repo: Repository,
@@ -87,12 +105,62 @@ export class Engine {
     this.llama.close();
     this.llama = new LlamaPool(this.repo, this.models);
   }
+  apiChoice(): EmbeddingApiChoice {
+    return this.repo.getSettings().embeddingApi ?? DEFAULT_EMBEDDING_API;
+  }
   dimensions() {
     const s = this.repo.getSettings();
+    if (s.embeddingModel === API_EMBEDDING_ID)
+      return this.apiChoice().dimensions;
     return embeddingDimensions(s.embeddingModel, s.dimensions);
+  }
+  /**
+   * How images enter the vector space: embedded directly ("native"), through a
+   * local LFM3 description ("caption"), or not at all for a text-only API model
+   * without LFM3 ("none", records are then searched by their own text).
+   */
+  imageMode(): "native" | "caption" | "none" {
+    const s = this.repo.getSettings();
+    if (s.embeddingModel === HARRIER_ID) return "caption";
+    if (s.embeddingModel !== API_EMBEDDING_ID) return "native";
+    if (embeddingApiMultimodal(this.apiChoice())) return "native";
+    return this.models
+      .list()
+      .some((m) => m.id === "lfm3-vl-2b" && m.verified) &&
+      this.models.list().some((m) => m.id === "llama-runtime" && m.verified)
+      ? "caption"
+      : "none";
   }
   contract() {
     const s = this.repo.getSettings();
+    if (s.embeddingModel === API_EMBEDDING_ID) {
+      const choice = this.apiChoice(),
+        mode = this.imageMode();
+      return createHash("sha256")
+        .update(
+          JSON.stringify({
+            protocol: "imago.api-embedding/1",
+            provider: choice.provider,
+            // The endpoint is part of the identity: two servers may expose
+            // different weights under the same model name.
+            endpoint: providerBase(choice.provider, s.apiProfiles),
+            model: choice.model.trim(),
+            dimensions: choice.dimensions,
+            text: "embeddingApiText/1",
+            images:
+              mode === "native"
+                ? "oriented-srgb-jpeg-1536-q90-v1"
+                : mode === "caption"
+                  ? {
+                      visionRevision: this.models.get("lfm3-vl-2b").revision,
+                      prompt: HARRIER_IMAGE_PROMPT,
+                    }
+                  : "none",
+            normalization: "l2",
+          }),
+        )
+        .digest("hex");
+    }
     if (s.embeddingModel !== LEGACY_EMBEDDING_ID)
       return createHash("sha256")
         .update(
@@ -100,6 +168,7 @@ export class Engine {
             s.embeddingModel,
             s.dimensions,
             this.models.get("lfm3-vl-2b").revision,
+            s.visionBudget ?? 280,
           ),
         )
         .digest("hex");
@@ -121,6 +190,26 @@ export class Engine {
       )
       .digest("hex");
   }
+  /**
+   * Contract of record text vectors. With EmbeddingGemma the visual token
+   * budget only changes how images are seen, so text vectors keep one identity
+   * across budgets and are not recomputed when the budget changes.
+   */
+  textContract() {
+    const s = this.repo.getSettings();
+    if (s.embeddingModel === ONNX_ID && (s.visionBudget ?? 280) !== 280)
+      return createHash("sha256")
+        .update(
+          embeddingBackendContract(
+            s.embeddingModel,
+            s.dimensions,
+            this.models.get("lfm3-vl-2b").revision,
+            280,
+          ),
+        )
+        .digest("hex");
+    return this.contract();
+  }
   async probe() {
     const model = this.repo.getSettings().embeddingModel;
     return {
@@ -131,8 +220,118 @@ export class Engine {
     };
   }
   ready(id: string) {
+    if (id === API_EMBEDDING_ID) {
+      const s = this.repo.getSettings(),
+        choice = this.apiChoice();
+      if (
+        !s.remoteEnabled &&
+        !isLoopbackUrl(providerBase(choice.provider, s.apiProfiles))
+      )
+        throw new Error(
+          "Activa el uso opcional de APIs en Ajustes para usar embeddings remotos.",
+        );
+      return;
+    }
     if (!this.models.list().some((m) => m.id === id && m.verified))
       throw new Error("Instala y verifica el modelo local en Configuración.");
+  }
+  /** Describe an image with local LFM3 once per contract; the text is cached. */
+  private async captionFor(png: string, signal?: AbortSignal) {
+    const hash = await hashFile(png),
+      contract = this.contract();
+    const cached = this.repo.db
+      .prepare(
+        "SELECT text FROM image_captions WHERE content_hash=? AND contract=?",
+      )
+      .get(hash, contract) as { text: string } | undefined;
+    if (cached) return cached.text;
+    this.ready("lfm3-vl-2b");
+    const text = parseDescription(
+      await this.llama.describe(
+        "lfm3-vl-2b",
+        png,
+        HARRIER_IMAGE_PROMPT,
+        signal ?? new AbortController().signal,
+      ),
+    );
+    this.repo.db
+      .prepare(
+        "INSERT INTO image_captions VALUES(?,?,?) ON CONFLICT DO NOTHING",
+      )
+      .run(hash, contract, text);
+    return text;
+  }
+  /** Embeddings through the API broker, in provider-sized batches. */
+  private async apiEmbed(
+    inputs: { image?: string; text?: string; role?: string }[],
+    signal?: AbortSignal,
+  ) {
+    const settings = this.repo.getSettings(),
+      choice = this.apiChoice(),
+      mode = this.imageMode();
+    const items: EmbeddingRequest["inputs"] = [];
+    for (const item of inputs) {
+      if (!item.image) {
+        items.push({
+          text: item.text ?? "",
+          role: item.role === "query" ? "query" : "document",
+        });
+        continue;
+      }
+      if (mode === "native") {
+        const jpeg = await (
+          await imagePipeline(item.image)
+        )
+          .rotate()
+          .resize(1536, 1536, { fit: "inside", withoutEnlargement: true })
+          .toColourspace("srgb")
+          .removeAlpha()
+          .jpeg({ quality: 90 })
+          .toBuffer();
+        items.push({ image: jpeg.toString("base64"), mimeType: "image/jpeg" });
+      } else if (mode === "caption")
+        items.push({
+          text: await withInferenceImage(this.repo.root, item.image, (png) =>
+            this.captionFor(png, signal),
+          ),
+          role: "document",
+        });
+      else
+        throw new Error(
+          "Este modelo de embeddings solo admite texto. Instala LFM3 para describir las imágenes o elige un modelo multimodal.",
+        );
+    }
+    const vectors: number[][] = [];
+    for (let i = 0; i < items.length;) {
+      // Gemini accepts at most six images per request; text batches are larger.
+      const size = items[i] && "image" in items[i] ? 6 : 32;
+      const chunk = items.slice(i, i + size);
+      vectors.push(
+        ...(await this.remoteEmbed(
+          {
+            embedding: true,
+            provider: choice.provider,
+            model: choice.model.trim(),
+            dimensions: choice.dimensions,
+            profiles: settings.apiProfiles,
+            remoteEnabled: settings.remoteEnabled,
+            minIntervalMs: settings.apiDelayMs,
+            inputs: chunk,
+          },
+          signal ?? new AbortController().signal,
+        )),
+      );
+      i += chunk.length;
+    }
+    for (const v of vectors)
+      if (v.length !== choice.dimensions)
+        throw Object.assign(
+          new Error(
+            `El modelo devolvió vectores de ${v.length} dimensiones; ajusta las dimensiones a ${v.length} en Ajustes.`,
+          ),
+          { fatal: true },
+        );
+    return vectors;
   }
   async embed(
     inputs: { image?: string; text?: string; role?: string }[],
@@ -140,6 +339,12 @@ export class Engine {
   ): Promise<number[][]> {
     const settings = this.repo.getSettings();
     this.ready(settings.embeddingModel);
+    if (settings.embeddingModel === API_EMBEDDING_ID) {
+      const vectors = await this.apiEmbed(inputs, signal);
+      if (vectors.length !== inputs.length)
+        throw new Error("El proveedor devolvió un lote de vectores inválido.");
+      return vectors.map((v) => normalizeVector(v, this.dimensions()));
+    }
     const prepared = inputs.map((item) => ({ ...item }));
     const encode = async (index: number): Promise<any> => {
       if (index < prepared.length) {
@@ -166,37 +371,13 @@ export class Engine {
           settings.dimensions,
           prepared,
           signal,
+          settings.visionBudget ?? 280,
         );
       if (settings.embeddingModel === HARRIER_ID) {
         const results: number[][] = [];
         for (const item of prepared) {
           let text = item.text ?? "";
-          if (item.image) {
-            const hash = await hashFile(item.image),
-              contract = this.contract();
-            const cached = this.repo.db
-              .prepare(
-                "SELECT text FROM image_captions WHERE content_hash=? AND contract=?",
-              )
-              .get(hash, contract) as { text: string } | undefined;
-            if (!cached) this.ready("lfm3-vl-2b");
-            text =
-              cached?.text ??
-              parseDescription(
-                await this.llama.describe(
-                  "lfm3-vl-2b",
-                  item.image,
-                  HARRIER_IMAGE_PROMPT,
-                  signal ?? new AbortController().signal,
-                ),
-              );
-            if (!cached)
-              this.repo.db
-                .prepare(
-                  "INSERT INTO image_captions VALUES(?,?,?) ON CONFLICT DO NOTHING",
-                )
-                .run(hash, contract, text);
-          }
+          if (item.image) text = await this.captionFor(item.image, signal);
           results.push(
             await this.harrier.embed(text, item.role ?? "document", signal),
           );
@@ -229,28 +410,79 @@ export class Engine {
       return normalizeVector(v, this.dimensions());
     });
   }
-  enqueueIndex(databaseIds?: string[]) {
+  /**
+   * What the next indexing pass would process, without loading any record:
+   * images with no vector for this contract, and records with no text vector
+   * or one marked stale by Repository.indexRow after an edit.
+   */
+  pendingIndex(databaseIds?: string[]) {
+    const params = databaseIds?.length ? databaseIds : [];
+    const scope = params.length
+      ? "database_id IN (" + params.map(() => "?").join(",") + ")"
+      : "1";
+    const contract = this.contract(),
+      textContract = this.textContract();
+    // Images already embedded under this contract are not queued again, so a
+    // resumed or repeated indexing pass starts where the last one stopped.
+    const assets =
+      this.imageMode() === "none"
+        ? []
+        : (
+            this.repo.db
+              .prepare(
+                `SELECT min(id) id FROM image_assets a WHERE width>0 AND ${scope} AND NOT EXISTS(SELECT 1 FROM embeddings e WHERE e.content_hash=a.content_hash AND e.contract=?) GROUP BY content_hash`,
+              )
+              .all(...params, contract) as { id: string }[]
+          ).map((a) => a.id);
+    // A stale vector keeps serving searches until the new one replaces it, so
+    // renaming a property never empties the text lane.
+    const rows = (
+      this.repo.db
+        .prepare(
+          `SELECT r.id FROM db_rows r LEFT JOIN record_embeddings e ON e.row_id=r.id AND e.contract=? WHERE ${scope.replace("database_id", "r.database_id")} AND (e.row_id IS NULL OR e.stale=1) ORDER BY r.database_id,r.position`,
+        )
+        .all(textContract, ...params) as { id: string }[]
+    ).map((r) => r.id);
+    return { rows, assets, contract };
+  }
+  enqueueIndex(
+    databaseIds?: string[],
+    options: { auto?: boolean; recordsOnly?: boolean } = {},
+  ) {
     this.ready(this.repo.getSettings().embeddingModel);
-    if (this.repo.getSettings().embeddingModel === HARRIER_ID) {
+    if (this.imageMode() === "caption") {
       this.ready("lfm3-vl-2b");
       this.ready("llama-runtime");
     }
-    const params = databaseIds?.length ? databaseIds : [];
     if (databaseIds && !databaseIds.length)
       throw new Error("Selecciona alguna base de datos.");
-    const assets = this.repo.db
-      .prepare(
-        `SELECT min(id) id FROM image_assets WHERE width>0 ${params.length ? "AND database_id IN (" + params.map(() => "?").join(",") + ")" : ""} GROUP BY content_hash`,
-      )
-      .all(...params) as { id: string }[];
+    const pending = this.pendingIndex(databaseIds),
+      { rows, contract } = pending,
+      assets = options.recordsOnly ? [] : pending.assets;
     return this.repo.newJob(
       "index",
-      { assets: assets.map((a) => a.id), contract: this.contract() },
-      assets.length,
+      {
+        rows,
+        assets,
+        contract,
+        ...(options.auto ? { auto: true, label: "Indexación automática" } : {}),
+      },
+      rows.length + assets.length,
     );
   }
+  /** Rough duration of a pass on this backend, for the automatic threshold. */
+  estimateSeconds(pending: { rows: number; assets: number }) {
+    const s = this.repo.getSettings();
+    if (s.embeddingModel === API_EMBEDDING_ID)
+      return pending.rows / 32 + pending.assets / 6;
+    const image =
+      s.embeddingModel === ONNX_ID
+        ? ({ 70: 1.2, 140: 2.7, 280: 5.3 } as const)[s.visionBudget ?? 280]
+        : 15;
+    return pending.rows * 0.6 + pending.assets * image;
+  }
   async indexOne(
-    payload: { assets: string[]; contract: string },
+    payload: { assets: string[]; rows?: string[]; contract: string },
     index: number,
     signal: AbortSignal,
   ) {
@@ -261,7 +493,15 @@ export class Engine {
         ),
         { fatal: true },
       );
-    const asset = this.repo.asset(payload.assets[index]);
+    const rows = payload.rows ?? [];
+    if (index < rows.length)
+      return this.indexRecord(
+        rows[index],
+        payload.contract,
+        signal,
+        rows.slice(index),
+      );
+    const asset = this.repo.asset(payload.assets[index - rows.length]);
     if ((await hashFile(asset.original_path)) !== asset.content_hash)
       throw new Error(
         "El original ha cambiado. Vuelve a importarlo antes de indexar.",
@@ -272,7 +512,13 @@ export class Engine {
         .get(asset.content_hash, payload.contract)
     )
       return "skipped" as const;
-    const [vector] = await this.embed([{ image: asset.original_path }], signal);
+    const vector =
+      this.takePrefetched("image:" + asset.content_hash) ??
+      (await this.prefetchImages(
+        asset,
+        payload.assets.slice(index - rows.length + 1, index - rows.length + 6),
+        signal,
+      ));
     signal.throwIfAborted();
     this.repo.db
       .prepare(
@@ -285,9 +531,182 @@ export class Engine {
       );
     return "imported" as const;
   }
+  /**
+   * Vectors computed ahead of the queue cursor. Remote models answer a batch in
+   * about the time of one item, so the next records or images of the same job
+   * travel in the same request. Local runtimes gain nothing and stay one by one.
+   */
+  private prefetched = new Map<string, number[]>();
+  private takePrefetched(key: string) {
+    const full = this.contract() + ":" + key,
+      vector = this.prefetched.get(full);
+    this.prefetched.delete(full);
+    return vector;
+  }
+  private batching() {
+    return this.repo.getSettings().embeddingModel === API_EMBEDDING_ID;
+  }
+  private remember(entries: [string, number[]][]) {
+    const contract = this.contract();
+    if (this.prefetched.size > 512) this.prefetched.clear();
+    for (const [key, vector] of entries)
+      this.prefetched.set(contract + ":" + key, vector);
+  }
+  private async prefetchImages(
+    asset: { content_hash: string; original_path: string },
+    upcoming: string[],
+    signal: AbortSignal,
+  ) {
+    const batch = [asset];
+    if (this.batching())
+      for (const id of upcoming) {
+        const next = this.repo.db
+          .prepare(
+            "SELECT content_hash,original_path FROM image_assets WHERE id=?",
+          )
+          .get(id) as
+          { content_hash: string; original_path: string } | undefined;
+        if (!next || batch.some((b) => b.content_hash === next.content_hash))
+          continue;
+        if (
+          (await hashFile(next.original_path).catch(() => "")) !==
+          next.content_hash
+        )
+          continue;
+        batch.push(next);
+      }
+    const vectors = await this.embed(
+      batch.map((b) => ({ image: b.original_path })),
+      signal,
+    );
+    this.remember(
+      batch.slice(1).map((b, i) => ["image:" + b.content_hash, vectors[i + 1]]),
+    );
+    return vectors[0];
+  }
+  /** Embed a record's own text (title and properties) for the text lane. */
+  async indexRecord(
+    rowId: string,
+    contract: string,
+    signal: AbortSignal,
+    upcoming: string[] = [rowId],
+  ) {
+    // Text vectors do not depend on the visual budget; see textContract().
+    void contract;
+    contract = this.textContract();
+    const found = this.repo.db
+      .prepare("SELECT database_id FROM db_rows WHERE id=?")
+      .get(rowId) as { database_id: string } | undefined;
+    if (!found) return "skipped" as const;
+    const row = this.repo.getRow(rowId),
+      text = recordEmbeddingText(this.recordColumns(found.database_id), row);
+    if (!text) return "skipped" as const;
+    const hash = recordTextHash(text);
+    if (
+      this.repo.db
+        .prepare(
+          "UPDATE record_embeddings SET stale=0 WHERE row_id=? AND contract=? AND text_hash=?",
+        )
+        .run(rowId, contract, hash).changes
+    )
+      return "skipped" as const;
+    let vector = this.takePrefetched(`record:${rowId}:${hash}`);
+    if (!vector) {
+      const batch = [{ rowId, hash, text }];
+      if (this.batching())
+        for (const id of upcoming.slice(1, 32)) {
+          const next = this.repo.db
+            .prepare("SELECT database_id FROM db_rows WHERE id=?")
+            .get(id) as { database_id: string } | undefined;
+          if (!next) continue;
+          const nextText = recordEmbeddingText(
+            this.recordColumns(next.database_id),
+            this.repo.getRow(id),
+          );
+          if (nextText)
+            batch.push({
+              rowId: id,
+              hash: recordTextHash(nextText),
+              text: nextText,
+            });
+        }
+      const vectors = await this.embed(
+        batch.map((b) => ({ text: b.text, role: "document" })),
+        signal,
+      );
+      this.remember(
+        batch
+          .slice(1)
+          .map((b, i) => [`record:${b.rowId}:${b.hash}`, vectors[i + 1]]),
+      );
+      vector = vectors[0];
+    }
+    signal.throwIfAborted();
+    // The record may have changed while it was being embedded; keep only a
+    // vector that still describes its current text.
+    const current = recordEmbeddingText(
+      this.recordColumns(found.database_id),
+      this.repo.getRow(rowId),
+    );
+    if (recordTextHash(current) !== hash) return "skipped" as const;
+    this.repo.db
+      .prepare(
+        "INSERT INTO record_embeddings(row_id,contract,text_hash,vector,stale) VALUES(?,?,?,?,0) ON CONFLICT(row_id,contract) DO UPDATE SET text_hash=excluded.text_hash,vector=excluded.vector,stale=0",
+      )
+      .run(rowId, contract, hash, Buffer.from(new Float32Array(vector).buffer));
+    return "imported" as const;
+  }
+  private columnCache = new Map<
+    string,
+    { signature: string; columns: ReturnType<Repository["detail"]>["columns"] }
+  >();
+  /** Column definitions for a database, reused while its schema and options are unchanged. */
+  private recordColumns(databaseId: string) {
+    const signature = (
+      this.repo.db
+        .prepare(
+          "SELECT (SELECT count(*)||':'||coalesce(max(updated_at),'') FROM db_columns WHERE database_id=?)||'|'||(SELECT count(*)||':'||coalesce(max(updated_at),'') FROM db_select_options WHERE database_id=?) s",
+        )
+        .get(databaseId, databaseId) as { s: string }
+    ).s;
+    const cached = this.columnCache.get(databaseId);
+    if (cached?.signature === signature) return cached.columns;
+    const columns = this.repo.detail(databaseId).columns;
+    this.columnCache.set(databaseId, { signature, columns });
+    return columns;
+  }
   async search(input: SearchInput, queryImage?: string): Promise<Page> {
     if (!input.mode || input.mode === "literal")
       return this.repo.literal(input);
+    const { ranked, scores, indexed, textIndexed } = await this.rank(input, queryImage);
+    if (input.sorts?.length || input.sortColumn) {
+      const page = this.repo.literal({ ...input, query: undefined }, ranked);
+      page.rows.forEach((row) => {
+        row.score = scores.get(row.id);
+      });
+      return { ...page, indexed, textIndexed };
+    }
+    const rows = this.repo.hydrate(
+      ranked.slice(
+        input.offset ?? 0,
+        (input.offset ?? 0) + (input.limit ?? 100),
+      ),
+    );
+    rows.forEach((r) => {
+      r.score = scores.get(r.id);
+    });
+    return { rows, total: ranked.length, indexed, textIndexed };
+  }
+  /**
+   * Every record a search selects, in its order: the records the timeline
+   * and the statistics count when the database's search box is in use.
+   */
+  async matchIds(input: SearchInput): Promise<string[]> {
+    if (!input.mode || input.mode === "literal" || !input.query?.trim())
+      return this.repo.literalIds({ ...input, mode: undefined });
+    return (await this.rank(input)).ranked;
+  }
+  private async rank(input: SearchInput, queryImage?: string) {
     this.ready(this.repo.getSettings().embeddingModel);
     if (!input.query?.trim() && !queryImage && !input.similarAssetId)
       throw new Error("Escribe una consulta o adjunta una imagen.");
@@ -326,94 +745,115 @@ export class Engine {
       ),
     );
     // Structured filtering happens before ranking, across all rows in scope.
-    const allowed = new Set<string>();
-    let offset = 0;
-    while (true) {
-      const page = this.repo.literal({
+    const allowed = new Set(
+      this.repo.literalIds({
         ...input,
         query: undefined,
         sortColumn: undefined,
         sorts: undefined,
-        limit: 200,
-        offset,
-      });
-      page.rows.forEach((r) => allowed.add(r.id));
-      offset += page.rows.length;
-      if (offset >= page.total || !page.rows.length) break;
-    }
+      }),
+    );
     const scope = input.databaseIds;
-    if (scope && !scope.length) return { rows: [], total: 0, indexed: 0 };
+    if (scope && !scope.length)
+      return {
+        ranked: [] as string[],
+        scores: new Map<string, number>(),
+        indexed: 0,
+        textIndexed: 0,
+      };
+    const marks = scope?.length ? scope.map(() => "?").join(",") : "";
+    const sources = input.semanticSources ?? "both",
+      textQuery = Boolean(input.query?.trim()),
+      // An image (or "similar to") query without words is visual by nature.
+      useImages = sources !== "text" || !textQuery,
+      useText = textQuery && sources !== "images";
+    const score = (blob: Buffer) => {
+      const v = new Float32Array(
+        blob.buffer,
+        blob.byteOffset,
+        blob.byteLength / 4,
+      );
+      if (v.length !== vector.length)
+        throw new Error("Índice vectorial incompatible. Reconstrúyelo.");
+      let total = 0;
+      for (let i = 0; i < v.length; i++) total += v[i] * vector[i];
+      return total;
+    };
     const values = this.repo.db
       .prepare(
-        `SELECT a.row_id,a.content_hash,e.vector FROM image_assets a JOIN embeddings e ON e.content_hash=a.content_hash AND e.contract=? ${scope?.length ? "WHERE a.database_id IN (" + scope.map(() => "?").join(",") + ")" : ""}`,
+        `SELECT a.row_id,a.content_hash,e.vector FROM image_assets a JOIN embeddings e ON e.content_hash=a.content_hash AND e.contract=? ${marks ? "WHERE a.database_id IN (" + marks + ")" : ""}`,
       )
       .all(contract, ...(scope ?? [])) as {
       row_id: string;
       content_hash: string;
       vector: Buffer;
     }[];
+    const imageScores = new Map<string, number>();
+    if (useImages)
+      for (const a of values) {
+        if (!allowed.has(a.row_id)) continue;
+        const value = score(a.vector);
+        if (value > (imageScores.get(a.row_id) ?? -Infinity))
+          imageScores.set(a.row_id, value);
+      }
+    const texts = this.repo.db
+      .prepare(
+        `SELECT e.row_id,e.vector FROM record_embeddings e JOIN db_rows r ON r.id=e.row_id WHERE e.contract=? ${marks ? "AND r.database_id IN (" + marks + ")" : ""}`,
+      )
+      .all(this.textContract(), ...(scope ?? [])) as {
+      row_id: string;
+      vector: Buffer;
+    }[];
+    const textScores = new Map<string, number>();
+    if (useText)
+      for (const t of texts)
+        if (allowed.has(t.row_id)) textScores.set(t.row_id, score(t.vector));
+    const byScore = (map: Map<string, number>) =>
+      [...map]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([id]) => id);
+    // Image and text similarities live on different scales, so the two lanes
+    // are combined by rank (reciprocal rank fusion), never by raw cosine.
+    const lanes = [byScore(imageScores), byScore(textScores)].filter(
+      (lane) => lane.length,
+    );
+    let semantic =
+      lanes.length > 1
+        ? fuseRankLists(
+            lanes.map((ids) => ({ ids, weight: 1 })),
+            60,
+            "mean",
+          ).map(([id]) => id)
+        : (lanes[0] ?? []);
     const scores = new Map<string, number>();
-    for (const a of values) {
-      if (!allowed.has(a.row_id)) continue;
-      const v = new Float32Array(
-        a.vector.buffer,
-        a.vector.byteOffset,
-        a.vector.byteLength / 4,
-      );
-      if (v.length !== vector.length)
-        throw new Error("Índice vectorial incompatible. Reconstrúyelo.");
-      let score = 0;
-      for (let i = 0; i < v.length; i++) score += v[i] * vector[i];
-      if (score > (scores.get(a.row_id) ?? -Infinity))
-        scores.set(a.row_id, score);
-    }
-    const semantic = [...scores]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([id]) => id);
+    for (const map of [imageScores, textScores])
+      for (const [id, value] of map)
+        if (value > (scores.get(id) ?? -Infinity)) scores.set(id, value);
+    // A database's search box keeps only the closest records, so the
+    // search narrows the table instead of ranking every record.
+    if (input.semanticLimit) semantic = semantic.slice(0, input.semanticLimit);
     let ranked = semantic;
     if (input.mode === "hybrid" && input.query?.trim()) {
-      const literal: string[] = [];
-      let start = 0;
-      while (true) {
-        const p = this.repo.literal({
-          ...input,
-          limit: 200,
-          offset: start,
-          sortColumn: undefined,
-          sorts: undefined,
-        });
-        literal.push(...p.rows.map((r) => r.id));
-        start += p.rows.length;
-        if (start >= p.total || !p.rows.length) break;
-      }
+      // The lexical lane accepts any significant word, ranked by BM25: a
+      // sentence-long description almost never contains every one of its words.
+      // The database box keeps its literal matches exact (every word).
+      const literal = this.repo.literalIds({
+        ...input,
+        match: input.semanticLimit
+          ? (input.match ?? "words")
+          : input.match === "phrase"
+            ? "phrase"
+            : "any",
+        sortColumn: undefined,
+        sorts: undefined,
+      });
       ranked = fuseRanks(literal, semantic, input.semanticWeight ?? 0.5)
-        .filter(([, score]) => score > 0)
+        .filter(([, value]) => value > 0)
         .map(([id]) => id);
     }
-    if (input.sorts?.length || input.sortColumn) {
-      const page = this.repo.literal({ ...input, query: undefined }, ranked);
-      page.rows.forEach((row) => {
-        row.score = scores.get(row.id);
-      });
-      return {
-        ...page,
-        indexed: new Set(values.map((value) => value.content_hash)).size,
-      };
-    }
-    const rows = this.repo.hydrate(
-      ranked.slice(
-        input.offset ?? 0,
-        (input.offset ?? 0) + (input.limit ?? 100),
-      ),
-    );
-    rows.forEach((r) => {
-      r.score = scores.get(r.id);
-    });
-    return {
-      rows,
-      total: ranked.length,
-      indexed: new Set(values.map((v) => v.content_hash)).size,
-    };
+    const indexed = new Set(values.map((value) => value.content_hash)).size,
+      textIndexed = texts.length;
+    return { ranked, scores, indexed, textIndexed };
   }
   enqueueAnalysis(input: {
     rowIds?: string[];

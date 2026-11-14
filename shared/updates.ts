@@ -25,4 +25,13 @@ export type UpdateStatus = {
   progress: number | null;
   message: string;
   checkedAt: string | null;
+  /** Structured reason, so the interface can explain and offer the right action. */
+  errorCode?:
+    | "update-check-failed"
+    | "update-download-failed"
+    | "update-install-failed"
+    | "pre-update-backup-required"
+    | "pre-update-backup-failed";
+  /** The stable update went ahead although its safety copy could not be made. */
+  backupWarning?: string;
 };

@@ -196,20 +196,73 @@ test("tampering with a previously verified package invalidates the staged update
     await f.close();
   }
 });
-test("failed backup blocks installation, releases the data lock and permits an explicit retry", async () => {
+test("stable: a configured copy is made, but its failure never blocks the release (Nodus contract)", async () => {
   const f = await setup();
   try {
-    let fail = true;
-    f.options.prepare = async () => {
+    const backups: boolean[] = [];
+    f.options.prepare = async (_password?: string, backup?: boolean) => {
+      backups.push(!!backup);
+      if (backup) throw Error("backup disk unavailable");
+    };
+    await f.manager.check();
+    await until(() => f.manager.status().status === "downloaded");
+    await f.manager.install();
+    assert.deepEqual(backups, [true]);
+    assert.equal(f.driver.installed, 1);
+    assert.match(f.manager.status().backupWarning ?? "", /disk/);
+  } finally {
+    await f.close();
+  }
+});
+test("stable without configured copies installs without one; a configured one is made first", async () => {
+  for (const configured of [false, true]) {
+    const f = await setup();
+    try {
+      const backups: boolean[] = [];
+      f.options.prepare = async (_password?: string, backup?: boolean) => {
+        backups.push(!!backup);
+      };
+      Object.assign(f.options, {
+        recovery: async () => ({ configured, ready: configured }),
+      });
+      await f.manager.check();
+      await until(() => f.manager.status().status === "downloaded");
+      await f.manager.install();
+      assert.deepEqual(backups, [configured]);
+      assert.equal(f.driver.installed, 1);
+    } finally {
+      await f.close();
+    }
+  }
+});
+test("beta: a verified copy is required, a failed copy blocks it, releases the lock and allows a retry", async () => {
+  const f = await setup();
+  try {
+    f.driver.version = "0.2.0-beta.1";
+    await f.manager.configure({ ...f.manager.status().preferences, beta: true });
+    let configured = false,
+      fail = true;
+    Object.assign(f.options, {
+      recovery: async () => ({ configured, ready: configured }),
+    });
+    f.options.prepare = async (_password?: string, backup?: boolean) => {
+      assert.equal(backup, true);
       if (fail) throw Error("backup disk unavailable");
     };
     await f.manager.check();
     await until(() => f.manager.status().status === "downloaded");
-    await assert.rejects(f.manager.install(), /disk/);
+    // No copies configured: nothing is touched.
+    await assert.rejects(f.manager.install(), /configures las copias/);
+    assert.equal(f.manager.status().errorCode, "pre-update-backup-required");
+    assert.equal(f.manager.status().status, "downloaded");
+    assert.ok(!f.events.includes("permission-check"));
+    configured = true;
+    await assert.rejects(f.manager.install(), /no pudo crearse una copia/);
+    assert.equal(f.manager.status().errorCode, "pre-update-backup-failed");
+    assert.equal(f.manager.status().status, "downloaded");
     assert.equal(f.driver.installed, 0);
     assert.ok(f.events.includes("unlock"));
     fail = false;
-    await f.manager.check();
     await f.manager.install();
     assert.equal(f.driver.installed, 1);
   } finally {

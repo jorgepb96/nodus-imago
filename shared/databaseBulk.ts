@@ -41,8 +41,8 @@ export interface BulkMatch {
 
 /**
  * A catalogue code: letter-runs glued to digit-runs, optionally chained with - or _
- * (LV001, LV001-FG001, IMG_2024). Anchored to neither end, so it survives the debris
- * real exports carry around a code — "_ _ lv130-fg006", "LV007-FG092·", "lv005-fg069__1".
+ * (AB001, AB001-CD001, IMG_2024). Anchored to neither end, so it survives the debris
+ * real exports carry around a code — "_ _ ab130-cd006", "AB007-CD092·", "ab005-cd069__1".
  */
 const CODE_RE = /[a-z]+\d+(?:[-_][a-z]+\d+)*/gi;
 

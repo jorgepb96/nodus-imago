@@ -77,7 +77,7 @@ export interface ColumnTypeDef {
 export const COLUMN_TYPES: ColumnTypeDef[] = [
   { id: 'title', label: 'Título', icon: 'heading', hasOptions: false, available: true },
   { id: 'rich_text', label: 'Texto enriquecido', icon: 'notebook', hasOptions: false, available: true },
-  { id: 'text', label: 'Texto (heredado)', icon: 'notebook', hasOptions: false, available: true },
+  { id: 'text', label: 'Texto simple', icon: 'notebook', hasOptions: false, available: true },
   { id: 'number', label: 'Número', icon: 'hash', hasOptions: false, available: true },
   { id: 'date', label: 'Fecha', icon: 'calendar', hasOptions: false, available: true },
   { id: 'time', label: 'Hora', icon: 'clock', hasOptions: false, available: true },
