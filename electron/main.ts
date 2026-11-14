@@ -13,10 +13,12 @@ import {
 import { Worker } from "node:worker_threads";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { validateCommand } from "../shared/validation";
+import { chatTurnSchema, validateCommand } from "../shared/validation";
 import { IMAGE_EXTENSIONS } from "./import/images";
 import { Secrets } from "./secrets/store";
 import { ApiProviders } from "./ai/apiProviders";
+import { ChatRunner } from "./chat/turn";
+import { sandboxScript } from "./chat/sandbox";
 import { Gazetteer } from "./geo/gazetteer";
 import { isMapTileRequest } from "./geo/mapRequests";
 import { externalHttpsUrl } from "../shared/externalLinks";
@@ -47,6 +49,7 @@ let window: BrowserWindow | null = null,
   closing = false;
 let backups: DesktopBackups | undefined;
 let updates: Updates | undefined;
+let chats: ChatRunner | undefined;
 const pending = new Map<
   number,
   { resolve: (v: any) => void; reject: (e: Error) => void }
@@ -428,6 +431,21 @@ app.whenReady().then(async () => {
       });
     }
   });
+  chats = new ChatRunner(call, providers, sandboxScript(__dirname), (delta) =>
+    window?.webContents.send("imago:chat-delta", delta),
+  );
+  const trusted = (event: Electron.IpcMainInvokeEvent) =>
+    !!window &&
+    event.sender === window.webContents &&
+    event.senderFrame === window.webContents.mainFrame;
+  ipcMain.handle("imago:chat-send", async (event, input: unknown) => {
+    if (!trusted(event)) throw new Error("Origen IPC no autorizado.");
+    return chats!.run(chatTurnSchema.parse(input));
+  });
+  ipcMain.handle("imago:chat-cancel", async (event, id: unknown) => {
+    if (!trusted(event)) throw new Error("Origen IPC no autorizado.");
+    if (typeof id === "string") chats!.cancel(id);
+  });
   ipcMain.handle(
     "imago:call",
     async (event, command: string, input: unknown) => {
@@ -725,6 +743,7 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   closing = true;
   updates?.close();
+  chats?.cancelAll();
   void (async () => {
     await backups?.close();
     await call("_close");

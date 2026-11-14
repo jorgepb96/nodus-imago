@@ -26,6 +26,18 @@ export const providerSchema = z.enum([
 const choice = z
   .object({ provider: z.enum(["local", ...providerSchema.options]), model: id })
   .strict();
+const chatMode = z.enum(["fast", "extended"]);
+/** One chat turn, checked in the main process before anything is sent. */
+export const chatTurnSchema = z
+  .object({
+    conversationId: id,
+    question: z.string().max(20000),
+    databaseIds: z.array(id).min(1).max(50),
+    model: choice,
+    mode: chatMode,
+    regenerate: z.boolean().optional(),
+  })
+  .strict();
 const filter = z
   .object({
     id: id.optional(),
@@ -382,6 +394,40 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .strict(),
   statisticDelete: z.object({ id }).strict(),
   statisticCompute: z.object({ search: searchSchema, spec: statSpec }).strict(),
+  chatList: z.object({ includeArchived: z.boolean().optional() }).strict(),
+  chatGet: z.object({ id }).strict(),
+  chatCreate: z
+    .object({
+      title: z.string().max(300).optional(),
+      databaseIds: z.array(id).max(50),
+      folderId: id.nullable().optional(),
+      model: choice.nullable().optional(),
+      mode: chatMode.optional(),
+    })
+    .strict(),
+  chatUpdate: z
+    .object({
+      ids: z.array(id).min(1).max(5000),
+      title: z.string().max(300).optional(),
+      folderId: id.nullable().optional(),
+      pinned: z.boolean().optional(),
+      archived: z.boolean().optional(),
+      databaseIds: z.array(id).max(50).optional(),
+      model: choice.nullable().optional(),
+      mode: chatMode.optional(),
+    })
+    .strict(),
+  chatDelete: z.object({ ids: z.array(id).min(1).max(5000) }).strict(),
+  chatFolderSave: z
+    .object({
+      id: id.optional(),
+      parentId: id.nullable().optional(),
+      name: z.string().trim().max(120).optional(),
+      color: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional(),
+      icon: z.string().max(40).nullable().optional(),
+    })
+    .strict(),
+  chatFolderDelete: z.object({ id }).strict(),
   timelineCandidates: z.object({ databaseId: id }).strict(),
   timeline: z.object({ search: searchSchema, columnId: id }).strict(),
   saveOptions: z

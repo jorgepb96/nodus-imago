@@ -31,7 +31,7 @@ Imago is in development at version **0.1.0**. Test installers and their validati
 
 You can also [run Imago from source](#development).
 
-The first time you open Imago, an introduction asks you to choose the language (Spanish or English), explains the main features and asks how you want to turn on semantic search: with a model on your computer, with an external provider, or not for now. A guided tour then points out each part of the screen. You can repeat both from **Settings › Interface**.
+The first time you open Imago, an introduction asks you to choose the language (Spanish or English), explains the main features and asks how you want to turn on semantic search: with a model on your computer, with an external provider, or not for now. A guided tour then points out each part of the screen, including the chat. You can repeat both from **Settings › Interface**.
 
 ## Import your catalogue
 
@@ -103,6 +103,14 @@ The **Statistics** view calculates the following on the records currently shown,
 - **Numeric:** mean, median, standard deviation and a histogram of a number property.
 
 Each result includes its data table, which you can copy. You can save calculations with the database to open them again later.
+
+## Ask questions in the chat
+
+The **Chat** section answers questions about your databases in writing, with tables and charts. Each conversation reads only the databases you choose for it. You can also open the chat beside a database with the **Chat** button in its header; drag the left edge of the panel to change its width.
+
+The model receives a summary computed over every record (how many records have each value, ranges of dates and numbers, records per decade) and a few example records. When an answer needs an exact figure that the summary does not contain, the model writes a short calculation in JavaScript. Imago runs it over all the records in an isolated process on your computer: the process cannot read or write files, start other programs or use the network, and it is stopped if it takes too long. Each answer shows the calculations it ran, with their code and results. **Fast** allows up to two calculations per answer and **Extended** up to four, with more example records.
+
+Conversations are saved with the database and can be renamed, highlighted, archived, deleted and organised in folders and subfolders. The chat needs a model from a provider or from a server on your computer, such as Ollama or LM Studio; with a local server, nothing leaves your computer.
 
 ## Choose local AI or an external provider
 

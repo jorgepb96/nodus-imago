@@ -19,6 +19,7 @@ import {
   geminiNativeBase,
   type EmbeddingApiProvider,
 } from "../../shared/embeddingApi";
+import { splitSse, sseData, streamDelta } from "../../shared/chat";
 export type CompletionRequest = {
   choice: ModelChoice;
   profiles: Partial<Record<ApiProvider, ApiProfile>>;
@@ -74,6 +75,28 @@ export class ApiProviders {
     signal: AbortSignal,
     expectedBase?: string,
   ) {
+    const response = await this.open(provider, base, route, body, signal, expectedBase);
+    let bytes = 0;
+    const chunks: Uint8Array[] = [];
+    if (!response.body) throw new ApiFailure("Respuesta vacía.");
+    for await (const chunk of response.body as any) {
+      bytes += chunk.length;
+      if (bytes > 8 * 2 ** 20)
+        throw new ApiFailure("Respuesta del proveedor demasiado grande.");
+      chunks.push(chunk);
+    }
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  }
+  /** Sends one request (with key checks and retries) and returns the open response. */
+  private async open(
+    provider: ApiProvider,
+    base: string,
+    route: string,
+    body: unknown,
+    signal: AbortSignal,
+    expectedBase?: string,
+    timeoutMs = 120_000,
+  ): Promise<Response> {
     const key = this.secrets.get(provider);
     if (key) {
       const official = PROVIDERS[provider].baseUrl;
@@ -100,7 +123,7 @@ export class ApiProviders {
       if (key) headers["x-goog-api-key"] = key;
     } else if (key) headers.Authorization = `Bearer ${key}`;
     for (let attempt = 0; attempt < 4; attempt++) {
-      const timeout = AbortSignal.timeout(120_000),
+      const timeout = AbortSignal.timeout(timeoutMs),
         combined = AbortSignal.any([signal, timeout]);
       let response: Response;
       try {
@@ -117,18 +140,7 @@ export class ApiProviders {
           "No se pudo conectar con el proveedor. Comprueba el endpoint y la conexión.",
         );
       }
-      if (response.ok) {
-        let bytes = 0;
-        const chunks: Uint8Array[] = [];
-        if (!response.body) throw new ApiFailure("Respuesta vacía.");
-        for await (const chunk of response.body as any) {
-          bytes += chunk.length;
-          if (bytes > 8 * 2 ** 20)
-            throw new ApiFailure("Respuesta del proveedor demasiado grande.");
-          chunks.push(chunk);
-        }
-        return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      }
+      if (response.ok) return response;
       if ([429, 500, 502, 503, 504].includes(response.status) && attempt < 3) {
         const delay = Math.min(
           30_000,
@@ -231,6 +243,107 @@ export class ApiProviders {
         : result.choices?.[0]?.message?.content;
     if (typeof text !== "string")
       throw new Error("El proveedor no devolvió una respuesta de texto.");
+    return text;
+  }
+  /**
+   * A chat answer, streamed. `onText` receives each piece of text as it
+   * arrives; the full text is returned at the end. Works with Anthropic and
+   * with every OpenAI-compatible endpoint (OpenAI, OpenRouter, Gemini,
+   * Ollama, LM Studio…).
+   */
+  async chatStream(
+    input: {
+      choice: ModelChoice;
+      profiles: Partial<Record<ApiProvider, ApiProfile>>;
+      remoteEnabled: boolean;
+      system: string;
+      messages: { role: "user" | "assistant"; content: string }[];
+      maxTokens?: number;
+    },
+    onText: (text: string) => void,
+    signal: AbortSignal,
+  ): Promise<string> {
+    if (input.choice.provider === "local")
+      throw new ApiFailure("El chat usa un modelo de un proveedor o de un servidor local (Ollama, LM Studio).");
+    const provider = input.choice.provider,
+      base = providerBase(provider, input.profiles);
+    if (!input.remoteEnabled && !isLoopbackUrl(base))
+      throw new ApiFailure(
+        "Las APIs remotas están desactivadas. No se ha enviado ningún dato.",
+      );
+    const maxTokens = input.maxTokens ?? 4096;
+    const anthropic = provider === "anthropic";
+    const response = await this.open(
+      provider,
+      base,
+      anthropic ? "/messages" : "/chat/completions",
+      anthropic
+        ? {
+            model: input.choice.model,
+            max_tokens: maxTokens,
+            system: input.system,
+            messages: input.messages,
+            stream: true,
+          }
+        : {
+            model: input.choice.model,
+            messages: [{ role: "system", content: input.system }, ...input.messages],
+            ...(provider === "openai"
+              ? { max_completion_tokens: maxTokens }
+              : { max_tokens: maxTokens }),
+            stream: true,
+          },
+      signal,
+      undefined,
+      10 * 60_000,
+    );
+    if (!response.body) throw new ApiFailure("Respuesta vacía.");
+    const decoder = new TextDecoder();
+    let buffer = "",
+      text = "";
+    // A provider that ignores `stream` answers with plain JSON.
+    if (!/event-stream/i.test(response.headers.get("content-type") ?? "")) {
+      for await (const chunk of response.body as any) {
+        buffer += decoder.decode(chunk, { stream: true });
+        if (buffer.length > 8 * 2 ** 20)
+          throw new ApiFailure("Respuesta del proveedor demasiado grande.");
+      }
+      const result = JSON.parse(buffer);
+      const answer = anthropic
+        ? result.content?.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n")
+        : result.choices?.[0]?.message?.content;
+      if (typeof answer !== "string")
+        throw new Error("El proveedor no devolvió una respuesta de texto.");
+      onText(answer);
+      return answer;
+    }
+    try {
+      const chunks = async function* () {
+        for await (const chunk of response.body as any) yield decoder.decode(chunk, { stream: true });
+        // The last event may arrive without its blank line.
+        yield decoder.decode() + "\n\n";
+      };
+      for await (const piece of chunks()) {
+        buffer += piece;
+        const { events, rest } = splitSse(buffer);
+        buffer = rest;
+        for (const event of events) {
+          const data = sseData(event);
+          if (data == null) continue;
+          const delta = streamDelta(anthropic ? "anthropic" : "openai", data);
+          if (delta.error) throw new ApiFailure(`${PROVIDERS[provider].label}: ${delta.error}`);
+          if (delta.text) {
+            text += delta.text;
+            if (text.length > 2 * 2 ** 20)
+              throw new ApiFailure("Respuesta del proveedor demasiado grande.");
+            onText(delta.text);
+          }
+        }
+      }
+    } catch (error) {
+      if (signal.aborted) throw new Error("Solicitud cancelada.");
+      throw error;
+    }
     return text;
   }
   async embed(

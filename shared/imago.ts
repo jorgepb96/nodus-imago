@@ -382,6 +382,44 @@ export type Commands = {
     input: { databaseId: string };
     result: { columnId: string; name: string; type: string; dated: number; share: number; score: number }[];
   };
+  chatList: {
+    input: { includeArchived?: boolean };
+    result: {
+      conversations: import("./chat").ChatConversationSummary[];
+      folders: import("./chat").ChatFolder[];
+      archivedCount: number;
+    };
+  };
+  chatGet: { input: { id: string }; result: import("./chat").ChatConversation };
+  chatCreate: {
+    input: {
+      title?: string;
+      databaseIds: string[];
+      folderId?: string | null;
+      model?: import("./aiConfig").ModelChoice | null;
+      mode?: import("./chat").ChatMode;
+    };
+    result: import("./chat").ChatConversation;
+  };
+  chatUpdate: {
+    input: {
+      ids: string[];
+      title?: string;
+      folderId?: string | null;
+      pinned?: boolean;
+      archived?: boolean;
+      databaseIds?: string[];
+      model?: import("./aiConfig").ModelChoice | null;
+      mode?: import("./chat").ChatMode;
+    };
+    result: void;
+  };
+  chatDelete: { input: { ids: string[] }; result: void };
+  chatFolderSave: {
+    input: { id?: string; parentId?: string | null; name?: string; color?: string | null; icon?: string | null };
+    result: import("./chat").ChatFolder;
+  };
+  chatFolderDelete: { input: { id: string }; result: void };
   timeline: {
     input: { search: SearchInput; columnId: string };
     result: {
@@ -578,6 +616,10 @@ export interface ImagoApi {
     ...args: Commands[K]["input"] extends void ? [] : [Commands[K]["input"]]
   ): Promise<Commands[K]["result"]>;
   onChange(listener: () => void): () => void;
+  /** Runs one chat turn in the main process; deltas arrive through onChatDelta. */
+  chatSend(request: import("./chat").ChatTurnRequest): Promise<import("./chat").ChatTurnResult>;
+  chatCancel(conversationId: string): Promise<void>;
+  onChatDelta(listener: (delta: import("./chat").ChatDelta) => void): () => void;
   setAppIcon(dataUrl: string): Promise<void>;
   onDrop(
     listener: (payload: {

@@ -77,10 +77,21 @@ export const TOUR_STEPS: TourStep[] = [
     body: "Cada columna es una propiedad. Arrastra el nombre de una columna para cambiarla de sitio y arrastra su borde derecho para cambiar el ancho. Con clic derecho sobre el nombre puedes renombrarla, cambiar su tipo, filtrar, ordenar, calcular un total, fijarla u ocultarla.",
   },
   {
+    target: "db-chat",
+    area: "databases",
+    title: "Chat junto a la base de datos",
+    body: "Abre un chat a la derecha de la tabla para hacer preguntas sobre esta base de datos. Para cambiar el ancho del panel, arrastra su borde izquierdo.",
+  },
+  {
     target: "nav-search",
     area: "search",
     title: "Búsqueda global",
     body: "Busca en todas tus bases de datos a la vez. Además de escribir, puedes adjuntar una imagen para encontrar otras parecidas y añadir filtros por propiedades.",
+  },
+  {
+    target: "nav-chat",
+    title: "Chat",
+    body: "La sección Chat guarda tus conversaciones y te deja organizarlas en carpetas. Cada conversación lee solo las bases de datos que elijas. Cuando hace falta una cifra exacta, el modelo escribe un cálculo que se ejecuta sobre todos los registros en un entorno aislado de este ordenador. Necesita un modelo de un proveedor o de Ollama o LM Studio.",
   },
   {
     target: "header-sidebar",
