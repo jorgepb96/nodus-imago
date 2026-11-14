@@ -109,15 +109,21 @@ try {
   );
 } finally {
   if (app) await app.close();
-  // The volume can stay busy for a moment while the app's helper processes
-  // exit (seen on the Intel macOS runners): try again, then force it.
-  for (let attempt = 1; ; attempt++) {
+  await detach();
+}
+
+/**
+ * The volume can stay busy for a moment while the app's helper processes
+ * exit (seen on the Intel macOS runners): try again, then force it.
+ */
+async function detach() {
+  for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      execFileSync("hdiutil", attempt > 5 ? ["detach", "-force", mount] : ["detach", mount], { stdio: "inherit" });
-      break;
-    } catch (error) {
-      if (attempt > 5) throw error;
+      execFileSync("hdiutil", ["detach", mount], { stdio: "inherit" });
+      return;
+    } catch {
       await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
     }
   }
+  execFileSync("hdiutil", ["detach", "-force", mount], { stdio: "inherit" });
 }
