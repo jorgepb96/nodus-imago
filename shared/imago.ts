@@ -442,6 +442,17 @@ export type Commands = {
     input: { rowIds: string[]; template: string; title: string; label: string; listTitle: string; start: number };
     result: { file: string; figures: number } | null;
   };
+  /** Handled in the main process: candidates for a value in Wikidata or Iconclass. */
+  authoritySearch: {
+    input: { source: import("./authority").AuthoritySource; query: string; kind?: import("./authority").AuthorityKind | null };
+    result: import("./authority").AuthorityLink[];
+  };
+  authorityLinks: { input: { columnId: string }; result: Record<string, import("./authority").AuthorityLink> };
+  authoritySet: { input: { columnId: string; items: { optionId: string; link: import("./authority").AuthorityLink | null }[] }; result: number };
+  authorityLocate: { input: { columnId: string; name: string }; result: { columnId: string; located: number } };
+  valueClusters: { input: { columnId: string }; result: import("./cleanup").ValueCluster[] };
+  valueCounts: { input: { columnId: string }; result: import("./cleanup").ValueCount[] };
+  valueMerge: { input: { columnId: string; groups: { members: string[]; target: string }[] }; result: number };
   /** Handled in the main process: present-day photographs near a place. */
   commonsNearby: {
     input: { latitude: number; longitude: number; radius?: number };
@@ -527,6 +538,10 @@ export type Commands = {
     result: import("./chat").ChatFolder;
   };
   chatFolderDelete: { input: { id: string }; result: void };
+  visualMap: {
+    input: { search: SearchInput; colorColumnId?: string | null };
+    result: import("./visualMap").VisualMap;
+  };
   network: {
     input: {
       search: SearchInput;

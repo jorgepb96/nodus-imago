@@ -42,7 +42,7 @@ A database is a table: each row is a record and each column is a property (title
 
 ## Work with a database
 
-Each database has seven views of the same records:
+Each database has eight views of the same records:
 
 | View | What it shows |
 | --- | --- |
@@ -53,6 +53,7 @@ Each database has seven views of the same records:
 | **Statistics** | Calculations on the records shown: see [Analyse the collection](#analyse-the-collection). |
 | **Variants** | The same image in different records (copies, reproductions, other scans, crops), each group in date order: see [Compare images](#compare-images). |
 | **Network** | Which values of two or three properties (photographers, places, subjects) appear together in the same records: see [Analyse the collection](#analyse-the-collection). |
+| **Visual map** | Every image placed by visual similarity, so that images that look alike appear together: see [Analyse the collection](#analyse-the-collection). |
 
 ![A research table with photographs, photographers, dates, thematic categories, visual notes and source links](docs/screenshots/readme-table.png)
 
@@ -71,6 +72,10 @@ For locations, you can choose a place from an offline list, type your own name o
 **Find a detail.** In the full-screen image, a selected region (a uniform, a shop sign, a monument) can be searched for in the other images. The quick search compares the detail with each whole image; the search inside the images also divides the most similar ones into nine parts and marks the part where the detail appears.
 
 **Filter and sort** applies to all views, and you can save a set of criteria to return to it later.
+
+**Unify similar values.** From a column's menu, Imago groups the values that are probably the same thing written differently: capitals, accents, punctuation, word order (“Muller, Nicolás”), initials (“N. Muller”) or a slip of one letter in a long word. Equal ones come marked; similar ones are left for you to check, since two names can differ by one letter and be different places. The chosen name is kept and the records of the others move to it. «Undo» brings everything back.
+
+**Link values to authorities.** The values of a property with options can be linked to Wikidata, which also gives the Getty identifiers (ULAN for people, TGN for places, AAT for concepts) when they exist, the years of a person and the coordinates of a place, or to Iconclass for iconographic subjects. You search value by value, or ask for proposals for all of them and accept them; only the text of the values searched is sent. Linked places can fill a new location property, which places their records on the map. Exports add a column with the URI and identifiers of each linked property.
 
 ## Search
 
@@ -115,6 +120,8 @@ The **Statistics** view calculates the following on the records currently shown,
 - **Numeric:** mean, median, standard deviation and a histogram of a number property.
 
 Each result includes its data table, which you can copy. You can save calculations with the database to open them again later.
+
+The **Visual map** places every image with semantic-search vectors on a plane, so that images that look alike appear together, and can colour them by a property (categories, or years on a single-hue scale). Zooming in shows the images themselves; clicking one opens its record. Records outside the filters stay in place, greyed, so the map keeps its shape. **Select an area** selects the records of a region to compare them, make plates or analyse them. The layout is calculated on your computer the first time (seconds for a few thousand images) and kept until the indexed images change.
 
 The **Network** view draws the values of two or three properties as points joined by lines when they appear in the same records: the size of a point is its number of records and the width of a line is how many records two values share. It uses the records shown after filters and can be limited to a period. Clicking a value lists the values it appears with, and **Show its records** filters the gallery.
 

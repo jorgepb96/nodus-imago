@@ -13,7 +13,9 @@ import {
   ChevronRight,
   Copy,
   EyeOff,
+  Combine,
   Filter,
+  Link2,
   Loader2,
   Pin,
   PinOff,
@@ -71,6 +73,8 @@ export function ColumnMenu({
   onSort,
   onEdit,
   onInserted,
+  onCleanup,
+  onAuthorities,
   initialView = "main",
 }: {
   initialView?: "main" | "calc";
@@ -89,6 +93,10 @@ export function ColumnMenu({
   onEdit: () => void;
   /** A property was inserted: reopen the menu on it so it can be named. */
   onInserted: (columnId: string) => void;
+  /** Merge values written in different ways. */
+  onCleanup?: () => void;
+  /** Link option values to Wikidata or Iconclass. */
+  onAuthorities?: () => void;
 }) {
   const t = useT(),
     api = window.imago,
@@ -392,6 +400,17 @@ export function ColumnMenu({
                 submenu: true,
               })}
             </div>
+            {((onCleanup && ["select", "multi_select", "text"].includes(column.type)) ||
+              (onAuthorities && ["select", "multi_select"].includes(column.type))) && (
+              <div className="column-menu-group">
+                {onCleanup &&
+                  ["select", "multi_select", "text"].includes(column.type) &&
+                  item(<Combine size={15} />, t("Unificar valores parecidos"), () => run(async () => onCleanup()))}
+                {onAuthorities &&
+                  ["select", "multi_select"].includes(column.type) &&
+                  item(<Link2 size={15} />, t("Enlazar con autoridades"), () => run(async () => onAuthorities()))}
+              </div>
+            )}
             <div className="column-menu-group">
               {item(
                 frozen ? <PinOff size={15} /> : <Pin size={15} />,

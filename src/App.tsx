@@ -29,6 +29,7 @@ import {
   Bookmark,
   ScanSearch,
   Sparkles,
+  ChartScatter,
   Undo2,
   Trash2,
   Check,
@@ -89,6 +90,9 @@ import { SuggestDialog } from "./components/SuggestDialog";
 import { PlatesDialog } from "./components/PlatesDialog";
 import { IiifDialog } from "./components/IiifDialog";
 import { NetworkView } from "./components/NetworkView";
+import { VisualMapView } from "./components/VisualMapView";
+import { CleanupDialog } from "./components/CleanupDialog";
+import { AuthorityDialog } from "./components/AuthorityDialog";
 import { citationTemplate } from "../shared/citation";
 import {
   filterOperators,
@@ -160,7 +164,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const [page, setPage] = useState<Page>({ rows: [], total: 0 }),
     [loading, setLoading] = useState(false),
     [view, setView] = useState<
-      "gallery" | "table" | "tree" | "map" | "timeline" | "stats" | "variants" | "network"
+      "gallery" | "table" | "tree" | "map" | "timeline" | "stats" | "variants" | "network" | "visualmap"
     >("gallery"),
     [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(""),
@@ -192,6 +196,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "suggest"
       | "plates"
       | "iiif"
+      | "cleanup"
+      | "authorities"
       | "deleteRows"
       | "deleteDatabase"
       | "saveSearch"
@@ -202,6 +208,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | null
     >(null),
     [name, setName] = useState(""),
+    [toolColumn, setToolColumn] = useState<string | null>(null),
     [bulkCount, setBulkCount] = useState(5),
     [csv, setCsv] = useState<CsvImportPlanData | null>(null),
     [imagePlan, setImagePlan] = useState<ImagePlan | null>(null),
@@ -590,6 +597,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     },
     [databaseId, databases],
   );
+  /** The database's layout again, after its properties or options changed. */
+  const reloadDetail = async (id: string) => {
+    const next = await api.call("detail", { id });
+    setDetail((current) => (current?.database.id === id ? next : current));
+    setAllDetails((all) => all.map((d) => (d.database.id === id ? next : d)));
+    refresh();
+  };
   const navigate = (id: string) => {
     setArea("databases");
     setDatabaseId(id);
@@ -976,7 +990,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     ),
     effectiveView =
       (view === "tree" && (!hierarchyColumn || area !== "databases")) ||
-      (["map", "timeline", "stats", "variants", "network"].includes(view) && area !== "databases")
+      (["map", "timeline", "stats", "variants", "network", "visualmap"].includes(view) && area !== "databases")
         ? "table"
         : view,
     hierarchy = useMemo(
@@ -1900,6 +1914,19 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           {t("Red")}
                         </button>
                       )}
+                      {area === "databases" && (
+                        <button
+                          className={effectiveView === "visualmap" ? "active" : ""}
+                          data-tooltip={t("Las imágenes colocadas por parecido: las que se parecen aparecen juntas")}
+                          onClick={() => {
+                            setView("visualmap");
+                            setSelected(new Set());
+                          }}
+                        >
+                          <ChartScatter size={15} />
+                          {t("Mapa visual")}
+                        </button>
+                      )}
                     </div>
                     <div
                       className="row toolbar-actions"
@@ -2185,6 +2212,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       revision={tick}
                       onOpen={(id) => void perform(async () => open(await api.call("getRow", { id })))}
                       onProperties={() => setModal("properties")}
+                    />
+                  ) : effectiveView === "visualmap" && detail && criteriaContext === criteriaKey ? (
+                    <VisualMapView
+                      key={detail.database.id}
+                      detail={detail}
+                      search={viewSearch}
+                      revision={tick}
+                      onOpen={(id) => void perform(async () => open(await api.call("getRow", { id })))}
+                      onSelect={(ids) => setSelected(new Set(ids))}
                     />
                   ) : effectiveView === "network" && detail && criteriaContext === criteriaKey ? (
                     <NetworkView
@@ -2688,7 +2724,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     </>
                   )}
                   <div className="pagination">
-                    {!["map", "timeline", "stats", "variants", "network"].includes(effectiveView) && (
+                    {!["map", "timeline", "stats", "variants", "network", "visualmap"].includes(effectiveView) && (
                       <>
                         <Button
                           icon
@@ -3048,6 +3084,14 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               setEditColumn(columnMenu);
               setModal("properties");
             }}
+            onCleanup={() => {
+              setToolColumn(columnMenu);
+              setModal("cleanup");
+            }}
+            onAuthorities={() => {
+              setToolColumn(columnMenu);
+              setModal("authorities");
+            }}
             onInserted={(id) =>
               // Wait for the new header to render, then name it from its menu.
               requestAnimationFrame(() => {
@@ -3081,6 +3125,30 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onImported={(result) => {
             setModal(null);
             finishStandardImport(result);
+          }}
+        />
+      )}
+      {modal === "cleanup" && detail && toolColumn && detail.columns.some((c) => c.id === toolColumn) && (
+        <CleanupDialog
+          column={detail.columns.find((c) => c.id === toolColumn)!}
+          onClose={() => setModal(null)}
+          onDone={(message) => {
+            notify(message);
+            setModal(null);
+            void reloadDetail(detail.database.id);
+          }}
+        />
+      )}
+      {modal === "authorities" && detail && toolColumn && detail.columns.some((c) => c.id === toolColumn) && (
+        <AuthorityDialog
+          column={detail.columns.find((c) => c.id === toolColumn)!}
+          onClose={() => setModal(null)}
+          onDone={(message, changed) => {
+            notify(message);
+            if (changed) {
+              setModal(null);
+              void reloadDetail(detail.database.id);
+            }
           }}
         />
       )}

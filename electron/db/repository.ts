@@ -1335,10 +1335,28 @@ export class Repository {
           throw new Error(
             "El valor cambió después de esta operación. No se ha deshecho ningún cambio.",
           );
+      // Options removed or renamed by «Unificar valores» come back first, so
+      // the cells can point to them again.
+      const restores = this.db
+        .prepare("SELECT option_json FROM option_restores WHERE batch_id=? ORDER BY id")
+        .all(last.batch_id) as { option_json: string }[];
+      const databases = new Set<string>();
+      for (const r of restores) {
+        const o = JSON.parse(r.option_json);
+        this.db
+          .prepare(
+            "INSERT OR REPLACE INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+          )
+          .run(o.id, o.database_id, o.column_id, o.label, o.color, o.position, o.created_at, o.updated_at);
+        databases.add(o.database_id);
+      }
+      if (restores.length)
+        this.db.prepare("DELETE FROM option_restores WHERE batch_id=?").run(last.batch_id);
       for (const c of changes) {
         this.setCell(c.row_id, c.column_id, c.before_value, false);
         this.db.prepare("UPDATE history SET undone=1 WHERE id=?").run(c.id);
       }
+      for (const id of databases) this.rebuildText(id);
       return changes.length;
     })();
   }

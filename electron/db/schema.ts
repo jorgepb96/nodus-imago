@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS restorations(id TEXT PRIMARY KEY,asset_id TEXT NOT NU
 CREATE INDEX IF NOT EXISTS restorations_asset ON restorations(asset_id,created_at);
 CREATE TABLE IF NOT EXISTS tile_embeddings(content_hash TEXT NOT NULL,contract TEXT NOT NULL,tile INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(content_hash,contract,tile));
 CREATE TABLE IF NOT EXISTS image_fingerprints(content_hash TEXT PRIMARY KEY,hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS option_authorities(option_id TEXT PRIMARY KEY,column_id TEXT NOT NULL,link_json TEXT NOT NULL,linked_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS option_restores(id INTEGER PRIMARY KEY,batch_id TEXT NOT NULL,option_json TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS option_restores_batch ON option_restores(batch_id);
+CREATE TABLE IF NOT EXISTS visual_maps(database_id TEXT PRIMARY KEY REFERENCES db_databases(id) ON DELETE CASCADE,key TEXT NOT NULL,created_at TEXT NOT NULL,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS compare_boards(id TEXT PRIMARY KEY,name TEXT NOT NULL,asset_ids_json TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS chat_folders(id TEXT PRIMARY KEY,parent_id TEXT REFERENCES chat_folders(id) ON DELETE CASCADE,name TEXT NOT NULL,color TEXT,icon TEXT,position INTEGER NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS chat_conversations(id TEXT PRIMARY KEY,title TEXT NOT NULL,folder_id TEXT REFERENCES chat_folders(id) ON DELETE SET NULL,database_ids_json TEXT NOT NULL,model_json TEXT,mode TEXT NOT NULL DEFAULT 'fast',pinned_at TEXT,archived INTEGER NOT NULL DEFAULT 0,messages_json TEXT NOT NULL DEFAULT '[]',message_count INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);

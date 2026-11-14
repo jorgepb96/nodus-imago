@@ -50,6 +50,7 @@ export const TOUR_STEPS: TourStep[] = [
       "Estadísticas: calcula frecuencias, tablas cruzadas y otros análisis, y permite guardarlos.",
       "Variantes: agrupa la misma imagen en distintos registros (copias, reproducciones, recortes) en orden de fecha.",
       "Red: muestra qué valores de dos o tres propiedades (por ejemplo, fotógrafo y lugar) aparecen juntos en los mismos registros.",
+      "Mapa visual: coloca las imágenes por parecido, de modo que las que se parecen aparecen juntas; se pueden colorear por una propiedad y seleccionar por zonas.",
     ],
   },
   {
@@ -77,7 +78,7 @@ export const TOUR_STEPS: TourStep[] = [
     target: "db-columns",
     area: "databases",
     title: "Cabecera de la tabla",
-    body: "Cada columna es una propiedad. Arrastra el nombre de una columna para cambiarla de sitio y arrastra su borde derecho para cambiar el ancho. Con clic derecho sobre el nombre puedes renombrarla, cambiar su tipo, filtrar, ordenar, calcular un total, fijarla u ocultarla.",
+    body: "Cada columna es una propiedad. Arrastra el nombre de una columna para cambiarla de sitio y arrastra su borde derecho para cambiar el ancho. Con clic derecho sobre el nombre puedes renombrarla, cambiar su tipo, filtrar, ordenar, calcular un total, unificar valores escritos de formas distintas, enlazar sus valores con Wikidata o Iconclass, fijarla u ocultarla.",
   },
   {
     target: "db-chat",

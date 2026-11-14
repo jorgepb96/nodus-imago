@@ -32,6 +32,9 @@ import { ChatStore } from "./chat/store";
 import { Annotations } from "./db/annotations";
 import { CompareBoards } from "./db/compare";
 import { Variants } from "./db/variants";
+import { VisualMaps } from "./db/visualMap";
+import { ValueCleanup } from "./db/cleanup";
+import { Authorities } from "./db/authorities";
 import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
@@ -74,6 +77,9 @@ export class Service {
   annotations: Annotations;
   boards: CompareBoards;
   variants: Variants;
+  visualMaps: VisualMaps;
+  cleanup: ValueCleanup;
+  authorities: Authorities;
   restorations: Restorations;
   suggestions: NeighbourSuggestions;
   details: DetailSearch;
@@ -135,6 +141,9 @@ export class Service {
       this.engine,
       changed,
     );
+    this.visualMaps = new VisualMaps(this.repo, () => this.engine.contract());
+    this.cleanup = new ValueCleanup(this.repo);
+    this.authorities = new Authorities(this.repo);
     this.variants = new Variants(this.repo, this.boards, () => {
       try {
         return this.engine.contract();
@@ -573,13 +582,15 @@ export class Service {
           }
         }
         const format = input.format;
+        // Linked values carry their URIs and Getty identifiers in a column of their own.
+        const exported = this.authorities.exportColumns(detail.columns, rows);
         const data =
           format === "csv"
-            ? databaseToCsv(detail.columns, rows)
+            ? databaseToCsv(exported.columns, exported.rows)
             : format === "json"
-              ? databaseToJson(detail.columns, rows)
+              ? databaseToJson(exported.columns, exported.rows)
               : (() => {
-                  const m = databaseToMatrix(detail.columns, rows);
+                  const m = databaseToMatrix(exported.columns, exported.rows);
                   return buildXlsx(m.header, m.body);
                 })();
         await fs.writeFile(input.file, data);
@@ -846,6 +857,28 @@ export class Service {
             .catch(() => {});
         }
         return preparation;
+      }
+      case "valueClusters":
+        return this.cleanup.clusters(input.columnId);
+      case "valueCounts":
+        return this.cleanup.counts(input.columnId);
+      case "valueMerge": {
+        const changed = this.cleanup.merge(input.columnId, input.groups);
+        this.changed();
+        return changed;
+      }
+      case "authorityLinks":
+        return this.authorities.links(input.columnId);
+      case "authoritySet":
+        return this.authorities.set(input.columnId, input.items);
+      case "authorityLocate": {
+        const result = this.authorities.locate(input.columnId, input.name);
+        this.changed();
+        return result;
+      }
+      case "visualMap": {
+        const databaseId = singleDatabase(input.search);
+        return this.visualMaps.map(databaseId, await this.selected(input.search), input.colorColumnId);
       }
       case "network": {
         const databaseId = singleDatabase(input.search);

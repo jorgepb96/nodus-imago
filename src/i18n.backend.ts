@@ -310,7 +310,13 @@ export const backendEn: Record<string, string> = {
   "No se pudo calcular la huella visual.": "The visual fingerprint could not be calculated.",
   "No se pudo conectar con Wikimedia Commons.": "Could not connect to Wikimedia Commons.",
   "No se pudo descargar el manifiesto IIIF.": "The IIIF manifest could not be downloaded.",
-  "Imagen demasiado grande.": "Image too large."
+  "Imagen demasiado grande.": "Image too large.",
+  "Esta propiedad no admite unificar valores.": "This property does not allow unifying values.",
+  "Solo se pueden enlazar las propiedades con opciones.": "Only properties with options can be linked.",
+  "Enlace de autoridad no válido.": "Invalid authority link.",
+  "Ningún valor enlazado tiene coordenadas en Wikidata.": "No linked value has coordinates in Wikidata.",
+  "No se pudo conectar con Iconclass.": "Could not connect to Iconclass.",
+  "No se pudo conectar con Wikidata.": "Could not connect to Wikidata."
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */
@@ -395,5 +401,8 @@ export const backendPatterns: [string, string][] = [
   ["El entorno de cálculo se cerró (código {0}).", "The calculation environment closed (code {0})."],
   ["{0}: el modelo no devolvió ninguna imagen. Comprueba que el modelo genera imágenes.", "{0}: the model returned no image. Check that the model generates images."],
   ["IIIF: HTTP {0}", "IIIF: HTTP {0}"],
-  ["Wikimedia Commons: HTTP {0}", "Wikimedia Commons: HTTP {0}"]
+  ["Wikimedia Commons: HTTP {0}", "Wikimedia Commons: HTTP {0}"],
+  ["Wikidata: HTTP {0}", "Wikidata: HTTP {0}"],
+  ["Iconclass: HTTP {0}", "Iconclass: HTTP {0}"],
+  ["Ya existe otra opción llamada «{0}». Inclúyela en el grupo para unirla.", "Another option is already called “{0}”. Include it in the group to merge it."]
 ];

@@ -443,6 +443,48 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       start: z.number().int().min(1).max(100000),
     })
     .strict(),
+  authoritySearch: z
+    .object({ source: z.enum(["wikidata", "iconclass"]), query: z.string().trim().min(1).max(250), kind: z.enum(["person", "place", "subject"]).nullable().optional() })
+    .strict(),
+  authorityLinks: z.object({ columnId: id }).strict(),
+  authoritySet: z
+    .object({
+      columnId: id,
+      items: z
+        .array(
+          z
+            .object({
+              optionId: id,
+              link: z
+                .object({
+                  source: z.enum(["wikidata", "iconclass"]),
+                  id: z.string().min(1).max(80),
+                  label: z.string().max(500),
+                  description: z.string().max(1000).nullable(),
+                  uri: z.string().url().max(300),
+                  ulan: z.string().max(40).nullable().optional(),
+                  tgn: z.string().max(40).nullable().optional(),
+                  aat: z.string().max(40).nullable().optional(),
+                  iconclass: z.string().max(120).nullable().optional(),
+                  coordinates: z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).nullable().optional(),
+                  born: z.number().int().nullable().optional(),
+                  died: z.number().int().nullable().optional(),
+                  kind: z.enum(["person", "place", "subject", "other"]).optional(),
+                })
+                .strict()
+                .nullable(),
+            })
+            .strict(),
+        )
+        .max(2000),
+    })
+    .strict(),
+  authorityLocate: z.object({ columnId: id, name: z.string().trim().min(1).max(120) }).strict(),
+  valueClusters: z.object({ columnId: id }).strict(),
+  valueCounts: z.object({ columnId: id }).strict(),
+  valueMerge: z
+    .object({ columnId: id, groups: z.array(z.object({ members: z.array(z.string().min(1).max(2000)).min(2).max(500), target: z.string().trim().min(1).max(500) }).strict()).min(1).max(1000) })
+    .strict(),
   commonsNearby: z
     .object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180), radius: z.number().min(10).max(10000).optional() })
     .strict(),
@@ -521,6 +563,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   chatFolderDelete: z.object({ id }).strict(),
   timelineCandidates: z.object({ databaseId: id }).strict(),
   timeline: z.object({ search: searchSchema, columnId: id }).strict(),
+  visualMap: z.object({ search: searchSchema, colorColumnId: id.nullable().optional() }).strict(),
   network: z
     .object({
       search: searchSchema,
