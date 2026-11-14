@@ -32,6 +32,17 @@ export function commonsQuery(latitude: number, longitude: number, radius = 300):
 }
 const plain = (html: unknown) =>
   typeof html === "string" ? html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() || null : null;
+/**
+ * The date of a Commons file as a date or a year. The field may hold a
+ * timestamp ("2019-05-02 10:00") or a sentence ("Taken on 2 June 2013").
+ */
+export function commonsDate(text: string | null): string | null {
+  if (!text) return null;
+  const iso = /\b(\d{4}-\d{2}-\d{2})\b/.exec(text);
+  if (iso) return iso[1];
+  const year = /\b(1[89]\d{2}|20\d{2})\b/.exec(text);
+  return year ? year[1] : null;
+}
 export function parseCommons(json: any, origin: { latitude: number; longitude: number }, distance: (a: any, b: any) => number): CommonsPhoto[] {
   const pages = Object.values(json?.query?.pages ?? {}) as any[];
   return pages
@@ -52,7 +63,7 @@ export function parseCommons(json: any, origin: { latitude: number; longitude: n
           distance: Math.round(distance(origin, at)),
           author: plain(meta.Artist?.value),
           license: plain(meta.LicenseShortName?.value),
-          date: plain(meta.DateTimeOriginal?.value)?.slice(0, 10) ?? null,
+          date: commonsDate(plain(meta.DateTimeOriginal?.value)),
         },
       ];
     })

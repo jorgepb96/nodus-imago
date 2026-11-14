@@ -84,6 +84,17 @@ export function VisualMapView({
     };
   }, [searchKey, colorColumnId, revision]);
 
+  /**
+   * Side of the images on screen: larger as the map is zoomed in, and larger
+   * when few images share the frame, so a small collection is not a field of
+   * tiny squares.
+   */
+  const thumbSize = useCallback(() => {
+    const { w, h } = size.current,
+      shown = Math.max(1, map?.points.filter((p) => p.shown).length ?? 1);
+    const room = Math.sqrt((w * h) / shown) * 0.42;
+    return Math.max(30, Math.min(96, Math.max(22 * Math.sqrt(view.current.k), room)));
+  }, [map]);
   /** Screen position of a point (CSS pixels). */
   const toScreen = useCallback((p: { x: number; y: number }) => {
     const { w, h } = size.current,
@@ -141,7 +152,7 @@ export function VisualMapView({
       return;
     }
     // Close enough: the images, framed in their colour.
-    const s = Math.max(30, Math.min(96, 22 * Math.sqrt(view.current.k)));
+    const s = thumbSize();
     for (const v of shown) {
       let img = images.current.get(v.p.assetId);
       if (!img) {
@@ -173,7 +184,7 @@ export function VisualMapView({
         ctx.fillRect(x, y, iw, ih);
       }
     }
-  }, [map, toScreen, colourOf]);
+  }, [map, toScreen, colourOf, thumbSize]);
 
   useEffect(() => {
     drawLater.current = draw;
@@ -202,9 +213,34 @@ export function VisualMapView({
   }, [redraw]);
   useEffect(() => redraw(), [redraw]);
 
+  /** The view that shows every image, as large as the frame allows. */
+  const fit = useCallback(() => {
+    if (!map?.points.length) return;
+    const { w, h } = size.current,
+      base = Math.min(w, h) - MARGIN * 2,
+      pad = MARGIN + thumbSize() / 2;
+    const xs = map.points.map((p) => p.x),
+      ys = map.points.map((p) => p.y);
+    const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const spanX = Math.max(0.05, maxX - minX),
+      spanY = Math.max(0.05, maxY - minY);
+    const k = Math.max(0.6, Math.min(8, Math.min((w - pad * 2) / (spanX * base), (h - pad * 2) / (spanY * base))));
+    view.current = { k, x: -((minX + maxX) / 2 - 0.5) * base * k, y: -((minY + maxY) / 2 - 0.5) * base * k };
+    redraw();
+  }, [map, thumbSize, redraw]);
+  // A new layout opens fitted to the frame; a new colour or filter keeps the view.
+  const fittedFor = useRef("");
+  useEffect(() => {
+    const key = map ? `${map.points.length}:${map.points[0]?.rowId ?? ""}` : "";
+    if (map && key !== fittedFor.current) {
+      fittedFor.current = key;
+      fit();
+    }
+  }, [map, fit]);
+
   const pointAt = (x: number, y: number) => {
     if (!map) return null;
-    const s = Math.max(30, Math.min(96, 22 * Math.sqrt(view.current.k)));
+    const s = thumbSize();
     const radius = map.points.filter((p) => p.shown).length && view.current.k > 1 ? s / 2 : 7;
     let best: VisualMapPoint | null = null,
       bestD = radius * radius;
@@ -277,10 +313,7 @@ export function VisualMapView({
             icon
             aria-label={t("Ver todo")}
             data-tooltip={t("Ver todo")}
-            onClick={() => {
-              view.current = { k: 1, x: 0, y: 0 };
-              redraw();
-            }}
+            onClick={fit}
           >
             <Maximize size={15} />
           </Button>

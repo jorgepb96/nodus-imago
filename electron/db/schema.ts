@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS restorations(id TEXT PRIMARY KEY,asset_id TEXT NOT NU
 CREATE INDEX IF NOT EXISTS restorations_asset ON restorations(asset_id,created_at);
 CREATE TABLE IF NOT EXISTS tile_embeddings(content_hash TEXT NOT NULL,contract TEXT NOT NULL,tile INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(content_hash,contract,tile));
 CREATE TABLE IF NOT EXISTS image_fingerprints(content_hash TEXT PRIMARY KEY,hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS image_pair_checks(pair TEXT PRIMARY KEY,same INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS image_miniatures(content_hash TEXT PRIMARY KEY,width INTEGER NOT NULL,height INTEGER NOT NULL,pixels BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS option_authorities(option_id TEXT PRIMARY KEY,column_id TEXT NOT NULL,link_json TEXT NOT NULL,linked_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS option_restores(id INTEGER PRIMARY KEY,batch_id TEXT NOT NULL,option_json TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS option_restores_batch ON option_restores(batch_id);

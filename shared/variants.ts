@@ -9,8 +9,9 @@ export type Sensitivity = "strict" | "balanced" | "broad";
  */
 export const SENSITIVITY: Record<Sensitivity, { bits: number; cosine: number | null }> = {
   strict: { bits: 8, cosine: null },
-  balanced: { bits: 16, cosine: 0.93 },
-  broad: { bits: 24, cosine: 0.88 },
+  // Vector candidates are then checked on the pixels (electron/db/cropMatch).
+  balanced: { bits: 16, cosine: 0.9 },
+  broad: { bits: 24, cosine: 0.86 },
 };
 export type VariantMember = CompareItem & {
   contentHash: string;

@@ -130,7 +130,7 @@ export function AuthorityDialog({
       }
       setBulk({ done: i + 1, total: list.length });
       // A pause between requests, out of courtesy to the public services.
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 1000));
     }
     setBulk(null);
   };

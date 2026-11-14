@@ -3,7 +3,9 @@
 //  - a perceptual fingerprint (dHash, 64 bits) per file: copies and scans of
 //    the same image differ in a few bits;
 //  - the image vectors of semantic search, when indexed: crops and retouched
-//    versions keep a very high cosine similarity.
+//    versions keep a high cosine similarity. So do different photographs of
+//    the same kind (studio portraits), so these candidates are confirmed on a
+//    tiny greyscale copy of each image (cropMatch).
 // Families group images that match either signal, in date order, so the
 // first dated appearance and later reuses can be read as a circulation.
 import fs from "node:fs/promises";
@@ -14,6 +16,7 @@ import type { CompareItem } from "../../shared/compare";
 import type { Sensitivity, VariantFamily, VariantMember, VariantStatus } from "../../shared/variants";
 import { SENSITIVITY } from "../../shared/variants";
 import { imagePipeline } from "../import/images";
+import { cropMatch, MINIATURE, SAME_PHOTOGRAPH, type Miniature } from "./cropMatch";
 
 /** Fingerprint length in hex characters: 128 bits. Older 64-bit ones are recalculated. */
 export const FINGERPRINT_HEX = 32;
@@ -58,6 +61,8 @@ export function informative(hex: string): boolean {
 type Asset = { id: string; row_id: string; content_hash: string; database_id: string };
 
 export class Variants {
+  /** Pixel checks already made, by pair of files (they never change). */
+  private checked = new Map<string, boolean>();
   constructor(
     private repo: Repository,
     private boards: CompareBoards,
@@ -91,23 +96,42 @@ export class Variants {
     return out;
   }
 
+  private miniatures(): Map<string, Miniature> {
+    return new Map(
+      (this.repo.db.prepare("SELECT content_hash,width,height,pixels FROM image_miniatures").all() as {
+        content_hash: string;
+        width: number;
+        height: number;
+        pixels: Buffer;
+      }[]).map((r) => [r.content_hash, { width: r.width, height: r.height, pixels: new Uint8Array(r.pixels) }]),
+    );
+  }
+  /** Files still without a fingerprint or a miniature. */
+  private pending(hashes: string[]): string[] {
+    const known = this.fingerprints(),
+      small = new Set((this.repo.db.prepare("SELECT content_hash FROM image_miniatures").all() as { content_hash: string }[]).map((r) => r.content_hash));
+    return hashes.filter((h) => !known.has(h) || !small.has(h));
+  }
+
   status(databaseIds?: string[]): VariantStatus {
     const hashes = new Set(this.assets(databaseIds).map((a) => a.content_hash));
-    const known = this.fingerprints();
-    const missing = [...hashes].filter((h) => !known.has(h)).length;
+    const missing = this.pending([...hashes]).length;
     return { images: hashes.size, missing, vectors: this.vectors(hashes).size };
   }
   /** A background task that fingerprints the images that have none. */
   prepare(databaseIds?: string[]): string | null {
-    const known = this.fingerprints();
-    const hashes = [...new Set(this.assets(databaseIds).map((a) => a.content_hash))].filter((h) => !known.has(h));
+    const hashes = this.pending([...new Set(this.assets(databaseIds).map((a) => a.content_hash))]);
     if (!hashes.length) return null;
     return this.repo.newJob("fingerprints", { hashes }, hashes.length);
   }
   /** One step of that task. */
   async fingerprintOne(payload: { hashes: string[] }, index: number): Promise<"imported" | "skipped"> {
     const hash = payload.hashes[index];
-    if (this.repo.db.prepare("SELECT 1 FROM image_fingerprints WHERE content_hash=? AND length(hash)=?").get(hash, FINGERPRINT_HEX)) return "skipped";
+    if (
+      this.repo.db.prepare("SELECT 1 FROM image_fingerprints WHERE content_hash=? AND length(hash)=?").get(hash, FINGERPRINT_HEX) &&
+      this.repo.db.prepare("SELECT 1 FROM image_miniatures WHERE content_hash=?").get(hash)
+    )
+      return "skipped";
     const asset = this.repo.db.prepare("SELECT original_path FROM image_assets WHERE content_hash=? AND width>0 LIMIT 1").get(hash) as
       | { original_path: string }
       | undefined;
@@ -135,12 +159,20 @@ export class Variants {
     const h = await sharp(trimmed).resize(9, 8, { fit: "fill" }).extractChannel(0).raw().toBuffer();
     const v = await sharp(trimmed).resize(8, 9, { fit: "fill" }).extractChannel(0).raw().toBuffer();
     if (h.length !== 72 || v.length !== 72) throw new Error("No se pudo calcular la huella visual.");
-    this.repo.db.prepare("INSERT OR REPLACE INTO image_fingerprints VALUES(?,?)").run(hash, dHash128(h, v));
+    const { data, info } = await sharp(trimmed)
+      .resize(MINIATURE, MINIATURE, { fit: "inside" })
+      .extractChannel(0)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    this.repo.db.transaction(() => {
+      this.repo.db.prepare("INSERT OR REPLACE INTO image_fingerprints VALUES(?,?)").run(hash, dHash128(h, v));
+      this.repo.db.prepare("INSERT OR REPLACE INTO image_miniatures VALUES(?,?,?,?)").run(hash, info.width, info.height, data);
+    })();
     return "imported";
   }
 
   /** Pairs of files that match, with how closely. */
-  private matches(hashes: string[], sensitivity: Sensitivity) {
+  private async matches(hashes: string[], sensitivity: Sensitivity) {
     const limits = SENSITIVITY[sensitivity];
     const fingerprints = this.fingerprints();
     const pairs: { a: string; b: string; bits: number | null; cosine: number | null }[] = [];
@@ -170,6 +202,32 @@ export class Variants {
     // only those pairs are compared (thousands instead of millions).
     if (limits.cosine !== null) {
       const vectors = this.vectors(new Set(hashes));
+      const miniatures = this.miniatures();
+      // A vector candidate counts only when the pixels confirm it.
+      // Checks are kept in the collection: two files never change, so each
+      // pair is checked once.
+      const stored = this.repo.db.prepare("SELECT same FROM image_pair_checks WHERE pair=?");
+      const store = this.repo.db.prepare("INSERT OR REPLACE INTO image_pair_checks VALUES(?,?)");
+      let work = 0;
+      const confirmed = async (a: string, b: string) => {
+        const key = a < b ? a + b : b + a;
+        let ok = this.checked.get(key);
+        if (ok === undefined) {
+          const row = stored.get(key) as { same: number } | undefined;
+          if (row) ok = !!row.same;
+          else {
+            const ma = miniatures.get(a),
+              mb = miniatures.get(b);
+            if (!ma || !mb) return false;
+            ok = cropMatch(ma, mb) >= SAME_PHOTOGRAPH;
+            store.run(key, ok ? 1 : 0);
+            // Long first runs give way to other requests now and then.
+            if (++work % 50 === 0) await new Promise((resolve) => setImmediate(resolve));
+          }
+          this.checked.set(key, ok);
+        }
+        return ok;
+      };
       const list = [...vectors];
       if (list.length > 1) {
         const dims = list[0][1].length;
@@ -198,7 +256,7 @@ export class Variants {
                 seen.add(key);
                 let dot = 0;
                 for (let d = 0; d < dims; d++) dot += va[d] * vb[d];
-                if (dot >= limits.cosine) pairs.push({ a: ha, b: hb, bits: null, cosine: dot });
+                if (dot >= limits.cosine && (await confirmed(ha, hb))) pairs.push({ a: ha, b: hb, bits: null, cosine: dot });
               }
         }
       }
@@ -206,7 +264,7 @@ export class Variants {
     return pairs;
   }
 
-  families(input: { databaseIds?: string[]; sensitivity: Sensitivity }): VariantFamily[] {
+  async families(input: { databaseIds?: string[]; sensitivity: Sensitivity }): Promise<VariantFamily[]> {
     const assets = this.assets(input.databaseIds);
     const byHash = new Map<string, Asset[]>();
     for (const a of assets) (byHash.get(a.content_hash) ?? byHash.set(a.content_hash, []).get(a.content_hash)!).push(a);
@@ -217,7 +275,7 @@ export class Variants {
       if (current && (current.bits ?? 999) <= (close.bits ?? 999) && (current.cosine ?? -1) >= (close.cosine ?? -1)) return;
       (adjacency.get(a) ?? adjacency.set(a, new Map()).get(a)!).set(b, { bits: close.bits ?? current?.bits ?? null, cosine: close.cosine ?? current?.cosine ?? null });
     };
-    for (const pair of this.matches([...byHash.keys()], input.sensitivity)) {
+    for (const pair of await this.matches([...byHash.keys()], input.sensitivity)) {
       link(pair.a, pair.b, pair);
       link(pair.b, pair.a, pair);
     }
@@ -250,9 +308,9 @@ export class Variants {
   }
 
   /** Images that match one image, for the record panel. */
-  of(assetId: string, sensitivity: Sensitivity = "balanced"): VariantFamily | null {
+  async of(assetId: string, sensitivity: Sensitivity = "balanced"): Promise<VariantFamily | null> {
     const asset = this.repo.asset(assetId) as Asset;
-    const family = this.families({ sensitivity }).find((f) => f.members.some((m) => m.contentHash === asset.content_hash));
+    const family = (await this.families({ sensitivity })).find((f) => f.members.some((m) => m.contentHash === asset.content_hash));
     return family ?? null;
   }
 

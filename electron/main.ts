@@ -48,6 +48,8 @@ import { Updates } from "./updates";
 import { autoUpdater } from "electron-updater";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+/** Wikimedia asks automated clients to name themselves and a way to find them. */
+const WIKIMEDIA_USER_AGENT = "NodusImago/0.1 (https://github.com/jorgepb96/nodus-imago)";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -669,14 +671,22 @@ app.whenReady().then(async () => {
         const status = (await call("status")) as { settings: { language: string } };
         const language = status.settings.language === "en" ? "en" : "es";
         const get = async (url: string) => {
-          const response = await fetch(url, {
-            headers: { "User-Agent": "NodusImago/0.1 (desktop research app)", Accept: "application/json" },
-            signal: AbortSignal.timeout(20_000),
-          }).catch(() => {
-            throw new Error(data.source === "iconclass" ? "No se pudo conectar con Iconclass." : "No se pudo conectar con Wikidata.");
-          });
-          if (!response.ok) throw new Error(`${AUTHORITY_SOURCES[data.source]}: HTTP ${response.status}`);
-          return response.json();
+          // A public service may ask to slow down (429): wait as it says, then try again.
+          for (let attempt = 0; ; attempt++) {
+            const response = await fetch(url, {
+              headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
+              signal: AbortSignal.timeout(20_000),
+            }).catch(() => {
+              throw new Error(data.source === "iconclass" ? "No se pudo conectar con Iconclass." : "No se pudo conectar con Wikidata.");
+            });
+            if (response.status === 429 && attempt < 3) {
+              const wait = Math.min(30, Number(response.headers.get("retry-after")) || 5 * (attempt + 1));
+              await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+              continue;
+            }
+            if (!response.ok) throw new Error(`${AUTHORITY_SOURCES[data.source]}: HTTP ${response.status}`);
+            return response.json();
+          }
         };
         if (data.source === "iconclass") {
           const notations = parseIconclassSearch(await get(iconclassSearchUrl(data.query)));
@@ -696,7 +706,7 @@ app.whenReady().then(async () => {
         // Only the place's coordinates are sent, and only when the user asks.
         const data = safe as { latitude: number; longitude: number; radius?: number };
         const response = await fetch(commonsQuery(data.latitude, data.longitude, data.radius), {
-          headers: { "User-Agent": "NodusImago/0.1 (desktop research app)" },
+          headers: { "User-Agent": WIKIMEDIA_USER_AGENT },
           signal: AbortSignal.timeout(20_000),
         }).catch(() => {
           throw new Error("No se pudo conectar con Wikimedia Commons.");

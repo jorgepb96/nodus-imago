@@ -173,6 +173,15 @@ test("Commons nearby photographs are read from the API response", () => {
   );
 });
 
+test("Commons dates are read from timestamps and from sentences", async () => {
+  const { commonsDate } = await import("../shared/commons");
+  assert.equal(commonsDate("2019-05-02 10:00"), "2019-05-02");
+  assert.equal(commonsDate("Taken on 2 June 2013"), "2013");
+  assert.equal(commonsDate("circa 1874"), "1874");
+  assert.equal(commonsDate("Take"), null);
+  assert.equal(commonsDate(null), null);
+});
+
 test("the window loads Commons images and nothing else from Wikimedia", async () => {
   const { isCommonsImageRequest } = await import("../electron/geo/mapRequests");
   assert.ok(isCommonsImageRequest("https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/T.jpg/500px-T.jpg", "image"));

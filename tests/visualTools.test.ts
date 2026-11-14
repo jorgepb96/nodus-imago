@@ -123,7 +123,7 @@ test("fingerprints group copies and the same file, in date order", () =>
     assert.equal(prints.get("hash-0")!.length, 32);
     assert.ok(hamming(prints.get("hash-0")!, prints.get("hash-2")!) > 30, "different images");
     assert.ok(hamming(prints.get("hash-0")!, prints.get("hash-1")!) <= 16, "reproduction");
-    const families = variants.families({ sensitivity: "balanced" });
+    const families = await variants.families({ sensitivity: "balanced" });
     assert.equal(families.length, 1);
     const [family] = families;
     // A (c. 1930) is the original, B (1952) a reproduction, D (1960) holds the
@@ -134,8 +134,8 @@ test("fingerprints group copies and the same file, in date order", () =>
     );
     assert.equal(family.firstYear, 1930);
     assert.ok(!family.members.some((m) => m.rowId === ids[2]));
-    assert.equal(variants.of(assets[1])?.members.length, 3);
-    assert.equal(variants.of(assets[2]), null);
+    assert.equal((await variants.of(assets[1]))?.members.length, 3);
+    assert.equal(await variants.of(assets[2]), null);
   }));
 
 test("the fingerprint task runs through the job queue", () =>
