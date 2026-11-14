@@ -6,19 +6,12 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  Bot,
   Check,
   Cloud,
   Compass,
   Cpu,
-  Database,
-  Images,
   Lightbulb,
-  Lock,
   ScanSearch,
-  Search,
-  ShieldCheck,
-  Sparkles,
   Type,
 } from "lucide-react";
 import type { ModelPreparation } from "../../shared/modelPreparation";
@@ -182,12 +175,12 @@ export function Welcome({
           ) : index === modelStep ? (
             <>
               <div className="welcome-eyebrow">
-                <Cpu size={15} />
-                {t("MODELOS")}
+                <ScanSearch size={15} />
+                {t("6 · BÚSQUEDA SEMÁNTICA")}
               </div>
-              <h1 id="welcome-title">{t("¿Cómo quieres buscar por significado?")}</h1>
+              <h1 id="welcome-title">{t("Elige cómo activar la búsqueda semántica")}</h1>
               <p className="welcome-summary">
-                {t("Elige ahora o más tarde en Ajustes. La búsqueda literal funciona siempre, sin modelos.")}
+                {t("La búsqueda literal funciona siempre. Para buscar por lo que muestran las imágenes hace falta un modelo de embeddings, que convierte cada imagen y cada ficha en una representación numérica que se puede comparar. Puedes cambiar esta elección más tarde en Ajustes › Modelos locales.")}
               </p>
               <div className="welcome-choices" role="radiogroup" aria-label={t("Modelos")}>
                 {(
@@ -195,24 +188,24 @@ export function Welcome({
                     [
                       "local",
                       <Cpu size={20} key="i" />,
-                      "En este equipo",
+                      "En este ordenador",
                       plan?.ready
-                        ? t("El modelo local ya está preparado en este equipo.")
-                        : `${t("EmbeddingGemma 2 se descarga una vez")}${plan ? ` (${formatBytes(plan.remainingBytes)})` : ""} ${t("y funciona sin conexión. Indexar una colección grande lleva tiempo; puedes seguir trabajando mientras tanto.")}`,
+                        ? t("El modelo EmbeddingGemma 2 ya está descargado en este ordenador.")
+                        : `${t("Descarga el modelo EmbeddingGemma 2")}${plan ? ` (${formatBytes(plan.remainingBytes)})` : ""} ${t("una sola vez. Después funciona sin internet. Procesar una colección grande puede llevar horas; mientras tanto puedes seguir trabajando.")}`,
                       t("Recomendado"),
                     ],
                     [
                       "api",
                       <Cloud size={20} key="i" />,
-                      "Mediante una API",
-                      t("Para equipos con menos recursos: Gemini, OpenAI u otro proveedor compatible calcula los vectores. Requiere una clave y envía las imágenes al proveedor."),
+                      "Con un proveedor externo (API)",
+                      t("Para ordenadores con poca memoria. Necesitas una clave de Gemini, OpenAI u otro proveedor compatible. Las imágenes y los textos se envían a ese proveedor para procesarlos."),
                       null,
                     ],
                     [
                       "literal",
                       <Type size={20} key="i" />,
-                      "Solo búsqueda literal",
-                      t("Sin descargas ni conexiones. Podrás activar la búsqueda por significado más adelante."),
+                      "Ahora no",
+                      t("Usa solo la búsqueda literal. No se descarga nada. Puedes activar la búsqueda semántica cuando quieras."),
                       null,
                     ],
                   ] as const
@@ -237,20 +230,20 @@ export function Welcome({
             <>
               <div className="welcome-eyebrow">
                 <Check size={15} />
-                {t("LISTO")}
+                {t("7 · FIN")}
               </div>
-              <h1 id="welcome-title">{t("Todo preparado")}</h1>
+              <h1 id="welcome-title">{t("Configuración terminada")}</h1>
               <p className="welcome-summary">
                 {t(
                   choice === "local"
-                    ? "Al empezar, el modelo se descargará en segundo plano; verás su progreso en Tareas."
+                    ? "El modelo se descargará en segundo plano. Puedes ver el progreso con el botón Tareas (icono de reloj) de la barra superior."
                     : choice === "api"
-                      ? "Al empezar te llevo a Ajustes para conectar el proveedor de embeddings."
-                      : "Puedes preparar la búsqueda por significado cuando quieras desde Ajustes.",
+                      ? "Al continuar se abrirá Ajustes › Modelos locales para que elijas el proveedor e introduzcas la clave."
+                      : "Puedes activar la búsqueda semántica más adelante en Ajustes › Modelos locales.",
                 )}
               </p>
               <p className="welcome-summary">
-                {t("Te enseño en un minuto dónde está cada cosa con un recorrido por la aplicación. Puedes repetirlo cuando quieras desde Ajustes.")}
+                {t("El recorrido guiado señala cada parte de la pantalla y explica para qué sirve. Dura unos dos minutos y puedes repetirlo desde Ajustes › Interfaz.")}
               </p>
               {error && <p className="welcome-error" role="alert">{t(error)}</p>}
             </>
@@ -267,7 +260,7 @@ export function Welcome({
           <ArrowLeft size={16} />
           {t("Anterior")}
         </button>
-        <span>{t("Usa las flechas para avanzar a tu ritmo")}</span>
+        <span>{t("También puedes usar las flechas ← → del teclado")}</span>
         {index < lastStep ? (
           <button
             type="button"
@@ -285,7 +278,7 @@ export function Welcome({
             </button>
             <button type="button" className="welcome-button primary" disabled={preparing} onClick={() => void finish(true)}>
               <Compass size={16} />
-              {t(preparing ? "Preparando…" : "Hacer el recorrido")}
+              {t(preparing ? "Preparando…" : "Ver el recorrido guiado")}
             </button>
           </div>
         )}
