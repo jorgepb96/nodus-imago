@@ -361,6 +361,7 @@ export function ChatView({
           <span className="chat-context-count">{databaseIds.length}</span>
         </button>
         <span className="chat-header-spacer" />
+        {compact && <span className="chat-header-break" aria-hidden="true" />}
         {compact && onExpand && (
           <button type="button" className="chat-header-icon" aria-label={t("Abrir en la sección Chat")} data-tooltip={t("Abrir en la sección Chat")} onClick={onExpand}>
             <Maximize2 size={15} />
@@ -387,8 +388,15 @@ export function ChatView({
             archivedCount={archivedCount}
             showArchived={showArchived}
             onToggleArchived={() => setShowArchived(!showArchived)}
-            onNewConversation={startNew}
-            onOpenConversation={(id) => void open(id).catch((e) => setError(String(e?.message ?? e)))}
+            onNewConversation={(folderId) => {
+              startNew(folderId);
+              // In the panel the history covers the conversation: close it once a chat is chosen.
+              if (compact) setHistoryOpen(false);
+            }}
+            onOpenConversation={(id) => {
+              if (compact) setHistoryOpen(false);
+              void open(id).catch((e) => setError(String(e?.message ?? e)));
+            }}
             onRename={async (c, title) => {
               await api.call("chatUpdate", { ids: [c.id], title });
               await refreshList();
