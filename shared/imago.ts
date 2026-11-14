@@ -208,6 +208,9 @@ export type Settings = {
   autoIndex?: { local?: boolean; api?: boolean };
   /** EmbeddingGemma 2 visual token budget (Gemma 4 sizes); 280 when absent. */
   visionBudget?: 70 | 140 | 280;
+  /** Introduction and guided tour already seen (their version). */
+  welcomeVersion?: number;
+  tourVersion?: number;
   mode: "light" | "dark" | "system";
   theme: string;
   accent: string;
@@ -243,6 +246,8 @@ export type Status = {
   settings: Settings;
   models: ModelInfo[];
   jobs: Job[];
+  /** Launched by a test driver: first-run screens stay out of the way. */
+  automated?: boolean;
 };
 export type SavedSearch = { id: string; name: string; input: SearchInput };
 export type Commands = {

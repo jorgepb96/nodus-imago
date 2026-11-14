@@ -48,7 +48,7 @@ export function DatabaseSearch({
   }, [draft, onChange]);
   const mode = modelReady ? value.mode : "literal";
   return (
-    <div className="database-search" role="search">
+    <div className="database-search" role="search" data-tour="db-search">
       <label className="database-search-input">
         <Search size={15} />
         <input

@@ -155,7 +155,11 @@ export function Settings({
   notify,
   initialTab = "api",
   details = [],
+  onReplayWelcome,
+  onReplayTour,
 }: {
+  onReplayWelcome?: () => void;
+  onReplayTour?: () => void;
   status: Status;
   onChanged: () => void;
   perform: Perform;
@@ -474,6 +478,18 @@ export function Settings({
                 <option value="en">English</option>
               </select>
             </label>
+            <div className="setting-row">
+              <span>
+                <strong>{t("Introducción y recorrido")}</strong>
+                <small className="hint">
+                  {t("Vuelve a ver la presentación de Nodus Imago o el recorrido guiado por la interfaz.")}
+                </small>
+              </span>
+              <div className="row">
+                <Button onClick={onReplayWelcome}>{t("Ver la introducción")}</Button>
+                <Button onClick={onReplayTour}>{t("Hacer el recorrido")}</Button>
+              </div>
+            </div>
             <h3>{t("Paleta")}</h3>
             <div className="palette-grid">
               <button

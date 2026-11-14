@@ -159,6 +159,13 @@ app.whenReady().then(async () => {
       return true;
     }),
     completionAborts = new Map<number, AbortController>();
+  // A test driver (Playwright attaches through remote debugging) never sees
+  // the first-run introduction unless a test asks for it.
+  if (
+    (app.commandLine.hasSwitch("remote-debugging-port") || app.commandLine.hasSwitch("inspect")) &&
+    process.env.IMAGO_FORCE_WELCOME !== "1"
+  )
+    process.env.IMAGO_AUTOMATED = "1";
   worker = new Worker(path.join(__dirname, "worker.cjs"), {
     workerData: {
       root,

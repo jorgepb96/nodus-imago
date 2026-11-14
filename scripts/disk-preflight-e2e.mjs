@@ -70,7 +70,9 @@ try {
       exact: true,
     })
     .waitFor();
-  await region.getByRole("checkbox").check();
+  await region
+    .getByRole("checkbox", { name: /He revisado las licencias/ })
+    .check();
   assert.equal(
     await region
       .getByRole("button", { name: "Preparar búsqueda semántica", exact: true })

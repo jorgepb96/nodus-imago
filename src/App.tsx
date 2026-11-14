@@ -78,6 +78,8 @@ import {
 import { ColumnMenu } from "./components/ColumnMenu";
 import { ColumnVisibility } from "./components/ColumnVisibility";
 import { StickyScrollbar } from "./components/StickyScrollbar";
+import { Welcome, WELCOME_VERSION } from "./components/Welcome";
+import { GuidedTour, TOUR_VERSION } from "./components/GuidedTour";
 import { TimelineView } from "./components/TimelineView";
 import { StatisticsView } from "./components/StatisticsView";
 import {
@@ -480,6 +482,33 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       cancelled = true;
     };
   }, [api, openRowId, tick]);
+  // First run: introduction (language, what Imago does, models), then the
+  // guided tour. Test drivers never see them unless a test asks.
+  const [welcomeOpen, setWelcomeOpen] = useState(false),
+    [tourOpen, setTourOpen] = useState(false),
+    [afterTour, setAfterTour] = useState<"api" | null>(null),
+    welcomeChecked = useRef(false);
+  useEffect(() => {
+    if (!status || welcomeChecked.current) return;
+    welcomeChecked.current = true;
+    if (!status.automated && (status.settings.welcomeVersion ?? 0) < WELCOME_VERSION)
+      setWelcomeOpen(true);
+  }, [status]);
+  const openEmbeddingSettings = () => {
+    setSettingsTab("models");
+    setArea("settings");
+  };
+  const tourArea = useCallback(
+    (target: "home" | "databases" | "search") => {
+      setArea(target);
+      if (target === "databases") {
+        const first = databaseId || databases[0]?.id;
+        if (first && first !== databaseId) setDatabaseId(first);
+        setView("table");
+      }
+    },
+    [databaseId, databases],
+  );
   const navigate = (id: string) => {
     setArea("databases");
     setDatabaseId(id);
@@ -982,7 +1011,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <Moon size={18} />
             )}
           </Button>
-          <span className="header-queue-action">
+          <span className="header-queue-action" data-tour="header-queue">
             <Button
               icon
               data-queue-trigger
@@ -1022,6 +1051,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           <nav>
             <button
               title={t("Inicio")}
+              data-tour="nav-home"
               className={area === "home" ? "active" : ""}
               onClick={() => setArea("home")}
             >
@@ -1046,6 +1076,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             <div className="nav-group-label">{t("EXPLORAR")}</div>
             <button
               title={t("Búsqueda")}
+              data-tour="nav-search"
               className={area === "search" ? "active" : ""}
               onClick={() => {
                 setArea("search");
@@ -1056,7 +1087,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <span className="nav-title">{t("Búsqueda")}</span>
             </button>
           </nav>
-          <div className="sidebar-databases">
+          <div className="sidebar-databases" data-tour="collections" data-tour-fit="content">
             <div className="row">
               <span className="nav-label">{t("COLECCIONES")}</span>
               <Button
@@ -1088,6 +1119,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           <div className="sidebar-bottom">
             <button
               title={t("Ajustes")}
+              data-tour="nav-settings"
               className={area === "settings" ? "active" : ""}
               onClick={() => {
                 setSettingsTab("api");
@@ -1130,6 +1162,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             status && (
               <Settings
                 status={status}
+                onReplayWelcome={() => setWelcomeOpen(true)}
+                onReplayTour={() => setTourOpen(true)}
                 initialTab={settingsTab}
                 onChanged={refresh}
                 perform={perform}
@@ -1588,7 +1622,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     )
                   )}
                   <div className="data-toolbar">
-                    <div className="view-tabs">
+                    <div className="view-tabs" data-tour="db-views">
                       <button
                         className={effectiveView === "table" ? "active" : ""}
                         onClick={() => setView("table")}
@@ -1656,6 +1690,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             criteriaContext !== criteriaKey ||
                             detail.database.id !== databaseId
                           }
+                          data-tour="db-agreement"
                           onClick={() => setModal("agreement")}
                         >
                           <BarChart3 size={14} />
@@ -1663,7 +1698,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         </Button>
                       )}
                       {area === "databases" && detail && (
-                        <Button onClick={() => setModal("automations")}>
+                        <Button data-tour="db-automations" onClick={() => setModal("automations")}>
                           <Sparkles size={14} />
                           {t("Automatizaciones")}
                         </Button>
@@ -1724,7 +1759,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         />
                       ) : (
                         <>
-                          <details className="actions-menu">
+                          <details className="actions-menu" data-tour="db-import">
                             <summary className="button">
                               <Upload size={14} />
                               {t("Importar")}
@@ -2023,7 +2058,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     <>
                     <div className="table-scroll data-table" ref={tableScrollRef}>
                       <table ref={tableRef}>
-                        <thead>
+                        <thead data-tour={area === "databases" ? "db-columns" : undefined}>
                           <tr>
                             <th
                               className={
@@ -2385,6 +2420,41 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onClose={() => setQueueFilter(null)}
           perform={perform}
           onChanged={refresh}
+        />
+      )}
+      {status && welcomeOpen && (
+        <Welcome
+          language={status.settings.language}
+          onLanguage={async (language) => {
+            await api.call("updateSettings", { language });
+            onLanguage(language);
+            refresh();
+          }}
+          onFinish={({ tour, choice }) => {
+            setWelcomeOpen(false);
+            void api
+              .call("updateSettings", { welcomeVersion: WELCOME_VERSION })
+              .then(refresh)
+              .catch(() => {});
+            setAfterTour(choice === "api" ? "api" : null);
+            if (tour) setTourOpen(true);
+            else if (choice === "api") openEmbeddingSettings();
+            else setArea("home");
+          }}
+        />
+      )}
+      {tourOpen && !welcomeOpen && (
+        <GuidedTour
+          onArea={tourArea}
+          onClose={() => {
+            setTourOpen(false);
+            void api
+              .call("updateSettings", { tourVersion: TOUR_VERSION })
+              .then(refresh)
+              .catch(() => {});
+            if (afterTour === "api") openEmbeddingSettings();
+            setAfterTour(null);
+          }}
         />
       )}
       {toast && (

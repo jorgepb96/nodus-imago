@@ -68,7 +68,13 @@ test("every visible t() literal has an English translation", () => {
 
 test("no interface text is written outside t()", () => {
   // Names that are the same in every language.
-  const allowed = new Set(["Español", "Nodus Imago"]);
+  // The language screen speaks both languages until one is chosen.
+  const allowed = new Set([
+    "Español",
+    "Nodus Imago",
+    "Elige tu idioma · Choose your language",
+    "Puedes cambiarlo cuando quieras en Ajustes. · You can change it at any time in Settings.",
+  ]);
   const found: string[] = [];
   for (const file of files("src", /\.tsx$/)) {
     const source = parse(file);

@@ -251,6 +251,7 @@ export class Service {
               .get(this.engine.textContract()) as { n: number }
           ).n,
           autoIndex: this.autoIndex.state(),
+          automated: process.env.IMAGO_AUTOMATED === "1",
           semanticReady: (() => {
             try {
               this.engine.ready(this.repo.getSettings().embeddingModel);

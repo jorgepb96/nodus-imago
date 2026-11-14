@@ -39,7 +39,9 @@ try {
     name: "Preparar búsqueda local",
     exact: true,
   });
-  await region.getByRole("checkbox").check();
+  await region
+    .getByRole("checkbox", { name: /He revisado las licencias/ })
+    .check();
   await region
     .getByRole("button", { name: "Preparar búsqueda semántica", exact: true })
     .click();

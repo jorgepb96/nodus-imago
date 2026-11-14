@@ -192,6 +192,9 @@ export const settingsSchema = z
       .object({ local: z.boolean().optional(), api: z.boolean().optional() })
       .strict()
       .optional(),
+    /** Introduction and guided tour already seen (their version). */
+    welcomeVersion: z.number().int().min(0).max(1000).optional(),
+    tourVersion: z.number().int().min(0).max(1000).optional(),
     mode: z.enum(["light", "dark", "system"]),
     theme: z.string().max(100),
     accent: z.string().regex(/^#[0-9a-f]{6}$/i),
