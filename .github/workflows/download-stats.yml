@@ -1,0 +1,61 @@
+name: Download stats
+
+# Twice a day and after every published release, count the downloads of
+# every installer and write them to the download-stats branch, which the
+# README badges read. GitHub keeps only running totals, so the branch also
+# keeps a dated history. main is never written.
+on:
+  schedule:
+    - cron: "23 6,18 * * *"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write # The download-stats branch only.
+
+concurrency:
+  group: download-stats
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout the counting script from the default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/release-downloads.mjs
+            scripts/write-download-stats.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Checkout or create the download-stats branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$url" download-stats >/dev/null; then
+            git clone --depth 1 --branch download-stats "$url" stats
+          else
+            mkdir stats && cd stats && git init -q -b download-stats && git remote add origin "$url"
+          fi
+      - name: Count the downloads
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/write-download-stats.mjs stats
+      - name: Commit the counters to download-stats
+        working-directory: stats
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add github-release-downloads.json history.jsonl
+          if git diff --cached --quiet; then echo "No change"; exit 0; fi
+          git commit -q -m "Download counters $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q origin download-stats

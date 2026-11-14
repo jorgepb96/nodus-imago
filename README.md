@@ -5,9 +5,14 @@
 <h1 align="center">Nodus Imago</h1>
 <p align="center"><strong>A desktop application to catalogue, describe and search collections of historical images.</strong></p>
 <p align="center">
+  <a href="https://github.com/jorgepb96/nodus-imago/releases/latest"><img alt="Download Nodus Imago" src="https://img.shields.io/badge/Download_Nodus_Imago-4f46e5?style=for-the-badge&amp;logo=github&amp;logoColor=white"></a>
+  <a href="https://github.com/jorgepb96/nodus"><img alt="Part of the Nodus family" src="https://img.shields.io/badge/Part_of_the_Nodus_family-6d28d9?style=for-the-badge&amp;logo=github&amp;logoColor=white"></a>
+  <a href="https://github.com/jorgepb96/nodus-imago/releases"><img alt="Total Nodus Imago downloads" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.total&amp;label=Downloads&amp;style=for-the-badge&amp;color=374151"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/jorgepb96/nodus-imago/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/jorgepb96/nodus-imago?label=release&amp;color=4f46e5"></a>
   <a href="https://github.com/jorgepb96/nodus-imago/actions/workflows/ci.yml"><img src="https://github.com/jorgepb96/nodus-imago/actions/workflows/ci.yml/badge.svg" alt="Desktop validation"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only-6d28d9" alt="License: AGPL-3.0-only"></a>
-  <a href="https://github.com/jorgepb96/nodus"><img src="https://img.shields.io/badge/part_of_the-Nodus_family-4f46e5" alt="Part of the Nodus family"></a>
 </p>
 
 Nodus Imago is an open-source desktop application for people who research with images, for example in history, art history or archives. It stores your images and their catalogue records in databases on your computer. With them you can describe each image, classify it, search for it by words or by what it shows, and analyse the collection.
@@ -18,18 +23,27 @@ Everything is stored on your computer. You do not need an account or a server. A
 
 ![Nodus Imago in English and light mode, showing a gallery of historical photographs from the Biblioteca Nacional de España](docs/screenshots/readme-gallery.png)
 
+## Install Nodus Imago
+
+Download the installer for your computer and open it. There is no server to configure and no account is required to begin.
+
+| Platform | Latest installer | Total downloads | Latest version downloads |
+| --- | --- | ---: | ---: |
+| macOS with Apple silicon | [Download DMG](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-mac-arm64.dmg) | <img alt="Total downloads of the macOS Apple silicon build" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.installers.macosArm64&amp;label=&amp;style=flat-square&amp;color=374151"> | <img alt="Downloads of the macOS Apple silicon build in the latest version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.latest.installers.macosArm64&amp;label=&amp;style=flat-square&amp;color=374151"> |
+| macOS with an Intel processor | [Download DMG](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-mac-x64.dmg) | <img alt="Total downloads of the macOS Intel build" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.installers.macosIntel&amp;label=&amp;style=flat-square&amp;color=374151"> | <img alt="Downloads of the macOS Intel build in the latest version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.latest.installers.macosIntel&amp;label=&amp;style=flat-square&amp;color=374151"> |
+| Windows 10 and 11 | [Download EXE](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-win-x64.exe) | <img alt="Total downloads of the Windows build" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.installers.windows&amp;label=&amp;style=flat-square&amp;color=374151"> | <img alt="Downloads of the Windows build in the latest version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.latest.installers.windows&amp;label=&amp;style=flat-square&amp;color=374151"> |
+| Ubuntu and Debian | [Download DEB](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-linux-amd64.deb) · [ARM64](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-linux-arm64.deb) | <img alt="Total downloads of the Debian and Ubuntu package" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.installers.linuxDeb&amp;label=&amp;style=flat-square&amp;color=374151"> | <img alt="Downloads of the Debian and Ubuntu package in the latest version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.latest.installers.linuxDeb&amp;label=&amp;style=flat-square&amp;color=374151"> |
+| Fedora, openSUSE and other RPM-based distributions | [Download RPM](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-linux-x86_64.rpm) · [ARM64](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-linux-aarch64.rpm) | <img alt="Total downloads of the RPM package" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.installers.linuxRpm&amp;label=&amp;style=flat-square&amp;color=374151"> | <img alt="Downloads of the RPM package in the latest version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.latest.installers.linuxRpm&amp;label=&amp;style=flat-square&amp;color=374151"> |
+| Other Linux distributions | [Download AppImage](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-linux-x86_64.AppImage) · [ARM64](https://github.com/jorgepb96/nodus-imago/releases/latest/download/Nodus-Imago-linux-arm64.AppImage) | <img alt="Total downloads of the AppImage" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.installers.linuxAppImage&amp;label=&amp;style=flat-square&amp;color=374151"> | <img alt="Downloads of the AppImage in the latest version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.latest.installers.linuxAppImage&amp;label=&amp;style=flat-square&amp;color=374151"> |
+| **Total** | | <img alt="Total downloads of every Nodus Imago installer" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.total&amp;label=&amp;style=flat-square&amp;color=374151"> | <img alt="Downloads of every Nodus Imago installer in the latest version" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjorgepb96%2Fnodus-imago%2Fdownload-stats%2Fgithub-release-downloads.json&amp;query=%24.latest.total&amp;label=&amp;style=flat-square&amp;color=374151"> |
+
+- **macOS:** the app is signed and notarized by Apple, so it opens like any other app. Choose Apple silicon for M-series Macs and Intel for older ones.
+- **Windows:** the installer is not yet signed with a code-signing certificate. If Windows SmartScreen shows a warning, choose **More info › Run anyway**.
+- **Linux:** the DEB and RPM packages install from your system's package tools. For the AppImage, allow it to run as a program (`chmod +x`) and open it.
+
+Imago checks for new versions and installs them when you choose to; in **Settings › Updates and news** you can also let it download them automatically. Every version, with its notes and all files, is on the [releases page](https://github.com/jorgepb96/nodus-imago/releases). You can also [run Imago from source](#development).
+
 ## Get started
-
-Imago is in development at version **0.1.0**. Test installers and their validation reports are available in [GitHub Actions](https://github.com/jorgepb96/nodus-imago/actions/workflows/ci.yml) in the formats below. They are for testing; a signed public release has not been published yet.
-
-| Platform | Test installer formats |
-| --- | --- |
-| macOS · Apple silicon | DMG, ZIP |
-| macOS · Intel | DMG, ZIP |
-| Windows 10/11 · x64 | NSIS installer |
-| Linux · x64 or ARM64 | AppImage, DEB, RPM |
-
-You can also [run Imago from source](#development).
 
 The first time you open Imago, an introduction asks you to choose the language (Spanish or English), explains the main features and asks how you want to turn on semantic search: with a model on your computer, with an external provider, or not for now. A guided tour then points out each part of the screen, including the chat. You can repeat both from **Settings › Interface**.
 
