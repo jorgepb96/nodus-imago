@@ -15,79 +15,90 @@ export type TourStep = {
   area?: "home" | "databases" | "search";
   title: string;
   body: string;
+  /** One line per item when the highlighted control groups several things. */
+  items?: string[];
 };
 
+// Writing rule: name what is highlighted, say what it does and how to use
+// it, in plain words; no slogans or figurative phrases.
 export const TOUR_STEPS: TourStep[] = [
   {
-    title: "Recorrido por Nodus Imago",
-    body: "En un minuto te enseño dónde está cada cosa. Usa las flechas o los botones para avanzar; puedes salir cuando quieras.",
+    title: "Recorrido por la pantalla",
+    body: "Este recorrido señala las partes principales de Nodus Imago y explica para qué sirve cada una. Pulsa Siguiente o usa las flechas ← → del teclado. Puedes cerrarlo en cualquier momento con Saltar.",
   },
   {
     target: "nav-home",
     area: "home",
     title: "Inicio",
-    body: "El resumen de tu colección: el siguiente paso recomendado, las imágenes y el estado de la indexación.",
+    body: "Muestra un resumen de tu colección: cuántas bases de datos, registros e imágenes tienes, cuántas imágenes están preparadas para la búsqueda semántica y qué paso conviene hacer a continuación.",
   },
   {
     target: "collections",
-    title: "Colecciones",
-    body: "Tus bases de datos. Pulsa + para crear una nueva; cada una tiene sus propias propiedades.",
+    title: "Lista de bases de datos",
+    body: "Aquí aparecen todas tus bases de datos. Pulsa sobre una para abrirla. El botón + crea una base de datos nueva.",
   },
   {
     target: "db-views",
     area: "databases",
-    title: "Vistas de la base",
-    body: "Los mismos registros como tabla, galería, mapa, cronología o estadísticas. Las estadísticas se guardan con la base.",
+    title: "Pestañas de vista",
+    body: "Estas pestañas muestran los registros de la base de datos abierta de distintas formas:",
+    items: [
+      "Tabla: una fila por registro y una columna por propiedad. Puedes editar las celdas directamente.",
+      "Galería: una tarjeta por registro con su imagen principal.",
+      "Mapa: sitúa en un mapa los registros que tienen una propiedad de ubicación.",
+      "Cronología: ordena los registros por año según una propiedad de fecha.",
+      "Estadísticas: calcula frecuencias, tablas cruzadas y otros análisis, y permite guardarlos.",
+    ],
   },
   {
     target: "db-search",
     area: "databases",
-    title: "Buscador de la base",
-    body: "Filtra esta base por palabras exactas o por significado, en las imágenes y en las fichas, sin salir de ella.",
+    title: "Buscador de la base de datos",
+    body: "Busca solo dentro de la base de datos abierta y muestra únicamente los registros que coinciden. Con los botones de la derecha eliges el tipo de búsqueda: Literal (palabras exactas), Semántica (por significado) o Híbrida (las dos).",
   },
   {
     target: "db-import",
     area: "databases",
     title: "Importar",
-    body: "Añade imágenes sueltas, una carpeta completa o una tabla CSV a esta base.",
+    body: "Abre un menú para añadir imágenes a esta base de datos (archivos sueltos o una carpeta completa) o para importar registros desde un archivo CSV.",
   },
   {
     target: "db-columns",
     area: "databases",
-    title: "Columnas",
-    body: "Arrastra una cabecera para moverla y su borde para cambiar el ancho. Con el botón derecho puedes renombrar, cambiar el tipo, filtrar, calcular, fijar u ocultar.",
+    title: "Cabecera de la tabla",
+    body: "Cada columna es una propiedad. Arrastra el nombre de una columna para cambiarla de sitio y arrastra su borde derecho para cambiar el ancho. Con clic derecho sobre el nombre puedes renombrarla, cambiar su tipo, filtrar, ordenar, calcular un total, fijarla u ocultarla.",
   },
   {
     target: "db-automations",
     area: "databases",
     title: "Automatizaciones",
-    body: "Los modelos proponen descripciones o categorías en lote. Revisas las propuestas antes de que cambien tus datos.",
+    body: "Configura un modelo de IA para que rellene una propiedad en muchos registros a la vez, por ejemplo una descripción o un tema. Los valores aparecen como propuestas y solo se guardan cuando los apruebas.",
   },
   {
     target: "db-agreement",
     area: "databases",
     title: "Concordancia",
-    body: "Compara las etiquetas de varios modelos con las del investigador: acuerdo, índices, confusiones y casos para revisar.",
+    body: "Compara las categorías asignadas por varios modelos de IA con las que has asignado tú. Muestra el porcentaje de acuerdo, índices como kappa y los registros en los que no coinciden.",
   },
   {
     target: "nav-search",
     area: "search",
     title: "Búsqueda global",
-    body: "Busca en todas tus bases a la vez: literal, semántica o híbrida, con una imagen de referencia y filtros.",
+    body: "Busca en todas tus bases de datos a la vez. Además de escribir, puedes adjuntar una imagen para encontrar otras parecidas y añadir filtros por propiedades.",
   },
   {
     target: "header-queue",
     title: "Tareas",
-    body: "Importaciones, descargas e indexación trabajan en segundo plano. Desde aquí ves su progreso y puedes pausarlas.",
+    body: "Las operaciones largas, como importar imágenes, descargar modelos o preparar la búsqueda semántica, se ejecutan en segundo plano. Este botón muestra su progreso y permite pausarlas o cancelarlas.",
   },
   {
     target: "nav-settings",
     title: "Ajustes",
-    body: "Modelos, APIs, copias de seguridad, idioma y apariencia. Desde aquí puedes repetir la introducción y este recorrido.",
+    body: "Aquí configuras los modelos de IA, los proveedores externos, las copias de seguridad, el idioma y la apariencia. En Ajustes › Interfaz puedes volver a ver la introducción y este recorrido.",
   },
   {
-    title: "¡Listo!",
-    body: "Empieza creando una base de datos o importando tu catálogo. Tus originales nunca se modifican.",
+    title: "Fin del recorrido",
+    body: "Para empezar, crea una base de datos con el botón + de la lista de bases de datos, o importa un archivo CSV desde Inicio.",
   },
 ];
 
@@ -258,6 +269,26 @@ export function GuidedTour({
         </header>
         <h2 id="tour-title">{t(step.title)}</h2>
         <p id="tour-body">{t(step.body)}</p>
+        {step.items && (
+          <ul className="tour-items">
+            {step.items.map((item) => {
+              const text = t(item),
+                cut = text.indexOf(":");
+              return (
+                <li key={item}>
+                  {cut > 0 ? (
+                    <>
+                      <b>{text.slice(0, cut)}</b>
+                      {text.slice(cut)}
+                    </>
+                  ) : (
+                    text
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <div className="tour-progress" aria-hidden="true">
           {TOUR_STEPS.map((_, i) => (
             <i key={i} className={i <= index ? "active" : ""} />

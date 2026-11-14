@@ -25,7 +25,7 @@ test("every tour step targets a data-tour control present in the interface", () 
 test("introduction and tour texts have English", () => {
   const texts = [
     ...SLIDES.flatMap((s) => [s.eyebrow, s.title, s.summary, s.tip ?? "", ...(s.points ?? []).flatMap((p) => [p.title, p.body])]),
-    ...TOUR_STEPS.flatMap((s) => [s.title, s.body]),
+    ...TOUR_STEPS.flatMap((s) => [s.title, s.body, ...(s.items ?? [])]),
   ].filter(Boolean);
   const untranslated = texts.filter((s) => translate(s, "en") === s && s !== "Literal");
   assert.deepEqual(untranslated, []);

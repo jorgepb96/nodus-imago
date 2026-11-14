@@ -481,9 +481,9 @@ export function Settings({
             <div className="setting-row">
               <span>
                 <strong>{t("Introducción y recorrido")}</strong>
-                <small className="hint">
+                <p className="hint">
                   {t("Vuelve a ver la presentación de Nodus Imago o el recorrido guiado por la interfaz.")}
-                </small>
+                </p>
               </span>
               <div className="row">
                 <Button onClick={onReplayWelcome}>{t("Ver la introducción")}</Button>
