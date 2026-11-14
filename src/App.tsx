@@ -499,8 +499,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setArea("settings");
   };
   const tourArea = useCallback(
-    (target: "home" | "databases" | "search") => {
+    (target: "home" | "databases" | "search" | "settings") => {
       setArea(target);
+      if (target === "settings") setSettingsTab("api");
       if (target === "databases") {
         const first = databaseId || databases[0]?.id;
         if (first && first !== databaseId) setDatabaseId(first);
@@ -952,6 +953,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       <header className="nodus-header app-titlebar">
         <button
           className="nodus-header-brand"
+          data-tour="header-sidebar"
           title={
             collapsed ? t("Mostrar menú lateral") : t("Ocultar menú lateral")
           }
@@ -967,6 +969,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </button>
         <button
           className="interface-trigger"
+          data-tour="header-interface"
           onClick={() => {
             setSettingsTab("appearance");
             setArea("settings");
@@ -980,7 +983,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           <ImagoMark size={16} />
           IMAGO
         </span>
-        <div className="nodus-header-actions">
+        <div className="nodus-header-actions" data-tour="header-actions">
           {!!busy && <Spinner />}
           <Button
             icon
@@ -1683,7 +1686,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         </button>
                       )}
                     </div>
-                    <div className="row toolbar-actions">
+                    <div
+                      className="row toolbar-actions"
+                      data-tour={area === "databases" ? "db-toolbar" : undefined}
+                    >
                       {area === "databases" && detail && (
                         <Button
                           disabled={

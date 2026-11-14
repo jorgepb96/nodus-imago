@@ -50,8 +50,8 @@ export const SLIDES: Slide[] = [
       },
       {
         icon: <Bot size={18} />,
-        title: "Propuestas de la IA",
-        body: "Un modelo de IA puede sugerir descripciones o categorías. Las sugerencias no se guardan hasta que tú las apruebas.",
+        title: "Descripciones y categorías con IA",
+        body: "Un modelo de IA puede proponer una descripción o una categoría para cada registro. Las propuestas no se guardan hasta que las revisas y las apruebas.",
       },
     ],
     tip: "Nodus Imago no modifica tus archivos originales: guarda una referencia a cada uno y crea miniaturas para mostrarlos.",

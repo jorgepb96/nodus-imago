@@ -217,7 +217,7 @@ export function Settings({
   ];
   return (
     <div className="settings-page">
-      <aside className="settings-navigation">
+      <aside className="settings-navigation" data-tour="settings-nav">
         <h1>{t("Ajustes")}</h1>
         <p>Nodus Imago v0.1.0</p>
         <div className="settings-search">
