@@ -31,6 +31,8 @@ import { Button, Modal } from "./ui";
 import type { Perform } from "./Properties";
 import { THEMES } from "../theme/themes.mjs";
 import { useT } from "../i18n";
+import { DEFAULT_EMBEDDING_API } from "../../shared/embeddingApi";
+import { PROVIDERS } from "../../shared/aiConfig";
 import { ApiSettings } from "./ApiSettings";
 import { ModelPicker } from "./ModelPicker";
 export function Jobs({
@@ -65,7 +67,7 @@ export function Jobs({
           <div className="row">
             <strong>
               {t(labels[j.kind] ?? j.kind)}
-              {j.label && <small className="job-label">{j.label}</small>}
+              {j.label && <small className="job-label">{t(j.label)}</small>}
             </strong>
             <span className={"badge " + j.state}>{t(states[j.state])}</span>
             <span className="spacer" />
@@ -136,7 +138,7 @@ export function Jobs({
             </span>
           </div>
           {j.message && (
-            <small className={j.state === "failed" || j.failed ? "danger" : "muted"}>{j.message}</small>
+            <small className={j.state === "failed" || j.failed ? "danger" : "muted"}>{t(j.message)}</small>
           )}
         </div>
       ))}
@@ -282,12 +284,18 @@ export function Settings({
             </label>
             <label className="setting-row">
               <strong>{t("Búsqueda multimodal")}</strong>
-              <span>{t("EmbeddingGemma 2 · local")}</span>
+              <span>
+                {s.embeddingModel === "api-embedding"
+                  ? `${PROVIDERS[(s.embeddingApi ?? DEFAULT_EMBEDDING_API).provider].label} · ${(s.embeddingApi ?? DEFAULT_EMBEDDING_API).model}`
+                  : s.embeddingModel === "harrier-oss-v1-0.6b-q8_0"
+                    ? "Harrier OSS v1 · local"
+                    : t("EmbeddingGemma 2 · local")}
+              </span>
             </label>
             <p className="hint">
-              Puedes elegir otro modelo e instrucciones para cada propiedad
-              desde su configuración. Los modelos de API solo se usan al
-              habilitarlos y encolar una tarea expresamente.
+              {t(
+                "Puedes elegir otro modelo e instrucciones para cada propiedad desde su configuración. Los modelos de API solo se usan al habilitarlos y encolar una tarea expresamente.",
+              )}
             </p>
           </div>
         )}
@@ -305,8 +313,9 @@ export function Settings({
               <span className="badge">{t("Opcional")}</span>
             </div>
             <p className="muted">
-              Las bases de datos y la búsqueda literal funcionan sin modelos.
-              Las descargas solo comienzan al pulsar Descargar.
+              {t(
+                "Las bases de datos y la búsqueda literal funcionan sin modelos. Las descargas solo comienzan al pulsar Descargar.",
+              )}
             </p>
             <ModelPreparation status={status} perform={perform} onChanged={onChanged}/>
             {status.models.filter(m => !m.experimental || m.id === s.embeddingModel || m.id === s.visionModel || m.id === s.descriptionModel.model || m.id === s.classificationModel.model).map((m) => (
@@ -320,14 +329,14 @@ export function Settings({
                     )}
                   </div>
                   <div>
-                    <h3>{m.label}</h3>
+                    <h3>{t(m.label)}</h3>
                     <span className="muted">
                       {m.task === "embedding"
                         ? t(m.id === "harrier-oss-v1-0.6b-q8_0" ? "Embeddings textuales · 0,6B" : "Embeddings de texto e imagen")
                         : m.task === "runtime"
-                          ? "Motor nativo de LFM3 · CPU / Metal"
-                          : "Descripción y clasificación"}{" "}
-                      · {m.license}
+                          ? t("Motor nativo de LFM3 · CPU / Metal")
+                          : t("Descripción y clasificación")}{" "}
+                      · {t(m.license)}
                     </span>
                   </div>
                   <span className="spacer" />
@@ -357,7 +366,7 @@ export function Settings({
                       disabled={m.available === false}
                       onClick={() =>
                         void perform(async () => {
-                          if (!window.confirm(`${m.label} · ${m.estimatedGB.toFixed(3)} GB · ${m.license}\n${status.root}/models\n${t("¿Autorizar esta descarga?")}`)) return;
+                          if (!window.confirm(`${t(m.label)} · ${m.estimatedGB.toFixed(3)} GB · ${t(m.license)}\n${status.root}/models\n${t("¿Autorizar esta descarga?")}`)) return;
                           await window.imago.call("downloadModel", {
                             id: m.id,
                           });
@@ -390,7 +399,7 @@ export function Settings({
                       )
                     }
                   >
-                    Licencia y procedencia
+                    {t("Licencia y procedencia")}
                   </Button>
                   {m.installed && (
                     <Button
@@ -431,10 +440,9 @@ export function Settings({
               </article>
             ))}
             <p className="hint">
-              LFM3-VL-2B usa la licencia LFM Open License 1.0, con condiciones
-              para organizaciones de gran facturación. Los pesos se descargan
-              por separado. Florence-2 Base (MIT) queda pendiente de
-              integración.
+              {t(
+                "LFM3-VL-2B usa la licencia LFM Open License 1.0, con condiciones para organizaciones de gran facturación. Los pesos se descargan por separado. Florence-2 Base (MIT) queda pendiente de integración.",
+              )}
             </p>
           </div>
         )}
@@ -660,17 +668,13 @@ export function Settings({
                 {t("Reconstruir índice literal")}
               </Button>
               <Button
-                disabled={
-                  !status.models.some(
-                    (m) => m.task === "embedding" && m.verified,
-                  )
-                }
+                disabled={!status.semanticReady}
                 title={
-                  status.models.some(
-                    (m) => m.task === "embedding" && m.verified,
-                  )
+                  status.semanticReady
                     ? undefined
-                    : "Instala y verifica EmbeddingGemma 2 en Modelos locales."
+                    : t(
+                        "Instala un modelo local de embeddings o configura uno por API.",
+                      )
                 }
                 onClick={() =>
                   void perform(async () => {
@@ -679,7 +683,7 @@ export function Settings({
                   })
                 }
               >
-                {t("Indexar imágenes")}
+                {t("Indexar imágenes y fichas")}
               </Button>
             </div>
           </div>
@@ -707,8 +711,9 @@ export function Settings({
               <span>
                 <strong>{t("Trabajos simultáneos")}</strong>
                 <p className="hint">
-                  Varias columnas pueden procesarse en paralelo. Se limita según
-                  el perfil y la memoria del equipo.
+                  {t(
+                    "Varias columnas pueden procesarse en paralelo. Se limita según el perfil y la memoria del equipo.",
+                  )}
                 </p>
               </span>
               <select
@@ -744,9 +749,9 @@ export function Settings({
               </select>
             </label>
             <p className="hint">
-              Cambiar las dimensiones crea un índice independiente. Los vectores
-              anteriores se conservan. La indexación omite los originales ya
-              procesados con la misma configuración.
+              {t(
+                "Cambiar las dimensiones crea un índice independiente. Los vectores anteriores se conservan. La indexación omite los originales ya procesados con la misma configuración.",
+              )}
             </p>
             <label className="setting-row">
               <strong>{t("Dispositivo")}</strong>
@@ -797,8 +802,9 @@ export function Settings({
           </div>
         )}
         <div className="settings-legal">
-          <ShieldCheck size={14} /> AGPL-3.0-only · Sin cuentas · Sin telemetría
-          · {s.remoteEnabled ? "APIs opcionales activadas" : "IA local"}
+          <ShieldCheck size={14} /> AGPL-3.0-only · {t("Sin cuentas")} ·{" "}
+          {t("Sin telemetría")} ·{" "}
+          {t(s.remoteEnabled ? "APIs opcionales activadas" : "IA local")}
         </div>
         {license && (
           <Modal

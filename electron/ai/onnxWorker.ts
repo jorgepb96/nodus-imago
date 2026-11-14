@@ -72,6 +72,13 @@ process.on("message", (request: any) => {
   chain = chain.then(async () => {
     try {
       const { processor, model, RawImage } = await load();
+      // Gemma 4 vision encoders are trained for 70, 140 and 280 soft tokens per
+      // image (9 patches each); fewer tokens cost far less CPU.
+      processor.image_processor.max_soft_tokens = [70, 140, 280].includes(
+        request.visionBudget,
+      )
+        ? request.visionBudget
+        : 280;
       const results: number[][] = [];
       for (const item of request.inputs as {
         text?: string;

@@ -12,6 +12,13 @@ import {
   openAiVisionContent,
   type VisionImagePart,
 } from "../../shared/visionContent";
+import {
+  embeddingApiMultimodal,
+  embeddingApiResizable,
+  embeddingApiText,
+  geminiNativeBase,
+  type EmbeddingApiProvider,
+} from "../../shared/embeddingApi";
 export type CompletionRequest = {
   choice: ModelChoice;
   profiles: Partial<Record<ApiProvider, ApiProfile>>;
@@ -20,6 +27,20 @@ export type CompletionRequest = {
   system: string;
   images: VisionImagePart[];
   minIntervalMs?: number;
+};
+/** An embedding call brokered by the main process: the worker never sees keys. */
+export type EmbeddingRequest = {
+  embedding: true;
+  provider: EmbeddingApiProvider;
+  model: string;
+  dimensions: number;
+  profiles: Partial<Record<ApiProvider, ApiProfile>>;
+  remoteEnabled: boolean;
+  minIntervalMs?: number;
+  inputs: (
+    | { text: string; role: "query" | "document" }
+    | { image: string; mimeType: "image/jpeg" | "image/png" }
+  )[];
 };
 export class ApiFailure extends Error {
   fatal = true;
@@ -51,11 +72,13 @@ export class ApiProviders {
     route: string,
     body: unknown,
     signal: AbortSignal,
+    expectedBase?: string,
   ) {
     const key = this.secrets.get(provider);
     if (key) {
       const official = PROVIDERS[provider].baseUrl;
-      const expected = official ? providerBase(provider, {}) : null;
+      const expected =
+        expectedBase ?? (official ? providerBase(provider, {}) : null);
       if (
         base !== expected &&
         !(await this.authorizeEndpoint?.(provider, base))
@@ -72,6 +95,9 @@ export class ApiProviders {
     if (provider === "anthropic") {
       if (key) headers["x-api-key"] = key;
       headers["anthropic-version"] = "2023-06-01";
+    } else if (provider === "gemini" && expectedBase) {
+      // Gemini's native endpoints (embeddings) take the key in their own header.
+      if (key) headers["x-goog-api-key"] = key;
     } else if (key) headers.Authorization = `Bearer ${key}`;
     for (let attempt = 0; attempt < 4; attempt++) {
       const timeout = AbortSignal.timeout(120_000),
@@ -206,6 +232,123 @@ export class ApiProviders {
     if (typeof text !== "string")
       throw new Error("El proveedor no devolvió una respuesta de texto.");
     return text;
+  }
+  async embed(
+    input: EmbeddingRequest,
+    signal: AbortSignal,
+  ): Promise<number[][]> {
+    const provider = input.provider,
+      base = providerBase(provider, input.profiles);
+    if (!input.remoteEnabled && !isLoopbackUrl(base))
+      throw new ApiFailure(
+        "Las APIs remotas están desactivadas. No se ha enviado ningún dato.",
+      );
+    if (!input.inputs.length) return [];
+    const images = input.inputs.some((item) => "image" in item);
+    if (images && !embeddingApiMultimodal(input))
+      throw new ApiFailure(
+        "Este modelo de embeddings solo admite texto; no se ha enviado ninguna imagen.",
+      );
+    const start = Math.max(Date.now(), this.nextRequest.get(provider) ?? 0);
+    this.nextRequest.set(
+      provider,
+      start + Math.min(60000, Math.max(0, input.minIntervalMs ?? 0)),
+    );
+    if (start > Date.now())
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          clearTimeout(timer);
+          reject(new Error("Solicitud cancelada."));
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", abort);
+          resolve();
+        }, start - Date.now());
+        signal.addEventListener("abort", abort, { once: true });
+      });
+    let vectors: unknown[];
+    if (provider === "gemini") {
+      const native = geminiNativeBase(base),
+        model = input.model.trim().replace(/^models\//, ""),
+        legacy = !/gemini-embedding-2/.test(model);
+      const result = await this.request(
+        provider,
+        native,
+        `/models/${encodeURIComponent(model)}:batchEmbedContents`,
+        {
+          requests: input.inputs.map((item) => ({
+            model: `models/${model}`,
+            content: {
+              parts: [
+                "image" in item
+                  ? {
+                      inline_data: {
+                        mime_type: item.mimeType,
+                        data: item.image,
+                      },
+                    }
+                  : {
+                      text: legacy
+                        ? item.text
+                        : embeddingApiText(model, item.role, item.text),
+                    },
+              ],
+            },
+            output_dimensionality: input.dimensions,
+            ...(legacy && "role" in item
+              ? {
+                  taskType:
+                    item.role === "query"
+                      ? "RETRIEVAL_QUERY"
+                      : "RETRIEVAL_DOCUMENT",
+                }
+              : {}),
+          })),
+        },
+        signal,
+        geminiNativeBase(providerBase(provider, {})),
+      );
+      vectors = (result.embeddings ?? []).map((e: any) => e?.values);
+    } else {
+      const result = await this.request(
+        provider,
+        base,
+        "/embeddings",
+        {
+          model: input.model,
+          input: input.inputs.map((item) =>
+            embeddingApiText(
+              input.model,
+              (item as { role: "query" | "document" }).role,
+              (item as { text: string }).text,
+            ),
+          ),
+          encoding_format: "float",
+          ...(embeddingApiResizable(input)
+            ? { dimensions: input.dimensions }
+            : {}),
+        },
+        signal,
+      );
+      const data = [...(result.data ?? [])].sort(
+        (a: any, b: any) => (a?.index ?? 0) - (b?.index ?? 0),
+      );
+      vectors = data.map((e: any) => e?.embedding);
+    }
+    if (
+      vectors.length !== input.inputs.length ||
+      vectors.some(
+        (v) =>
+          !Array.isArray(v) ||
+          !v.length ||
+          !v.every((x) => typeof x === "number" && Number.isFinite(x)) ||
+          !v.some((x) => x !== 0),
+      )
+    )
+      throw new ApiFailure(
+        `${PROVIDERS[provider].label}: el modelo de embeddings devolvió vectores vacíos, inválidos o en distinto número que las entradas.`,
+      );
+    return vectors as number[][];
   }
   async list(
     provider: ApiProvider,

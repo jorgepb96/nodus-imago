@@ -28,6 +28,7 @@ export const BACKUP_TABLES = [
   "jobs",
   "job_errors",
   "embeddings",
+  "record_embeddings",
   "image_captions",
   "proposals",
   "history",
@@ -296,6 +297,7 @@ export async function restoreBackup(
         );
       if (options.replace) repo.db.prepare("DELETE FROM db_databases").run();
       repo.db.prepare("DELETE FROM embeddings").run();
+      repo.db.prepare("DELETE FROM record_embeddings").run();
       repo.db.prepare("DELETE FROM image_captions").run();
       repo.db.prepare("DELETE FROM saved_searches").run();
       repo.db.prepare("DELETE FROM agreement_experiments").run();
@@ -311,6 +313,7 @@ export async function restoreBackup(
           [
             "agreement_experiments",
             "image_captions",
+            "record_embeddings",
             "page_documents",
             "automation_rules",
             "automation_events",
@@ -445,6 +448,7 @@ export async function verifyBackup(repo: Repository, file: string) {
     const optional = new Set([
       "agreement_experiments",
       "image_captions",
+      "record_embeddings",
       "page_documents",
       "automation_rules",
       "automation_events",

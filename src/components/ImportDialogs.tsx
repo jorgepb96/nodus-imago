@@ -30,8 +30,57 @@ export function CsvImport({
   const t = useT(),
     [name, setName] = useState(plan.fileName.replace(/\.[^.]+$/, "")),
     [headers, setHeaders] = useState(plan.headers),
-    [types, setTypes] = useState(plan.suggestedTypes);
+    [types, setTypes] = useState(plan.suggestedTypes),
+    markers = plan.suggestions.reduce((n, s) => n + (s.nullMarkers ?? 0), 0),
+    [markersEmpty, setMarkersEmpty] = useState(markers > 0);
   const titleCount = types.filter((type) => type === "title").length;
+  const columnHint = (i: number) => {
+    const s = plan.suggestions[i];
+    if (!s) return null;
+    const type = types[i],
+      options =
+        type === "select" || type === "status"
+          ? s.vocabularies?.select
+          : type === "multi_select"
+            ? s.vocabularies?.multi_select
+            : undefined,
+      parts = [
+        `${s.filled.toLocaleString()} ${t("con valor")}`,
+        options != null
+          ? `${options.toLocaleString()} ${t(options === 1 ? "opción" : "opciones")}`
+          : `${s.distinct.toLocaleString()} ${t(s.distinct === 1 ? "distinto" : "distintos")}`,
+      ];
+    if (s.nullMarkers)
+      parts.push(`${s.nullMarkers.toLocaleString()} «-»/s.d.`);
+    // Images are matched to records by this value: repeats become ambiguous.
+    const repeated = type === "title" ? s.filled - s.distinct : 0;
+    const tooManyOptions = options != null && options > 1000;
+    return (
+      <small
+        className="csv-hint"
+        title={
+          s.topOptions?.length && type === s.type
+            ? t("Más frecuentes") + ": " + s.topOptions.join(" · ")
+            : undefined
+        }
+      >
+        <span>{type === s.type ? t(s.reason) : t("Tipo elegido manualmente")}</span>
+        <span>{parts.join(" · ")}</span>
+        {repeated > 0 && (
+          <span className="csv-hint-warning">
+            {repeated === 1
+              ? t("1 valor repetido: sus imágenes quedarán como ambiguas")
+              : `${repeated.toLocaleString()} ${t("valores repetidos: sus imágenes quedarán como ambiguas")}`}
+          </span>
+        )}
+        {tooManyOptions && (
+          <span className="csv-hint-warning">
+            {t("Demasiadas opciones: considera texto.")}
+          </span>
+        )}
+      </small>
+    );
+  };
   return (
     <Modal wide title={t("Previsualización de importación")} onClose={onClose}>
       <form
@@ -43,6 +92,7 @@ export function CsvImport({
               name,
               headers,
               types,
+              nullMarkersAsEmpty: markersEmpty,
             });
             onDone(d.database.id);
           });
@@ -104,6 +154,8 @@ export function CsvImport({
                             "multi_select",
                             "checkbox",
                             "url",
+                            "location",
+                            "attachment",
                           ].includes(c.id),
                         ).map((c) => (
                           <option value={c.id} key={c.id}>
@@ -111,6 +163,7 @@ export function CsvImport({
                           </option>
                         ))}
                       </select>
+                      {columnHint(i)}
                     </th>
                   ))}
                 </tr>
@@ -119,16 +172,30 @@ export function CsvImport({
                 {plan.sampleRows.map((r, i) => (
                   <tr key={i}>
                     {headers.map((_, j) => (
-                      <td key={j}>{r[j] ?? ""}</td>
+                      <td key={j} title={(r[j] ?? "").slice(0, 2000)}>
+                        <div>{r[j] ?? ""}</div>
+                      </td>
                     ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {markers > 0 && (
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={markersEmpty}
+                onChange={(e) => setMarkersEmpty(e.target.checked)}
+              />
+              {t("Importar «-», «s.d.», «n/a» y similares como celdas vacías")} (
+              {markers.toLocaleString()})
+            </label>
+          )}
           <p className="hint">
-            Selecciona una única columna de título. Los valores incompatibles
-            detendrán la importación para que puedas corregir el tipo.
+            {t(
+              "Cada tipo es una propuesta: revisa las selecciones y selecciones múltiples antes de importar. Elige una única columna de título; los valores incompatibles detendrán la importación para que puedas corregir el tipo.",
+            )}
           </p>
         </div>
         <footer>
@@ -256,7 +323,7 @@ export function ImageImport({
             checked={partial}
             onChange={(e) => setPartial(e.target.checked)}
           />
-          {t("Coincidencia parcial")} · revisión manual
+          {t("Coincidencia parcial")} · {t("revisión manual")}
         </label>
         <div className="row">
           <input
@@ -403,9 +470,9 @@ export function ImageImport({
           {t("Crear registros sin correspondencia")}
         </label>
         <p className="hint">
-          Los casos dudosos se omiten hasta que elijas un registro. Los
-          originales se conservan intactos y los duplicados se detectan por su
-          contenido.
+          {t(
+            "Los casos dudosos se omiten hasta que elijas un registro. Los originales se conservan intactos y los duplicados se detectan por su contenido.",
+          )}
         </p>
       </div>
       <footer>

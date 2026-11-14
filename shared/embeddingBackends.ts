@@ -24,6 +24,7 @@ export function embeddingBackendContract(
   model: string,
   dimensions: number,
   visionRevision: string,
+  visionBudget = 280,
 ) {
   return canonicalizeEmbeddingContract(
     createEmbeddingContract({
@@ -65,7 +66,7 @@ export function embeddingBackendContract(
               projection: "onnx-model",
               reduction: "matryoshka-prefix",
               titleFallback: "none",
-              visionTokens: 280,
+              visionTokens: visionBudget,
               audio: false,
               imagePreparation: "oriented-srgb-png-2200-v1",
             },

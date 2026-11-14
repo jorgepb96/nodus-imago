@@ -9,6 +9,6 @@ export type ModelPreparation = {
   ready: boolean;
   activeDimensions: number;
   priorVectors: number;
-  runtime: "onnx-cpu" | "llama-cpu" | "python-experimental";
+  runtime: "onnx-cpu" | "llama-cpu" | "python-experimental" | "api";
 };
 export type ModelPreparationStep = { id: string; fileIndex: number | null };

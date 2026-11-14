@@ -51,6 +51,7 @@ export class OnnxHost {
     dimensions: number,
     inputs: { image?: string; text?: string; role?: string }[],
     signal?: AbortSignal,
+    visionBudget = 280,
   ): Promise<number[][]> {
     if (process.platform === "darwin" && process.arch === "x64")
       throw new Error(
@@ -114,7 +115,7 @@ export class OnnxHost {
           signal?.removeEventListener("abort", abort);
         },
       });
-      this.worker!.send({ id, inputs, dimensions });
+      this.worker!.send({ id, inputs, dimensions, visionBudget });
     });
   }
 }

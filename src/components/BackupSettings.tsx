@@ -331,11 +331,11 @@ export function BackupSettings({
         </Button>
       </div>
       {busy && (
-        <p role="status">{state.phase || t("Operación de copias en curso…")}</p>
+        <p role="status">{state.phase ? t(state.phase) : t("Operación de copias en curso…")}</p>
       )}
       {state.lastError && (
         <p role="alert" className="danger">
-          {state.lastError}
+          {t(state.lastError)}
         </p>
       )}
       {message && <p role="status">{message}</p>}
@@ -549,7 +549,7 @@ export function BackupSettings({
                           setPick(null);
                           setRestorePassword("");
                           if (result.warnings.length)
-                            setMessage(result.warnings.join(" "));
+                            setMessage(result.warnings.map((w) => t(w)).join(" "));
                           else
                             void window.imago
                               .call("reloadInterface")

@@ -140,16 +140,32 @@ export class JobQueue {
         prepare: "steps",
       } as Record<string, string>
     )[job.kind];
+    // Index jobs carry record texts before images; older ones only images.
+    const items =
+      job.kind === "index" && payload && Array.isArray(payload.rows)
+        ? payload.rows.length +
+          (Array.isArray(payload.assets) ? payload.assets.length : NaN)
+        : Array.isArray(payload?.[field])
+          ? payload[field].length
+          : NaN;
     if (
       !payload ||
       typeof payload !== "object" ||
-      (field &&
-        (!Array.isArray(payload[field]) || payload[field].length !== job.total))
+      (field && (!Array.isArray(payload[field]) || items !== job.total)) ||
+      (payload.rows !== undefined &&
+        (!Array.isArray(payload.rows) ||
+          payload.rows.some((id: unknown) => typeof id !== "string")))
     )
       throw new Error("Contenido de tarea inválido.");
-    if (payload.retryItems !== undefined && (!Array.isArray(payload.retryItems) ||
-        payload.retryItems.some((i: unknown) => !Number.isSafeInteger(i) || Number(i) < 0 || Number(i) >= job.total) ||
-        new Set(payload.retryItems).size !== payload.retryItems.length))
+    if (
+      payload.retryItems !== undefined &&
+      (!Array.isArray(payload.retryItems) ||
+        payload.retryItems.some(
+          (i: unknown) =>
+            !Number.isSafeInteger(i) || Number(i) < 0 || Number(i) >= job.total,
+        ) ||
+        new Set(payload.retryItems).size !== payload.retryItems.length)
+    )
       throw new Error("Selección de reintento inválida.");
     if (job.kind === "images") resources.add("image-import");
     if (job.kind === "download") resources.add("model:" + payload.id);
@@ -183,7 +199,10 @@ export class JobQueue {
   pump() {
     if (this.closed) return;
     const queued = this.repo.db
-      .prepare("SELECT * FROM jobs WHERE state='queued' ORDER BY rowid")
+      // Automatic indexing yields to work the researcher queued explicitly.
+      .prepare(
+        "SELECT * FROM jobs WHERE state='queued' ORDER BY CASE WHEN kind='index' AND json_valid(payload_json) THEN coalesce(json_extract(payload_json,'$.auto'),0) ELSE 0 END,rowid",
+      )
       .all() as any[];
     for (const job of queued) {
       if (this.running.size >= this.concurrency()) break;
