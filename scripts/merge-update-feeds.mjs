@@ -80,7 +80,7 @@ export async function mergeUpdateFeeds(root, output, expectedVersion) {
     for (const suffix of expected)
       if (
         !ordered.some(
-          (f) => f.url === `Nodus-Imago-${expectedVersion}-${suffix}`,
+          (f) => f.url === `Nodus-Imago-${name.includes("-mac") ? "mac" : name.includes("linux") ? "linux" : "win"}-${suffix}`,
         )
       )
         throw Error("Missing architecture/package " + suffix);

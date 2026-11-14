@@ -67,7 +67,7 @@ async function setup() {
   await fs.writeFile(driver.file, "non-installable test fixture");
   driver.files = [
     {
-      url: "Nodus-Imago-0.2.0-arm64.zip",
+      url: "Nodus-Imago-mac-arm64.zip",
       sha512: createHash("sha512")
         .update(await fs.readFile(driver.file))
         .digest("base64"),
@@ -308,14 +308,15 @@ for (const [platform, arch, type, extension, publishedArch, otherArch] of [
 ])
   test(`update assets select ${platform}/${arch}/${type} using real builder suffix ${publishedArch}`, () => {
     const hash = Buffer.alloc(64).toString("base64");
+    const os = platform === "darwin" ? "mac" : platform === "win32" ? "win" : "linux";
     const info = {
       version: "0.2.0",
       files: [
         {
-          url: `Nodus-Imago-0.2.0-${publishedArch}.${extension}`,
+          url: `Nodus-Imago-${os}-${publishedArch}.${extension}`,
           sha512: hash,
         },
-        { url: `Nodus-Imago-0.2.0-${otherArch}.${extension}`, sha512: hash },
+        { url: `Nodus-Imago-${os}-${otherArch}.${extension}`, sha512: hash },
         { url: "https://invalid.invalid/not-an-imago.zip", sha512: hash },
       ],
     };

@@ -30,7 +30,7 @@ async function fixture() {
     await fs.mkdir(folder);
     const files = [];
     for (const suffix of suffixes) {
-      const url = "Nodus-Imago-0.2.0-" + suffix,
+      const url = `Nodus-Imago-${target.startsWith("mac") ? "mac" : target.startsWith("win") ? "win" : "linux"}-${suffix}`,
         bytes = Buffer.from(url);
       await fs.writeFile(path.join(folder, url), bytes);
       files.push({
@@ -73,7 +73,7 @@ for (const fault of [
         await fs.rm(path.join(f.input, "mac-x64"), { recursive: true });
       if (fault === "bad-hash")
         await fs.appendFile(
-          path.join(f.input, "win", "Nodus-Imago-0.2.0-x64.exe"),
+          path.join(f.input, "win", "Nodus-Imago-win-x64.exe"),
           "damage",
         );
       if (fault === "wrong-version") {

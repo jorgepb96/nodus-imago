@@ -21,7 +21,7 @@ const requests: string[] = [],
   events: string[] = [];
 const bytes = Buffer.alloc(1024 * 1024, 73),
   digest = createHash("sha512").update(bytes).digest("base64");
-const filename = `Nodus-Imago-0.2.0-${process.arch}.zip`;
+const filename = `Nodus-Imago-mac-${process.arch}.zip`;
 const server = http.createServer((request, response) => {
   const url = new URL(request.url!, "http://localhost");
   requests.push(url.pathname);

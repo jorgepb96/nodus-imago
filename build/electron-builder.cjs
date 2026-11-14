@@ -4,7 +4,9 @@ module.exports = {
   buildDependenciesFromSource: process.platform === "linux",
   productName: "Nodus Imago",
   icon: "build/icon.png",
-  artifactName: "Nodus-Imago-${version}-${arch}.${ext}",
+  // Without the version, as in Nodus Research: "releases/latest/download/…"
+  // links in the README keep working from one version to the next.
+  artifactName: "Nodus-Imago-${os}-${arch}.${ext}",
   directories: { output: "release" },
   files: ["dist/**/*", "dist-electron/**/*", "electron/assets/gazetteer/**/*", "package.json"],
   asarUnpack: ["**/*.node", "**/sharp/**/*", "**/@img/**/*", "**/onnxruntime-node/**/*", "dist-electron/chat/sandboxChild.cjs"],
