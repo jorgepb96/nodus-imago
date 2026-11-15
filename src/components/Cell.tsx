@@ -11,6 +11,10 @@ import { MarkdownView } from "./MarkdownView";
 import { RichTextEditor } from "./RichTextEditor";
 import { LocationCell } from "./LocationCell";
 import { HistoricalDateCell } from "./HistoricalDateCell";
+import { TextCellPopover } from "./TextCellPopover";
+
+/** Table text cells that open the expanded editor on click, as in Notion. */
+const EXPANDABLE_TYPES = ["title", "text", "rich_text", "ai"];
 export function Cell({
   column,
   value,
@@ -27,10 +31,19 @@ export function Cell({
 }) {
   const [draft, setDraft] = useState(value ?? ""),
     [busy, setBusy] = useState(false),
-    [preview, setPreview] = useState(false);
+    [preview, setPreview] = useState(false),
+    [expanded, setExpanded] = useState<Element | null>(null);
   const t = useT(),
-    textareaRef = useRef<HTMLTextAreaElement>(null);
+    textareaRef = useRef<HTMLTextAreaElement>(null),
+    expandedOpen = useRef(false);
   useEffect(() => setDraft(value ?? ""), [value, column.type]);
+  // Enter and the blur that follows both close the editor: save only once.
+  const collapse = () => {
+    if (!expandedOpen.current) return;
+    expandedOpen.current = false;
+    setExpanded(null);
+    if (draft !== (value ?? "")) void save(draft || null);
+  };
   const save = async (v: string | null) => {
     setBusy(true);
     try {
@@ -256,6 +269,32 @@ export function Cell({
       </div>
     );
   }
+  if (compact && !wrap && EXPANDABLE_TYPES.includes(column.type))
+    return (
+      <>
+        <input
+          {...props}
+          type="text"
+          onMouseDown={(event) => {
+            // A click opens the whole text over the cell; keyboard focus (Tab)
+            // still edits in place.
+            if (event.button !== 0 || busy) return;
+            event.preventDefault();
+            expandedOpen.current = true;
+            setExpanded(event.currentTarget.closest("td") ?? event.currentTarget);
+          }}
+        />
+        {expanded && (
+          <TextCellPopover
+            anchor={expanded}
+            label={column.name}
+            value={draft}
+            onChange={setDraft}
+            onClose={collapse}
+          />
+        )}
+      </>
+    );
   if (wrap && !["number", "time"].includes(column.type))
     return (
       <textarea
