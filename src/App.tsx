@@ -103,6 +103,9 @@ import { ColumnMenu } from "./components/ColumnMenu";
 import { ColumnVisibility } from "./components/ColumnVisibility";
 import { StickyScrollbar } from "./components/StickyScrollbar";
 import { Welcome, WELCOME_VERSION } from "./components/Welcome";
+import { WhatsNewModal } from "./components/WhatsNewModal";
+import { RELEASE_NOTES, releaseNotesUpTo } from "../shared/releaseNotes";
+import { version as APP_VERSION } from "../package.json";
 import { GuidedTour, TOUR_VERSION } from "./components/GuidedTour";
 import { TimelineView } from "./components/TimelineView";
 import { StatisticsView } from "./components/StatisticsView";
@@ -521,12 +524,23 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [tourOpen, setTourOpen] = useState(false),
     [afterTour, setAfterTour] = useState<"api" | null>(null),
     welcomeChecked = useRef(false);
+  // After an update: what is new, once (as in Nodus Research). A first
+  // installation sees the introduction instead and starts from this version.
+  const [whatsNew, setWhatsNew] = useState<"startup" | "settings" | null>(null);
   useEffect(() => {
     if (!status || welcomeChecked.current) return;
     welcomeChecked.current = true;
-    if (!status.automated && (status.settings.welcomeVersion ?? 0) < WELCOME_VERSION)
+    if (status.automated) return;
+    if ((status.settings.welcomeVersion ?? 0) < WELCOME_VERSION) {
       setWelcomeOpen(true);
-  }, [status]);
+      if (!status.settings.welcomeVersion) void api.call("updateSettings", { whatsNewVersion: APP_VERSION }).catch(() => {});
+      return;
+    }
+    if (status.settings.whatsNewVersion !== APP_VERSION) {
+      if (RELEASE_NOTES.some((n) => n.version === APP_VERSION.split("-")[0])) setWhatsNew("startup");
+      else void api.call("updateSettings", { whatsNewVersion: APP_VERSION }).catch(() => {});
+    }
+  }, [status, api]);
   const [compareSeed, setCompareSeed] = useState<string[] | null>(null);
   const finishStandardImport = (result: StandardImport) => {
     notify(
@@ -1324,6 +1338,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <Settings
                 status={status}
                 onReplayWelcome={() => setWelcomeOpen(true)}
+                onWhatsNew={() => setWhatsNew("settings")}
                 onReplayTour={() => setTourOpen(true)}
                 initialTab={settingsTab}
                 onChanged={refresh}
@@ -2836,6 +2851,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             if (tour) setTourOpen(true);
             else if (choice === "api") openEmbeddingSettings();
             else setArea("home");
+          }}
+        />
+      )}
+      {whatsNew && !welcomeOpen && (
+        <WhatsNewModal
+          current={APP_VERSION}
+          notes={releaseNotesUpTo(APP_VERSION)}
+          startup={whatsNew === "startup"}
+          onClose={() => {
+            setWhatsNew(null);
+            void api.call("updateSettings", { whatsNewVersion: APP_VERSION }).then(refresh).catch(() => {});
           }}
         />
       )}

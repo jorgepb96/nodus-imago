@@ -229,6 +229,8 @@ export type Settings = {
   visionBudget?: 70 | 140 | 280;
   /** Introduction and guided tour already seen (their version). */
   welcomeVersion?: number;
+  /** The last version whose news were shown after an update. */
+  whatsNewVersion?: string;
   tourVersion?: number;
   mode: "light" | "dark" | "system";
   theme: string;

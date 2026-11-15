@@ -206,6 +206,7 @@ export const settingsSchema = z
       .optional(),
     /** Introduction and guided tour already seen (their version). */
     welcomeVersion: z.number().int().min(0).max(1000).optional(),
+    whatsNewVersion: z.string().regex(/^\d+\.\d+\.\d+(-[\w.]+)?$/).optional(),
     tourVersion: z.number().int().min(0).max(1000).optional(),
     mode: z.enum(["light", "dark", "system"]),
     theme: z.string().max(100),

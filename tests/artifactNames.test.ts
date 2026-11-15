@@ -5,7 +5,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { updateArtifactArchitecture } from "../shared/updateArtifacts.mjs";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const config = require("../build/electron-builder.cjs");
 
 const name = (os: string, arch: string, ext: string) =>

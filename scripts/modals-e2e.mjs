@@ -355,6 +355,28 @@ try {
     .click();
   await inspect("19-verify-english-zoom");
   await modal().locator(":scope > header button").click();
+  // What's New, opened from Settings: the window of Nodus Research, in English.
+  await page
+    .getByRole("button", { name: "Updates and news", exact: true })
+    .click();
+  await page.getByTestId("whats-new-open").click();
+  const news = page.getByTestId("whats-new-cinematic-modal");
+  await news.waitFor();
+  const shown = await news.evaluate((m) => {
+    const r = m.getBoundingClientRect();
+    return {
+      inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+      sections: [...m.querySelectorAll(".whats-new-category-title")].map((h) => h.textContent),
+      version: m.querySelector(".whats-new-release-version")?.textContent,
+    };
+  });
+  const { version: installed } = JSON.parse(await fs.readFile("package.json", "utf8"));
+  assert.deepEqual(shown, { inside: true, sections: ["New features", "Enhancements", "Fixes"], version: "v" + installed.split("-")[0] });
+  await page.getByTestId("whats-new-version-trigger").click();
+  await page.getByTestId("whats-new-version-menu").waitFor();
+  await page.getByTestId("whats-new-close").click();
+  await news.waitFor({ state: "detached" });
+  checks.push({ name: "20-whats-new", ...shown });
   assert.deepEqual(errors, []);
   await fs.writeFile(
     path.join(root, "evidence.json"),

@@ -5,7 +5,7 @@ import type { Perform } from "./Properties";
 import { Button } from "./ui";
 import { useT } from "../i18n";
 import { updateStatusMessage } from "./UpdateBanner";
-export function UpdateSettings({ perform }: { perform: Perform }) {
+export function UpdateSettings({ perform, onWhatsNew }: { perform: Perform; onWhatsNew?: () => void }) {
   const t = useT(),
     [state, setState] = useState<UpdateStatus | null>(null);
   const [password, setPassword] = useState(""),
@@ -34,8 +34,13 @@ export function UpdateSettings({ perform }: { perform: Perform }) {
   return (
     <section className="settings-section stack">
       <h2>{t("Actualizaciones y novedades")}</h2>
-      <p>
+      <p className="row">
         {t("Versión instalada")}: {state.currentVersion}
+        {onWhatsNew && (
+          <Button onClick={onWhatsNew} data-testid="whats-new-open">
+            {t("Ver novedades")}
+          </Button>
+        )}
       </p>
       <label className="check-label">
         <input

@@ -158,9 +158,11 @@ export function Settings({
   initialTab = "api",
   details = [],
   onReplayWelcome,
+  onWhatsNew,
   onReplayTour,
 }: {
   onReplayWelcome?: () => void;
+  onWhatsNew?: () => void;
   onReplayTour?: () => void;
   status: Status;
   onChanged: () => void;
@@ -254,7 +256,7 @@ export function Settings({
         ))}
       </aside>
       <div className="settings-content">
-        {tab === "updates" && <UpdateSettings perform={perform} />}
+        {tab === "updates" && <UpdateSettings perform={perform} onWhatsNew={onWhatsNew} />}
         {tab === "tasks" && (
           <div className="settings-section">
             <div className="settings-card-heading">

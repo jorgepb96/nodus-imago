@@ -159,6 +159,8 @@ jobs:
       - name: Create draft only; publication remains a separate explicit step
         shell: bash
         run: |
-          gh release create "$IMAGO_RELEASE_TAG" --draft --verify-tag --title "Nodus Imago $IMAGO_RELEASE_TAG" --generate-notes
+          # The description is the What's New text in English, in the same order.
+          node scripts/generate-release-notes.mjs "$IMAGO_RELEASE_TAG" "$RUNNER_TEMP/release-notes.md"
+          gh release create "$IMAGO_RELEASE_TAG" --draft --verify-tag --title "Nodus Imago $IMAGO_RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
           find artifacts -type f ! -name '*.yml' -print0 | xargs -0 gh release upload "$IMAGO_RELEASE_TAG"
           gh release upload "$IMAGO_RELEASE_TAG" feeds/*.yml
