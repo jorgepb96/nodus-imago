@@ -33,6 +33,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.1.2",
+    date: "2026-11-15",
+    highlights: [
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "Con un tema de color en modo claro, los paneles toman el tono más claro del tema en lugar de quedar en blanco.",
+        en: "With a colour theme in light mode, panels take the theme's lightest shade instead of staying white.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "La introducción volvía a aparecer después de actualizar si se había terminado mientras se indexaban las imágenes. Ahora la introducción, el recorrido y la ventana de novedades quedan marcados como vistos aunque haya tareas en marcha.",
+        en: "The introduction appeared again after an update if it had been finished while images were being indexed. The introduction, the tour and the What's New window are now marked as seen even while tasks are running.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Una tarea fallida dejaba de mostrarse solo al cerrarla. Ahora desaparece de la lista cuando la misma tarea se completa más tarde.",
+        en: "A failed task stayed in the list until it was closed. It now disappears when the same task completes later.",
+      },
+    ],
+  },
+  {
     version: "0.1.1",
     date: "2026-11-15",
     highlights: [
