@@ -412,6 +412,11 @@
   --accent-ink: var(--a-700);
   --shadow: 0 12px 40px #00000012;
 }
+/* A colour theme in light mode tints white panels with its palest shade, as
+   Nodus Research does, so a themed window has no large pure-white areas. */
+:root.theme-active:not(.dark) {
+  --panel: color-mix(in srgb, var(--n-50) 60%, #fff);
+}
 :root.dark {
   color-scheme: dark;
   --panel: var(--n-900);

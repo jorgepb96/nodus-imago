@@ -10,6 +10,8 @@ export function applyTheme(settings: Settings) {
       : settings.mode;
   root.classList.toggle("dark", mode === "dark");
   root.classList.toggle("light", mode === "light");
+  // Any palette other than the default marks the document, as in Nodus.
+  root.classList.toggle("theme-active", settings.theme !== "default");
   root.lang = settings.language;
   const def =
     settings.theme === "custom"
