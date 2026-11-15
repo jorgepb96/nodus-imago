@@ -1,9 +1,7 @@
 <p align="center">
-  <img src="build/icon-mark.svg" width="112" alt="Nodus Imago camera lens and N logo">
+  <img src="docs/screenshots/readme-banner.png" alt="Nodus Imago: Nodi with a magnifying glass over an album of historical photographs, and the Nodus Imago N. Explore images, discover history. Catalogue, visual search, compare, AI analysis, maps and timelines. Free and open source, on macOS, Windows and Linux.">
 </p>
 
-<h1 align="center">Nodus Imago</h1>
-<p align="center"><strong>A desktop application to catalogue, describe and search collections of historical images.</strong></p>
 <p align="center">
   <a href="https://github.com/jorgepb96/nodus-imago/releases/latest"><img alt="Download Nodus Imago" src="https://img.shields.io/badge/Download_Nodus_Imago-4f46e5?style=for-the-badge&amp;logo=github&amp;logoColor=white"></a>
   <a href="https://github.com/jorgepb96/nodus"><img alt="Part of the Nodus family" src="https://img.shields.io/badge/Part_of_the_Nodus_family-6d28d9?style=for-the-badge&amp;logo=github&amp;logoColor=white"></a>
