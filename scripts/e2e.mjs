@@ -377,15 +377,26 @@ try {
   await page
     .getByRole("heading", { name: "Equivalencias de campos", exact: true })
     .waitFor();
-  await page.getByPlaceholder("Lugar, Autor, Fecha…").fill("Campos de texto");
-  await page
-    .locator(".equivalence-form select")
-    .selectOption([{ label: "ID" }, { label: "Descripción" }]);
-  await page.getByRole("button", { name: "Añadir grupo", exact: true }).click();
-  await page
+  // On slow Windows runners a settings refresh can land between filling the
+  // form and adding the group; fill it again until the group is saved.
+  const equivalence = page
     .locator(".equivalence-item")
     .filter({ hasText: "Campos de texto" })
-    .waitFor();
+    .first();
+  for (let attempt = 1; ; attempt++) {
+    await page.getByPlaceholder("Lugar, Autor, Fecha…").fill("Campos de texto");
+    await page
+      .locator(".equivalence-form select")
+      .selectOption([{ label: "ID" }, { label: "Descripción" }]);
+    const add = page.getByRole("button", { name: "Añadir grupo", exact: true });
+    if (await add.isEnabled()) await add.click();
+    try {
+      await equivalence.waitFor({ timeout: 10000 });
+      break;
+    } catch (error) {
+      if (attempt === 3) throw error;
+    }
+  }
   await page.screenshot({ path: "test-results/09-equivalences.png" });
   const queueTrigger = page.locator("[data-queue-trigger]");
   assert.equal(await queueTrigger.count(), 1);

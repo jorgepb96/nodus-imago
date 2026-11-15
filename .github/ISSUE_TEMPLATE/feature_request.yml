@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a new capability or an improvement to an existing workflow.
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write your request in English. Explain the research need before describing a solution and include mockups or screenshots whenever they help. Please search existing issues first.
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature description
+      description: What should Nodus Imago do?
+      placeholder: Describe the proposed capability or improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem would this solve, and for whom (for example historians, art historians or archivists)?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe current workarounds or other approaches you considered.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add mockups, examples, or related references if useful.

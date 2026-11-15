@@ -134,3 +134,20 @@ jobs:
             test-results/queue-real-*/failure.json
             test-results/queue-real-*/*.png
           if-no-files-found: warn
+  # The single required check, as in Nodus Research: every platform passed,
+  # and the repository automation (CLA and PR checks) still behaves.
+  test:
+    if: always()
+    needs: [desktop, native-ai]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Repository automation tests
+        run: node --test scripts/test-cla.mjs scripts/test-cla-reminder.mjs scripts/test-pr-checks.mjs
+      - name: Every platform passed
+        run: |
+          test "${{ needs.desktop.result }}" = success
+          test "${{ needs.native-ai.result }}" = success

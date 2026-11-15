@@ -136,9 +136,11 @@ npm run test:desktop:all   # desktop flows; needs a graphical session
 
 Imago is built with Electron, React, TypeScript and SQLite. The [CI workflow](.github/workflows/ci.yml) tests the source and the packaged applications on macOS, Windows and Linux. Releases are built, signed and published by the [release workflow](.github/workflows/release-draft.yml); the macOS Intel build is added afterwards by [its own workflow](.github/workflows/release-macos-intel.yml). The [verification record](docs/VERIFICATION.md) describes what has been tested.
 
-## Report a problem
+## Report a problem or contribute
 
-[Open an issue](https://github.com/jorgepb96/nodus-imago/issues) with your app version, your platform and the steps that reproduce it. Do not include private research material or API keys.
+[Open an issue](https://github.com/jorgepb96/nodus-imago/issues/new/choose) with your app version, your platform and the steps that reproduce it. Product feedback goes in the [shared feedback thread](https://github.com/jorgepb96/nodus-imago/issues/1), and security problems are reported [privately](SECURITY.md). Do not include private research material or API keys.
+
+Imago follows the same contribution rules as Nodus Research: every pull request is in English, addresses an existing issue and passes the required checks. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before opening one.
 
 ## Image credits
 
@@ -147,3 +149,8 @@ The screenshots show photographs by Jean Laurent and his studio (1850s–1880s) 
 ## License
 
 Nodus Imago is © Jorge Pérez Burgueño and licensed under [AGPL-3.0-only](LICENSE). Adapted Nodus components keep their attribution; see the [reuse notes](docs/REUSE.md) and [third-party notices](THIRD_PARTY_NOTICES.md). Dependencies, photographs and optional models keep their own licenses. LFM3 uses the [LFM Open License 1.0](legal/LFM-Open-License-1.0.txt); model weights are not included with the app.
+
+Contributions require acceptance of the [Contributor License Agreement](CLA.md).
+Contributors retain ownership and grant the maintainer permission to sublicense
+and relicense their contributions, including under commercial terms. See
+[CONTRIBUTING.md](CONTRIBUTING.md#accepting-the-cla) for the acceptance process.
