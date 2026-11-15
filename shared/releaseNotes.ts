@@ -33,6 +33,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.1.3",
+    date: "2026-11-16",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Al hacer clic en una celda de texto de la tabla se abre un recuadro sobre ella con el texto completo, que se puede editar ahí mismo. Intro, Esc o un clic fuera guardan el texto; Mayús+Intro añade una línea.",
+        en: "Clicking a text cell in the table opens a panel over it with the whole text, which can be edited there. Enter, Esc or a click outside keep the text; Shift+Enter adds a line.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "Los puntos de color de las etiquetas se veían achatados cuando el nombre ocupaba dos líneas. Ahora son siempre círculos.",
+        en: "The colour dots of tags looked squashed when the name took two lines. They are now always circles.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "La versión para Mac con Intel podía no publicarse si la conexión con Apple se cortaba al final de la firma. Ahora ese paso se reintenta.",
+        en: "The Mac version for Intel processors could fail to publish if the connection to Apple dropped at the end of signing. That step is now retried.",
+      },
+    ],
+  },
+  {
     version: "0.1.2",
     date: "2026-11-15",
     highlights: [

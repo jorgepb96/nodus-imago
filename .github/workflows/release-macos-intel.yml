@@ -47,6 +47,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.event.release.tag_name }}
+      # The application comes from the tag. The stapling retry comes from this
+      # workflow's commit and stays out of the bundle, so a tooling fix can
+      # also rebuild a tag published before it.
+      - name: Checkout this workflow's macOS build tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-tools
+          sparse-checkout: |
+            scripts/macos-stapler-retry.cjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Apply this workflow's macOS build tooling
+        shell: bash
+        run: |
+          cp .release-tools/scripts/macos-stapler-retry.cjs scripts/
+          rm -rf .release-tools
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: npm }
       - name: Validate the tag and the published release
@@ -136,7 +153,10 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: true
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: npx electron-builder --mac --x64 --config build/electron-builder.release.cjs --publish never
+          # @electron/notarize 2.5.0 never retries stapling: a lost connection
+          # to Apple's ticket service (error 68) would fail a notarized build.
+          IMAGO_RETRY_MACOS_STAPLING: "1"
+        run: node --require "$GITHUB_WORKSPACE/scripts/macos-stapler-retry.cjs" node_modules/electron-builder/cli.js --mac --x64 --config build/electron-builder.release.cjs --publish never
       - name: Validate the installed package
         if: steps.release.outputs.skip != 'true'
         run: node scripts/packaged-e2e.mjs

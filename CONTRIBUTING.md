@@ -93,11 +93,13 @@ To publish a version:
 
 1. Update the version in `package.json` and `package-lock.json` and add its
    notes, through a pull request.
-2. After it merges, tag the merged commit (`vX.Y.Z`) and run
-   **Prepare signed release draft** with that tag. It builds, signs, notarizes,
-   and checks every installer, then creates a draft release.
-3. Publish the draft. The macOS Intel build is added afterwards by its own
-   workflow, and the download counters update automatically.
+2. After it merges, tag the merged commit (`vX.Y.Z`) and push the tag. The
+   **Signed release** workflow builds, signs, notarizes and checks every
+   installer, and publishes the release once all of them pass; if any fails,
+   nothing is published. It can also be started by hand for an existing tag.
+3. Once the release is published, the macOS Intel build starts on its own and
+   adds its DMG and ZIP to the published release. The download counters
+   update automatically.
 
 ## Project conventions
 
