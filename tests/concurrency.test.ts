@@ -49,6 +49,16 @@ test("pausing work permits settings changes after the in-flight request has sett
       service.run("updateSettings", { parallelJobs: 1 }),
       /Pausa/,
     );
+    // What the interface has shown is saved while tasks run: the first-run
+    // introduction ends just as the first indexing starts.
+    await service.run("updateSettings", { welcomeVersion: 1 });
+    await service.run("updateSettings", { tourVersion: 1, whatsNewVersion: "0.1.1" });
+    await service.run("updateSettings", { language: "en" });
+    assert.deepEqual(
+      [service.repo.getSettings().welcomeVersion, service.repo.getSettings().tourVersion, service.repo.getSettings().whatsNewVersion],
+      [1, 1, "0.1.1"],
+    );
+    assert.equal(service.repo.jobs().find((job) => job.id === id)?.state, "running");
     service.queue.control(id, "pause");
     await service.run("updateSettings", { parallelJobs: 1 });
     assert.equal(settled, true);

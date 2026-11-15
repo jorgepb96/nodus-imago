@@ -64,6 +64,17 @@ import { AgreementResearch } from "./research/agreement";
 
 import { Automations } from "./automations";
 
+/** Settings that never affect a runtime or a running task. */
+const INTERFACE_SETTINGS = new Set([
+  "mode",
+  "theme",
+  "accent",
+  "language",
+  "welcomeVersion",
+  "tourVersion",
+  "whatsNewVersion",
+]);
+
 export class Service {
   private storageTask: Promise<unknown> | null = null;
   private backupAbort: AbortController | null = null;
@@ -677,11 +688,10 @@ export class Service {
       case "probeRuntime":
         return this.engine.probe();
       case "updateSettings": {
-        if (
-          Object.keys(input).every((key) =>
-            ["mode", "theme", "accent", "language"].includes(key),
-          )
-        )
+        // Appearance and what the interface has already shown (introduction,
+        // tour, What's New) never touch a runtime, so they are saved even while
+        // tasks run: the introduction often ends as indexing starts.
+        if (Object.keys(input).every((key) => INTERFACE_SETTINGS.has(key)))
           return this.repo.updateSettings(input);
         if (
           this.repo

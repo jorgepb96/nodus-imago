@@ -1230,7 +1230,9 @@ export class Repository {
   jobs(): Job[] {
     return this.db
       .prepare(
-        "SELECT id,kind,CASE WHEN json_valid(payload_json) THEN coalesce(json_extract(payload_json,'$.label'),'') ELSE '' END label,state,done,total,failed,skipped,message,created_at createdAt,updated_at updatedAt FROM jobs WHERE state IN ('queued','running','paused','failed') OR id IN(SELECT id FROM jobs WHERE state IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 50) ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,created_at DESC",
+        // A failed job stays listed until the same work (same kind and
+        // payload) completes later; then the old failure is no longer news.
+        "SELECT id,kind,CASE WHEN json_valid(payload_json) THEN coalesce(json_extract(payload_json,'$.label'),'') ELSE '' END label,state,done,total,failed,skipped,message,created_at createdAt,updated_at updatedAt FROM jobs j WHERE (state IN ('queued','running','paused') OR (state='failed' AND NOT EXISTS(SELECT 1 FROM jobs later WHERE later.kind=j.kind AND later.payload_json=j.payload_json AND later.state='completed' AND later.created_at>j.created_at))) OR id IN(SELECT id FROM jobs WHERE state IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 50) ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,created_at DESC",
       )
       .all() as Job[];
   }
