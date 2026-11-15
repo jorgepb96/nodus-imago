@@ -140,7 +140,7 @@ Imago is built with Electron, React, TypeScript and SQLite. The [CI workflow](.g
 
 [Open an issue](https://github.com/jorgepb96/nodus-imago/issues/new/choose) with your app version, your platform and the steps that reproduce it. Product feedback goes in the [shared feedback thread](https://github.com/jorgepb96/nodus-imago/issues/1), and security problems are reported [privately](SECURITY.md). Do not include private research material or API keys.
 
-Imago follows the same contribution rules as Nodus Research: every pull request is in English, addresses an existing issue and passes the required checks. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before opening one.
+Imago follows the same contribution rules as Nodus Research: every pull request is in English, addresses an existing issue and passes the required checks. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening one.
 
 ## Image credits
 
