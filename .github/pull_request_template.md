@@ -43,4 +43,4 @@
 - [ ] I added English translations for new static UI text.
 - [ ] I added the change to the release notes when it is visible to users.
 - [ ] I preserved local-first behavior and existing privacy boundaries.
-- [ ] I have read and followed `CONTRIBUTING.md`, `AGENTS.md` and `CODE_OF_CONDUCT.md`.
+- [ ] I have read and followed `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`.

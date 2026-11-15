@@ -9,8 +9,7 @@ and follows the same contribution rules, Contributor License Agreement, and
 pull-request checks as Nodus Research.
 
 By participating, you agree to follow the
-[Code of Conduct](CODE_OF_CONDUCT.md). People and AI agents who change the code
-also follow [AGENTS.md](AGENTS.md).
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Language
 
