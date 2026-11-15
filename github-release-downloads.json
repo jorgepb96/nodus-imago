@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-15T06:32:20.889Z",
+  "updatedAt": "2026-11-15T12:15:29.466Z",
   "total": 22,
   "installers": {
     "macosArm64": 6,
@@ -10,15 +10,15 @@
     "linuxAppImage": 4
   },
   "latest": {
-    "total": 10,
+    "total": 0,
     "installers": {
-      "macosArm64": 3,
+      "macosArm64": 0,
       "macosIntel": 0,
-      "windows": 1,
-      "linuxDeb": 2,
-      "linuxRpm": 2,
-      "linuxAppImage": 2
+      "windows": 0,
+      "linuxDeb": 0,
+      "linuxRpm": 0,
+      "linuxAppImage": 0
     },
-    "version": "v0.1.1"
+    "version": "v0.1.2"
   }
 }
