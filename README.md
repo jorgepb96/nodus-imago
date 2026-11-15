@@ -17,8 +17,6 @@ Nodus Imago is an open-source desktop application for historians, art historians
 
 Everything stays on your computer. There is no account and no server. AI features can run locally, and external providers are used only if you turn them on. Imago is part of the [Nodus](https://github.com/jorgepb96/nodus) family and works on its own.
 
-![A gallery of nineteenth-century photographs by Jean Laurent in Nodus Imago](docs/screenshots/readme-gallery.png)
-
 ## Install Nodus Imago
 
 Download the installer for your computer and open it. There is no server to configure and no account is required to begin.
@@ -39,11 +37,17 @@ Download the installer for your computer and open it. There is no server to conf
 
 Imago checks for new versions and installs them when you choose to; in **Settings › Updates and news** you can also let it download them automatically. Every version, with its notes and all files, is on the [releases page](https://github.com/jorgepb96/nodus-imago/releases). You can also [run Imago from source](#development).
 
-## Catalogue a collection
+## Catalogue, describe and tag your images
+
+Every image has a catalogue record with the fields you choose: text, dates, places, people, single tags and multiple tags. Edit them in the table, in the gallery or in the record itself.
 
 Bring in a CSV or TSV file, a Notion export, a Nodus database, a Tropy project or a IIIF manifest from a digital library. Images are matched to their records by file name, and originals are never modified.
 
 Dates stay as cataloguers write them: “c. 1860”, “[1930]”, “1950s”, “before 1936”. Imago reads the period and how certain it is, and uses it in filters, sorting, the timeline and statistics.
+
+An AI model can describe images, tag them with your own vocabulary, or transcribe backs, stamps, inscriptions and captions, one record or many at a time. Results are proposals: nothing changes until you approve them.
+
+![A gallery of nineteenth-century photographs by Jean Laurent in Nodus Imago](docs/screenshots/readme-gallery.png)
 
 ![A record with a historical date, its period and a Copy citation button](docs/screenshots/readme-record.png)
 
@@ -90,10 +94,6 @@ Unify values written in different ways (“N. Muller”, “Muller, Nicolás”)
 ![Places of the collection with proposed links to Wikidata, Getty TGN identifiers and coordinates](docs/screenshots/readme-authorities.png)
 
 Complete empty fields from the most similar images: Imago proposes a value, such as an attributed period “[1950–1955]”, and shows the images it is based on.
-
-## Describe, transcribe and classify with AI
-
-Ask a model to describe images, to classify them with your own vocabulary, or to transcribe backs, stamps, inscriptions and captions. Results are proposals: nothing changes until you approve them.
 
 ## Restore without touching the original
 
