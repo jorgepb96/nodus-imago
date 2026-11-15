@@ -1,4 +1,5 @@
 import { UpdateSettings } from "./UpdateSettings";
+import { version as APP_VERSION } from "../../package.json";
 import { BackupSettings } from "./BackupSettings";
 import { ModelPreparation } from "./ModelPreparation";
 import { useState, useEffect } from "react";
@@ -220,7 +221,7 @@ export function Settings({
     <div className="settings-page">
       <aside className="settings-navigation" data-tour="settings-nav">
         <h1>{t("Ajustes")}</h1>
-        <p>Nodus Imago v0.1.0</p>
+        <p>Nodus Imago v{APP_VERSION}</p>
         <div className="settings-search">
           <Search size={16} />
           <input

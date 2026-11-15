@@ -1,9 +1,9 @@
 {
   "name": "nodus-imago",
   "desktopName": "app.nodus.imago.desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local visual research databases. Research through images.",
-  "author": "Jorge P\u00e9rez Burgue\u00f1o",
+  "author": "Jorge Pérez Burgueño",
   "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
