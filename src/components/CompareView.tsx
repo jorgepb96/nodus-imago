@@ -119,6 +119,13 @@ export function CompareView({
   return (
     <div className="compare-page" data-testid="compare-view">
       <aside className="compare-boards">
+        <h1>
+          <Columns2 size={18} />
+          {t("Mesa de comparación")}
+        </h1>
+        <p className="hint">
+          {t("Pon imágenes juntas para compararlas con el zoom sincronizado y superpón dos de ellas para ver qué cambia. Cada mesa guarda su selección; las imágenes originales no se modifican.")}
+        </p>
         <div className="compare-boards-head">
           <h2>{t("Mesas")}</h2>
           <Button icon aria-label={t("Nueva mesa")} data-tooltip={t("Nueva mesa")} onClick={() => void create()}>

@@ -274,7 +274,11 @@ try {
           '.data-table tbody tr input[aria-label="Título"]',
         ).value === "IMG001",
     );
-    await chooseCriteria(page, "Dirección del ordenamiento", "Mayor a menor");
+    await page
+      .locator(".view-controls-panel")
+      .getByRole("group", { name: "Dirección del ordenamiento", exact: true })
+      .getByRole("button", { name: "Mayor a menor", exact: true })
+      .click();
     await page.waitForFunction(
       () =>
         document.querySelector(

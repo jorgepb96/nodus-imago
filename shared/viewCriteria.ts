@@ -392,6 +392,10 @@ export function restoreViewCriteria(raw: string | null): ViewCriteria {
             .map((item: ViewSort) => ({
               columnId: item.columnId,
               direction: item.direction,
+              ...(item.empty === "first" ? { empty: "first" as const } : {}),
+              ...(item.by === "label" || item.by === "count"
+                ? { by: item.by }
+                : {}),
             }))
         : [],
     };

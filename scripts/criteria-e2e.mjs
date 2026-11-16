@@ -119,19 +119,15 @@ try {
     .click();
   await chooseCriteria(page, "Añadir filtro", "Temas");
   const row = controls.locator(".criteria-filter-row").first();
-  await row
-    .getByRole("button", { name: "Valores del filtro", exact: true })
-    .click();
-  const search = page.getByRole("combobox", {
-    name: "Buscar: Valores del filtro",
+  // Option filters show an inline checklist: accent-insensitive search, then
+  // Enter ticks the first match.
+  const search = row.getByRole("textbox", {
+    name: "Buscar opciones",
     exact: true,
   });
   await search.fill("arbol");
   await search.press("Enter");
-  await page
-    .locator(".criteria-select-menu:popover-open")
-    .getByRole("button", { name: "Listo", exact: true })
-    .click();
+  await row.locator(".choice-chip").filter({ hasText: "Árbol" }).waitFor();
   await poll(
     async () => (await page.locator(".data-table tbody tr").count()) === 70,
   );
@@ -162,7 +158,10 @@ try {
   await page.screenshot({ path: "test-results/final-criteria-filters.png" });
   await controls.getByRole("button", { name: /Ordenamientos/ }).click();
   await chooseCriteria(page, "Añadir ordenamiento", "Número");
-  await chooseCriteria(page, "Dirección del ordenamiento", "Mayor a menor");
+  await controls
+    .getByRole("group", { name: "Dirección del ordenamiento", exact: true })
+    .getByRole("button", { name: "Mayor a menor", exact: true })
+    .click();
   await poll(
     async () =>
       (await page

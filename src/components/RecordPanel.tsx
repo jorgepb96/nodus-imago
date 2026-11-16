@@ -143,6 +143,7 @@ export function RecordPanel({
   onCompare,
   citation,
   perform,
+  hidden = [],
 }: {
   row: RecordRow;
   detail: DatabaseDetail;
@@ -156,6 +157,8 @@ export function RecordPanel({
   /** The database's citation template. */
   citation?: string;
   perform: Perform;
+  /** Properties hidden in the table: listed apart, folded, after the rest. */
+  hidden?: string[];
 }) {
   const t = useT(),
     [imageIndex, setImageIndex] = useState(0),
@@ -207,6 +210,51 @@ export function RecordPanel({
       await window.imago.call("rotateImage", { id, direction });
       onChanged();
     });
+  // Same order as the table (the database's column order) and the same
+  // hidden properties, which stay reachable in a folded list.
+  const hiddenSet = new Set(hidden);
+  const properties = detail.columns.filter(
+    (c) => !["attachment", "files"].includes(c.type),
+  );
+  const shownProperties = properties.filter(
+    (c) => c.type === "title" || !hiddenSet.has(c.id),
+  );
+  const hiddenProperties = properties.filter(
+    (c) => c.type !== "title" && hiddenSet.has(c.id),
+  );
+  const property = (c: DatabaseColumn) => (
+    <div className="record-property" key={c.id}>
+      <label>{c.name}</label>
+      <div>
+        {c.type === "relation" ? (
+          <RelationEditor
+            row={row}
+            column={c}
+            perform={perform}
+            onChanged={onChanged}
+          />
+        ) : (
+          <Cell
+            column={c}
+            value={row.cells[c.id] ?? null}
+            onSave={(v) =>
+              perform(async () => {
+                await window.imago.call("setCell", {
+                  rowId: row.id,
+                  columnId: c.id,
+                  value: v,
+                });
+                onChanged();
+              })
+            }
+          />
+        )}
+        {c.type === "rich_text" && (
+          <BlockOutline rowId={row.id} columnId={c.id} />
+        )}
+      </div>
+    </div>
+  );
   return (
     <dialog ref={dialog} className="record-overlay" aria-label={row.title}>
       <button
@@ -508,42 +556,20 @@ export function RecordPanel({
           )}
           <h2>{t("Propiedades")}</h2>
           <div className="record-properties">
-            {detail.columns
-              .filter((c) => !["attachment", "files"].includes(c.type))
-              .map((c) => (
-                <div className="record-property" key={c.id}>
-                  <label>{c.name}</label>
-                  <div>
-                    {c.type === "relation" ? (
-                      <RelationEditor
-                        row={row}
-                        column={c}
-                        perform={perform}
-                        onChanged={onChanged}
-                      />
-                    ) : (
-                      <Cell
-                        column={c}
-                        value={row.cells[c.id] ?? null}
-                        onSave={(v) =>
-                          perform(async () => {
-                            await window.imago.call("setCell", {
-                              rowId: row.id,
-                              columnId: c.id,
-                              value: v,
-                            });
-                            onChanged();
-                          })
-                        }
-                      />
-                    )}
-                    {c.type === "rich_text" && (
-                      <BlockOutline rowId={row.id} columnId={c.id} />
-                    )}
-                  </div>
-                </div>
-              ))}
+            {shownProperties.map(property)}
           </div>
+          {!!hiddenProperties.length && (
+            <details className="record-hidden-properties">
+              <summary>
+                {hiddenProperties.length === 1
+                  ? t("1 propiedad oculta")
+                  : `${hiddenProperties.length} ${t("propiedades ocultas")}`}
+              </summary>
+              <div className="record-properties">
+                {hiddenProperties.map(property)}
+              </div>
+            </details>
+          )}
           {!!provenance.length && (
             <details className="metadata provenance">
               <summary>{t("Procedencia de las propuestas")}</summary>

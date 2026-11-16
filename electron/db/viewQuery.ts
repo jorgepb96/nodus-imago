@@ -366,13 +366,23 @@ export function compileViewSorts(
       if (kind === "date") expr = `julianday(imago_date(${raw}))`;
       else if (kind === "period") expr = `imago_period_start(${raw})`;
       else if (kind === "options") {
-        expr =
-          column.type === "multi_select"
-            ? `(SELECT min(o.position) FROM db_select_options o JOIN json_each(CASE WHEN json_valid(${raw}) THEN ${raw} ELSE '[]' END) j ON j.value=o.id WHERE o.column_id=${quote(column.id)})`
-            : `(SELECT o.position FROM db_select_options o WHERE o.column_id=${quote(column.id)} AND o.id=${raw})`;
+        const multi = column.type === "multi_select",
+          values = `json_each(CASE WHEN json_valid(${raw}) THEN ${raw} ELSE '[]' END)`,
+          col = quote(column.id);
+        if (multi && sort.by === "count")
+          expr = `(SELECT NULLIF(count(*),0) FROM db_select_options o JOIN ${values} j ON j.value=o.id WHERE o.column_id=${col})`;
+        else if (sort.by === "label")
+          expr = multi
+            ? `(SELECT min(imago_sort_text(o.label)) FROM db_select_options o JOIN ${values} j ON j.value=o.id WHERE o.column_id=${col})`
+            : `(SELECT imago_sort_text(o.label) FROM db_select_options o WHERE o.column_id=${col} AND o.id=${raw})`;
+        else
+          expr = multi
+            ? `(SELECT min(o.position) FROM db_select_options o JOIN ${values} j ON j.value=o.id WHERE o.column_id=${col})`
+            : `(SELECT o.position FROM db_select_options o WHERE o.column_id=${col} AND o.id=${raw})`;
       } else if (!["number", "checkbox", "files", "relation"].includes(kind))
         expr = `imago_sort_text(${expr})`;
-      return `(${expr} IS NULL OR ${expr}='') ASC,${expr} ${sort.direction === "desc" ? "DESC" : "ASC"}`;
+      // Empty values keep their place (end by default) whatever the direction.
+      return `(${expr} IS NULL OR ${expr}='') ${sort.empty === "first" ? "DESC" : "ASC"},${expr} ${sort.direction === "desc" ? "DESC" : "ASC"}`;
     })
     .concat("r.position ASC,r.id ASC")
     .join(",");
