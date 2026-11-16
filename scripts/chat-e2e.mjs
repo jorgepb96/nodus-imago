@@ -105,12 +105,13 @@ try {
   await view.locator(".research-folder-row", { hasText: "Postales antiguas" }).waitFor();
   assert.equal((await call("chatList", {})).conversations[0].folderId, folder.id);
 
-  // The panel beside the database reads that database.
+  // The panel beside the database reads that database only, so it offers no
+  // source to choose.
   await page.locator(".sidebar-databases > button", { hasText: "Postales" }).click();
   await page.locator('[data-tour="db-chat"]').click();
   const panel = page.locator('[data-testid="chat-panel"]');
   await panel.waitFor();
-  assert.match(await panel.locator('[data-testid="chat-context-toggle"]').innerText(), /Postales/);
+  assert.equal(await panel.locator('[data-testid="chat-context-toggle"]').count(), 0);
   assert.deepEqual(errors, []);
   console.log("chat e2e ok");
 } finally {

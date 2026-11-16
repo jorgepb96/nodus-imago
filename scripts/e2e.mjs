@@ -229,6 +229,39 @@ try {
   await page.getByRole("button", { name: "Tabla", exact: true }).click();
   await page.locator(".data-table").waitFor();
   assert.equal(await page.locator(".data-table tbody tr").count(), 4);
+  assert.equal(await page.locator(".database-search").count(), 1, "one search box per database view");
+  // Column edges: dragging shows guides with the width, resizes every cell
+  // of the column, Escape puts it back and a release saves the width.
+  {
+    const header = page.locator(".data-table th.column-header").first(),
+      edge = header.locator(".column-resize"),
+      cell = page.locator(".data-table tbody tr").first().locator("td").nth(1),
+      box = await edge.boundingBox(),
+      before = (await header.boundingBox()).width;
+    await page.mouse.move(box.x + 3, box.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 63, box.y + 5, { steps: 4 });
+    assert.equal(await page.locator(".column-resize-guide").count(), 2);
+    assert.match(await page.locator(".column-resize-width").innerText(), /^\d+ px$/);
+    assert.ok(Math.abs((await cell.boundingBox()).width - (await header.boundingBox()).width) < 2);
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    assert.equal(await page.locator(".column-resize-guide").count(), 0);
+    assert.ok(Math.abs((await header.boundingBox()).width - before) < 1);
+    await page.mouse.move(box.x + 3, box.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 43, box.y + 5, { steps: 4 });
+    await page.mouse.up();
+    const widened = (await header.boundingBox()).width;
+    assert.ok(widened > before + 30, `column widened (${before} → ${widened})`);
+    assert.ok(
+      await page.evaluate(() =>
+        Object.entries(localStorage).some(
+          ([k, v]) => k.startsWith("imago.tableView.") && Object.keys(JSON.parse(v).widths ?? {}).length > 0,
+        ),
+      ),
+    );
+  }
   await page
     .locator(".data-table thead")
     .getByText("Doble año", { exact: true })

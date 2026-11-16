@@ -23,6 +23,7 @@ import {
 import type { ImageAnnotation, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { DetailSearchPanel } from "./DetailSearchPanel";
+import { Spinner } from "./ui";
 import { MIN_CROP, validCrop, type Region } from "../../shared/imageRotation";
 
 type View = { scale: number; x: number; y: number };
@@ -100,11 +101,16 @@ export function ImageViewer({
   const [cropping, setCropping] = useState<Region | null>(null);
   const cropDrag = useRef<{ grip: Grip; start: Region; from: { x: number; y: number } } | null>(null);
   const savedCrop = image ? validCrop(image.metadata?.imagoCrop) : null;
+  /** The shown image could not be loaded (its original moved, say). */
+  const [loadFailed, setLoadFailed] = useState(false);
+  /** A crop being saved: the bar waits instead of taking more clicks. */
+  const [applying, setApplying] = useState(false);
   const startCrop = () => {
     setAnnotating(false);
     setDraft(null);
     setSelected(null);
     setNatural(null);
+    setLoadFailed(false);
     setCropping(savedCrop ?? { x: 0, y: 0, w: 1, h: 1 });
   };
   const [cropOnOpen, setCropOnOpen] = useState(initialCrop);
@@ -121,6 +127,7 @@ export function ImageViewer({
       ? () => {
           setCropping(null);
           setNatural(null);
+          setLoadFailed(false);
         }
       : onClose;
   }, [onClose, isCropping]);
@@ -152,10 +159,23 @@ export function ImageViewer({
     setDraft(null);
     setSelected(null);
     setCropping(null);
+    setLoadFailed(false);
   }
   useEffect(() => {
     void load();
   }, [load]);
+  // The crop editor shows the whole image, a file of its own prepared on
+  // demand: ask for it in the background so «Recortar» opens at once
+  // instead of waiting behind imports or indexing.
+  const imageRevision = image?.revision;
+  useEffect(() => {
+    if (!imageId) return;
+    const timer = window.setTimeout(() => {
+      const preload = new Image();
+      preload.src = src(imageId, imageRevision, "full");
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [imageId, imageRevision]);
   useEffect(() => {
     void window.imago.call("annotationTags", { databaseId: row.databaseId }).then(setKnown).catch(() => {});
   }, [row.databaseId]);
@@ -267,21 +287,26 @@ export function ImageViewer({
   };
   /** Crop as edited, or the whole image again with `null`. */
   const applyCrop = async (crop: Region | null) => {
-    if (!image) return;
+    if (!image || applying) return;
     setError(null);
+    setApplying(true);
     try {
       await window.imago.call("cropImage", { id: image.id, crop: crop && validCrop(crop) });
       setCropping(null);
       setNatural(null);
+      setLoadFailed(false);
       await load();
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setApplying(false);
     }
   };
   const cancelCrop = () => {
     setCropping(null);
     setNatural(null);
+    setLoadFailed(false);
   };
   /** A quarter turn kept with the image; its annotations turn with it. */
   const rotate = async (direction: "left" | "right") => {
@@ -312,7 +337,7 @@ export function ImageViewer({
     const key = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement).closest("input,textarea")) return;
       if (cropping) {
-        if (event.key === "Enter") void applyCrop(cropping);
+        if (event.key === "Enter" && natural) void applyCrop(cropping);
         return;
       }
       if (event.key === "a" || event.key === "A") setAnnotating((v) => !v);
@@ -377,20 +402,21 @@ export function ImageViewer({
         {cropping ? (
           <div className="crop-bar" data-testid="viewer-crop-bar">
             <span>{t("Arrastra el marco o sus esquinas para elegir la parte que quieres ver.")}</span>
-            <button type="button" className="viewer-annotate" onClick={() => setCropping({ x: 0, y: 0, w: 1, h: 1 })}>
+            <button type="button" className="viewer-annotate" disabled={applying || !natural} onClick={() => setCropping({ x: 0, y: 0, w: 1, h: 1 })}>
               {t("Toda la imagen")}
             </button>
-            <button type="button" className="viewer-annotate" onClick={cancelCrop}>
+            <button type="button" className="viewer-annotate" disabled={applying} onClick={cancelCrop}>
               {t("Cancelar")}
             </button>
             <button
               type="button"
               className="viewer-annotate is-on"
               data-testid="viewer-crop-apply"
+              disabled={applying || !natural}
               onClick={() => void applyCrop(cropping)}
             >
-              <Check size={15} />
-              {t("Aplicar recorte")}
+              {applying ? <Spinner /> : <Check size={15} />}
+              {t(applying ? "Aplicando…" : "Aplicar recorte")}
             </button>
           </div>
         ) : (
@@ -476,13 +502,37 @@ export function ImageViewer({
               src={src(image.id, image.revision, cropping ? "full" : "preview")}
               alt={row.title}
               draggable={false}
-              onLoad={(event) => setNatural({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight })}
+              onLoad={(event) => {
+                setLoadFailed(false);
+                setNatural({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight });
+              }}
+              onError={() => setLoadFailed(true)}
               style={
                 natural
                   ? { width: natural.w * view.scale, height: natural.h * view.scale, transform: `translate(${view.x}px, ${view.y}px)` }
                   : { visibility: "hidden" }
               }
             />
+          )}
+          {image && !natural && (
+            <div className="viewer-loading" role="status" data-testid="viewer-loading">
+              {loadFailed ? (
+                <>
+                  <ImageOff size={22} />
+                  {t("No se ha podido cargar la imagen.")}
+                  {cropping && (
+                    <button type="button" className="viewer-annotate" onClick={cancelCrop}>
+                      {t("Cancelar")}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Spinner />
+                  {t(cropping ? "Preparando la imagen completa…" : "Cargando la imagen…")}
+                </>
+              )}
+            </div>
           )}
           {cropping && natural && (
             <div className="crop-frame" style={box(cropping)} data-grip="move" data-testid="viewer-crop-frame">
@@ -732,11 +782,11 @@ function AnnotationEditor({
       {error && <p className="annotation-error">{t(error)}</p>}
       <footer>
         <span className="hint">{t("⌘/Ctrl + Enter para guardar")}</span>
-        <button type="button" className="button" onClick={onCancel}>
-          {t("Cancelar")}
-        </button>
         <button type="submit" className="button primary" data-testid="annotation-save">
           {t("Guardar")}
+        </button>
+        <button type="button" className="button annotation-cancel" onClick={onCancel}>
+          {t("Cancelar")}
         </button>
       </footer>
     </form>

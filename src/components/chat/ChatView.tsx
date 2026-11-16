@@ -130,7 +130,11 @@ export function ChatView({
   }, [activeId]);
 
   const chosenModel = model && choices.some((c) => encode(c) === encode(model)) ? model : (choices[0] ?? null);
-  const databaseIds = valid(selection);
+  // Beside a database the chat reads that database only: its context is
+  // implied, so there is nothing to choose (and older chats opened from the
+  // history answer about it too).
+  const lockedIds = compact && initialDatabaseIds?.length ? initialDatabaseIds : null;
+  const databaseIds = valid(lockedIds ?? selection);
   const run = activeId ? runs.get(activeId) : undefined;
   const sending = !!run;
   const runningIds = useMemo(() => new Set(runs.keys()), [runs]);
@@ -344,6 +348,7 @@ export function ChatView({
             </button>
           ))}
         </div>
+        {!lockedIds && (
         <button
           ref={contextTrigger}
           type="button"
@@ -360,6 +365,7 @@ export function ChatView({
           <span className="chat-context-label">{databaseIds.length ? contextLabel : t("Contexto")}</span>
           <span className="chat-context-count">{databaseIds.length}</span>
         </button>
+        )}
         <span className="chat-header-spacer" />
         {compact && <span className="chat-header-break" aria-hidden="true" />}
         {compact && onExpand && (
@@ -373,7 +379,7 @@ export function ChatView({
           </button>
         )}
       </header>
-      {compact && contextOpen && (
+      {compact && !lockedIds && contextOpen && (
         <CriteriaPopover anchor={contextTrigger} onClose={() => setContextOpen(false)} width={340} label={t("Bases de datos del chat")} className="chat-context-popover">
           {picker}
         </CriteriaPopover>

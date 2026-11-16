@@ -33,6 +33,48 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.1.5",
+    date: "2026-11-16",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "Los bordes de las columnas de la tabla se ven en la cabecera. Al arrastrar uno, dos líneas verticales cruzan la tabla (dónde estaba y dónde está) con el ancho en píxeles; Escape lo deja como estaba.",
+        en: "Table column edges show in the header. While dragging one, two vertical lines cross the table (where it was and where it is) with the width in pixels; Escape puts it back.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Cambiar el ancho de una columna en una base de datos grande podía congelar la ventana hasta dejarla en blanco. Ahora va fluido, y si la ventana fallara se recupera sola o muestra un aviso con un botón para recargarla, sin tener que cerrar Imago.",
+        en: "Resizing a column in a large database could freeze the window until it went blank. It is now smooth, and if the window ever fails it recovers on its own or shows a notice with a button to reload it, without closing Imago.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "Las miniaturas ya preparadas se muestran al momento aunque haya una importación o una indexación en marcha, en vez de quedarse en blanco un rato.",
+        en: "Thumbnails already prepared show at once even while an import or indexing is running, instead of staying blank for a while.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "El editor de recorte prepara la imagen completa en cuanto se abre el visor y avisa mientras carga o si no puede cargarla, en lugar de dejar los botones sin efecto.",
+        en: "The crop editor prepares the whole image as soon as the viewer opens and says so while it loads or if it cannot load it, instead of leaving the buttons without effect.",
+      },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "El chat junto a una base de datos consulta solo esa base de datos, así que ya no muestra el selector de fuentes.",
+        en: "The chat beside a database reads only that database, so it no longer shows the source picker.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "Al anotar una zona, «Guardar» va a la izquierda y «Cancelar» a la derecha, con el estilo oscuro del visor.",
+        en: "When annotating a region, “Save” is on the left and “Cancel” on the right, in the viewer’s dark style.",
+      },
+    ],
+  },
+  {
     version: "0.1.4",
     date: "2026-11-16",
     highlights: [
