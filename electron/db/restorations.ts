@@ -10,7 +10,8 @@ import sharp from "sharp";
 import type { Repository } from "./repository";
 import type { ApiProvider } from "../../shared/aiConfig";
 import type { Restoration, RestorationTask, Watermark } from "../../shared/restoration";
-import { imagePipeline } from "../import/images";
+import { imagePipeline, orientedImage } from "../import/images";
+import { assetView, shownSize } from "../../shared/imageRotation";
 
 /** Longest side sent to a provider. */
 const SEND_MAX = 2048;
@@ -50,8 +51,9 @@ export class Restorations {
 
   /** The image or the region to send, as JPEG, and where a region sits. */
   async input(assetId: string, region: Region | null) {
-    const asset = this.repo.asset(assetId) as { original_path: string };
-    const source = (await imagePipeline(asset.original_path)).rotate();
+    const asset = this.repo.asset(assetId) as { original_path: string; metadata_json: string };
+    // Regions are fractions of the image as shown, after any quarter turn.
+    const source = await orientedImage(asset.original_path, assetView(asset.metadata_json));
     const { data, info } = await source.png().toBuffer({ resolveWithObject: true });
     let crop: { left: number; top: number; width: number; height: number } | null = null;
     let image = sharp(data);
@@ -85,14 +87,15 @@ export class Restorations {
     crop: { left: number; top: number; width: number; height: number } | null;
     result: string;
   }): Promise<Restoration> {
-    const asset = this.repo.asset(input.assetId) as { original_path: string; row_id: string };
+    const asset = this.repo.asset(input.assetId) as { original_path: string; row_id: string; metadata_json: string };
+    const view = assetView(asset.metadata_json);
     const result = Buffer.from(input.result, "base64");
     await sharp(result).metadata().catch(() => {
       throw new Error("La imagen recibida está vacía o dañada.");
     });
     let output: Buffer;
     if (input.crop) {
-      const base = await (await imagePipeline(asset.original_path)).rotate().png().toBuffer();
+      const base = await (await orientedImage(asset.original_path, view)).png().toBuffer();
       const { width, height } = input.crop;
       const feather = Math.max(2, Math.round(Math.min(width, height) * 0.06));
       // A soft-edged mask: the pasted crop fades into the original at its border.
@@ -121,8 +124,8 @@ export class Restorations {
     } else {
       // Models answer in their own sizes (1024×1024, 1536×1024…): the version
       // takes the original's size and proportions, so both line up when compared.
-      const original = await (await imagePipeline(asset.original_path)).rotate().metadata();
-      const [w, h] = orientedSize(original);
+      const original = await (await imagePipeline(asset.original_path)).metadata();
+      const [w, h] = shownSize(...orientedSize(original), view);
       const scale = Math.min(1, 4096 / Math.max(w, h));
       output = await sharp(result)
         .resize(Math.round(w * scale), Math.round(h * scale), { fit: "fill" })

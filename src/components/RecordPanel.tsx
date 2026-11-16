@@ -14,6 +14,10 @@ import {
   Wand2,
   Quote,
   Check,
+  RotateCcw,
+  RotateCw,
+  Crop,
+  ImageOff,
 } from "lucide-react";
 import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
 import type { Provenance, RecordRow } from "../../shared/imago";
@@ -22,6 +26,7 @@ import { Cell } from "./Cell";
 import { BlockOutline } from "./BlockOutline";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
+import { validCrop } from "../../shared/imageRotation";
 import { ImageViewer } from "./ImageViewer";
 import { renderCitation } from "../../shared/citation";
 function RelationEditor({
@@ -154,7 +159,7 @@ export function RecordPanel({
 }) {
   const t = useT(),
     [imageIndex, setImageIndex] = useState(0),
-    [viewer, setViewer] = useState(false),
+    [viewer, setViewer] = useState<false | "view" | "crop">(false),
     [copied, setCopied] = useState(false),
     [provenance, setProvenance] = useState<Provenance[]>([]),
     [moving, setMoving] = useState(false),
@@ -196,6 +201,12 @@ export function RecordPanel({
   }, []);
   const image = row.images[Math.min(imageIndex, row.images.length - 1)];
   const regions = image ? (row.annotations ?? []).filter((a) => a.assetId === image.id).length : 0;
+  /** A quarter turn kept with the image; its annotations turn with it. */
+  const rotate = (id: string, direction: "left" | "right") =>
+    void perform(async () => {
+      await window.imago.call("rotateImage", { id, direction });
+      onChanged();
+    });
   return (
     <dialog ref={dialog} className="record-overlay" aria-label={row.title}>
       <button
@@ -229,37 +240,95 @@ export function RecordPanel({
           </Button>
         </header>
         <div className="record-body">
-          <button
-            type="button"
-            className="record-image-open"
-            disabled={!image?.width}
-            aria-label={t("Ampliar y anotar")}
-            data-testid="record-image-open"
-            onClick={() => setViewer(true)}
-          >
-            <Thumbnail
-              id={image?.width ? image.id : undefined}
-              revision={image?.revision}
-              large
-              alt={row.title}
-            />
+          <div className="record-image">
+            <button
+              type="button"
+              className="record-image-open"
+              disabled={!image?.width}
+              aria-label={t("Ampliar y anotar")}
+              data-testid="record-image-open"
+              onClick={() => setViewer("view")}
+            >
+              <Thumbnail
+                id={image?.width ? image.id : undefined}
+                revision={image?.revision}
+                large
+                alt={row.title}
+              />
+              {regions > 0 && (
+                <span className="record-image-regions" data-tooltip={t("Zonas anotadas en esta imagen")}>
+                  <SquareDashedMousePointer size={12} />
+                  {regions}
+                </span>
+              )}
+            </button>
             {image?.width ? (
-              <span className="record-image-hint">
-                <Maximize2 size={13} />
-                {t("Ampliar y anotar")}
-              </span>
+              <div className="record-image-tools">
+                <button
+                  type="button"
+                  className="record-image-turn"
+                  aria-label={t("Girar a la izquierda")}
+                  data-tooltip={t("Girar 90° a la izquierda. El original no se modifica.")}
+                  data-testid="record-image-rotate-left"
+                  onClick={() => rotate(image.id, "left")}
+                >
+                  <RotateCcw size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="record-image-turn"
+                  aria-label={t("Girar a la derecha")}
+                  data-tooltip={t("Girar 90° a la derecha. El original no se modifica.")}
+                  data-testid="record-image-rotate-right"
+                  onClick={() => rotate(image.id, "right")}
+                >
+                  <RotateCw size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="record-image-turn"
+                  aria-label={t("Recortar")}
+                  data-tooltip={t("Recortar la imagen a tu gusto. El original no se modifica.")}
+                  data-testid="record-image-crop"
+                  onClick={() => setViewer("crop")}
+                >
+                  <Crop size={14} />
+                </button>
+                {validCrop(image.metadata?.imagoCrop) && (
+                  <button
+                    type="button"
+                    className="record-image-turn"
+                    aria-label={t("Volver al original")}
+                    data-tooltip={t("Volver al original: quita el recorte y muestra la imagen completa.")}
+                    data-testid="record-image-uncrop"
+                    onClick={() =>
+                      void perform(async () => {
+                        await window.imago.call("cropImage", { id: image.id, crop: null });
+                        onChanged();
+                      })
+                    }
+                  >
+                    <ImageOff size={14} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="record-image-hint"
+                  tabIndex={-1}
+                  aria-hidden
+                  onClick={() => setViewer("view")}
+                >
+                  <Maximize2 size={13} />
+                  {t("Ampliar y anotar")}
+                </button>
+              </div>
             ) : null}
-            {regions > 0 && (
-              <span className="record-image-regions" data-tooltip={t("Zonas anotadas en esta imagen")}>
-                <SquareDashedMousePointer size={12} />
-                {regions}
-              </span>
-            )}
-          </button>
+          </div>
           {viewer && (
             <ImageViewer
               row={row}
               initialIndex={imageIndex}
+              initialCrop={viewer === "crop"}
               onClose={() => setViewer(false)}
               onChanged={onChanged}
               onOpenRecord={onOpenRecord}

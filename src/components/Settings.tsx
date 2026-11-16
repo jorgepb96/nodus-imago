@@ -36,6 +36,7 @@ import { DEFAULT_EMBEDDING_API } from "../../shared/embeddingApi";
 import { PROVIDERS } from "../../shared/aiConfig";
 import { ApiSettings } from "./ApiSettings";
 import { ModelPicker } from "./ModelPicker";
+import { askIndexQuality } from "./IndexQualityDialog";
 export function Jobs({
   jobs,
   perform,
@@ -697,10 +698,12 @@ export function Settings({
                       )
                 }
                 onClick={() =>
-                  void perform(async () => {
-                    await window.imago.call("indexImages", {});
-                    onChanged();
-                  })
+                  status.autoIndex.quality
+                    ? askIndexQuality()
+                    : void perform(async () => {
+                        await window.imago.call("indexImages", {});
+                        onChanged();
+                      })
                 }
               >
                 {t("Indexar imágenes y fichas")}

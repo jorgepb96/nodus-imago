@@ -6,7 +6,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Repository } from "../db/repository";
-import { imagePipeline } from "../import/images";
+import { orientedImage } from "../import/images";
+import { assetView } from "../../shared/imageRotation";
 import { renderCitation } from "../../shared/citation";
 
 export type PlateItem = { file: string; caption: string; width: number; height: number };
@@ -21,10 +22,9 @@ export async function preparePlates(repo: Repository, input: { rowIds: string[];
     const image = row.images.find((i) => i.width > 0);
     if (!image) continue;
     if (!columnsByDb.has(row.databaseId)) columnsByDb.set(row.databaseId, repo.detail(row.databaseId).columns);
-    const asset = repo.asset(image.id) as { original_path: string };
+    const asset = repo.asset(image.id) as { original_path: string; metadata_json: string };
     const file = path.join(folder, `${items.length + 1}.jpg`);
-    const info = await (await imagePipeline(asset.original_path))
-      .rotate()
+    const info = await (await orientedImage(asset.original_path, assetView(asset.metadata_json)))
       .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 90 })
       .toFile(file);

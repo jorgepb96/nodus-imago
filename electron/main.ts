@@ -399,7 +399,7 @@ app.whenReady().then(async () => {
       if (
         u.hostname !== "asset" ||
         parts.length !== 2 ||
-        !["thumb", "preview"].includes(parts[1]) ||
+        !["thumb", "preview", "full"].includes(parts[1]) ||
         !/^[a-z0-9-]{1,200}$/i.test(parts[0])
       )
         return new Response(null, { status: 404 });

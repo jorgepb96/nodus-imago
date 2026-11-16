@@ -1,6 +1,7 @@
 import os from "node:os";
 import { Repository, now } from "./db/repository";
-import { Images } from "./import/images";
+import { Images, type ImageImportPayload, type PreparedImage } from "./import/images";
+import { AdaptiveParallelism, importParallelism } from "./import/adaptiveParallelism";
 import { Models } from "./ai/models";
 import { Engine } from "./ai/engine";
 
@@ -261,13 +262,18 @@ export class JobQueue {
       failed = job.failed,
       skipped = job.skipped;
     try {
-      for (; done < job.total;) {
+      if (job.kind === "images") {
+        const counts = { done, failed, skipped };
+        try {
+          await this.importImages(job, payload, retryItems, signal, counts);
+        } finally {
+          ({ done, failed, skipped } = counts);
+        }
+      } else for (; done < job.total;) {
         if (signal.aborted || this.closed) break;
         try {
           let outcome: "imported" | "skipped" = "imported";
           if (retryItems && !retryItems.has(done)) outcome = "skipped";
-          else if (job.kind === "images")
-            outcome = await this.images.importOne(payload, done);
           else if (job.kind === "index")
             outcome = await this.engine.indexOne(payload, done, signal);
           else if (job.kind === "analyze")
@@ -314,24 +320,10 @@ export class JobQueue {
           )
             throw error;
           failed++;
-          const message =
-            error instanceof Error ? error.message : String(error);
-          this.repo.db
-            .prepare(
-              "INSERT INTO job_errors(job_id,item,message) VALUES(?,?,?)",
-            )
-            .run(job.id, done, message);
-          this.repo.db
-            .prepare("UPDATE jobs SET message=? WHERE id=?")
-            .run(message, job.id);
+          this.itemFailed(job.id, done, error);
         }
         done++;
-        this.repo.db
-          .prepare(
-            "UPDATE jobs SET done=?,failed=?,skipped=?,updated_at=? WHERE id=?",
-          )
-          .run(done, failed, skipped, now(), job.id);
-        this.changed();
+        this.progress(job.id, done, failed, skipped);
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
       if (done === job.total && !signal.aborted && !this.closed) {
@@ -367,5 +359,108 @@ export class JobQueue {
           );
       }
     }
+  }
+  private itemFailed(jobId: string, item: number, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    this.repo.db
+      .prepare("INSERT INTO job_errors(job_id,item,message) VALUES(?,?,?)")
+      .run(jobId, item, message);
+    this.repo.db.prepare("UPDATE jobs SET message=? WHERE id=?").run(message, jobId);
+  }
+  private progress(jobId: string, done: number, failed: number, skipped: number) {
+    this.repo.db
+      .prepare("UPDATE jobs SET done=?,failed=?,skipped=?,updated_at=? WHERE id=?")
+      .run(done, failed, skipped, now(), jobId);
+    this.changed();
+  }
+  /** Set by tests to observe the regulator of each image import. */
+  onRegulator?: (regulator: AdaptiveParallelism) => void;
+  /**
+   * Imports images several at a time, as many as the regulator allows, and
+   * records them in the order of their files. `done` stays the number of
+   * files settled from the start, so a pause or a restart resumes exactly:
+   * after a pause the images already being prepared finish and are recorded.
+   */
+  private async importImages(
+    job: { id: string; total: number },
+    payload: ImageImportPayload,
+    retryItems: Set<number> | null,
+    signal: AbortSignal,
+    counts: { done: number; failed: number; skipped: number },
+  ) {
+    type Result =
+      | { kind: "prepared"; prepared: PreparedImage }
+      | { kind: "skipped" }
+      | { kind: "error"; error: unknown };
+    const results = new Map<number, Result>(),
+      regulator = new AdaptiveParallelism({
+        max: importParallelism(this.repo.getSettings().profile),
+        // Indexing alongside runs in a process of its own: not another program.
+        ownWork: () => this.running.size > 1,
+      });
+    this.onRegulator?.(regulator);
+    let next = counts.done,
+      active = 0,
+      fatal: unknown = null;
+    const stopped = () => fatal !== null || signal.aborted || this.closed;
+    // Record, in file order, every image whose preparation has finished.
+    const settle = () => {
+      for (let result = results.get(counts.done); result; result = results.get(counts.done)) {
+        if (result.kind === "error") {
+          // An image interrupted by the pause is prepared again on resume.
+          if (signal.aborted || (result.error as { fatal?: boolean })?.fatal) break;
+          counts.failed++;
+          this.itemFailed(job.id, counts.done, result.error);
+        } else if (result.kind === "skipped") counts.skipped++;
+        else
+          try {
+            if (this.images.commitOne(payload, result.prepared) === "skipped") counts.skipped++;
+          } catch (error) {
+            counts.failed++;
+            this.itemFailed(job.id, counts.done, error);
+          }
+        results.delete(counts.done);
+        counts.done++;
+        this.progress(job.id, counts.done, counts.failed, counts.skipped);
+      }
+    };
+    try {
+      await new Promise<void>((resolve) => {
+        const launch = () => {
+          while (!stopped() && next < job.total && active < regulator.limit()) {
+            const index = next++;
+            active++;
+            const work: Promise<Result> =
+              retryItems && !retryItems.has(index)
+                ? Promise.resolve({ kind: "skipped" })
+                : this.images.prepareOne(payload, index).then(
+                    (prepared) =>
+                      prepared === "skipped" ? { kind: "skipped" } : { kind: "prepared", prepared },
+                    (error) => ({ kind: "error", error }),
+                  );
+            void work.then((result) => {
+              active--;
+              if (result.kind === "error" && (result.error as { fatal?: boolean })?.fatal) fatal ??= result.error;
+              regulator.finished(
+                result.kind === "prepared" ? result.prepared.width * result.prepared.height : 0,
+                result.kind === "error" ? result.error : undefined,
+              );
+              results.set(index, result);
+              try {
+                settle();
+              } catch (error) {
+                fatal ??= error;
+              }
+              launch();
+            });
+          }
+          if (active === 0) resolve();
+        };
+        launch();
+      });
+    } finally {
+      regulator.close();
+    }
+    if (fatal !== null) throw fatal;
   }
 }

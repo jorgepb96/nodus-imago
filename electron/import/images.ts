@@ -7,6 +7,7 @@ import exifr from "exifr";
 import ExifReader from "exifreader";
 import { Repository, now } from "../db/repository";
 import { matchImages } from "../../shared/imageMatching";
+import type { ImageView } from "../../shared/imageRotation";
 import type { ImagePlan } from "../../shared/imago";
 
 // libvips' file cache can keep a decoded source locked after the operation on
@@ -193,11 +194,12 @@ export class Images {
     payload: ImageImportPayload,
     index: number,
   ): Promise<"imported" | "skipped"> {
-    const file = payload.files[index],
-      stat = await fsp.stat(file.path);
-    if (!stat.isFile()) throw new Error("El original no es un archivo.");
-    const hash = await hashFile(file.path);
-    const existing = payload.files[index].rowId
+    const prepared = await this.prepareOne(payload, index);
+    return prepared === "skipped" ? prepared : this.commitOne(payload, prepared);
+  }
+  /** Whether this image is already in the record (or, unmatched, in the database). */
+  private exists(payload: ImageImportPayload, file: ImageImportPayload["files"][number], hash: string) {
+    return !!(file.rowId
       ? this.repo.db
           .prepare(
             "SELECT id FROM image_assets WHERE row_id=? AND column_id=? AND content_hash=?",
@@ -207,8 +209,21 @@ export class Images {
           .prepare(
             "SELECT id FROM image_assets WHERE database_id=? AND content_hash=?",
           )
-          .get(payload.databaseId, hash);
-    if (existing) return "skipped";
+          .get(payload.databaseId, hash));
+  }
+  /**
+   * The slow part of importing an image, which several images may do at once:
+   * hash, previews, metadata and the managed copy. Nothing is recorded yet.
+   */
+  async prepareOne(
+    payload: ImageImportPayload,
+    index: number,
+  ): Promise<PreparedImage | "skipped"> {
+    const file = payload.files[index],
+      stat = await fsp.stat(file.path);
+    if (!stat.isFile()) throw new Error("El original no es un archivo.");
+    const hash = await hashFile(file.path);
+    if (this.exists(payload, file, hash)) return "skipped";
     const image = await imagePipeline(file.path),
       meta = await image.metadata();
     if (!meta.width || !meta.height)
@@ -234,7 +249,8 @@ export class Images {
           .clone()
           .rotate()
           .resize(2200, 2200, { fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 88 }),
+          // Effort 2 encodes in half the time for a file ~2 % larger.
+          .webp({ quality: 88, effort: 2 }),
         preview,
       );
     let metadata: Record<string, unknown> = {};
@@ -308,7 +324,25 @@ export class Images {
           "La copia gestionada no supera la verificación de integridad.",
         );
     }
-    this.repo.db.transaction(() => {
+    return {
+      file,
+      hash,
+      size: stat.size,
+      width: meta.width,
+      height: meta.height,
+      metadata,
+      original,
+    };
+  }
+  /**
+   * Records a prepared image. Imports commit in the order of their files, so
+   * new records keep that order however the preparations finished.
+   */
+  commitOne(payload: ImageImportPayload, prepared: PreparedImage): "imported" | "skipped" {
+    const { file, hash, original, metadata } = prepared;
+    return this.repo.db.transaction(() => {
+      // Two copies of one image prepared at once: only the first is recorded.
+      if (this.exists(payload, file, hash)) return "skipped" as const;
       const rowId =
         file.rowId ?? this.repo.createRow(payload.databaseId, false).id;
       if (!file.rowId) {
@@ -343,9 +377,9 @@ export class Images {
           original,
           payload.storage === "copy" ? 1 : 0,
           hash,
-          stat.size,
-          meta.width,
-          meta.height,
+          prepared.size,
+          prepared.width,
+          prepared.height,
           JSON.stringify(metadata),
           null,
           position,
@@ -353,10 +387,48 @@ export class Images {
         );
       this.repo.touchRows([rowId]);
       this.repo.indexRow(rowId);
-      // Commit item and cursor together: restart cannot create a second record.
+      return "imported" as const;
     })();
-    return "imported";
   }
+}
+
+export type PreparedImage = {
+  file: ImageImportPayload["files"][number];
+  hash: string;
+  size: number;
+  width: number;
+  height: number;
+  metadata: Record<string, unknown>;
+  original: string;
+};
+const ORIGINAL_VIEW: ImageView = { rotation: 0, crop: null };
+/**
+ * The image as the researcher sees it: oriented by its EXIF tag, then turned
+ * and cropped as framed in Imago. Callers must not rotate it again (sharp
+ * keeps only one explicit rotation per pipeline).
+ */
+export async function orientedImage(file: string, view: ImageView = ORIGINAL_VIEW): Promise<Sharp> {
+  const source = await imagePipeline(file);
+  const image = source.clone().rotate();
+  if (view.rotation) image.rotate(view.rotation);
+  if (!view.crop) return image;
+  const meta = await source.metadata();
+  const oriented: [number, number] =
+    (meta.orientation ?? 1) >= 5 ? [meta.height ?? 1, meta.width ?? 1] : [meta.width ?? 1, meta.height ?? 1];
+  const [width, height] = view.rotation % 180 ? [oriented[1], oriented[0]] : oriented;
+  const left = Math.min(width - 1, Math.max(0, Math.round(view.crop.x * width))),
+    top = Math.min(height - 1, Math.max(0, Math.round(view.crop.y * height)));
+  return image.extract({
+    left,
+    top,
+    width: Math.max(1, Math.min(width - left, Math.round(view.crop.w * width))),
+    height: Math.max(1, Math.min(height - top, Math.round(view.crop.h * height))),
+  });
+}
+/** Width and height of an original as shown after its EXIF orientation. */
+export async function orientedDimensions(file: string): Promise<[number, number]> {
+  const meta = await (await imagePipeline(file)).metadata();
+  return (meta.orientation ?? 1) >= 5 ? [meta.height ?? 1, meta.width ?? 1] : [meta.width ?? 1, meta.height ?? 1];
 }
 export async function imagePipeline(file: string): Promise<Sharp> {
   // Native backups store originals by hash, without an extension. Detect the
@@ -410,13 +482,13 @@ export async function withInferenceImage<T>(
   root: string,
   original: string,
   work: (file: string) => Promise<T>,
+  view: ImageView = ORIGINAL_VIEW,
 ): Promise<T> {
   const file = path.join(root, "staging", uuid() + ".png");
   try {
-    const image = await imagePipeline(original);
+    const image = await orientedImage(original, view);
     await writeAtomicImage(
       image
-        .rotate()
         .resize(2200, 2200, { fit: "inside", withoutEnlargement: true })
         .toColourspace("srgb")
         .removeAlpha()

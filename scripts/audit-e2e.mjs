@@ -502,6 +502,8 @@ try {
         .locator(".sidebar-databases>button")
         .filter({ hasText: database.name })
         .click();
+      // A database opens in Table unless another view is featured.
+      await page.getByRole("button", { name: "Galería", exact: true }).click();
       await page.waitForFunction(
         () =>
           [...document.querySelectorAll(".gallery-card img")].length === 3 &&
@@ -677,6 +679,7 @@ try {
         .locator(".sidebar-databases>button")
         .filter({ hasText: database.name })
         .click();
+      await page.getByRole("button", { name: "Galería", exact: true }).click();
       await page
         .getByRole("button", { name: "Abrir registro IMG001", exact: true })
         .click();
@@ -759,6 +762,7 @@ try {
         .locator(".sidebar-databases>button")
         .filter({ hasText: database.name })
         .click();
+      await page.getByRole("button", { name: "Galería", exact: true }).click();
       await page
         .getByRole("button", { name: "Abrir registro IMG001", exact: true })
         .click();

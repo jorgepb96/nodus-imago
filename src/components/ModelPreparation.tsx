@@ -29,6 +29,7 @@ import { Button, Spinner, Modal } from "./ui";
 import { CriteriaSelect } from "./CriteriaSelect";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
+import { askIndexQuality } from "./IndexQualityDialog";
 
 export function ModelPreparation({
   status,
@@ -343,10 +344,12 @@ export function ModelPreparation({
                   primary
                   disabled={!status.rows || indexing}
                   onClick={() =>
-                    void perform(async () => {
-                      await window.imago.call("indexImages", {});
-                      onChanged();
-                    })
+                    status.autoIndex.quality
+                      ? askIndexQuality()
+                      : void perform(async () => {
+                          await window.imago.call("indexImages", {});
+                          onChanged();
+                        })
                   }
                 >
                   {t("Indexar imágenes y fichas")}
@@ -606,7 +609,7 @@ function AutoIndexToggle({
           {t(
             api
               ? "Desactivado por defecto con APIs: cada indexación envía fichas e imágenes al proveedor y puede tener coste."
-              : "Unos segundos después de importar o editar, se indexa solo lo pendiente. Si la tarea fuese larga (más de 15 minutos), se pide confirmación. Una indexación pausada o fallida no se reanuda sola.",
+              : "Unos segundos después de importar o editar se indexa solo lo pendiente, también mientras una importación sigue en marcha. Lo que tardaría más se indexa en tandas de unos 15 minutos, una tras otra. Una indexación pausada o fallida no se reanuda sola.",
           )}
         </p>
       </span>

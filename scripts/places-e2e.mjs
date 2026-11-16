@@ -106,6 +106,8 @@ try {
     .locator(".sidebar-databases>button")
     .filter({ hasText: db.database.name })
     .click();
+  // A database opens in Table unless another view is featured.
+  await page.getByRole("button", { name: "Galería", exact: true }).click();
   await page
     .getByRole("button", {
       name: "Abrir registro Fotografía de archivo",
@@ -288,6 +290,8 @@ try {
     .locator(".sidebar-databases>button")
     .filter({ hasText: db.database.name })
     .click();
+  // A database opens in Table unless another view is featured.
+  await page.getByRole("button", { name: "Galería", exact: true }).click();
   await page
     .getByRole("button", {
       name: "Abrir registro Fotografía de archivo",

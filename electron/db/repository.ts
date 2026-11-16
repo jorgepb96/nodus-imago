@@ -57,6 +57,18 @@ import { settingsSchema } from "../../shared/validation";
 import { defaultEmbeddingModel } from "../../shared/embeddingBackends";
 import { markdownBlocks, type PageDocument } from "../../shared/pageBlocks";
 import { recomputeRollups, validateRollup } from "./rollups";
+import {
+  assetRevision,
+  assetView,
+  shownSize,
+  toShown,
+  turn,
+  turnRegion,
+  validCrop,
+  viewKey,
+  type Region,
+  type RotationDirection,
+} from "../../shared/imageRotation";
 
 export const now = () => new Date().toISOString();
 const marks = (xs: unknown[]) => xs.map(() => "?").join(",");
@@ -815,12 +827,19 @@ export class Repository {
         `SELECT id,asset_id assetId,row_id rowId,x,y,w,h,note,tags_json,color,created_at createdAt,updated_at updatedAt FROM image_annotations WHERE row_id IN (${p}) ORDER BY created_at`,
       )
       .all(...ids) as (Omit<ImageAnnotation, "tags"> & { tags_json: string })[];
-    const annotationsByRow = new Map<string, ImageAnnotation[]>();
-    for (const { tags_json, ...a } of annotations)
-      (annotationsByRow.get(a.rowId) ?? annotationsByRow.set(a.rowId, []).get(a.rowId)!).push({
-        ...a,
-        tags: JSON.parse(tags_json),
-      });
+    const annotationsByRow = new Map<string, ImageAnnotation[]>(),
+      views = new Map(assets.map((a) => [a.id as string, assetView(a.metadata_json)]));
+    // Stored in the original's frame; listed as the image is shown, without
+    // the ones a crop leaves out.
+    for (const { tags_json, ...a } of annotations) {
+      const view = views.get(a.assetId),
+        shown = view ? toShown(a, view) : a;
+      if (shown)
+        (annotationsByRow.get(a.rowId) ?? annotationsByRow.set(a.rowId, []).get(a.rowId)!).push({
+          ...shown,
+          tags: JSON.parse(tags_json),
+        });
+    }
     // Grouped once: filtering every cell for every record was quadratic.
     const cellsByRow = new Map<string, Record<string, string | null>>(),
       assetsByRow = new Map<string, any[]>();
@@ -847,7 +866,7 @@ export class Repository {
           return {
             ...a,
             metadata,
-            revision: metadata.imagoRelinkRevision,
+            revision: assetRevision(metadata),
             missing: false,
           };
         });
@@ -1369,6 +1388,55 @@ export class Repository {
     if (!a) throw new Error("Imagen no encontrada.");
     return a;
   }
+  /**
+   * Turns an image a quarter to the left or right as it is shown. The original
+   * stays untouched: the angle is kept in the asset's metadata, width, height
+   * and any crop follow it, and its vectors are dropped so the semantic index
+   * embeds the image as it is now shown. Annotations keep the original's frame
+   * and are translated when listed.
+   */
+  rotateImage(id: string, direction: RotationDirection) {
+    return this.db.transaction(() => {
+      const asset = this.asset(id),
+        view = assetView(asset.metadata_json),
+        rotation = turn(view.rotation, direction),
+        crop = view.crop ? turnRegion(view.crop, direction) : null;
+      this.db
+        .prepare(
+          "UPDATE image_assets SET width=height,height=width,metadata_json=json_set(metadata_json,'$.imagoRotation',?,'$.imagoCrop',json(?)) WHERE id=?",
+        )
+        .run(rotation, JSON.stringify(crop), id);
+      this.forgetVectors(asset);
+      return { rotation };
+    })();
+  }
+  /**
+   * Crops an image as it is shown (fractions of the turned image), or shows
+   * it whole again with `null`. The original file is never changed.
+   * `oriented` is the original's size after its EXIF orientation.
+   */
+  cropImage(id: string, crop: Region | null, oriented: [number, number]) {
+    return this.db.transaction(() => {
+      const asset = this.asset(id),
+        next = crop ? validCrop(crop) : null;
+      if (crop && !next) throw new Error("El recorte no es válido: elige una zona dentro de la imagen.");
+      const view = { rotation: assetView(asset.metadata_json).rotation, crop: next },
+        [width, height] = shownSize(oriented[0], oriented[1], view);
+      this.db
+        .prepare(
+          "UPDATE image_assets SET width=?,height=?,metadata_json=json_set(metadata_json,'$.imagoCrop',json(?)) WHERE id=?",
+        )
+        .run(width, height, JSON.stringify(next), id);
+      this.forgetVectors(asset);
+      return { crop: next };
+    })();
+  }
+  /** A changed view makes the image's vectors stale: index it again. */
+  private forgetVectors(asset: { content_hash: string; row_id: string }) {
+    this.db.prepare("DELETE FROM embeddings WHERE content_hash=?").run(asset.content_hash);
+    this.db.prepare("DELETE FROM tile_embeddings WHERE content_hash=?").run(asset.content_hash);
+    this.touchRows([asset.row_id]);
+  }
   normalizeImagePositions(rowId: string) {
     const images = this.db
       .prepare(
@@ -1455,8 +1523,9 @@ export class Repository {
   }
   assetPath(id: string, thumbnail = false): string {
     const a = this.asset(id);
+    const key = viewKey(assetView(a.metadata_json));
     return thumbnail
-      ? path.join(this.root, "thumbnails", a.content_hash + ".webp")
+      ? path.join(this.root, "thumbnails", a.content_hash + (key ? `-${key}` : "") + ".webp")
       : a.original_path;
   }
   stats() {

@@ -200,6 +200,7 @@ export const settingsSchema = z
       .strict()
       .optional(),
     visionBudget: z.union([z.literal(70), z.literal(140), z.literal(280)]).optional(),
+    indexQualityChosen: z.boolean().optional(),
     autoIndex: z
       .object({ local: z.boolean().optional(), api: z.boolean().optional() })
       .strict()
@@ -654,6 +655,21 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({ ids, rowId: id, columnId: id.optional() })
     .strict(),
   relinkImage: z.object({ id }).strict(),
+  rotateImage: z.object({ id, direction: z.enum(["left", "right"]) }).strict(),
+  cropImage: z
+    .object({
+      id,
+      crop: z
+        .object({
+          x: z.number().min(0).max(1),
+          y: z.number().min(0).max(1),
+          w: z.number().min(0).max(1),
+          h: z.number().min(0).max(1),
+        })
+        .strict()
+        .nullable(),
+    })
+    .strict(),
   export: z
     .object({
       databaseId: id,
@@ -675,6 +691,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   resumePausedJobs: z.undefined(),
   rebuildText: z.undefined(),
   indexImages: z.object({ databaseIds: ids.optional() }).strict(),
+  startIndexing: z.object({ visionBudget: z.union([z.literal(70), z.literal(140), z.literal(280)]) }).strict(),
   downloadModel: z.object({ id }).strict(),
   importModel: z.object({ id }).strict(),
   deleteModel: z.object({ id }).strict(),
