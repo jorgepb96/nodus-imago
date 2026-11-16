@@ -72,6 +72,8 @@ export function installTooltips() {
     if (
       !text ||
       !anchor.isConnected ||
+      // A column edge being dragged: the hint would cover the rows.
+      document.body.classList.contains("resizing-column") ||
       !(anchor.matches(":hover") || anchor.matches(":focus-visible"))
     )
       return;

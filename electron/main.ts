@@ -73,6 +73,8 @@ let backups: DesktopBackups | undefined;
 let updates: Updates | undefined;
 let chats: ChatRunner | undefined;
 let restorationAbort: AbortController | null = null;
+/** Prepared image files by «id/variant?revision», so repeat loads skip the worker. */
+const assetPaths = new Map<string, string>();
 const pending = new Map<
   number,
   { resolve: (v: any) => void; reject: (e: Error) => void }
@@ -403,8 +405,24 @@ app.whenReady().then(async () => {
         !/^[a-z0-9-]{1,200}$/i.test(parts[0])
       )
         return new Response(null, { status: 404 });
-      const local = await call("_asset", { id: parts[0], variant: parts[1] });
-      return new Response(await fs.readFile(local), {
+      // An image already prepared is read straight from disk: asking the
+      // worker again queued thumbnails behind imports and indexing, and they
+      // showed blank for a while. Only versioned URLs (?v=revision) are
+      // remembered, so a turned or cropped image is looked up afresh.
+      const versioned = u.searchParams.has("v"),
+        cacheKey = `${parts[0]}/${parts[1]}?${u.searchParams.get("v")}`;
+      let bytes: Buffer | null = null;
+      const known = versioned ? assetPaths.get(cacheKey) : undefined;
+      if (known) bytes = await fs.readFile(known).catch(() => null);
+      if (!bytes) {
+        const local: string = await call("_asset", { id: parts[0], variant: parts[1] });
+        bytes = await fs.readFile(local);
+        if (versioned) {
+          if (assetPaths.size >= 20_000) assetPaths.delete(assetPaths.keys().next().value!);
+          assetPaths.set(cacheKey, local);
+        }
+      }
+      return new Response(new Uint8Array(bytes), {
         headers: {
           "Content-Type": "image/webp",
           "Cache-Control": "private, max-age=86400",
@@ -882,13 +900,31 @@ app.whenReady().then(async () => {
       if (layoutSaved || closing || !window) return;
       event.preventDefault();
       const target = window;
-      void target.webContents.executeJavaScript(`Object.fromEntries(Object.entries(localStorage).filter(([k])=>k.startsWith('imago.')))`)
+      // A hung or crashed page never answers: close anyway after a moment,
+      // keeping the layout saved the last time.
+      const layout = target.webContents.isCrashed()
+        ? Promise.reject(new Error("crashed"))
+        : Promise.race([
+            target.webContents.executeJavaScript(`Object.fromEntries(Object.entries(localStorage).filter(([k])=>k.startsWith('imago.')))`),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 1500)),
+          ]);
+      void layout
         .then(client => fs.writeFile(path.join(app.getPath("userData"), "client-layout.json"), JSON.stringify(client), {mode: 0o600}))
         .catch(() => {})
         .finally(() => { layoutSaved = true; if (!target.isDestroyed()) target.close(); });
     });
     window.on("closed", () => {
       window = null;
+    });
+    // If the page's process dies (out of memory, a GPU fault…), load it again
+    // instead of leaving a blank window: the collection lives in this process.
+    let lastReload = 0;
+    window.webContents.on("render-process-gone", (_event, details) => {
+      console.error("Renderer gone:", details.reason, details.exitCode);
+      if (closing || details.reason === "clean-exit" || !window || window.isDestroyed()) return;
+      if (Date.now() - lastReload < 10_000) return;
+      lastReload = Date.now();
+      window.webContents.reload();
     });
     if (dev) void window.loadURL(dev);
     else void window.loadFile(path.join(__dirname, "../dist/index.html"));

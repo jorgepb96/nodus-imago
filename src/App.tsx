@@ -954,26 +954,83 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       refresh();
     });
   };
+  // Dragging a column edge resizes that column's cells directly, frame by
+  // frame, and saves the width once on release: re-rendering the whole table
+  // on every pointer move froze large databases. Two vertical guides span the
+  // table while dragging (where the edge was and where it is), with the width
+  // in pixels; Escape puts the column back as it was.
   const startResize = (id: string, event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     const header = (event.currentTarget as HTMLElement).parentElement!,
       startX = event.clientX,
-      startWidth = header.getBoundingClientRect().width;
-    let latest = startWidth;
+      box = header.getBoundingClientRect(),
+      startWidth = Math.round(box.width),
+      cells = tableRef.current
+        ? [...tableRef.current.querySelectorAll<HTMLElement>(`[data-column="${CSS.escape(id)}"]`)]
+        : [header],
+      before = cells.map((cell) => [cell.style.width, cell.style.minWidth, cell.style.maxWidth]),
+      area = (tableScrollRef.current ?? header).getBoundingClientRect(),
+      top = Math.max(0, area.top),
+      height = Math.max(0, Math.min(window.innerHeight, area.bottom) - top);
+    const guide = (className: string, left: number) => {
+      const line = document.createElement("div");
+      line.className = className;
+      line.setAttribute("aria-hidden", "true");
+      Object.assign(line.style, { top: `${top}px`, height: `${height}px`, left: `${left}px` });
+      document.body.append(line);
+      return line;
+    };
+    const origin = guide("column-resize-guide is-origin", box.right),
+      edge = guide("column-resize-guide", box.right),
+      label = document.createElement("span");
+    label.className = "column-resize-width";
+    edge.append(label);
+    let latest = startWidth,
+      frame = 0;
+    const paint = () => {
+      frame = 0;
+      for (const cell of cells) {
+        cell.style.width = cell.style.minWidth = cell.style.maxWidth = `${latest}px`;
+      }
+      edge.style.left = `${header.getBoundingClientRect().right}px`;
+      label.textContent = `${latest} px`;
+    };
+    paint();
     const move = (e: MouseEvent) => {
       latest = Math.round(Math.min(800, Math.max(80, startWidth + e.clientX - startX)));
-      updatePrefs((p) => ({ ...p, widths: { ...p.widths, [id]: latest } }), false);
+      if (!frame) frame = requestAnimationFrame(paint);
     };
-    const up = () => {
+    const finish = (keep: boolean) => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("blur", up);
+      if (frame) cancelAnimationFrame(frame);
+      origin.remove();
+      edge.remove();
       document.body.classList.remove("resizing-column");
-      updatePrefs((p) => ({ ...p, widths: { ...p.widths, [id]: latest } }));
+      if (!keep) {
+        cells.forEach((cell, i) => {
+          [cell.style.width, cell.style.minWidth, cell.style.maxWidth] = before[i];
+        });
+        return;
+      }
+      if (latest !== startWidth || columnWidths[id] !== undefined)
+        updatePrefs((p) => ({ ...p, widths: { ...p.widths, [id]: latest } }));
+    };
+    const up = () => finish(true);
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      finish(false);
     };
     document.body.classList.add("resizing-column");
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("blur", up);
   };
   const visibleDetails =
     area === "search"
@@ -2655,6 +2712,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 shownColumns.map((c) => (
                                   <td
                                     key={c.id}
+                                    data-column={c.id}
                                     style={columnStyle(c.id)}
                                     className={
                                       (frozenIds.includes(c.id) ? "frozen" : "") +
@@ -2751,6 +2809,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 return (
                                   <td
                                     key={c.id}
+                                    data-column={c.id}
                                     style={columnStyle(c.id)}
                                     className={
                                       (frozenIds.includes(c.id) ? "frozen" : "") +
