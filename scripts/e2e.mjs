@@ -177,6 +177,12 @@ try {
     .getByRole("button", { name: "Guardar", exact: true })
     .click();
   await properties.getByRole("button", { name: "Cerrar", exact: true }).click();
+  // A database opens in Table unless another view is featured.
+  await page
+    .locator(".view-tabs button.active")
+    .filter({ hasText: "Tabla" })
+    .waitFor();
+  await page.getByRole("button", { name: "Galería", exact: true }).click();
   await page.locator(".gallery-card").nth(3).waitFor();
   await app.evaluate(({ dialog }, files) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: files });

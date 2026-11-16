@@ -9,7 +9,8 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import type { Repository } from "../db/repository";
 import type { Engine } from "./engine";
-import { imagePipeline } from "../import/images";
+import { orientedImage } from "../import/images";
+import { assetView, type ImageView } from "../../shared/imageRotation";
 import type { DetailMatch } from "../../shared/detailSearch";
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -38,8 +39,9 @@ export class DetailSearch {
   ) {}
 
   /** A part of an image written as a JPEG the embedding model can read. */
-  private async crop(originalPath: string, box: Box, folder: string): Promise<string> {
-    const image = (await imagePipeline(originalPath)).rotate();
+  private async crop(originalPath: string, box: Box, folder: string, view?: ImageView): Promise<string> {
+    // Regions are fractions of the image as shown, after any quarter turn.
+    const image = await orientedImage(originalPath, view);
     const { data, info } = await image.png().toBuffer({ resolveWithObject: true });
     const left = Math.round(box.x * info.width),
       top = Math.round(box.y * info.height);
@@ -56,21 +58,21 @@ export class DetailSearch {
 
   async search(input: { assetId: string; region: Box; databaseIds?: string[]; inside?: boolean }, signal?: AbortSignal): Promise<DetailMatch[]> {
     const contract = this.engine.contract();
-    const source = this.repo.asset(input.assetId) as { original_path: string; content_hash: string };
+    const source = this.repo.asset(input.assetId) as { original_path: string; content_hash: string; metadata_json: string };
     const folder = path.join(this.repo.root, "staging", "details");
     await fs.mkdir(folder, { recursive: true });
     const files: string[] = [];
     try {
-      const queryFile = await this.crop(source.original_path, input.region, folder);
+      const queryFile = await this.crop(source.original_path, input.region, folder, assetView(source.metadata_json));
       files.push(queryFile);
       const query = unit((await this.engine.embed([{ image: queryFile }], signal))[0]);
       const marks = input.databaseIds?.length ? input.databaseIds.map(() => "?").join(",") : null;
       const candidates = this.repo.db
         .prepare(
-          `SELECT a.id,a.row_id rowId,a.content_hash hash,a.original_path path,e.vector FROM image_assets a JOIN embeddings e ON e.content_hash=a.content_hash AND e.contract=?
+          `SELECT a.id,a.row_id rowId,a.content_hash hash,a.original_path path,a.metadata_json metadata,e.vector FROM image_assets a JOIN embeddings e ON e.content_hash=a.content_hash AND e.contract=?
            WHERE a.content_hash<>? ${marks ? `AND a.database_id IN (${marks})` : ""}`,
         )
-        .all(contract, source.content_hash, ...(input.databaseIds ?? [])) as { id: string; rowId: string; hash: string; path: string; vector: Buffer }[];
+        .all(contract, source.content_hash, ...(input.databaseIds ?? [])) as { id: string; rowId: string; hash: string; path: string; metadata: string; vector: Buffer }[];
       if (!candidates.length) throw new Error("Indexa las imágenes para la búsqueda semántica: la búsqueda de detalles usa sus vectores.");
       const scored = candidates
         .map((c) => ({ ...c, score: dot(query, unit(fromBlob(c.vector))), box: null as Box | null }))
@@ -86,7 +88,7 @@ export class DetailSearch {
           if (missing.length) {
             const cut: string[] = [];
             try {
-              for (const i of missing) cut.push(await this.crop(candidate.path, TILES[i], folder));
+              for (const i of missing) cut.push(await this.crop(candidate.path, TILES[i], folder, assetView(candidate.metadata)));
             } catch {
               continue; // The original is not available: keep the whole-image score.
             }

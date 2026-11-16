@@ -4,12 +4,17 @@
 // so the literal and semantic searches find it.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
+  Crop as CropIcon,
+  ImageOff,
   Maximize,
   Minus,
   Pencil,
   Plus,
+  RotateCcw,
+  RotateCw,
   ScanSearch,
   SquareDashedMousePointer,
   Trash2,
@@ -18,16 +23,50 @@ import {
 import type { ImageAnnotation, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { DetailSearchPanel } from "./DetailSearchPanel";
+import { MIN_CROP, validCrop, type Region } from "../../shared/imageRotation";
 
 type View = { scale: number; x: number; y: number };
 type Draft = { id?: string; x: number; y: number; w: number; h: number; note: string; tags: string[] };
 const COLORS = ["#f59e0b", "#22c55e", "#3b82f6", "#ec4899", "#8b5cf6", "#ef4444"];
-const src = (id: string, revision?: string) =>
-  `imago://asset/${id}/preview${revision ? "?v=" + encodeURIComponent(revision) : ""}`;
+const src = (id: string, revision?: string, variant: "preview" | "full" = "preview") =>
+  `imago://asset/${id}/${variant}${revision ? "?v=" + encodeURIComponent(revision) : ""}`;
+/** Which part of the crop frame a drag moves. */
+type Grip = "move" | "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se" | "new";
+const GRIPS: Grip[] = ["n", "s", "e", "w", "nw", "ne", "sw", "se"];
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+/** The crop after dragging a grip from where the drag started. */
+function dragCrop(start: Region, grip: Grip, dx: number, dy: number, origin: { x: number; y: number }): Region {
+  if (grip === "new") {
+    const x1 = clamp01(origin.x + dx),
+      y1 = clamp01(origin.y + dy);
+    return {
+      x: Math.min(origin.x, x1),
+      y: Math.min(origin.y, y1),
+      w: Math.max(MIN_CROP, Math.abs(x1 - origin.x)),
+      h: Math.max(MIN_CROP, Math.abs(y1 - origin.y)),
+    };
+  }
+  if (grip === "move")
+    return {
+      ...start,
+      x: Math.min(1 - start.w, Math.max(0, start.x + dx)),
+      y: Math.min(1 - start.h, Math.max(0, start.y + dy)),
+    };
+  let x0 = start.x,
+    y0 = start.y,
+    x1 = start.x + start.w,
+    y1 = start.y + start.h;
+  if (grip.includes("w")) x0 = Math.min(x1 - MIN_CROP, clamp01(x0 + dx));
+  if (grip.includes("e")) x1 = Math.max(x0 + MIN_CROP, clamp01(x1 + dx));
+  if (grip.includes("n")) y0 = Math.min(y1 - MIN_CROP, clamp01(y0 + dy));
+  if (grip.includes("s")) y1 = Math.max(y0 + MIN_CROP, clamp01(y1 + dy));
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
 
 export function ImageViewer({
   row,
   initialIndex = 0,
+  initialCrop = false,
   onClose,
   onChanged,
   onOpenRecord,
@@ -35,6 +74,8 @@ export function ImageViewer({
 }: {
   row: RecordRow;
   initialIndex?: number;
+  /** Open straight into the crop editor. */
+  initialCrop?: boolean;
   onClose: () => void;
   onChanged: () => void;
   onOpenRecord?: (rowId: string) => void;
@@ -55,11 +96,34 @@ export function ImageViewer({
   const [known, setKnown] = useState<string[]>([]);
   const [searching, setSearching] = useState<ImageAnnotation | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The crop being edited, as fractions of the whole turned image. */
+  const [cropping, setCropping] = useState<Region | null>(null);
+  const cropDrag = useRef<{ grip: Grip; start: Region; from: { x: number; y: number } } | null>(null);
+  const savedCrop = image ? validCrop(image.metadata?.imagoCrop) : null;
+  const startCrop = () => {
+    setAnnotating(false);
+    setDraft(null);
+    setSelected(null);
+    setNatural(null);
+    setCropping(savedCrop ?? { x: 0, y: 0, w: 1, h: 1 });
+  };
+  const [cropOnOpen, setCropOnOpen] = useState(initialCrop);
+  if (cropOnOpen && image) {
+    setCropOnOpen(false);
+    startCrop();
+  }
   const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
   const closeRef = useRef(onClose);
+  // Escape leaves the crop editor first, then closes the viewer.
+  const isCropping = !!cropping;
   useEffect(() => {
-    closeRef.current = onClose;
-  }, [onClose]);
+    closeRef.current = isCropping
+      ? () => {
+          setCropping(null);
+          setNatural(null);
+        }
+      : onClose;
+  }, [onClose, isCropping]);
 
   useEffect(() => {
     const d = dialog.current!;
@@ -87,6 +151,7 @@ export function ImageViewer({
     setNatural(null);
     setDraft(null);
     setSelected(null);
+    setCropping(null);
   }
   useEffect(() => {
     void load();
@@ -128,6 +193,13 @@ export function ImageViewer({
   };
   const onPointerDown = (event: ReactPointerEvent) => {
     if (!natural || event.button !== 0) return;
+    if (cropping) {
+      const grip = ((event.target as HTMLElement).closest("[data-grip]") as HTMLElement | null)?.dataset.grip as Grip | undefined;
+      const from = point(event);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      cropDrag.current = { grip: grip ?? "new", start: cropping, from };
+      return;
+    }
     if ((event.target as HTMLElement).closest(".viewer-region")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     if (annotating) {
@@ -137,6 +209,12 @@ export function ImageViewer({
     } else drag.current = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
   };
   const onPointerMove = (event: ReactPointerEvent) => {
+    if (cropDrag.current && natural) {
+      const { grip, start, from } = cropDrag.current,
+        p = point(event);
+      setCropping(dragCrop(start, grip, p.x - from.x, p.y - from.y, from));
+      return;
+    }
     if (drawing && natural) {
       const p = point(event);
       setDrawing({ ...drawing, x: p.x, y: p.y });
@@ -147,6 +225,7 @@ export function ImageViewer({
   };
   const onPointerUp = () => {
     drag.current = null;
+    cropDrag.current = null;
     if (!drawing) return;
     const x = Math.min(drawing.x0, drawing.x),
       y = Math.min(drawing.y0, drawing.y),
@@ -186,6 +265,37 @@ export function ImageViewer({
     await load();
     onChanged();
   };
+  /** Crop as edited, or the whole image again with `null`. */
+  const applyCrop = async (crop: Region | null) => {
+    if (!image) return;
+    setError(null);
+    try {
+      await window.imago.call("cropImage", { id: image.id, crop: crop && validCrop(crop) });
+      setCropping(null);
+      setNatural(null);
+      await load();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const cancelCrop = () => {
+    setCropping(null);
+    setNatural(null);
+  };
+  /** A quarter turn kept with the image; its annotations turn with it. */
+  const rotate = async (direction: "left" | "right") => {
+    if (!image) return;
+    setError(null);
+    try {
+      await window.imago.call("rotateImage", { id: image.id, direction });
+      setDraft(null);
+      await load();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
   /** Centre a region and zoom to it. */
   const focus = (a: { x: number; y: number; w: number; h: number }) => {
     const box = stage.current?.getBoundingClientRect();
@@ -201,6 +311,10 @@ export function ImageViewer({
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement).closest("input,textarea")) return;
+      if (cropping) {
+        if (event.key === "Enter") void applyCrop(cropping);
+        return;
+      }
       if (event.key === "a" || event.key === "A") setAnnotating((v) => !v);
       if (event.key === "+" || event.key === "=") zoom(1.25);
       if (event.key === "-") zoom(0.8);
@@ -260,17 +374,83 @@ export function ImageViewer({
             <Maximize size={15} />
           </button>
         </div>
-        <button
-          type="button"
-          className={`viewer-annotate ${annotating ? "is-on" : ""}`}
-          aria-pressed={annotating}
-          data-testid="viewer-annotate"
-          data-tooltip={t("Arrastra sobre la imagen para marcar una zona y escribir una nota (tecla A).")}
-          onClick={() => setAnnotating(!annotating)}
-        >
-          <SquareDashedMousePointer size={16} />
-          {t("Anotar")}
-        </button>
+        {cropping ? (
+          <div className="crop-bar" data-testid="viewer-crop-bar">
+            <span>{t("Arrastra el marco o sus esquinas para elegir la parte que quieres ver.")}</span>
+            <button type="button" className="viewer-annotate" onClick={() => setCropping({ x: 0, y: 0, w: 1, h: 1 })}>
+              {t("Toda la imagen")}
+            </button>
+            <button type="button" className="viewer-annotate" onClick={cancelCrop}>
+              {t("Cancelar")}
+            </button>
+            <button
+              type="button"
+              className="viewer-annotate is-on"
+              data-testid="viewer-crop-apply"
+              onClick={() => void applyCrop(cropping)}
+            >
+              <Check size={15} />
+              {t("Aplicar recorte")}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="viewer-group">
+              <button
+                type="button"
+                aria-label={t("Girar a la izquierda")}
+                data-tooltip={t("Girar 90° a la izquierda. El original no se modifica.")}
+                data-testid="viewer-rotate-left"
+                disabled={!image}
+                onClick={() => void rotate("left")}
+              >
+                <RotateCcw size={15} />
+              </button>
+              <button
+                type="button"
+                aria-label={t("Girar a la derecha")}
+                data-tooltip={t("Girar 90° a la derecha. El original no se modifica.")}
+                data-testid="viewer-rotate-right"
+                disabled={!image}
+                onClick={() => void rotate("right")}
+              >
+                <RotateCw size={15} />
+              </button>
+              <button
+                type="button"
+                aria-label={t("Recortar")}
+                data-tooltip={t("Recortar la imagen a tu gusto. El original no se modifica.")}
+                data-testid="viewer-crop"
+                disabled={!image}
+                onClick={startCrop}
+              >
+                <CropIcon size={15} />
+              </button>
+              {savedCrop && (
+                <button
+                  type="button"
+                  aria-label={t("Volver al original")}
+                  data-tooltip={t("Volver al original: quita el recorte y muestra la imagen completa.")}
+                  data-testid="viewer-uncrop"
+                  onClick={() => void applyCrop(null)}
+                >
+                  <ImageOff size={15} />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              className={`viewer-annotate ${annotating ? "is-on" : ""}`}
+              aria-pressed={annotating}
+              data-testid="viewer-annotate"
+              data-tooltip={t("Arrastra sobre la imagen para marcar una zona y escribir una nota (tecla A).")}
+              onClick={() => setAnnotating(!annotating)}
+            >
+              <SquareDashedMousePointer size={16} />
+              {t("Anotar")}
+            </button>
+          </>
+        )}
         <span className="viewer-spacer" />
         <button type="button" className="viewer-close" aria-label={t("Cerrar")} data-tooltip={t("Cerrar")} onClick={onClose}>
           <X size={18} />
@@ -279,7 +459,7 @@ export function ImageViewer({
       <div className="viewer-body">
         <div
           ref={stage}
-          className={`viewer-stage ${annotating ? "is-annotating" : ""}`}
+          className={`viewer-stage ${annotating ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
           onWheel={(event) => {
             const r = stage.current!.getBoundingClientRect();
             zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - r.left, event.clientY - r.top);
@@ -287,13 +467,13 @@ export function ImageViewer({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onDoubleClick={() => !annotating && zoom(2)}
+          onDoubleClick={() => !annotating && !cropping && zoom(2)}
         >
           {image && (
             <img
               key={image.id}
               className="viewer-image"
-              src={src(image.id, image.revision)}
+              src={src(image.id, image.revision, cropping ? "full" : "preview")}
               alt={row.title}
               draggable={false}
               onLoad={(event) => setNatural({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight })}
@@ -304,7 +484,14 @@ export function ImageViewer({
               }
             />
           )}
-          {annotations.map((a) => (
+          {cropping && natural && (
+            <div className="crop-frame" style={box(cropping)} data-grip="move" data-testid="viewer-crop-frame">
+              {GRIPS.map((grip) => (
+                <span key={grip} className={`crop-grip is-${grip}`} data-grip={grip} />
+              ))}
+            </div>
+          )}
+          {!cropping && annotations.map((a) => (
             <button
               key={a.id}
               type="button"

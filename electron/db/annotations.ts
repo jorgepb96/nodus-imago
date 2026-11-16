@@ -1,10 +1,12 @@
-// Regions marked on an image with a note and tags. Coordinates are fractions
-// of the image as displayed (after its EXIF rotation), so they hold for every
-// size Imago shows. Saving one re-indexes its record: the note is found by the
+// Regions marked on an image with a note and tags. Coordinates are stored as
+// fractions of the original as oriented by its EXIF tag, so they hold for
+// every size Imago shows and survive turning and cropping: they are listed and
+// saved in the frame of the image as shown (shared/imageRotation.ts). Saving one re-indexes its record: the note is found by the
 // literal search at once and by the semantic search after the next indexing.
 import { randomUUID as uuid } from "node:crypto";
 import type { Repository } from "./repository";
 import type { ImageAnnotation } from "../../shared/imago";
+import { assetView, fromShown, toShown, type ImageView } from "../../shared/imageRotation";
 
 const now = () => new Date().toISOString();
 const clamp = (n: number) => Math.min(1, Math.max(0, n));
@@ -24,14 +26,28 @@ export function cleanTags(tags: string[]): string[] {
 export class Annotations {
   constructor(private repo: Repository) {}
 
+  private view(assetId: string): ImageView {
+    return assetView((this.repo.asset(assetId) as { metadata_json: string }).metadata_json);
+  }
+  /** As shown: turned and cropped like the image; a crop hides the rest. */
   list(input: { assetId?: string; rowId?: string }): ImageAnnotation[] {
     const [where, value] = input.assetId ? ["asset_id", input.assetId] : ["row_id", input.rowId];
-    return (this.repo.db.prepare(`${SELECT} WHERE ${where}=? ORDER BY created_at`).all(value) as Row[]).map(decode);
+    const views = new Map<string, ImageView>();
+    return (this.repo.db.prepare(`${SELECT} WHERE ${where}=? ORDER BY created_at`).all(value) as Row[]).flatMap((row) => {
+      if (!views.has(row.assetId)) views.set(row.assetId, this.view(row.assetId));
+      const shown = toShown(decode(row), views.get(row.assetId)!);
+      return shown ? [shown] : [];
+    });
   }
-  get(id: string): ImageAnnotation {
+  /** In the original's frame, as stored. */
+  private stored(id: string): ImageAnnotation {
     const row = this.repo.db.prepare(`${SELECT} WHERE id=?`).get(id) as Row | undefined;
     if (!row) throw new Error("Anotación no encontrada.");
     return decode(row);
+  }
+  get(id: string): ImageAnnotation {
+    const annotation = this.stored(id);
+    return toShown(annotation, this.view(annotation.assetId)) ?? annotation;
   }
   save(input: {
     id?: string;
@@ -44,11 +60,20 @@ export class Annotations {
     tags: string[];
     color?: string | null;
   }): ImageAnnotation {
-    const asset = this.repo.asset(input.assetId) as { row_id: string };
-    const x = clamp(input.x),
-      y = clamp(input.y),
-      w = Math.min(clamp(input.w), 1 - x),
-      h = Math.min(clamp(input.h), 1 - y);
+    const asset = this.repo.asset(input.assetId) as { row_id: string; metadata_json: string };
+    const view = assetView(asset.metadata_json);
+    // Editing the note of a zone a crop clips must not shrink the zone: keep
+    // the stored one unless the zone itself was moved.
+    const previous = input.id ? this.stored(input.id) : null,
+      shownBefore = previous ? toShown(previous, view) : null,
+      unchanged =
+        shownBefore &&
+        (["x", "y", "w", "h"] as const).every((k) => Math.abs(shownBefore[k] - input[k]) < 1e-6),
+      region = unchanged ? previous! : fromShown(input, view);
+    const x = clamp(region.x),
+      y = clamp(region.y),
+      w = Math.min(clamp(region.w), 1 - x),
+      h = Math.min(clamp(region.h), 1 - y);
     if (w < 0.005 || h < 0.005) throw new Error("La zona es demasiado pequeña.");
     const at = now(),
       tags = JSON.stringify(cleanTags(input.tags)),

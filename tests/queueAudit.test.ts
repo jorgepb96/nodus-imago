@@ -329,14 +329,17 @@ test("retry never repeats a successful import even if its external source has si
       },
       2,
     );
-    f.queue.images.importOne = async (_p, i) => {
+    f.queue.images.prepareOne = async (_p, i) => {
       if (i === 0 && imported.includes(0))
         throw Error("external source no longer exists");
       if (i === 1 && fail) {
         fail = false;
         throw Error("temporary I/O error");
       }
-      imported.push(i);
+      return { file: { path: "", rowId: null }, hash: String(i), size: 0, width: 1, height: 1, metadata: {}, original: "" };
+    };
+    f.queue.images.commitOne = (_p, prepared) => {
+      imported.push(Number(prepared.hash));
       return "imported";
     };
     f.queue.pump();

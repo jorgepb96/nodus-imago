@@ -227,6 +227,8 @@ export type Settings = {
   autoIndex?: { local?: boolean; api?: boolean };
   /** EmbeddingGemma 2 visual token budget (Gemma 4 sizes); 280 when absent. */
   visionBudget?: 70 | 140 | 280;
+  /** The researcher chose the image quality when images were first indexed. */
+  indexQualityChosen?: boolean;
   /** Introduction and guided tour already seen (their version). */
   welcomeVersion?: number;
   /** The last version whose news were shown after an update. */
@@ -660,6 +662,13 @@ export type Commands = {
     result: void;
   };
   relinkImage: { input: { id: string }; result: boolean };
+  /** A quarter turn of the image as shown; the original file is never changed. */
+  rotateImage: { input: { id: string; direction: "left" | "right" }; result: { rotation: 0 | 90 | 180 | 270 } };
+  /** Crop as shown (fractions), or `null` to show the whole image again. The original is never changed. */
+  cropImage: {
+    input: { id: string; crop: { x: number; y: number; w: number; h: number } | null };
+    result: { crop: { x: number; y: number; w: number; h: number } | null };
+  };
   export: {
     input: {
       databaseId: string;
@@ -715,6 +724,8 @@ export type Commands = {
   resumePausedJobs: { input: void; result: void };
   rebuildText: { input: void; result: number };
   indexImages: { input: { databaseIds?: string[] }; result: string };
+  /** First indexing of images, at the image quality the researcher chose. */
+  startIndexing: { input: { visionBudget: 70 | 140 | 280 }; result: string };
   downloadModel: { input: { id: string }; result: string };
   importModel: { input: { id: string }; result: boolean };
   deleteModel: { input: { id: string }; result: void };

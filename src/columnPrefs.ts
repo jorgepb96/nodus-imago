@@ -17,7 +17,24 @@ export type ColumnPrefs = {
   timelineBucket?: "auto" | "year" | "decade";
   /** Statistics: the saved statistic last open. */
   statistic?: string | null;
+  /** The view the database opens in, chosen with «Destacar» (null: Table). */
+  defaultView?: DatabaseViewId | null;
 };
+/** The views of a database, in tab order. */
+export const DATABASE_VIEWS = [
+  "table",
+  "gallery",
+  "map",
+  "tree",
+  "timeline",
+  "stats",
+  "variants",
+  "network",
+  "visualmap",
+] as const;
+export type DatabaseViewId = (typeof DATABASE_VIEWS)[number];
+const isView = (value: unknown): value is DatabaseViewId =>
+  (DATABASE_VIEWS as readonly unknown[]).includes(value);
 export const EMPTY_PREFS: ColumnPrefs = {
   widths: {},
   hidden: [],
@@ -42,6 +59,7 @@ export function readColumnPrefs(databaseId: string): ColumnPrefs {
         timelineColumn: parsed.timelineColumn ?? null,
         timelineBucket: parsed.timelineBucket ?? "auto",
         statistic: parsed.statistic ?? null,
+        defaultView: isView(parsed.defaultView) ? parsed.defaultView : null,
       };
     }
     // Widths saved before the other preferences existed.

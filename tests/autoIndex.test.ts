@@ -18,7 +18,8 @@ async function fixture() {
     models = new Models(repo),
     engine = new Engine(repo, models, host),
     queue = new JobQueue(repo, new Images(repo), models, engine, () => {});
-  repo.updateSettings({ embeddingModel: "embeddinggemma2-onnx" });
+  // These tests are about timing; the first-indexing quality choice has its own.
+  repo.updateSettings({ embeddingModel: "embeddinggemma2-onnx", indexQualityChosen: true });
   engine.ready = () => {};
   const embedded: string[] = [];
   engine.onnx.embed = async (_dir, _threads, dims, inputs) =>
@@ -81,26 +82,29 @@ test("new and edited records are indexed once editing settles, one pass at a tim
   }
 });
 
-test("long passes wait for the researcher; paused or failed passes are never resumed by the timer", async () => {
+test("a long backlog goes in batches, records first; paused or failed passes are never resumed by the timer", async () => {
   const f = await fixture();
   try {
     f.advance(31_000);
     const estimate = f.engine.estimateSeconds.bind(f.engine);
-    f.engine.estimateSeconds = () => 3600;
-    assert.equal(f.auto.tick(), "held");
-    assert.deepEqual(f.auto.state().held, { items: 2, seconds: 3600 });
-    assert.equal(f.repo.jobs().length, 0);
-    // A long image backlog does not stop records: they go alone, images wait.
-    f.engine.estimateSeconds = (p) => (p.assets ? 3600 : 1);
-    f.engine.pendingIndex = ((original) => () => ({ ...original(), assets: ["a1", "a2"] }))(f.engine.pendingIndex.bind(f.engine));
-    const recordsId = f.auto.tick();
-    assert.match(recordsId, /^[0-9a-f-]{36}$/);
-    assert.deepEqual(f.auto.state().held, { items: 2, seconds: 3599 });
-    const payload = JSON.parse((f.repo.db.prepare("SELECT payload_json FROM jobs WHERE id=?").get(recordsId) as { payload_json: string }).payload_json);
-    assert.equal(payload.rows.length, 2);
-    assert.equal(payload.assets.length, 0);
+    const pendingIndex = f.engine.pendingIndex.bind(f.engine);
+    // Two records at 1 s each and images at 10 min each: one batch holds the
+    // records and one image; the next tick queues the following batch.
+    f.engine.estimateSeconds = (p) => p.rows * 1 + p.assets * 600;
+    f.engine.pendingIndex = () => ({ ...pendingIndex(), assets: ["a1", "a2", "a3"] });
+    const first = f.auto.tick();
+    assert.match(first, /^[0-9a-f-]{36}$/);
+    const payload = (id: string) =>
+      JSON.parse((f.repo.db.prepare("SELECT payload_json FROM jobs WHERE id=?").get(id) as { payload_json: string }).payload_json);
+    assert.equal(payload(first).rows.length, 2);
+    assert.deepEqual(payload(first).assets, ["a1"]);
+    assert.equal(f.auto.tick(), "busy", "one batch at a time");
+    f.repo.db.prepare("UPDATE jobs SET state='completed' WHERE id=?").run(first);
+    f.engine.pendingIndex = () => ({ ...pendingIndex(), rows: [], assets: ["a2", "a3"] });
+    const second = f.auto.tick();
+    assert.deepEqual([payload(second).rows.length, payload(second).assets], [0, ["a2"]]);
     f.repo.db.prepare("DELETE FROM jobs").run();
-    delete (f.engine as { pendingIndex?: unknown }).pendingIndex;
+    f.engine.pendingIndex = pendingIndex;
     f.engine.estimateSeconds = estimate;
     const id = f.auto.tick();
     f.queue.control(id, "pause", false);
@@ -115,11 +119,14 @@ test("long passes wait for the researcher; paused or failed passes are never res
   }
 });
 
-test("an import still running counts as activity, and remote APIs stay manual unless enabled", async () => {
+test("what an import adds is indexed while it goes on; a classification writing cells is waited for; remote APIs stay manual unless enabled", async () => {
   const f = await fixture();
   try {
     f.advance(31_000);
     f.repo.newJob("images", { files: [{ path: "/x.jpg", rowId: null }], databaseId: f.d.database.id, columnId: "c", storage: "link", createUnmatched: false }, 1);
+    assert.match(f.auto.tick(), /^[0-9a-f-]{36}$/, "indexes during the import");
+    f.repo.db.prepare("DELETE FROM jobs").run();
+    f.repo.newJob("analyze", { rowIds: [], columnIds: [] }, 1);
     assert.equal(f.auto.tick(), "settling");
     f.repo.db.prepare("UPDATE jobs SET state='completed'").run();
     f.repo.updateSettings({ embeddingModel: "api-embedding" });
@@ -150,6 +157,39 @@ test("automatic passes yield to work the researcher queued explicitly", async ()
     assert.equal(state(autoId), "queued");
     assert.equal(f.repo.jobs().find((j) => j.id === autoId)?.label, "Indexación automática");
     await f.queue.task;
+  } finally {
+    await f.close();
+  }
+});
+
+test("the first image indexing waits for the researcher to choose its quality", async () => {
+  const f = await fixture();
+  try {
+    f.repo.updateSettings({ indexQualityChosen: false });
+    f.engine.pendingIndex = ((original) => () => ({ ...original(), assets: ["a1", "a2"] }))(f.engine.pendingIndex.bind(f.engine));
+    f.advance(31_000);
+    // Nothing starts on its own, records included: changing the quality
+    // would invalidate a pass already running.
+    assert.equal(f.auto.tick(), "quality");
+    assert.equal(f.repo.jobs().length, 0);
+    const quality = f.auto.state().quality!;
+    assert.deepEqual([quality.assets, quality.rows, quality.current], [2, 2, 70]);
+    assert.ok(quality.seconds[280] > quality.seconds[140] && quality.seconds[140] > quality.seconds[70]);
+    // Asked as soon as images arrive, while the import still goes on, with
+    // the fast level chosen unless another was set.
+    f.repo.newJob("images", { files: [], databaseId: f.d.database.id, columnId: "c", storage: "link", createUnmatched: false }, 1);
+    assert.notEqual(f.auto.state().quality, null);
+    assert.equal(f.auto.tick(), "quality");
+    f.repo.db.prepare("DELETE FROM jobs").run();
+    // Once chosen, indexing runs as usual and the question is not asked again.
+    f.repo.updateSettings({ visionBudget: 70, indexQualityChosen: true });
+    assert.equal(f.auto.state().quality, null);
+    assert.match(f.auto.tick(), /^[0-9a-f-]{36}$/);
+    // A collection that already has image vectors is never asked.
+    f.repo.db.prepare("DELETE FROM jobs").run();
+    f.repo.updateSettings({ indexQualityChosen: false });
+    f.repo.db.prepare("INSERT INTO embeddings VALUES(?,?,?)").run("h", "c", Buffer.from(new Float32Array([1]).buffer));
+    assert.equal(f.auto.state().quality, null);
   } finally {
     await f.close();
   }

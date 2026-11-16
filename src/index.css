@@ -804,6 +804,9 @@ summary::-webkit-details-marker {
   min-width: 0;
   background: var(--panel);
   overflow: auto;
+  /* Room for the scrollbar is kept on short pages too, so centred pages
+     (Settings) do not shift sideways when switching sections. */
+  scrollbar-gutter: stable;
 }
 .workspace-top {
   height: 50px;
@@ -1049,6 +1052,18 @@ summary::-webkit-details-marker {
 .view-tabs > button.active {
   color: var(--accent-ink);
   border-bottom-color: var(--accent);
+}
+/* The featured view, which the database opens in (right-click a tab). */
+.view-tabs .view-featured {
+  flex: none;
+  margin-left: -2px;
+  color: var(--accent);
+}
+.view-menu-note {
+  margin: 2px 8px 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 .toolbar-actions {
   padding: 8px 0;
@@ -5757,16 +5772,18 @@ body.resizing-column * {
   }
 }
 
-/* With many views the toolbar can be wider than the window: the actions
-   then move to a row above, and the view tabs stay on the bottom border. */
+/* The actions always have their own row above the view tabs, which stay on
+   the bottom border. Each view shows different actions; sharing one row only
+   when they fitted made the tabs jump up and down between views. */
 .data-toolbar {
-  flex-wrap: wrap-reverse;
+  flex-direction: column-reverse;
+  align-items: stretch;
   row-gap: 0;
 }
 .data-toolbar > .toolbar-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
-  margin-left: auto;
+  min-height: 46px;
 }
 .view-tabs {
   flex-wrap: wrap;
@@ -6333,10 +6350,15 @@ body.resizing-column * {
 
 /* Annotated regions: badges on the gallery and the record image. */
 .image-regions { position: absolute; bottom: 9px; left: 9px; display: flex; gap: 4px; align-items: center; padding: 2px 6px; border-radius: 4px; font-size: 9px; color: white; background: color-mix(in srgb, #f59e0b 85%, #000); pointer-events: auto; }
+.record-image { position: relative; }
 .record-image-open { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .record-image-open:disabled { cursor: default; }
-.record-image-hint { position: absolute; right: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 11.5px; color: white; background: #000a; opacity: 0; transition: opacity .15s; }
-.record-image-open:hover .record-image-hint, .record-image-open:focus-visible .record-image-hint { opacity: 1; }
+/* Turning and opening the image, over its lower right corner on hover. */
+.record-image-tools { position: absolute; right: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 4px; opacity: 0; transition: opacity .15s; }
+.record-image:hover .record-image-tools, .record-image:focus-within .record-image-tools { opacity: 1; }
+.record-image-hint { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 11.5px; color: white; background: #000a; cursor: zoom-in; }
+.record-image-turn { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px; color: white; background: #000a; }
+.record-image-turn:hover, .record-image-hint:hover { background: #000d; }
 .record-image-regions { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; font-size: 11.5px; color: white; background: color-mix(in srgb, #f59e0b 85%, #000); }
 
 /* Full-screen viewer. */
@@ -6365,6 +6387,48 @@ body.resizing-column * {
 .viewer-region:hover { background: color-mix(in srgb, var(--region, #f59e0b) 22%, transparent); }
 .viewer-region.is-selected { border-width: 3px; box-shadow: 0 0 0 1px #000a, 0 0 0 9999px #00000059; z-index: 2; }
 .viewer-region.is-drawing { border: 2px dashed #f59e0b; background: #f59e0b1f; pointer-events: none; }
+/* Crop editor: a free frame over the whole image, the rest dimmed. */
+.viewer-stage.is-cropping { cursor: crosshair; }
+.crop-frame { position: absolute; border: 2px solid white; box-shadow: 0 0 0 9999px #000000a6; cursor: move; z-index: 2; }
+.crop-frame::before, .crop-frame::after { content: ""; position: absolute; inset: 33.33% 0; border-block: 1px solid #ffffff59; pointer-events: none; }
+.crop-frame::after { inset: 0 33.33%; border-block: 0; border-inline: 1px solid #ffffff59; }
+.crop-grip { position: absolute; width: 14px; height: 14px; border: 2px solid white; border-radius: 3px; background: #111113; }
+.crop-grip.is-nw { left: -8px; top: -8px; cursor: nwse-resize; }
+.crop-grip.is-se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+.crop-grip.is-ne { right: -8px; top: -8px; cursor: nesw-resize; }
+.crop-grip.is-sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+.crop-grip.is-n, .crop-grip.is-s { left: calc(50% - 10px); width: 20px; height: 8px; cursor: ns-resize; }
+.crop-grip.is-n { top: -5px; }
+.crop-grip.is-s { bottom: -5px; }
+.crop-grip.is-e, .crop-grip.is-w { top: calc(50% - 10px); width: 8px; height: 20px; cursor: ew-resize; }
+.crop-grip.is-e { right: -5px; }
+.crop-grip.is-w { left: -5px; }
+.crop-bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crop-bar > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #a1a1aa; }
+
+/* First indexing: the quality levels, each with its duration. */
+.modal-body.index-quality { display: flex; flex-direction: column; gap: 20px; }
+.modal-body.index-quality > p { margin: 0; }
+.index-quality-lead { font-size: 13.5px; line-height: 1.6; color: var(--text); }
+.index-quality-summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 12.5px; }
+.index-quality-summary strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.index-quality-options { display: flex; flex-direction: column; gap: 10px; }
+.index-quality-option { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; column-gap: 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer; transition: border-color .15s, background .15s, box-shadow .15s; }
+.index-quality-option:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.index-quality-option.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--panel)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.index-quality-option:has(.index-quality-radio:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The native radio stays for keyboards and screen readers; the tile shows the choice. */
+.index-quality-radio { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.index-quality-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--surface); color: var(--muted); }
+.index-quality-option.is-selected .index-quality-icon { background: var(--accent); color: white; }
+.index-quality-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.index-quality-text strong { font-size: 14px; font-weight: 600; }
+.index-quality-text small { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.index-quality-time { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding-left: 8px; text-align: right; }
+.index-quality-time small { font-size: 10.5px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+.index-quality-time b { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.index-quality-note { display: flex; align-items: flex-start; gap: 10px; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.index-quality-note > svg { flex: none; margin-top: 2px; }
 .viewer-hint { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); padding: 8px 14px; border-radius: 999px; font-size: 13px; color: #111; background: #f59e0b; pointer-events: none; }
 .viewer-side { display: flex; flex-direction: column; gap: 10px; width: 340px; flex-shrink: 0; overflow-y: auto; padding: 16px; border-left: 1px solid #ffffff14; background: #111113; }
 .viewer-side h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #a1a1aa; }

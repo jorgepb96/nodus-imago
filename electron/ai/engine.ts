@@ -23,7 +23,8 @@ import {
   type ModelChoice,
 } from "../../shared/aiConfig";
 import type { CompletionRequest, EmbeddingRequest } from "./apiProviders";
-import { imagePipeline, withInferenceImage } from "../import/images";
+import { orientedImage, withInferenceImage } from "../import/images";
+import { assetView, type ImageView } from "../../shared/imageRotation";
 import { LlamaPool } from "./llama";
 import {
   parseClassification,
@@ -263,7 +264,7 @@ export class Engine {
   }
   /** Embeddings through the API broker, in provider-sized batches. */
   private async apiEmbed(
-    inputs: { image?: string; text?: string; role?: string }[],
+    inputs: { image?: string; view?: ImageView; text?: string; role?: string }[],
     signal?: AbortSignal,
   ) {
     const settings = this.repo.getSettings(),
@@ -280,9 +281,8 @@ export class Engine {
       }
       if (mode === "native") {
         const jpeg = await (
-          await imagePipeline(item.image)
+          await orientedImage(item.image, item.view)
         )
-          .rotate()
           .resize(1536, 1536, { fit: "inside", withoutEnlargement: true })
           .toColourspace("srgb")
           .removeAlpha()
@@ -291,8 +291,11 @@ export class Engine {
         items.push({ image: jpeg.toString("base64"), mimeType: "image/jpeg" });
       } else if (mode === "caption")
         items.push({
-          text: await withInferenceImage(this.repo.root, item.image, (png) =>
-            this.captionFor(png, signal),
+          text: await withInferenceImage(
+            this.repo.root,
+            item.image,
+            (png) => this.captionFor(png, signal),
+            item.view,
           ),
           role: "document",
         });
@@ -334,7 +337,7 @@ export class Engine {
     return vectors;
   }
   async embed(
-    inputs: { image?: string; text?: string; role?: string }[],
+    inputs: { image?: string; view?: ImageView; text?: string; role?: string }[],
     signal?: AbortSignal,
   ): Promise<number[][]> {
     const settings = this.repo.getSettings();
@@ -354,9 +357,12 @@ export class Engine {
             this.repo.root,
             item.image,
             async (file) => {
+              // The staged PNG is already framed: do not frame it again.
               item.image = file;
+              item.view = undefined;
               return encode(index + 1);
             },
+            item.view,
           );
         return encode(index + 1);
       }
@@ -447,7 +453,7 @@ export class Engine {
   }
   enqueueIndex(
     databaseIds?: string[],
-    options: { auto?: boolean; recordsOnly?: boolean } = {},
+    options: { auto?: boolean; recordsOnly?: boolean; limit?: { rows: number; assets: number } } = {},
   ) {
     this.ready(this.repo.getSettings().embeddingModel);
     if (this.imageMode() === "caption") {
@@ -457,8 +463,14 @@ export class Engine {
     if (databaseIds && !databaseIds.length)
       throw new Error("Selecciona alguna base de datos.");
     const pending = this.pendingIndex(databaseIds),
-      { rows, contract } = pending,
-      assets = options.recordsOnly ? [] : pending.assets;
+      { contract } = pending,
+      // A batch of a long backlog: the next pass picks up the rest.
+      rows = options.limit ? pending.rows.slice(0, options.limit.rows) : pending.rows,
+      assets = options.recordsOnly
+        ? []
+        : options.limit
+          ? pending.assets.slice(0, options.limit.assets)
+          : pending.assets;
     return this.repo.newJob(
       "index",
       {
@@ -471,13 +483,13 @@ export class Engine {
     );
   }
   /** Rough duration of a pass on this backend, for the automatic threshold. */
-  estimateSeconds(pending: { rows: number; assets: number }) {
+  estimateSeconds(pending: { rows: number; assets: number }, budget?: 70 | 140 | 280) {
     const s = this.repo.getSettings();
     if (s.embeddingModel === API_EMBEDDING_ID)
       return pending.rows / 32 + pending.assets / 6;
     const image =
       s.embeddingModel === ONNX_ID
-        ? ({ 70: 1.2, 140: 2.7, 280: 5.3 } as const)[s.visionBudget ?? 280]
+        ? ({ 70: 1.2, 140: 2.7, 280: 5.3 } as const)[budget ?? s.visionBudget ?? 280]
         : 15;
     return pending.rows * 0.6 + pending.assets * image;
   }
@@ -553,7 +565,7 @@ export class Engine {
       this.prefetched.set(contract + ":" + key, vector);
   }
   private async prefetchImages(
-    asset: { content_hash: string; original_path: string },
+    asset: { content_hash: string; original_path: string; metadata_json: string },
     upcoming: string[],
     signal: AbortSignal,
   ) {
@@ -562,10 +574,10 @@ export class Engine {
       for (const id of upcoming) {
         const next = this.repo.db
           .prepare(
-            "SELECT content_hash,original_path FROM image_assets WHERE id=?",
+            "SELECT content_hash,original_path,metadata_json FROM image_assets WHERE id=?",
           )
           .get(id) as
-          { content_hash: string; original_path: string } | undefined;
+          { content_hash: string; original_path: string; metadata_json: string } | undefined;
         if (!next || batch.some((b) => b.content_hash === next.content_hash))
           continue;
         if (
@@ -576,7 +588,7 @@ export class Engine {
         batch.push(next);
       }
     const vectors = await this.embed(
-      batch.map((b) => ({ image: b.original_path })),
+      batch.map((b) => ({ image: b.original_path, view: assetView(b.metadata_json) })),
       signal,
     );
     this.remember(
@@ -732,7 +744,10 @@ export class Engine {
             ),
           ),
         );
-      else vectors.push((await this.embed([{ image: a.original_path }]))[0]);
+      else
+        vectors.push(
+          (await this.embed([{ image: a.original_path, view: assetView(a.metadata_json) }]))[0],
+        );
     }
     const inputs = [];
     if (input.query?.trim()) inputs.push({ text: input.query, role: "query" });
@@ -1017,33 +1032,40 @@ export class Engine {
       revision = model.revision;
       // A transcription reads every image of the record (the front and the
       // back of a photograph); a description reads the first one.
-      const local = async (path: string) =>
+      const local = async (source: { original_path: string; metadata_json: string }) =>
         model.backend === "llama"
-          ? withInferenceImage(this.repo.root, path, (file) =>
-              this.llama.describe(choice.model, file, prompt, signal, options ? "json" : "text"),
+          ? withInferenceImage(
+              this.repo.root,
+              source.original_path,
+              (file) => this.llama.describe(choice.model, file, prompt, signal, options ? "json" : "text"),
+              assetView(source.metadata_json),
             )
-          : withInferenceImage(this.repo.root, path, (file) =>
-              this.host.request(
-                {
-                  task: "vision",
-                  directory: this.models.directory(choice.model),
-                  device: settings.device,
-                  threads: settings.profile === "light" ? 1 : 2,
-                  image: file,
-                  prompt,
-                },
-                signal,
-              ),
+          : withInferenceImage(
+              this.repo.root,
+              source.original_path,
+              (file) =>
+                this.host.request(
+                  {
+                    task: "vision",
+                    directory: this.models.directory(choice.model),
+                    device: settings.device,
+                    threads: settings.profile === "light" ? 1 : 2,
+                    image: file,
+                    prompt,
+                  },
+                  signal,
+                ),
+              assetView(source.metadata_json),
             );
       if (transcribe && sourceImages.length > 1) {
         const texts: string[] = [];
         for (const [i, source] of sourceImages.slice(0, 3).entries()) {
-          const text = parseDescription(String(await local(this.repo.asset(source.id).original_path)));
+          const text = parseDescription(String(await local(this.repo.asset(source.id))));
           if (text && !/^\[?sin texto\]?$/i.test(text.trim())) texts.push(`[${i + 1}] ${text}`);
         }
         result = texts.join("\n\n") || "[sin texto]";
       } else
-        result = await local(asset.original_path);
+        result = await local(asset);
     } else {
       const parts = [];
       for (const source of sourceImages.slice(0, 2)) {
@@ -1052,9 +1074,8 @@ export class Engine {
           throw new Error(
             "Una imagen de origen ha cambiado. Vuelve a importarla.",
           );
-        const pipeline = await imagePipeline(a.original_path);
+        const pipeline = await orientedImage(a.original_path, assetView(a.metadata_json));
         const buffer = await pipeline
-          .rotate()
           .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
           .jpeg({ quality: 85 })
           .toBuffer();

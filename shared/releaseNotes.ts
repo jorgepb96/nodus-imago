@@ -33,6 +33,60 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.1.4",
+    date: "2026-11-16",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Junto a «Ampliar y anotar» hay botones para girar la imagen 90° a la izquierda o a la derecha. El giro se guarda en la ficha sin tocar el archivo original, y las anotaciones giran con la imagen.",
+        en: "Next to “Enlarge and annotate” there are buttons to turn the image 90° left or right. The turn is kept in the record without touching the original file, and annotations turn with the image.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Las imágenes se pueden recortar a mano, arrastrando el marco o sus esquinas, y volver al original cuando se quiera. El archivo original nunca se modifica.",
+        en: "Images can be cropped by hand, dragging the frame or its corners, and returned to the original at any time. The original file is never changed.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Las bases de datos se abren en la vista de tabla. Con clic derecho en una pestaña de vista, «Destacar» hace que sea la que se abre en esa base de datos.",
+        en: "Databases open in the table view. Right-clicking a view tab and choosing “Feature” makes it the view that opens for that database.",
+      },
+      {
+        scope: "search",
+        category: "new",
+        es: "La primera vez que se indexan las imágenes, Imago pregunta la calidad, con el tiempo estimado de cada nivel. Viene marcada la rápida.",
+        en: "The first time images are indexed, Imago asks for the quality, with the estimated time of each level. Fast is selected by default.",
+      },
+      {
+        scope: "search",
+        category: "enhancement",
+        es: "Las imágenes se indexan mientras se importan, sin esperar al final. Un volumen grande se indexa en tandas de unos 15 minutos que se encadenan solas.",
+        en: "Images are indexed while they are imported, without waiting for the end. A large backlog is indexed in batches of about 15 minutes that follow one another on their own.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "La importación de imágenes es unas tres veces más rápida: prepara varias a la vez y ajusta cuántas según el ordenador. Si otros programas necesitan el procesador o falta memoria, cede.",
+        en: "Image import is about three times faster: it prepares several images at once and adjusts how many to the computer. When other programs need the processor or memory runs short, it gives way.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Las pestañas de vista se movían de sitio al cambiar a una vista sin botones superiores. Ahora se quedan siempre en la misma posición.",
+        en: "View tabs moved when switching to a view without top buttons. They now always stay in the same place.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "En Configuración, el menú lateral se desplazaba unos píxeles al cambiar de sección. Ya no se mueve.",
+        en: "In Settings, the side menu shifted a few pixels when switching sections. It no longer moves.",
+      },
+    ],
+  },
+  {
     version: "0.1.3",
     date: "2026-11-16",
     highlights: [

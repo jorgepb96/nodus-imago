@@ -3,6 +3,8 @@
 // source and translated where the interface shows them. tests/i18n.test.ts
 // fails when a new message has no entry here or in src/i18n.tsx.
 export const backendEn: Record<string, string> = {
+  "Espera a que termine la indexación en curso.": "Wait for the indexing in progress to finish.",
+  "El recorte no es válido: elige una zona dentro de la imagen.": "The crop is not valid: choose an area inside the image.",
   "El nuevo orden debe incluir cada propiedad de la base una sola vez.": "The new order must include every property of the database exactly once.",
   "EmbeddingGemma 2 · texto + visión": "EmbeddingGemma 2 · text + vision",
   "EmbeddingGemma 2 · texto + visión · experimental Python": "EmbeddingGemma 2 · text + vision · experimental Python",

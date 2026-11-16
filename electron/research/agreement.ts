@@ -14,6 +14,7 @@ import type {
   AgreementResult,
 } from "../../shared/agreement";
 import { agreementCsv } from "../../shared/agreementExport";
+import { assetRevision } from "../../shared/imageRotation";
 
 export class AgreementResearch {
   // Tokens bind saves/exports to the exact computed snapshot, never to edited UI inputs.
@@ -118,7 +119,7 @@ export class AgreementResearch {
         byRow.set(cell.rowId, row);
       }
       const image = this.repo.db.prepare(
-        "SELECT id,json_extract(metadata_json,'$.imagoRelinkRevision') revision FROM image_assets WHERE row_id=? AND width>0 ORDER BY position,id LIMIT 1",
+        "SELECT id,metadata_json metadata FROM image_assets WHERE row_id=? AND width>0 ORDER BY position,id LIMIT 1",
       );
       const provenance = this.repo.db
         .prepare(
@@ -141,9 +142,10 @@ export class AgreementResearch {
         rows: included.map((r) => ({
           ...r,
           cells: byRow.get(r.id) ?? {},
-          image:
-            (image.get(r.id) as
-              { id: string; revision?: string } | undefined) ?? null,
+          image: (() => {
+            const first = image.get(r.id) as { id: string; metadata: string } | undefined;
+            return first ? { id: first.id, revision: assetRevision(first.metadata) } : null;
+          })(),
         })),
         matched: records.length,
         provenance,

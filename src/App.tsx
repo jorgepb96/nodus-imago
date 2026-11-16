@@ -54,6 +54,8 @@ import {
   Globe,
   Images,
   Share2,
+  Star,
+  StarOff,
 } from "lucide-react";
 import type { DatabaseDetail, DatabaseSummary } from "../shared/databases";
 import { decodeMultiSelect } from "../shared/databases";
@@ -81,7 +83,8 @@ import { Cell } from "./components/Cell";
 import { Properties, type Perform } from "./components/Properties";
 import { CsvImport, ImageImport } from "./components/ImportDialogs";
 import { ViewControls } from "./components/ViewControls";
-import { CriteriaSelect } from "./components/CriteriaSelect";
+import { CriteriaPopover, CriteriaSelect } from "./components/CriteriaSelect";
+import { askIndexQuality, IndexQualityDialog } from "./components/IndexQualityDialog";
 import { ChatView } from "./components/chat/ChatView";
 import { CompareView } from "./components/CompareView";
 import { VariantsView } from "./components/VariantsView";
@@ -114,7 +117,12 @@ import {
   EMPTY_DATABASE_SEARCH,
   type DatabaseSearchState,
 } from "./components/DatabaseSearch";
-import { useColumnPrefs, visibleColumns } from "./columnPrefs";
+import {
+  readColumnPrefs,
+  useColumnPrefs,
+  visibleColumns,
+  type DatabaseViewId,
+} from "./columnPrefs";
 import { decodeDatabaseDate } from "../shared/databaseProperties";
 import { ROLLUP_FUNCTIONS } from "../shared/databases";
 import { RecordPanel } from "./components/RecordPanel";
@@ -156,6 +164,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [databaseId, setDatabaseId] = useState(""),
     [detail, setDetail] = useState<DatabaseDetail | null>(null),
     [status, setStatus] = useState<Status | null>(null),
+    // The quality choice before the first indexing: shown once on its own
+    // per session, and whenever the researcher asks to index.
+    [qualityDismissed, setQualityDismissed] = useState(false),
+    [qualityAsked, setQualityAsked] = useState(false),
     [tick, setTick] = useState(0),
     [busy, setBusy] = useState(0),
     [toast, setToast] = useState<{ message: string; error: boolean } | null>(
@@ -166,9 +178,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   const [page, setPage] = useState<Page>({ rows: [], total: 0 }),
     [loading, setLoading] = useState(false),
-    [view, setView] = useState<
-      "gallery" | "table" | "tree" | "map" | "timeline" | "stats" | "variants" | "network" | "visualmap"
-    >("gallery"),
+    // Search starts in the gallery; a database sets its own view on opening.
+    [view, setView] = useState<DatabaseViewId>("gallery"),
     [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(""),
     [mode, setMode] = useState<"literal" | "semantic" | "hybrid">("literal"),
@@ -319,6 +330,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     };
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
+  }, []);
+  useEffect(() => {
+    const ask = () => setQualityAsked(true);
+    window.addEventListener("imago:index-quality", ask);
+    return () => window.removeEventListener("imago:index-quality", ask);
   }, []);
   const notify = useCallback((message: string, error = false) => {
     setToast({ message, error });
@@ -621,6 +637,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const navigate = (id: string) => {
     setArea("databases");
     setDatabaseId(id);
+    // A database opens in Table, or in the view the researcher featured.
+    setView(readColumnPrefs(id).defaultView ?? "table");
     setExecuted({});
     setQuery("");
     setFilters([]);
@@ -748,6 +766,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     } | null>(null),
     [columnMenu, setColumnMenu] = useState<string | null>(null),
     [menuView, setMenuView] = useState<"main" | "calc">("main"),
+    [viewMenuAt, setViewMenuAt] = useState<{ id: DatabaseViewId; tab: HTMLElement } | null>(null),
     [editColumn, setEditColumn] = useState<string | null>(null),
     [filterRequest, setFilterRequest] = useState(0),
     [summaries, setSummaries] = useState<Record<string, string>>({}),
@@ -857,6 +876,38 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       ? number.toLocaleString(uiLocale())
       : value;
   };
+  /** The view a database opens in; right-clicking a tab features another. */
+  const featuredView = area === "databases" && detail ? (prefs.defaultView ?? null) : null;
+  const viewMenu = viewMenuAt?.id ?? null,
+    // A stable anchor: the popover repositions whenever its anchor changes.
+    viewMenuAnchor = useMemo(() => ({ current: viewMenuAt?.tab ?? null }), [viewMenuAt]);
+  const openViewMenu = (id: DatabaseViewId, tab: HTMLElement) => setViewMenuAt({ id, tab });
+  const viewTab = (id: DatabaseViewId) =>
+    area === "databases" && detail
+      ? {
+          "aria-haspopup": "menu" as const,
+          onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => {
+            event.preventDefault();
+            openViewMenu(id, event.currentTarget);
+          },
+          onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+              event.preventDefault();
+              openViewMenu(id, event.currentTarget);
+            }
+          },
+        }
+      : {};
+  const featuredMark = (id: DatabaseViewId) =>
+    featuredView === id ? (
+      <Star
+        size={11}
+        className="view-featured"
+        fill="currentColor"
+        aria-label={t("Vista destacada")}
+        data-tooltip={t("Vista destacada: la base de datos se abre en ella")}
+      />
+    ) : null;
   const openColumnMenu = (columnId: string, header: HTMLElement) => {
     menuAnchor.current = header;
     if (!header.matches("button")) setMenuView("main");
@@ -1689,26 +1740,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           {t("para activar la búsqueda multimodal.")}
                         </p>
                       )}
-                      {modelReady && status?.autoIndex.held && (
+                      {modelReady && status?.autoIndex.quality && (
                         <p className="search-note" role="status">
                           <RefreshCw size={14} />
-                          {status.autoIndex.held.items.toLocaleString()}{" "}
-                          {t("elementos por indexar")} (≈
-                          {Math.max(
-                            1,
-                            Math.round(status.autoIndex.held.seconds / 60),
-                          ).toLocaleString()}{" "}
-                          min). {t("Es largo, así que no empieza solo.")}{" "}
-                          <button
-                            onClick={() =>
-                              void perform(async () => {
-                                await api.call("indexImages", {});
-                                refresh();
-                              })
-                            }
-                          >
-                            {t("Indexar ahora")}
-                          </button>
+                          {status.autoIndex.quality.assets.toLocaleString()}{" "}
+                          {t("imágenes sin indexar para la búsqueda semántica.")}{" "}
+                          <button onClick={askIndexQuality}>{t("Elegir calidad e indexar")}</button>
                         </p>
                       )}
                       {!!saved.length && (
@@ -1846,21 +1883,26 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     <div className="view-tabs" data-tour="db-views">
                       <button
                         className={effectiveView === "table" ? "active" : ""}
+                        {...viewTab("table")}
                         onClick={() => setView("table")}
                       >
                         <Table2 size={15} />
                         {t("Tabla")}
+                        {featuredMark("table")}
                       </button>
                       <button
                         className={effectiveView === "gallery" ? "active" : ""}
+                        {...viewTab("gallery")}
                         onClick={() => setView("gallery")}
                       >
                         <LayoutGrid size={15} />
                         {t("Galería")}
+                        {featuredMark("gallery")}
                       </button>
                       {area === "databases" && (
                         <button
                           className={effectiveView === "map" ? "active" : ""}
+                          {...viewTab("map")}
                           onClick={() => {
                             setView("map");
                             setSelected(new Set());
@@ -1868,20 +1910,24 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         >
                           <MapIcon size={15} />
                           {t("Mapa")}
+                          {featuredMark("map")}
                         </button>
                       )}
                       {area === "databases" && hierarchyColumn && (
                         <button
                           className={effectiveView === "tree" ? "active" : ""}
+                          {...viewTab("tree")}
                           onClick={() => setView("tree")}
                         >
                           <ListTree size={15} />
                           {t("Árbol")}
+                          {featuredMark("tree")}
                         </button>
                       )}
                       {area === "databases" && (
                         <button
                           className={effectiveView === "timeline" ? "active" : ""}
+                          {...viewTab("timeline")}
                           onClick={() => {
                             setView("timeline");
                             setSelected(new Set());
@@ -1889,11 +1935,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         >
                           <CalendarRange size={15} />
                           {t("Cronología")}
+                          {featuredMark("timeline")}
                         </button>
                       )}
                       {area === "databases" && (
                         <button
                           className={effectiveView === "stats" ? "active" : ""}
+                          {...viewTab("stats")}
                           onClick={() => {
                             setView("stats");
                             setSelected(new Set());
@@ -1901,11 +1949,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         >
                           <ChartColumn size={15} />
                           {t("Estadísticas")}
+                          {featuredMark("stats")}
                         </button>
                       )}
                       {area === "databases" && (
                         <button
                           className={effectiveView === "variants" ? "active" : ""}
+                          {...viewTab("variants")}
                           data-tooltip={t("La misma imagen en varios registros: copias, reproducciones y recortes")}
                           onClick={() => {
                             setView("variants");
@@ -1914,11 +1964,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         >
                           <Copy size={15} />
                           {t("Variantes")}
+                          {featuredMark("variants")}
                         </button>
                       )}
                       {area === "databases" && (
                         <button
                           className={effectiveView === "network" ? "active" : ""}
+                          {...viewTab("network")}
                           data-tooltip={t("Qué fotógrafos, lugares y temas aparecen juntos en los mismos registros")}
                           onClick={() => {
                             setView("network");
@@ -1927,11 +1979,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         >
                           <Share2 size={15} />
                           {t("Red")}
+                          {featuredMark("network")}
                         </button>
                       )}
                       {area === "databases" && (
                         <button
                           className={effectiveView === "visualmap" ? "active" : ""}
+                          {...viewTab("visualmap")}
                           data-tooltip={t("Las imágenes colocadas por parecido: las que se parecen aparecen juntas")}
                           onClick={() => {
                             setView("visualmap");
@@ -1940,6 +1994,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         >
                           <ChartScatter size={15} />
                           {t("Mapa visual")}
+                          {featuredMark("visualmap")}
                         </button>
                       )}
                     </div>
@@ -3078,6 +3133,54 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             </Button>
           </footer>
         </Modal>
+      )}
+      {status?.autoIndex.quality && (qualityAsked || !qualityDismissed) && (
+        <IndexQualityDialog
+          quality={status.autoIndex.quality}
+          onClose={() => {
+            setQualityAsked(false);
+            setQualityDismissed(true);
+          }}
+          onStart={(visionBudget) =>
+            perform(async () => {
+              await api.call("startIndexing", { visionBudget });
+              setQualityAsked(false);
+              setQualityDismissed(true);
+              notify(t("Indexación iniciada. Puedes seguirla en Tareas."));
+              refresh();
+            })
+          }
+        />
+      )}
+      {viewMenu && detail && area === "databases" && (
+        <CriteriaPopover
+          anchor={viewMenuAnchor as React.RefObject<HTMLElement>}
+          onClose={() => setViewMenuAt(null)}
+          width={250}
+          label={t("Opciones de la vista")}
+          className="column-menu view-menu"
+        >
+          <div role="menu" className="column-menu-group">
+            <button
+              type="button"
+              role="menuitem"
+              className="column-menu-item"
+              autoFocus
+              data-testid="view-feature"
+              onClick={() => {
+                const next = featuredView === viewMenu ? null : viewMenu;
+                updatePrefs((current) => ({ ...current, defaultView: next }));
+                setViewMenuAt(null);
+              }}
+            >
+              {featuredView === viewMenu ? <StarOff size={15} /> : <Star size={15} />}
+              <span>{t(featuredView === viewMenu ? "Quitar destacado" : "Destacar")}</span>
+            </button>
+          </div>
+          <p className="view-menu-note">
+            {t("La vista destacada es la que se abre al entrar en esta base de datos. Sin ninguna, se abre la tabla.")}
+          </p>
+        </CriteriaPopover>
       )}
       {columnMenu &&
         detail &&

@@ -6,6 +6,8 @@ import { Repository } from "./db/repository";
 import {
   Images,
   imagePipeline,
+  orientedImage,
+  orientedDimensions,
   hashFile,
   writeAtomicImage,
 } from "./import/images";
@@ -26,6 +28,7 @@ import { importNodus } from "./import/nodus";
 import { importNotion } from "./import/notion";
 import type { CompletionRequest, EmbeddingRequest } from "./ai/apiProviders";
 import { embeddingApiMultimodal } from "../shared/embeddingApi";
+import { assetView, viewKey } from "../shared/imageRotation";
 import { AutoIndexer } from "./autoIndex";
 import { Statistics } from "./db/statistics";
 import { ChatStore } from "./chat/store";
@@ -57,7 +60,7 @@ const CONTENT_WRITES = new Set([
   "notionImport", "nodusImport", "restore", "_restoreBackup", "reviewProposals",
   "undo", "addColumn", "updateColumn", "deleteColumn", "saveOptions", "deleteImage",
   "convertColumn", "duplicateColumn", "reorderColumns",
-  "deleteImages", "reassignImage", "reassignImages", "relinkImage", "setPrimary",
+  "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
 ]);
 import { AgreementResearch } from "./research/agreement";
@@ -554,6 +557,12 @@ export class Service {
         return this.repo.deleteImages(input.ids);
       case "reassignImages":
         return this.repo.reassignImages(input.ids, input.rowId, input.columnId);
+      case "rotateImage":
+        return this.repo.rotateImage(input.id, input.direction);
+      case "cropImage": {
+        const a = this.repo.asset(input.id);
+        return this.repo.cropImage(input.id, input.crop, await orientedDimensions(a.original_path));
+      }
       case "relinkImage": {
         const a = this.repo.asset(input.id);
         if ((await hashFile(input.file)) !== a.content_hash)
@@ -724,6 +733,21 @@ export class Service {
         return;
       case "rebuildText":
         return this.repo.rebuildText();
+      case "startIndexing": {
+        // The first indexing of images, with the quality the researcher chose.
+        // The quality is part of the vectors' contract: refuse while a pass
+        // that would be invalidated is running.
+        if (
+          this.repo
+            .jobs()
+            .some((job) => job.kind === "index" && ["queued", "running"].includes(job.state))
+        )
+          throw new Error("Espera a que termine la indexación en curso.");
+        this.repo.updateSettings({ visionBudget: input.visionBudget, indexQualityChosen: true });
+        const id = this.engine.enqueueIndex();
+        this.queue.pump();
+        return id;
+      }
       case "indexImages": {
         const id = this.engine.enqueueIndex(input.databaseIds);
         this.queue.pump();
@@ -826,11 +850,17 @@ export class Service {
         return;
       case "_asset": {
         const a = this.repo.asset(input.id),
+          framed = assetView(a.metadata_json),
+          // «full»: the turned image without its crop, to edit the crop.
+          view = input.variant === "full" ? { ...framed, crop: null } : framed,
+          key = viewKey(view),
           suffix = input.variant === "thumb" ? ".webp" : "-preview.webp",
+          // A turned or cropped image has derived files of its own: other
+          // records may hold the same original as it is.
           target = path.join(
             this.repo.root,
             "thumbnails",
-            a.content_hash + suffix,
+            a.content_hash + (key ? `-${key}` : "") + suffix,
           );
         try {
           await fs.access(a.original_path);
@@ -843,10 +873,9 @@ export class Service {
             try {
               await fs.access(target);
             } catch {
-              const image = await imagePipeline(a.original_path);
+              const image = await orientedImage(a.original_path, view);
               await writeAtomicImage(
                 image
-                  .rotate()
                   .resize(
                     input.variant === "thumb" ? 480 : 2200,
                     input.variant === "thumb" ? 480 : 2200,
