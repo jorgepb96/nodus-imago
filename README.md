@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/readme-banner.png" alt="Nodus Imago: Nodi with a magnifying glass over an album of historical photographs, and the Nodus Imago N. Explore images, discover history. Catalogue, visual search, compare, AI analysis, maps and timelines. Free and open source, on macOS, Windows and Linux.">
+  <img src="docs/screenshots/readme-banner.png" alt="Nodus Imago: a magnifying glass over an album of historical photographs, and the Nodus Imago N. Explore images, discover history. Catalogue, visual search, compare, AI analysis, maps and timelines. Free and open source, on macOS, Windows and Linux.">
 </p>
 
 <p align="center">
