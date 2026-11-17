@@ -307,7 +307,7 @@ export function AgreementWorkbench({
     (!config.referenceId || columns.some((c) => c.id === config.referenceId));
 
   return (
-    <Modal
+    <Modal icon={BarChart3}
       title={`${t("Concordancia")} · ${detail.database.name}`}
       wide
       layout="panels"

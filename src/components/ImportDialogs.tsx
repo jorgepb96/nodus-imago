@@ -5,6 +5,8 @@ import {
   FileQuestion,
   FileImage,
   FolderInput,
+  FileSpreadsheet,
+  ImagePlus,
 } from "lucide-react";
 import { Modal, Button } from "./ui";
 import type { CsvImportPlanData } from "../../shared/databaseCsv";
@@ -82,7 +84,7 @@ export function CsvImport({
     );
   };
   return (
-    <Modal wide title={t("Previsualización de importación")} onClose={onClose}>
+    <Modal icon={FileSpreadsheet} wide title={t("Previsualización de importación")} onClose={onClose}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -262,7 +264,7 @@ export function ImageImport({
       setPage(0);
     });
   return (
-    <Modal wide title={t("Importar imágenes")} onClose={onClose}>
+    <Modal icon={ImagePlus} wide title={t("Importar imágenes")} onClose={onClose}>
       <div className="modal-body stack">
         <div className="row">
           <FileImage size={20} />

@@ -2416,6 +2416,22 @@ thead th:last-child {
   background: var(--panel);
   z-index: 2;
 }
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.modal-icon {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
 .modal h2 {
   min-width: 0;
   overflow-wrap: anywhere;

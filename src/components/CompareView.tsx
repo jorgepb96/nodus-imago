@@ -14,6 +14,7 @@ import {
   Search,
   Trash2,
   X,
+  ImagePlus,
 } from "lucide-react";
 import type { CompareBoard, CompareItem } from "../../shared/compare";
 import type { DatabaseSummary } from "../../shared/databases";
@@ -328,7 +329,7 @@ export function CompareView({
         />
       )}
       {deleting && (
-        <Modal title={t("Eliminar mesa")} onClose={() => setDeleting(null)}>
+        <Modal icon={Trash2} title={t("Eliminar mesa")} onClose={() => setDeleting(null)}>
           <div className="modal-body">
             <p>{t("Se eliminará «{name}». Las imágenes y los registros no cambian.").replace("{name}", deleting.name)}</p>
           </div>
@@ -434,7 +435,7 @@ export function ImagePicker({
   }, [query, scope, databases.length]);
   const images = rows.flatMap((row) => row.images.filter((i) => i.width > 0).map((image) => ({ row, image })));
   return (
-    <Modal title={title ?? t("Añadir imágenes a la mesa")} onClose={onClose} wide>
+    <Modal icon={ImagePlus} title={title ?? t("Añadir imágenes a la mesa")} onClose={onClose} wide>
       <div className="modal-body compare-picker">
         <div className="compare-picker-search">
           <label className="search-input-row">

@@ -51,7 +51,7 @@ export function IndexQualityDialog({
   const [choice, setChoice] = useState<Quality>(quality.current);
   const [busy, setBusy] = useState(false);
   return (
-    <Modal title={t("Primera indexación de las imágenes")} onClose={onClose}>
+    <Modal icon={Gauge} title={t("Primera indexación de las imágenes")} onClose={onClose}>
       <form
         onSubmit={(event) => {
           event.preventDefault();

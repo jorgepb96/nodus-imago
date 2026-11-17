@@ -1,5 +1,6 @@
 // Importing from a IIIF manifest or collection: its metadata become
 // properties and its images are downloaded into the collection.
+import { Globe } from "lucide-react";
 import { useState } from "react";
 import type { StandardImport } from "../../shared/imago";
 import { useT } from "../i18n";
@@ -12,7 +13,7 @@ export function IiifDialog({ onClose, onImported }: { onClose: () => void; onImp
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <Modal title={t("Importar desde un manifiesto IIIF")} onClose={onClose}>
+    <Modal icon={Globe} title={t("Importar desde un manifiesto IIIF")} onClose={onClose}>
       <form
         onSubmit={(e) => {
           e.preventDefault();

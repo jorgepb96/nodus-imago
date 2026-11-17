@@ -405,7 +405,7 @@ export function RestorationsView({
         />
       )}
       {deleting && (
-        <Modal title={t("Eliminar versión")} onClose={() => setDeleting(null)}>
+        <Modal icon={Trash2} title={t("Eliminar versión")} onClose={() => setDeleting(null)}>
           <div className="modal-body">
             <p>{t("Se eliminará esta versión restaurada. La imagen original no cambia.")}</p>
           </div>
@@ -504,7 +504,7 @@ function AddModel({ onClose, onAdd }: { onClose: () => void; onAdd: (value: stri
   const [provider, setProvider] = useState<ApiProvider>("openai");
   const [model, setModel] = useState("");
   return (
-    <Modal title={t("Añadir modelo de imagen")} onClose={onClose}>
+    <Modal icon={Plus} title={t("Añadir modelo de imagen")} onClose={onClose}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -557,7 +557,7 @@ function ExportDialog({
   const [format, setFormat] = useState<"png" | "jpeg">("jpeg");
   const [busy, setBusy] = useState(false);
   return (
-    <Modal title={t("Descargar versión restaurada")} onClose={onClose}>
+    <Modal icon={Download} title={t("Descargar versión restaurada")} onClose={onClose}>
       <div className="modal-body restoration-export">
         <div className="restoration-export-preview">
           <img src={`imago://restoration/${version.id}`} alt="" />

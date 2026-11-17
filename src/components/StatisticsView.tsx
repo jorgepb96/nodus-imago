@@ -476,7 +476,7 @@ export function StatisticsView({
         )}
       </section>
       {confirmDelete && draft.id && (
-        <Modal title={t("Eliminar estadística")} onClose={() => setConfirmDelete(false)}>
+        <Modal icon={Trash2} title={t("Eliminar estadística")} onClose={() => setConfirmDelete(false)}>
           <div className="modal-body">
             <h3>{draft.name}</h3>
             <p>{t("Se elimina la estadística guardada; los registros no cambian.")}</p>

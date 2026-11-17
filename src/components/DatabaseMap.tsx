@@ -13,23 +13,37 @@ import type {
 } from "../../shared/imago";
 import {
   clusterMapRecords,
+  focusBounds,
   locatedRecords,
+  sameMapRecords,
+  storedBounds,
   type LocatedMapRecord,
 } from "../../shared/mapClusters";
 import { useT } from "../i18n";
 import { Button, Spinner, Thumbnail } from "./ui";
 import { CriteriaSelect } from "./CriteriaSelect";
 
+type MarkerEntry = { marker: L.Marker; ids: string[]; thumb?: HTMLImageElement; src?: string };
+
 function RecordMapCanvas({
   records,
   onSelect,
   focusIds,
   fitRequest,
+  viewKey,
+  frameKey,
 }: {
   records: LocatedMapRecord[];
   onSelect: (ids: string[]) => void;
   focusIds: string[] | null;
   fitRequest: number;
+  /** Changes when the user picks another property or other filters: the map
+   * then frames the new answer even if they had moved it by hand. */
+  viewKey: string;
+  /** Where this database's last framing is remembered on this device, so the
+   * map opens on the photographs' region instead of the whole world while the
+   * records load. */
+  frameKey: string;
 }) {
   const element = useRef<HTMLDivElement>(null),
     mapRef = useRef<L.Map | null>(null);
@@ -37,8 +51,19 @@ function RecordMapCanvas({
     tiles = useRef<L.TileLayer | null>(null);
   const current = useRef(records),
     select = useRef(onSelect),
+    frame = useRef(frameKey),
     redraw = useRef<() => void>(() => {});
-  const fitted = useRef("");
+  // Markers by what they show, so panning and refreshes reuse the same DOM
+  // nodes and thumbnails instead of rebuilding hundreds of them each time.
+  const markers = useRef(new Map<string, MarkerEntry>());
+  // Loaded thumbnails by address. Zooming regroups the photographs into new
+  // markers; their images move into them instead of being requested and
+  // decoded again, hundreds at a time.
+  const thumbs = useRef(new Map<string, HTMLImageElement>());
+  const fitted = useRef(""),
+    framed = useRef<L.LatLngBounds | null>(null),
+    moved = useRef(false),
+    lastView = useRef(viewKey);
   const [ready, setReady] = useState(0),
     [online, setOnline] = useState(navigator.onLine);
   const [failed, setFailed] = useState(false),
@@ -49,7 +74,8 @@ function RecordMapCanvas({
   useEffect(() => {
     current.current = records;
     select.current = onSelect;
-  }, [records, onSelect]);
+    frame.current = frameKey;
+  }, [records, onSelect, frameKey]);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
@@ -61,17 +87,49 @@ function RecordMapCanvas({
   }, []);
   useEffect(() => {
     const container = element.current!;
+    // Once the user pans or zooms, the map stays where they left it.
+    const touched = () => {
+      moved.current = true;
+    };
+    container.addEventListener("pointerdown", touched);
+    container.addEventListener("wheel", touched, { passive: true });
+    container.addEventListener("keydown", touched);
     const resize = new ResizeObserver(() => {
       if (!container.clientWidth || !container.clientHeight) return;
       if (mapRef.current) {
-        mapRef.current.invalidateSize({ pan: true });
+        // The panel often settles its size after the first frame: keep the
+        // photographs framed until the user takes over.
+        if (!moved.current && framed.current) {
+          mapRef.current.invalidateSize({ pan: false });
+          mapRef.current.fitBounds(framed.current, {
+            padding: [40, 40],
+            maxZoom: 12,
+            animate: false,
+          });
+        } else mapRef.current.invalidateSize({ pan: true });
         return;
+      }
+      let remembered: L.LatLngBounds | null = null;
+      try {
+        const saved = storedBounds(localStorage.getItem(frame.current));
+        remembered = saved ? L.latLngBounds(saved) : null;
+      } catch {
+        /* Device preference only. */
       }
       const map = L.map(container, {
         minZoom: 2,
         maxZoom: 19,
         worldCopyJump: true,
-      }).setView([20, 0], 2);
+        // Smaller zoom steps: a trackpad or wheel zooms gradually instead of
+        // jumping a whole level per notch.
+        zoomSnap: 0.25,
+        zoomDelta: 0.5,
+        wheelPxPerZoomLevel: 110,
+      });
+      if (remembered) {
+        framed.current = remembered;
+        map.fitBounds(remembered, { padding: [40, 40], maxZoom: 12, animate: false });
+      } else map.setView([20, 0], 2);
       map.attributionControl.setPrefix(false);
       mapRef.current = map;
       layers.current = L.layerGroup().addTo(map);
@@ -80,8 +138,13 @@ function RecordMapCanvas({
       setReady((n) => n + 1);
     });
     resize.observe(container);
+    const cache = markers.current,
+      images = thumbs.current;
     return () => {
       resize.disconnect();
+      container.removeEventListener("pointerdown", touched);
+      container.removeEventListener("wheel", touched);
+      container.removeEventListener("keydown", touched);
       mapRef.current?.stop();
       if (mapRef.current)
         (mapRef.current as unknown as { _animatingZoom?: boolean })._animatingZoom = false;
@@ -89,6 +152,8 @@ function RecordMapCanvas({
       mapRef.current = null;
       layers.current = null;
       tiles.current = null;
+      cache.clear();
+      images.clear();
     };
   }, []);
   useEffect(() => {
@@ -100,8 +165,10 @@ function RecordMapCanvas({
       "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
       {
         maxZoom: 19,
-        updateWhenIdle: true,
-        keepBuffer: 0,
+        // Tiles for the final zoom only, not for every step of the animation;
+        // neighbouring tiles stay so panning back does not reload them.
+        updateWhenZooming: false,
+        keepBuffer: 2,
         attribution:
           '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       },
@@ -119,34 +186,73 @@ function RecordMapCanvas({
       layer = layers.current;
     if (!map || !layer) return;
     const draw = () => {
-      layer.clearLayers();
+      const bounds = map.getBounds().pad(0.2),
+        previous = markers.current,
+        next = new Map<string, MarkerEntry>();
       for (const group of clusterMapRecords(current.current, map.getZoom())) {
         if (
-          !map
-            .getBounds()
-            .pad(0.2)
-            .contains([
-              Math.max(-85.05112878, Math.min(85.05112878, group.latitude)),
-              group.longitude,
-            ])
+          !bounds.contains([
+            Math.max(-85.05112878, Math.min(85.05112878, group.latitude)),
+            group.longitude,
+          ])
         )
           continue;
         const cover = group.records.find((record) => record.image)?.image;
+        // The direction the camera faced, for a single photograph.
+        const bearing =
+          group.records.length === 1 ? group.records[0].location?.bearing : null;
+        const label =
+          group.records.length > 1
+            ? `${group.records.length} ${recordLabel} · ${group.records[0].location.name}`
+            : group.records[0].title;
+        let key = [
+          group.latitude,
+          group.longitude,
+          group.records.length,
+          cover?.id ?? "",
+          cover?.revision ?? "",
+          typeof bearing === "number" ? bearing : "",
+          label,
+        ].join("|");
+        const ids = group.records.map((record) => record.id);
+        if (next.has(key)) key += "|" + group.id;
+        const reused = previous.get(key);
+        if (reused) {
+          reused.ids = ids;
+          if (reused.src && reused.thumb?.parentElement) {
+            thumbs.current.delete(reused.src);
+            thumbs.current.set(reused.src, reused.thumb);
+          }
+          previous.delete(key);
+          next.set(key, reused);
+          continue;
+        }
         const pin = document.createElement("span");
         pin.className = "map-record-pin";
+        let thumb: HTMLImageElement | undefined, thumbSrc: string | undefined;
         if (cover) {
-          const img = document.createElement("img");
-          img.src = `imago://asset/${encodeURIComponent(cover.id)}/thumb${cover.revision ? "?v=" + encodeURIComponent(cover.revision) : ""}`;
-          img.alt = "";
-          img.loading = "lazy";
-          img.onerror = () => {
-            img.remove();
-            pin.classList.add("without-image");
-          };
+          const src = `imago://asset/${encodeURIComponent(cover.id)}/thumb${cover.revision ? "?v=" + encodeURIComponent(cover.revision) : ""}`;
+          let img = thumbs.current.get(src);
+          if (img) thumbs.current.delete(src);
+          else {
+            img = document.createElement("img");
+            img.src = src;
+            img.alt = "";
+            img.decoding = "async";
+            img.draggable = false;
+            img.onerror = () => {
+              const parent = img!.parentElement;
+              img!.remove();
+              thumbs.current.delete(src);
+              parent?.classList.add("without-image");
+            };
+          }
+          // Most recently used last, for the size limit below.
+          thumbs.current.set(src, img);
           pin.append(img);
+          thumb = img;
+          thumbSrc = src;
         } else pin.classList.add("without-image");
-        // The direction the camera faced, for a single photograph.
-        const bearing = group.records.length === 1 ? group.records[0].location?.bearing : null;
         if (typeof bearing === "number") {
           const arrow = document.createElement("i");
           arrow.className = "map-bearing";
@@ -158,10 +264,6 @@ function RecordMapCanvas({
           count.textContent = String(group.records.length);
           pin.append(count);
         }
-        const label =
-          group.records.length > 1
-            ? `${group.records.length} ${recordLabel} · ${group.records[0].location.name}`
-            : group.records[0].title;
         const marker = L.marker([group.latitude, group.longitude], {
           icon: L.divIcon({
             className: "record-map-marker",
@@ -172,20 +274,27 @@ function RecordMapCanvas({
           title: label,
           alt: label,
           keyboard: true,
-        }).addTo(layer);
+        });
+        const entry: MarkerEntry = { marker, ids, thumb, src: thumbSrc };
+        marker.on("click", () => select.current(entry.ids));
+        marker.addTo(layer);
         marker.getElement()?.setAttribute("aria-label", label);
-        marker.on("click", () =>
-          select.current(group.records.map((record) => record.id)),
-        );
+        next.set(key, entry);
       }
-      containerCount();
-    };
-    const containerCount = () => {
+      for (const { marker } of previous.values()) layer.removeLayer(marker);
+      markers.current = next;
+      for (const [src] of thumbs.current) {
+        if (thumbs.current.size <= 800) break;
+        thumbs.current.delete(src);
+      }
       if (element.current)
-        element.current.dataset.markerCount = String(layer.getLayers().length);
+        element.current.dataset.markerCount = String(next.size);
     };
     redraw.current = draw;
-    draw();
+    if (lastView.current !== viewKey) {
+      lastView.current = viewKey;
+      moved.current = false;
+    }
     const signature = records
       .map(
         (record) =>
@@ -193,22 +302,30 @@ function RecordMapCanvas({
       )
       .sort()
       .join("|");
-    if (signature !== fitted.current) {
+    // Frame the photographs when they first arrive or the question changes,
+    // but never pull the map away from where the user is looking.
+    if (signature !== fitted.current && !moved.current) {
       fitted.current = signature;
       map.stop();
-      if (records.length)
-        map.fitBounds(
-          L.latLngBounds(
-            records.map((record) => [
-              record.location.latitude,
-              record.location.longitude,
-            ]),
-          ),
-          { padding: [40, 40], maxZoom: 12, animate: false },
-        );
+      const region = focusBounds(records);
+      framed.current = region ? L.latLngBounds(region) : null;
+      try {
+        if (region) localStorage.setItem(frame.current, JSON.stringify(region));
+      } catch {
+        /* Device preference only. */
+      }
+      if (framed.current)
+        map.fitBounds(framed.current, {
+          padding: [40, 40],
+          maxZoom: 12,
+          animate: false,
+        });
       else map.setView([20, 0], 2, { animate: false });
-    }
-  }, [records, ready, recordLabel]);
+    } else fitted.current = signature;
+    // fitBounds/setView without animation fire «moveend», which draws; draw
+    // anyway when the view did not change.
+    draw();
+  }, [records, ready, recordLabel, viewKey]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !fitRequest) return;
@@ -320,6 +437,18 @@ export function DatabaseMap({
     [limit, setLimit] = useState(50),
     [fitRequest, setFitRequest] = useState(0);
   const [focusIds, setFocusIds] = useState<string[] | null>(null);
+  // The question the map answers. Only a new question shows the spinner and
+  // frames the map again; a refresh after a change elsewhere in the app keeps
+  // the current markers on screen and touches nothing when the answer is the
+  // same.
+  const viewKey = JSON.stringify([
+    detail.database.id,
+    columnId,
+    filters,
+    groups,
+    logic,
+  ]);
+  const answered = useRef("");
   useEffect(() => {
     if (!columnId) {
       setData([]);
@@ -327,36 +456,49 @@ export function DatabaseMap({
       return;
     }
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    const timer = setTimeout(() => {
-      void window.imago
-        .call("mapRecords", {
-          databaseId: detail.database.id,
-          columnId,
-          filters,
-          filterLogic: logic,
-          filterGroups: groups,
-          sorts,
-        })
-        .then((result) => {
-          if (!cancelled) setData(result.records);
-        })
-        .catch((cause) => {
-          if (!cancelled) {
+    const question = JSON.stringify([viewKey, sorts]),
+      fresh = answered.current !== question;
+    if (fresh) {
+      setLoading(true);
+      setError("");
+    }
+    const timer = setTimeout(
+      () => {
+        void window.imago
+          .call("mapRecords", {
+            databaseId: detail.database.id,
+            columnId,
+            filters,
+            filterLogic: logic,
+            filterGroups: groups,
+            sorts,
+          })
+          .then((result) => {
+            if (cancelled) return;
+            answered.current = question;
+            setError("");
+            setData((previous) =>
+              sameMapRecords(previous, result.records) ? previous : result.records,
+            );
+          })
+          .catch((cause) => {
+            if (cancelled) return;
             setError(String(cause.message ?? cause));
-            setData([]);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 180);
+            if (fresh) setData([]);
+          })
+          .finally(() => {
+            if (!cancelled) setLoading(false);
+          });
+      },
+      // Indexing and backups announce changes many times a minute: gather
+      // them instead of re-reading thousands of records each time.
+      fresh ? 180 : 700,
+    );
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [detail.database.id, columnId, filters, groups, sorts, logic, revision]);
+  }, [detail.database.id, columnId, filters, groups, sorts, logic, revision, viewKey]);
   useEffect(() => {
     setSelectedIds(null);
     setUnlocated(false);
@@ -364,6 +506,7 @@ export function DatabaseMap({
   }, [columnId, filters, groups, logic]);
   useEffect(() => {
     setData([]);
+    answered.current = "";
   }, [columnId]);
   const mapped = useMemo(() => locatedRecords(data), [data]);
   const mappedById = useMemo(
@@ -477,6 +620,8 @@ export function DatabaseMap({
           onSelect={select}
           focusIds={focusIds}
           fitRequest={fitRequest}
+          viewKey={viewKey}
+          frameKey={`imago.map-frame.${detail.database.id}.${columnId}`}
         />
         <aside
           className="database-map-records"

@@ -401,7 +401,7 @@ export function LocationCell({
         </small>
       )}
       {expanded && mapped && (
-        <Modal
+        <Modal icon={MapPin}
           title={`${t("Mapa de")} ${place.name}`}
           wide
           onClose={() => setExpanded(false)}

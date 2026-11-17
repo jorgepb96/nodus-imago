@@ -4,7 +4,7 @@ import {
   type ReactNode,
   type ButtonHTMLAttributes,
 } from "react";
-import { X, Loader2, Image as ImageIcon } from "lucide-react";
+import { X, Loader2, Image as ImageIcon, type LucideIcon } from "lucide-react";
 import { useT } from "../i18n";
 export function Button({
   children,
@@ -26,12 +26,16 @@ export function Button({
 }
 export function Modal({
   title,
+  icon: Icon,
   children,
   onClose,
   wide = false,
   layout = "standard",
 }: {
   title: string;
+  /** Every window says what it is about with an icon beside its title — the
+   * same one as the button that opens it. Required so none is left without. */
+  icon: LucideIcon;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
@@ -76,7 +80,12 @@ export function Modal({
       }}
     >
       <header>
-        <h2>{title}</h2>
+        <div className="modal-title">
+          <span className="modal-icon" aria-hidden="true">
+            <Icon size={16} />
+          </span>
+          <h2>{title}</h2>
+        </div>
         <Button icon onClick={onClose} aria-label={t("Cerrar")}>
           <X size={18} />
         </Button>

@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Square,
   X,
+  Trash2,
 } from "lucide-react";
 import type { Settings } from "../../../shared/imago";
 import type { DatabaseSummary } from "../../../shared/databases";
@@ -621,7 +622,7 @@ export function ChatView({
         )}
       </div>
       {deleting && (
-        <Modal title={t("Eliminar chats")} onClose={() => setDeleting(null)}>
+        <Modal icon={Trash2} title={t("Eliminar chats")} onClose={() => setDeleting(null)}>
           <div className="modal-body">
             <p>
               {deleting.length === 1
@@ -649,7 +650,7 @@ export function ChatView({
         </Modal>
       )}
       {deletingFolder && (
-        <Modal title={t("Eliminar carpeta")} onClose={() => setDeletingFolder(null)}>
+        <Modal icon={Trash2} title={t("Eliminar carpeta")} onClose={() => setDeletingFolder(null)}>
           <div className="modal-body">
             <p>
               {t("Se eliminará «{name}» con sus subcarpetas. Sus chats no se borran: vuelven al historial general.").replace("{name}", deletingFolder.name)}
