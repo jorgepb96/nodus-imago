@@ -1,0 +1,41 @@
+name: Release on version bump
+# A merge into main that raises package.json's version releases it: the
+# merge commit gets the annotated tag "Nodus Imago vX.Y.Z", and the signed
+# release starts for that tag. Together with auto-merge, a version PR ships
+# by itself once every required check is green. A tag pushed with the
+# workflow token does not start other workflows, so the signed release is
+# started by hand here (workflow_dispatch is the exception GitHub allows).
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+permissions:
+  contents: write # the tag
+  actions: write # starting the signed release
+concurrency:
+  group: release-on-version-bump
+  cancel-in-progress: false
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag the new version and start the signed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists: nothing to release."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Nodus Imago $tag" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+          gh workflow run release-draft.yml --ref "$tag" -f tag="$tag"
+          echo "Tagged $GITHUB_SHA as $tag and started the signed release."

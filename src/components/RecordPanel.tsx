@@ -223,7 +223,7 @@ export function RecordPanel({
     (c) => c.type !== "title" && hiddenSet.has(c.id),
   );
   const property = (c: DatabaseColumn) => (
-    <div className="record-property" key={c.id}>
+    <div className="record-property" key={c.id} data-tour={`record-prop-${c.type}`}>
       <label>{c.name}</label>
       <div>
         {c.type === "relation" ? (
@@ -262,7 +262,7 @@ export function RecordPanel({
         onClick={onClose}
         aria-label={t("Cerrar")}
       />
-      <aside aria-label={row.title} className="record-panel">
+      <aside aria-label={row.title} className="record-panel" data-tour="record-panel">
         <header>
           <span>
             <span className="muted">{row.databaseName}</span>
@@ -271,6 +271,7 @@ export function RecordPanel({
           {citation && (
             <Button
               data-testid="copy-citation"
+              data-tour="record-citation"
               data-tooltip={renderCitation(citation, detail.columns, row)}
               onClick={() =>
                 void navigator.clipboard.writeText(renderCitation(citation, detail.columns, row)).then(() => {
@@ -295,6 +296,7 @@ export function RecordPanel({
               disabled={!image?.width}
               aria-label={t("Ampliar y anotar")}
               data-testid="record-image-open"
+              data-tour="record-image-open"
               onClick={() => setViewer("view")}
             >
               <Thumbnail
@@ -311,7 +313,7 @@ export function RecordPanel({
               )}
             </button>
             {image?.width ? (
-              <div className="record-image-tools">
+              <div className="record-image-tools" data-tour="record-image-tools">
                 <button
                   type="button"
                   className="record-image-turn"
@@ -431,12 +433,13 @@ export function RecordPanel({
                 </span>
               </div>
               <div className="row wrap">
-                <Button onClick={() => onSimilar(image.id)}>
+                <Button data-tour="record-similar" onClick={() => onSimilar(image.id)}>
                   <ScanSearch size={15} />
                   {t("Buscar imágenes similares")}
                 </Button>
                 {onRestore && (
                   <Button
+                    data-tour="record-restore"
                     data-tooltip={t("Abre el taller de restauración con esta imagen. El original no se modifica.")}
                     onClick={() => onRestore(image.id)}
                   >
@@ -555,7 +558,7 @@ export function RecordPanel({
             </>
           )}
           <h2>{t("Propiedades")}</h2>
-          <div className="record-properties">
+          <div className="record-properties" data-tour="record-properties">
             {shownProperties.map(property)}
           </div>
           {!!hiddenProperties.length && (

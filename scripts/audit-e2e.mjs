@@ -406,6 +406,7 @@ try {
       );
       assert.equal((await call("proposals")).length, 5);
       await page
+        .getByTestId("pagination-top")
         .getByRole("button", { name: "Revisar propuestas", exact: true })
         .click();
       const dialog = page.getByRole("dialog");

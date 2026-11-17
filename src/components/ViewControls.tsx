@@ -1205,6 +1205,7 @@ export function ViewControls({
       <button
         ref={anchor}
         className={`button ${count || sorts.length ? "selected" : ""}`}
+        data-tour="db-filter"
         aria-label={t("Filtrar y ordenar")}
         aria-expanded={open}
         onClick={() => setOpen(!open)}

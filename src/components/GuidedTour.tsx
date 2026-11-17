@@ -2,21 +2,36 @@
 // each step highlights a `data-tour` control and explains it in a card next
 // to it. Steps whose control is not on screen (no database yet, say) are
 // skipped. Arrow keys move, Escape closes; replayable from Settings.
+//
+// The same engine runs the short tutorials (src/tutorials.ts) in «strict»
+// mode: there the researcher does each step on the real interface, so a
+// step whose control is not on screen yet waits for it instead of being
+// skipped, a step can move on by itself once the action is done (`until`),
+// and the card follows the researcher into the dialogs they open.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useT } from "../i18n";
 
 export const TOUR_VERSION = 1;
 
+export type TourArea = "home" | "databases" | "search" | "settings" | "chat" | "compare" | "restorations";
+
 export type TourStep = {
   /** `data-tour` value of the control to highlight; none: a centred card. */
   target?: string;
   /** Where the app should be for this step. */
-  area?: "home" | "databases" | "search" | "settings";
+  area?: TourArea;
+  /** The Settings section to open with `area: "settings"`. */
+  tab?: string;
   title: string;
   body: string;
   /** One line per item when the highlighted control groups several things. */
   items?: string[];
+  /** Tutorials: move on by itself once this `data-tour` control appears. */
+  until?: string;
+  /** Tutorials: what to do when the control is not on screen yet. */
+  missing?: string;
 };
 
 // Writing rule: name what is highlighted, say what it does and how to use
@@ -108,6 +123,11 @@ export const TOUR_STEPS: TourStep[] = [
     body: "Crea versiones restauradas, reparadas o coloreadas con un modelo de imagen de OpenAI, Gemini u OpenRouter. El original no se modifica: cada versión se guarda aparte y se puede descargar con una marca de agua.",
   },
   {
+    target: "nav-tutorials",
+    title: "Tutoriales",
+    body: "Tutoriales cortos que te guían paso a paso por una tarea concreta: adjuntar una imagen, describirla o etiquetarla con IA, situarla en el mapa, comentar una zona, comparar… Tienen buscador, y tú haces cada paso sobre la pantalla real.",
+  },
+  {
     target: "header-sidebar",
     title: "Mostrar u ocultar el menú lateral",
     body: "El logotipo de la esquina superior izquierda oculta el menú lateral para dejar más espacio a la tabla. Púlsalo otra vez para mostrarlo.",
@@ -122,6 +142,7 @@ export const TOUR_STEPS: TourStep[] = [
     title: "Botones de la barra superior",
     body: "Estos botones están siempre disponibles:",
     items: [
+      "Birrete: abre los tutoriales guiados desde cualquier pantalla y muestra por dónde seguir aprendiendo.",
       "Lupa: abre la búsqueda global.",
       "Luna o sol: cambia entre el modo oscuro y el modo claro.",
       "Reloj: muestra las tareas en segundo plano (importaciones, descargas de modelos, preparación de la búsqueda) y permite pausarlas o cancelarlas. El número indica cuántas hay en curso.",
@@ -147,37 +168,73 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     title: "Fin del recorrido",
-    body: "Para empezar, crea una base de datos con el botón + de la lista de bases de datos, o importa un archivo CSV desde Inicio. Puedes repetir este recorrido en Ajustes › Interfaz.",
+    body: "Para empezar, crea una base de datos con el botón + de la lista de bases de datos, o importa un archivo CSV desde Inicio. Puedes repetir este recorrido en Tutoriales o en Ajustes › Interfaz.",
   },
 ];
 
 type Box = { top: number; left: number; width: number; height: number };
 
+const find = (target?: string) =>
+  target ? document.querySelector<HTMLElement>(`[data-tour="${target}"]`) : null;
+
+/** The dialog on top, if any: the card has to live inside it, because an
+ *  open modal dialog makes everything outside it unreachable. */
+const topDialog = () =>
+  [...document.querySelectorAll<HTMLDialogElement>("dialog[open]")].filter((d) => d.matches(":modal")).at(-1) ?? null;
+
 export function GuidedTour({
+  steps = TOUR_STEPS,
+  label = "Recorrido",
+  strict = false,
   onArea,
   onClose,
+  onDone,
 }: {
-  onArea: (area: NonNullable<TourStep["area"]>) => void;
+  steps?: TourStep[];
+  /** The word before the step count in the card. */
+  label?: string;
+  /** Tutorial mode: wait for missing controls instead of skipping them. */
+  strict?: boolean;
+  onArea: (area: TourArea, tab?: string) => void;
   onClose: () => void;
+  /** Called when the last step is finished (not when it is closed early). */
+  onDone?: () => void;
 }) {
   const t = useT(),
     [index, setIndex] = useState(0),
     [box, setBox] = useState<Box | null>(null),
     card = useRef<HTMLDivElement>(null),
-    [cardPos, setCardPos] = useState<{ top: number; left: number; side: string } | null>(null);
-  const step = TOUR_STEPS[index],
-    last = index === TOUR_STEPS.length - 1;
-  const present = (s: TourStep) =>
-    !s.target || !!document.querySelector(`[data-tour="${s.target}"]`);
+    [cardPos, setCardPos] = useState<{ top: number; left: number; side: string } | null>(null),
+    [host, setHost] = useState<HTMLElement | null>(null);
+  const step = steps[index],
+    last = index === steps.length - 1;
+  const present = (s: TourStep) => !s.target || !!find(s.target);
 
-  // Moving, skip steps whose control is not on screen (after their area opens).
+  // A tutorial opens where its first step happens.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current) return;
+    opened.current = true;
+    const first = steps[0];
+    if (strict && first.area) onArea(first.area, first.tab);
+  }, [strict, steps, onArea]);
+
+  // Moving, skip steps whose control is not on screen (after their area
+  // opens); a tutorial keeps them and waits for the control instead.
   const go = useCallback(
     (direction: 1 | -1) => {
       let next = index + direction;
+      if (strict) {
+        const s = steps[next];
+        if (!s) return;
+        if (s.area) onArea(s.area, s.tab);
+        setIndex(next);
+        return;
+      }
       const tryStep = () => {
-        if (next < 0 || next >= TOUR_STEPS.length) return;
-        const s = TOUR_STEPS[next];
-        if (s.area) onArea(s.area);
+        if (next < 0 || next >= steps.length) return;
+        const s = steps[next];
+        if (s.area) onArea(s.area, s.tab);
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
             if (present(s)) setIndex(next);
@@ -190,15 +247,28 @@ export function GuidedTour({
       };
       tryStep();
     },
-    [index, onArea],
+    [index, onArea, steps, strict],
   );
+
+  // A step done on the real interface moves on by itself.
+  useEffect(() => {
+    if (!step.until || last) return;
+    const until = step.until;
+    const timer = setInterval(() => {
+      if (find(until)) {
+        clearInterval(timer);
+        go(1);
+      }
+    }, 300);
+    return () => clearInterval(timer);
+  }, [step, last, go]);
 
   useLayoutEffect(() => {
     const measure = () => {
-      const target = step.target
-        ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
-        : null;
-      if (!target) {
+      const dialog = topDialog();
+      setHost((current) => (current === dialog ? current : dialog));
+      const target = find(step.target);
+      if (!target || !target.getClientRects().length) {
         setBox(null);
         return;
       }
@@ -228,17 +298,26 @@ export function GuidedTour({
           right = Math.min(right, r.right);
           bottom = Math.min(bottom, r.bottom);
         }
+        // An open dialog is drawn above everything: what contains it in the
+        // page (the record panel around the image viewer) does not clip it.
+        if (p instanceof HTMLDialogElement && p.matches(":modal")) break;
       }
       top = Math.max(top, 0);
       left = Math.max(left, 0);
       right = Math.min(right, window.innerWidth);
       bottom = Math.min(bottom, window.innerHeight);
-      setBox({ top: top - 6, left: left - 6, width: right - left + 12, height: bottom - top + 12 });
+      const next = { top: top - 6, left: left - 6, width: right - left + 12, height: bottom - top + 12 };
+      setBox((current) =>
+        current &&
+        current.top === next.top &&
+        current.left === next.left &&
+        current.width === next.width &&
+        current.height === next.height
+          ? current
+          : next,
+      );
     };
-    const target = step.target
-      ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
-      : null;
-    target?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    find(step.target)?.scrollIntoView({ block: "nearest", inline: "nearest" });
     measure();
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
@@ -262,20 +341,36 @@ export function GuidedTour({
       clampTop = (v: number) => Math.max(12, Math.min(vh - h - 12, v)),
       clampLeft = (v: number) => Math.max(12, Math.min(vw - w - 12, v));
     if (!box) {
-      setCardPos({ top: (vh - h) / 2, left: (vw - w) / 2, side: "center" });
+      // A tutorial waiting for its control keeps out of the way, so the
+      // researcher can still do the step it asks for.
+      setCardPos(
+        strict && step.target
+          ? { top: vh - h - 20, left: vw - w - 20, side: "corner" }
+          : { top: (vh - h) / 2, left: (vw - w) / 2, side: "center" },
+      );
       return;
     }
-    if (box.left + box.width + gap + w <= vw - 12)
+    // A control that fills most of the window (the image in the viewer)
+    // keeps the card in a corner instead of under it.
+    if (strict && box.width > vw * 0.55 && box.height > vh * 0.55)
+      setCardPos({ top: vh - h - 20, left: vw - w - 20, side: "corner" });
+    else if (box.left + box.width + gap + w <= vw - 12)
       setCardPos({ top: clampTop(box.top), left: box.left + box.width + gap, side: "right" });
     else if (box.top + box.height + gap + h <= vh - 12)
       setCardPos({ top: box.top + box.height + gap, left: clampLeft(box.left + box.width - w), side: "below" });
+    else if (box.left - gap - w >= 12)
+      setCardPos({ top: clampTop(box.top), left: box.left - gap - w, side: "left" });
     else setCardPos({ top: clampTop(box.top - h - gap), left: clampLeft(box.left), side: "above" });
-  }, [box, index]);
+  }, [box, index, strict, step, host]);
 
+  // The tour takes the keyboard; a tutorial leaves it to the interface the
+  // researcher is using (arrows browse images, Escape closes a viewer).
   useEffect(() => {
+    if (strict) return;
     card.current?.querySelector<HTMLElement>(".tour-next")?.focus({ preventScroll: true });
-  }, [index]);
+  }, [index, strict]);
   useEffect(() => {
+    if (strict) return;
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -285,10 +380,11 @@ export function GuidedTour({
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [go, index, last, onClose]);
+  }, [go, index, last, onClose, strict]);
 
-  return (
-    <div className="tour-layer">
+  const waiting = strict && !!step.target && !box;
+  const layer = (
+    <div className={"tour-layer" + (strict ? " is-tutorial" : "")} data-testid="tour-layer">
       {box ? (
         <div
           className="tour-spotlight"
@@ -296,7 +392,7 @@ export function GuidedTour({
           aria-hidden="true"
         />
       ) : (
-        <div className="tour-dim" aria-hidden="true" />
+        !strict && <div className="tour-dim" aria-hidden="true" />
       )}
       <div
         ref={card}
@@ -305,14 +401,15 @@ export function GuidedTour({
         aria-modal="false"
         aria-labelledby="tour-title"
         aria-describedby="tour-body"
+        data-testid="tour-card"
         style={cardPos ? { top: cardPos.top, left: cardPos.left } : { visibility: "hidden" }}
       >
         <header>
           <span aria-live="polite">
-            {t("Recorrido")} · {index + 1}/{TOUR_STEPS.length}
+            {t(label)} · {index + 1}/{steps.length}
           </span>
-          <button type="button" className="tour-close" onClick={onClose} aria-label={t("Cerrar el recorrido")}>
-            {t("Saltar")}
+          <button type="button" className="tour-close" onClick={onClose} aria-label={t(strict ? "Salir del tutorial" : "Cerrar el recorrido")}>
+            {t(strict ? "Salir" : "Saltar")}
             <X size={13} />
           </button>
         </header>
@@ -338,8 +435,16 @@ export function GuidedTour({
             })}
           </ul>
         )}
+        {waiting && (
+          <p className="tour-waiting" data-testid="tour-waiting">
+            {t(step.missing ?? "Este control aparecerá cuando hagas el paso anterior. Cuando lo veas, se iluminará.")}
+          </p>
+        )}
+        {strict && step.until && !last && !waiting && (
+          <p className="tour-waiting">{t("Cuando lo hagas, el tutorial seguirá solo.")}</p>
+        )}
         <div className="tour-progress" aria-hidden="true">
-          {TOUR_STEPS.map((_, i) => (
+          {steps.map((_, i) => (
             <i key={i} className={i <= index ? "active" : ""} />
           ))}
         </div>
@@ -352,12 +457,20 @@ export function GuidedTour({
           <button
             type="button"
             className="button primary tour-next"
-            onClick={() => (last ? onClose() : go(1))}
+            data-testid="tour-next"
+            onClick={() => {
+              if (!last) go(1);
+              else {
+                onDone?.();
+                onClose();
+              }
+            }}
           >
-            {t(last ? "Empezar" : "Siguiente")}
+            {t(last ? (strict ? "Terminar" : "Empezar") : "Siguiente")}
           </button>
         </footer>
       </div>
     </div>
   );
+  return createPortal(layer, host ?? document.body);
 }

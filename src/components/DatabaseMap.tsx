@@ -347,7 +347,7 @@ function RecordMapCanvas({
         );
   }, [fitRequest, focusIds]);
   return (
-    <div className="database-map-canvas-wrap">
+    <div className="database-map-canvas-wrap" data-tour="map-canvas">
       <div
         ref={element}
         className="database-map-canvas"
@@ -651,6 +651,7 @@ export function DatabaseMap({
             </Button>
             <Button
               className={viewsTab ? "selected" : ""}
+              data-tour="map-repeated-views"
               data-tooltip={t("Fotografías tomadas desde el mismo punto y mirando en la misma dirección")}
               onClick={() => {
                 setViewsTab(true);
@@ -734,6 +735,7 @@ export function DatabaseMap({
               {selectedIds.length === 1 && (
                 <Button
                   data-testid="then-now-open"
+                  data-tour="map-then-now"
                   data-tooltip={t("Busca fotografías actuales tomadas cerca en Wikimedia Commons")}
                   onClick={() => setThenNow(mapped.find((r) => r.id === selectedIds[0]) ?? null)}
                 >

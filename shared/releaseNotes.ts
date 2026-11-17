@@ -33,6 +33,60 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.2.0",
+    date: "2026-11-17",
+    highlights: [
+      {
+        scope: "general",
+        category: "new",
+        es: "Tutoriales guiados: 26 tutoriales cortos que te enseñan Nodus Imago sobre la pantalla real, de una tarea cada uno (adjuntar una imagen, describirla o etiquetarla con IA, situarla en el mapa, comentar una zona, comparar, enlazar con Wikidata…). Tú haces cada paso y el tutorial ilumina dónde, sigue solo cuando lo haces y te acompaña dentro de las ventanas que abres.",
+        en: "Guided tutorials: 26 short tutorials that teach Nodus Imago on the real screen, one task each (attaching an image, describing or tagging it with AI, putting it on the map, commenting on an area, comparing, linking to Wikidata…). You do each step while the tutorial lights up where, moves on by itself once you do it and follows you into the windows you open.",
+      },
+      {
+        scope: "general",
+        category: "new",
+        es: "Los tutoriales forman un itinerario en cinco niveles, de lo esencial a investigar y publicar, con tu progreso, el siguiente recomendado y un buscador. Están en la nueva sección Tutoriales y en el birrete de la barra superior, y al terminar cada uno Imago te felicita y te propone el siguiente.",
+        en: "The tutorials form a five-level path, from the essentials to research and publishing, with your progress, the recommended next one and a search box. They live in the new Tutorials section and behind the mortarboard in the top bar, and when you finish one Imago congratulates you and suggests the next.",
+      },
+      {
+        scope: "search",
+        category: "enhancement",
+        es: "La búsqueda empieza en Híbrida, que combina las palabras exactas con el significado, y los modos aparecen en el orden Híbrida, Semántica y Literal. Mientras no hay un modelo de búsqueda preparado, sigue en Literal.",
+        en: "Search starts in Hybrid, which combines exact words with meaning, and the modes are listed as Hybrid, Semantic and Literal. While no search model is ready, it stays in Literal.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "Las flechas para pasar de página y «Revisar propuestas» también están encima de la tabla, sin tener que bajar hasta el final.",
+        en: "The page arrows and “Review proposals” are also above the table, so you no longer have to scroll to the bottom.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "Mayúsculas + clic marca o desmarca de una vez todos los registros entre la última casilla y la que pulsas, en la tabla y en la galería. Al volver a una base de datos sus registros aparecen al instante mientras se actualizan.",
+        en: "Shift+click ticks or unticks every record between the last box and the one you click, in the table and the gallery. Coming back to a database shows its records at once while they are refreshed.",
+      },
+      {
+        scope: "compare",
+        category: "fix",
+        es: "«Comparar» con varios registros marcados vuelve a abrir sus imágenes en una mesa nueva, en lugar de la última mesa guardada.",
+        en: "“Compare” with several ticked records opens their images on a new table again, instead of the last saved table.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "Las casillas de los registros quedan alineadas con la de la cabecera de la tabla.",
+        en: "The record checkboxes line up with the one in the table header.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Los botones del visor de imagen vuelven a responder: «Aplicar recorte», «Toda la imagen», «Cancelar» y «Anotar» ya no se quedan sin hacer nada cuando están en la parte superior de la ventana.",
+        en: "The image viewer's buttons respond again: “Apply crop”, “Whole image”, “Cancel” and “Annotate” no longer do nothing when they sit at the top of the window.",
+      },
+    ],
+  },
+  {
     version: "0.1.7",
     date: "2026-11-17",
     highlights: [
