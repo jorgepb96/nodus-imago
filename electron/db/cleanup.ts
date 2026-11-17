@@ -88,7 +88,7 @@ export class ValueCleanup {
           db.prepare("DELETE FROM db_select_options WHERE id=?").run(o.id);
         }
       }
-      db.prepare("UPDATE history SET batch_id=? WHERE id>?").run(batch, before);
+      db.prepare("UPDATE history SET batch_id=?,kind='cleanup' WHERE id>?").run(batch, before);
       const save = db.prepare("INSERT INTO option_restores(batch_id,option_json) VALUES(?,?)");
       for (const s of snapshots) save.run(batch, JSON.stringify(s));
       this.repo.recompute(column.databaseId);

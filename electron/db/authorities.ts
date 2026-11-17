@@ -74,7 +74,7 @@ export class Authorities {
         this.repo.setCell(r, created.id, encodeDatabaseLocation(place));
         located++;
       }
-      db.prepare("UPDATE history SET batch_id=? WHERE id>?").run(randomUUID(), before);
+      db.prepare("UPDATE history SET batch_id=?,kind='locate' WHERE id>?").run(randomUUID(), before);
     })();
     return { columnId: created!.id, located };
   }

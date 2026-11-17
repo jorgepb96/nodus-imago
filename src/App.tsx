@@ -30,7 +30,6 @@ import {
   ScanSearch,
   Sparkles,
   ChartScatter,
-  Undo2,
   Trash2,
   Check,
   MoreHorizontal,
@@ -86,6 +85,7 @@ import { applyAppIcon } from "./theme/appIcon";
 import { Button, Empty, Modal, Spinner, Thumbnail } from "./components/ui";
 import { Cell } from "./components/Cell";
 import { Properties, type Perform } from "./components/Properties";
+import { HistoryButtons } from "./components/HistoryButtons";
 import { CsvImport, ImageImport } from "./components/ImportDialogs";
 import { CriteriaBar, ViewControls } from "./components/ViewControls";
 import { CriteriaPopover, CriteriaSelect } from "./components/CriteriaSelect";
@@ -2517,24 +2517,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         <Trash2 size={14} />
                         {t("Eliminar")}
                       </Button>
-                      <Button
-                        onClick={() =>
-                          void perform(async () => {
-                            const n = await api.call("undo");
-                            notify(
-                              n
-                                ? `${n} ${t("cambios deshechos")}`
-                                : t(
-                                    "No hay cambios de propuestas que deshacer.",
-                                  ),
-                            );
-                            refresh();
-                          })
-                        }
-                      >
-                        <Undo2 size={14} />
-                        {t("Deshacer")}
-                      </Button>
+                      <HistoryButtons
+                        scope="all"
+                        tick={tick}
+                        perform={perform}
+                        onDone={(message) => {
+                          notify(message);
+                          refresh();
+                        }}
+                      />
                       <span className="spacer" />
                       <Button
                         icon
@@ -3768,22 +3759,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               >
                 {t("Rechazar todas")}
               </Button>
-              <Button
-                onClick={() =>
-                  void perform(async () => {
-                    const n = await api.call("undo");
-                    notify(
-                      n
-                        ? `${n} ${t("cambios deshechos")}`
-                        : t("No hay cambios de propuestas que deshacer."),
-                    );
-                    refresh();
-                  })
-                }
-              >
-                <Undo2 size={14} />
-                {t("Deshacer")}
-              </Button>
+              <HistoryButtons
+                scope="proposals"
+                tick={tick}
+                perform={perform}
+                onDone={(message) => {
+                  notify(message);
+                  void api.call("proposals").then(setProposals);
+                  refresh();
+                }}
+              />
             </div>
             {!proposals.length && (
               <p className="muted">{t("No hay propuestas pendientes.")}</p>

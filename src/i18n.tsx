@@ -1020,8 +1020,16 @@ const en: Record<string, string> = {
     'Use property("id"), + − * / % operators and functions such as if(), dateAdd(), concat() or sum(). It is validated before saving.',
   "Mover todas las imágenes del registro": "Move all images in the record",
   "cambios deshechos": "changes undone",
-  "No hay cambios de propuestas que deshacer.":
-    "There are no proposal changes to undo.",
+  "cambios rehechos": "changes redone",
+  "No hay cambios que deshacer.": "There are no changes to undo.",
+  "No hay cambios que rehacer.": "There are no changes to redo.",
+  cambio: "change",
+  cambios: "changes",
+  edición: "edit",
+  "propuestas aceptadas": "accepted proposals",
+  "Se devolverán los valores anteriores de este cambio:":
+    "The previous values of this change will be restored:",
+  "Se volverá a aplicar este cambio:": "This change will be applied again:",
   "APIs opcionales activadas": "Optional APIs enabled",
   Aceptada: "Accepted",
   Rechazada: "Rejected",

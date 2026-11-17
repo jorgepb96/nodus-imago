@@ -196,6 +196,17 @@ export type Proposal = {
   title: string;
   columnName: string;
 };
+/** Which change batches an Undo or Redo button may touch. */
+export type HistoryScope = "all" | "proposals";
+/** How a change batch was made; null is a single edit. */
+export type HistoryKind = "proposals" | "cleanup" | "locate" | null;
+/** What the next Undo or Redo in a scope would change, shown before it runs. */
+export type HistoryStep = {
+  kind: HistoryKind;
+  changes: number;
+  columns: string[];
+  createdAt: string;
+};
 export type Provenance = {
   id: string;
   columnId: string;
@@ -766,7 +777,12 @@ export type Commands = {
     input: { ids: string[]; action: "accept" | "reject" };
     result: { applied: number; conflicts: number };
   };
-  undo: { input: void; result: number };
+  undo: { input: { scope: HistoryScope }; result: number };
+  redo: { input: { scope: HistoryScope }; result: number };
+  historyState: {
+    input: { scope: HistoryScope };
+    result: { undo: HistoryStep | null; redo: HistoryStep | null };
+  };
   savedSearches: { input: void; result: SavedSearch[] };
   saveSearch: { input: { name: string; input: SearchInput }; result: void };
   removeSearch: { input: { id: string }; result: void };

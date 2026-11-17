@@ -160,7 +160,7 @@ export class NeighbourSuggestions {
       const before = (this.repo.db.prepare("SELECT coalesce(max(id),0) id FROM history").get() as { id: number }).id;
       for (const item of items) this.repo.setCell(item.rowId, item.columnId, item.value);
       // One batch: a single «Deshacer» reverts every accepted proposal.
-      this.repo.db.prepare("UPDATE history SET batch_id=? WHERE id>?").run(randomUUID(), before);
+      this.repo.db.prepare("UPDATE history SET batch_id=?,kind='proposals' WHERE id>?").run(randomUUID(), before);
     })();
     return items.length;
   }
