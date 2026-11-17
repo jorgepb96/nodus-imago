@@ -417,9 +417,26 @@ try {
       assert.ok(
         (await call("getRow", { id: rows[0].id })).cells[description.id],
       );
-      await dialog
-        .getByRole("button", { name: "Deshacer", exact: true })
-        .click();
+      // Undo and Redo touch more than one value, so each asks first and
+      // says what it will change.
+      const confirmStep = async (name) => {
+        await dialog.getByRole("button", { name, exact: true }).click();
+        const confirm = page.getByRole("dialog", { name, exact: true });
+        await confirm.getByText("propuestas aceptadas", { exact: false }).waitFor();
+        await confirm.getByRole("button", { name, exact: true }).click();
+        await confirm.waitFor({ state: "detached" });
+      };
+      await confirmStep("Deshacer");
+      await poll(
+        async () =>
+          !(await call("getRow", { id: rows[0].id })).cells[description.id],
+      );
+      await confirmStep("Rehacer");
+      await poll(
+        async () =>
+          !!(await call("getRow", { id: rows[0].id })).cells[description.id],
+      );
+      await confirmStep("Deshacer");
       await poll(
         async () =>
           !(await call("getRow", { id: rows[0].id })).cells[description.id],
