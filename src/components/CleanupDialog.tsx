@@ -41,7 +41,7 @@ export function CleanupDialog({
     0,
   );
   return (
-    <Modal title={`${t("Unificar valores parecidos")} · ${column.name}`} onClose={onClose} wide>
+    <Modal icon={Combine} title={`${t("Unificar valores parecidos")} · ${column.name}`} onClose={onClose} wide>
       <div className="modal-body cleanup-dialog" data-testid="cleanup-dialog">
         <p className="hint">
           {t("Grupos de valores que probablemente son lo mismo escrito de otra forma: mayúsculas, acentos, puntuación, orden de las palabras, iniciales o una letra distinta. Los iguales vienen marcados; revisa los parecidos antes de unirlos. Se puede deshacer.")}

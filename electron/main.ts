@@ -335,8 +335,9 @@ app.whenReady().then(async () => {
     finish: async (success) => {
       if (success) {
         await backups!.close();
-        await call("_close");
+        // From here the service refuses work: the window must stop asking.
         closing = true;
+        await call("_close");
       } else if (closing) {
         app.relaunch();
         app.exit();
@@ -500,9 +501,21 @@ app.whenReady().then(async () => {
     if (!trusted(event)) throw new Error("Origen IPC no autorizado.");
     if (typeof id === "string") chats!.cancel(id);
   });
-  ipcMain.handle(
-    "imago:call",
-    async (event, command: string, input: unknown) => {
+  // While Imago closes (quitting, or installing an update) the service stops
+  // answering. The window is still on screen for a moment and keeps asking —
+  // a refresh, a thumbnail list —; those requests simply wait for the app to
+  // go instead of showing «Imago se está cerrando.» as an error.
+  const untilClosed = () => new Promise<never>(() => {});
+  const answer = async (event: Electron.IpcMainInvokeEvent, command: string, input: unknown) => {
+    if (closing) return untilClosed();
+    try {
+      return await handleCall(event, command, input);
+    } catch (error) {
+      if (closing) return untilClosed();
+      throw error;
+    }
+  };
+  const handleCall = async (event: Electron.IpcMainInvokeEvent, command: string, input: unknown) => {
       if (
         !window ||
         event.sender !== window.webContents ||
@@ -874,8 +887,8 @@ app.whenReady().then(async () => {
         return call(command, { ...data, file: result.filePath });
       }
       return call(command, safe);
-    },
-  );
+    };
+  ipcMain.handle("imago:call", answer);
   function createWindow() {
     window = new BrowserWindow({
       width: 1440,

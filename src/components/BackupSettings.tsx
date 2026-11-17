@@ -411,7 +411,7 @@ export function BackupSettings({
         </Button>
       )}
       {verifyId && (
-        <Modal
+        <Modal icon={CheckCircle}
           title={t("Comprobar integridad")}
           onClose={() => {
             if (!busy) {
@@ -452,7 +452,7 @@ export function BackupSettings({
         </Modal>
       )}
       {pick && (
-        <Modal
+        <Modal icon={Upload}
           title={t("Restaurar copia")}
           onClose={() => {
             if (!busy) setPick(null);

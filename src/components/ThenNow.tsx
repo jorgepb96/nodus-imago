@@ -2,7 +2,7 @@
 // nearby, from Wikimedia Commons. Only the place's coordinates are sent, and
 // only when the user opens this window.
 import { useEffect, useState } from "react";
-import { Columns2, ExternalLink, Layers } from "lucide-react";
+import { Columns2, ExternalLink, Layers, History } from "lucide-react";
 import type { MapRecord } from "../../shared/imago";
 import type { CommonsPhoto } from "../../shared/commons";
 import { useT } from "../i18n";
@@ -37,7 +37,7 @@ export function ThenNow({ record, onClose }: { record: MapRecord; onClose: () =>
   }, [location.latitude, location.longitude, radius]);
   const historical = record.image ? `imago://asset/${record.image.id}/preview${record.image.revision ? "?v=" + encodeURIComponent(record.image.revision) : ""}` : null;
   return (
-    <Modal title={`${t("Entonces y ahora")} · ${record.title}`} onClose={onClose} wide>
+    <Modal icon={History} title={`${t("Entonces y ahora")} · ${record.title}`} onClose={onClose} wide>
       <div className="modal-body then-now" data-testid="then-now">
         <p className="hint">
           {t("Fotografías actuales de Wikimedia Commons tomadas cerca de este lugar. Se envían a Wikimedia solo las coordenadas del lugar.")}

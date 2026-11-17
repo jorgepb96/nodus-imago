@@ -1,3 +1,4 @@
+import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { DatabaseDetail } from "../../shared/databases";
 import type {
@@ -99,7 +100,7 @@ export function Automations({
       actions: rule.actions.map((a, i) => (i === index ? action : a)),
     });
   return (
-    <Modal title={t("Automatizaciones")} onClose={onClose} wide layout="panels">
+    <Modal icon={Sparkles} title={t("Automatizaciones")} onClose={onClose} wide layout="panels">
       <div className="modal-body automation-intro">
         <p className="hint">
           {t(

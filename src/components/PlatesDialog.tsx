@@ -2,7 +2,7 @@
 // a preview of the captions of the selected records, and the PDF export with
 // one numbered figure per page and the list of figures.
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FileDown } from "lucide-react";
+import { Copy, FileDown, FileImage } from "lucide-react";
 import type { DatabaseDetail } from "../../shared/databases";
 import type { RecordRow } from "../../shared/imago";
 import { CITATION_STYLES, citationTemplate, renderCitation, type CitationStyle } from "../../shared/citation";
@@ -83,7 +83,7 @@ export function PlatesDialog({
   const captions = useMemo(() => rows.map((row) => renderCitation(template, detail.columns, row) || row.title), [rows, template, detail.columns]);
   const withImages = rows.filter((r) => r.images.some((i) => i.width > 0)).length;
   return (
-    <Modal title={t("Láminas y citas")} onClose={onClose} wide>
+    <Modal icon={FileImage} title={t("Láminas y citas")} onClose={onClose} wide>
       <div className="modal-body plates-dialog" data-testid="plates-dialog">
         <p className="hint">
           {t("Crea un PDF con una figura por página, numerada y con su pie, y al final la lista de figuras. El pie se forma con la plantilla, que también usa «Copiar cita» en la ficha.")}

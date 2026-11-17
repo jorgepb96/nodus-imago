@@ -2,7 +2,7 @@
 // without it gets a proposed value from its visually closest records that have
 // it, shown beside the proposal so the researcher can judge it.
 import { useEffect, useMemo, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, X, Lightbulb } from "lucide-react";
 import type { DatabaseDetail } from "../../shared/databases";
 import { confidenceLevel, type NeighbourSuggestion } from "../../shared/suggest";
 import { useT, formatNumber } from "../i18n";
@@ -69,7 +69,7 @@ export function SuggestDialog({
     onApplied(count);
   };
   return (
-    <Modal title={t("Completar con imágenes parecidas")} onClose={onClose} wide>
+    <Modal icon={Lightbulb} title={t("Completar con imágenes parecidas")} onClose={onClose} wide>
       <div className="modal-body suggest-dialog" data-testid="suggest-dialog">
         <p className="hint">
           {t("Para cada registro sin valor en la propiedad elegida, Imago busca las imágenes más parecidas que sí lo tienen y propone un valor. Las fechas se proponen como periodo atribuido, entre corchetes. Nada se guarda hasta que lo aceptas, y se puede deshacer.")}

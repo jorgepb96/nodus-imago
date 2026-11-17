@@ -33,6 +33,36 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.1.7",
+    date: "2026-11-17",
+    highlights: [
+      {
+        scope: "places",
+        category: "enhancement",
+        es: "El mapa se abre en la zona donde están tus fotografías: un país si son de un país, un continente o el mundo si se reparten por ellos. Recuerda el último encuadre de cada base de datos y ya no salta cuando llegan cambios mientras lo exploras.",
+        en: "The map opens on the region where your photographs are: a country when they are in one country, a continent or the world when they spread that far. It remembers each database's last framing and no longer jumps when changes arrive while you explore it.",
+      },
+      {
+        scope: "places",
+        category: "fix",
+        es: "El mapa con miles de fotografías ya no frena ni bloquea Imago: el zoom va fluido, deja de aparecer el círculo de carga a cada rato y solo se vuelve a dibujar cuando cambian los registros. Las vistas repetidas se calculan en una fracción de segundo.",
+        en: "A map with thousands of photographs no longer slows down or freezes Imago: zooming is smooth, the loading spinner stops appearing every few seconds and the map only redraws when the records change. Repeated views are found in a fraction of a second.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Al cerrar Imago o instalar una actualización ya no aparece el error «Imago se está cerrando», y los mensajes de error ya no empiezan por «Error invoking remote method».",
+        en: "Closing Imago or installing an update no longer shows the «Imago is closing» error, and error messages no longer start with «Error invoking remote method».",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "Todas las ventanas llevan un icono junto al título, el mismo que el botón que las abre.",
+        en: "Every window shows an icon beside its title, the same as the button that opens it.",
+      },
+    ],
+  },
+  {
     version: "0.1.6",
     date: "2026-11-17",
     highlights: [

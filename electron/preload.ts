@@ -1,8 +1,19 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { ImagoApi } from "../shared/imago";
+// Electron wraps every error from the main process as «Error invoking remote
+// method 'imago:call': Error: …»; the user only needs the message itself.
+const plain = (error: unknown) =>
+  new Error(
+    String((error as Error)?.message ?? error).replace(
+      /^Error invoking remote method '[^']+': (?:[A-Za-z]*Error: )?/,
+      "",
+    ),
+  );
 const api: ImagoApi = {
   call: (command, ...args) =>
-    ipcRenderer.invoke("imago:call", command, args[0]),
+    ipcRenderer.invoke("imago:call", command, args[0]).catch((error) => {
+      throw plain(error);
+    }),
   onChange: (listener) => {
     const handler = () => listener();
     ipcRenderer.on("imago:changed", handler);

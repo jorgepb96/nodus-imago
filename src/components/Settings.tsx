@@ -25,6 +25,7 @@ import {
   Info,
   Link2,
   Plus,
+  Scale,
 } from "lucide-react";
 import type { Status, Settings as SettingsType, Job } from "../../shared/imago";
 import type { DatabaseDetail } from "../../shared/databases";
@@ -830,7 +831,7 @@ export function Settings({
           {t(s.remoteEnabled ? "APIs opcionales activadas" : "IA local")}
         </div>
         {license && (
-          <Modal
+          <Modal icon={Scale}
             wide
             title={"Licencia · " + license.label}
             onClose={() => setLicense(null)}

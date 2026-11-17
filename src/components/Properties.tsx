@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, ArrowUp, ArrowDown, Pencil } from "lucide-react";
+import { Plus, Trash2, ArrowUp, ArrowDown, Pencil, SlidersHorizontal } from "lucide-react";
 import type {
   DatabaseColumn,
   DatabaseColumnType,
@@ -208,7 +208,7 @@ export function Properties({
     );
   };
   return (
-    <Modal title={t("Propiedades")} onClose={onClose} wide layout="panels">
+    <Modal icon={SlidersHorizontal} title={t("Propiedades")} onClose={onClose} wide layout="panels">
       <div className="property-layout">
         <div className="property-list">
           {detail.columns.map((c) => (
@@ -661,7 +661,7 @@ export function Properties({
         </form>
       </div>
       {confirmDelete && (
-        <Modal
+        <Modal icon={Trash2}
           title={t("Eliminar propiedad")}
           onClose={() => setConfirmDelete(null)}
         >

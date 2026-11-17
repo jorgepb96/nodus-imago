@@ -1089,34 +1089,79 @@ export class Repository {
         "Elige una propiedad de ubicación de esta base de datos.",
       );
     // Read every matching row in one consistent snapshot. A map is not a page
-    // of the grid; only the compact presentation fields cross the IPC boundary.
+    // of the grid: one ordered id query, then only the title, the location and
+    // the first image of each record — never every cell, annotation and
+    // attachment of thousands of records, which kept the service busy.
     return this.db.transaction(() => {
-      const records: MapRecord[] = [];
-      let total = 0;
-      do {
-        const page = this.literal({
-          databaseIds: [input.databaseId],
-          filters: input.filters,
-          filterLogic: input.filterLogic,
-          filterGroups: input.filterGroups,
-          sorts: input.sorts,
-          offset: records.length,
-          limit: 200,
-        });
-        total = page.total;
-        for (const row of page.rows) {
-          const image = row.images.find((asset) => asset.width > 0);
-          records.push({
-            id: row.id,
-            title: row.title,
-            location: decodeDatabaseLocation(row.cells[column.id] ?? null),
-            image: image ? { id: image.id, revision: image.revision } : null,
-            imageCount: row.images.length,
-          });
+      const ids = this.literalIds({
+        databaseIds: [input.databaseId],
+        filters: input.filters,
+        filterLogic: input.filterLogic,
+        filterGroups: input.filterGroups,
+        sorts: input.sorts,
+      });
+      const titleColumn = (
+        this.db
+          .prepare(
+            "SELECT id FROM db_columns WHERE database_id=? AND type='title'",
+          )
+          .get(input.databaseId) as { id: string } | undefined
+      )?.id;
+      const titles = new Map<string, string | null>(),
+        places = new Map<string, string | null>(),
+        images = new Map<
+          string,
+          { first: { id: string; metadata: string | null } | null; count: number }
+        >();
+      for (let i = 0; i < ids.length; i += 500) {
+        const chunk = ids.slice(i, i + 500),
+          p = marks(chunk);
+        for (const cell of this.db
+          .prepare(
+            `SELECT row_id,column_id,value_text FROM db_cells WHERE row_id IN (${p}) AND column_id IN (?,?)`,
+          )
+          .all(...chunk, column.id, titleColumn ?? column.id) as {
+          row_id: string;
+          column_id: string;
+          value_text: string | null;
+        }[]) {
+          if (cell.column_id === column.id) places.set(cell.row_id, cell.value_text);
+          if (cell.column_id === titleColumn) titles.set(cell.row_id, cell.value_text);
         }
-        if (!page.rows.length) break;
-      } while (records.length < total);
-      return { records, total };
+        for (const asset of this.db
+          .prepare(
+            `SELECT id,row_id,width,metadata_json FROM image_assets WHERE row_id IN (${p}) ORDER BY position,created_at`,
+          )
+          .all(...chunk) as {
+          id: string;
+          row_id: string;
+          width: number;
+          metadata_json: string | null;
+        }[]) {
+          const entry =
+            images.get(asset.row_id) ??
+            images.set(asset.row_id, { first: null, count: 0 }).get(asset.row_id)!;
+          entry.count++;
+          if (!entry.first && asset.width > 0)
+            entry.first = { id: asset.id, metadata: asset.metadata_json };
+        }
+      }
+      const records = ids.map((id): MapRecord => {
+        const image = images.get(id);
+        return {
+          id,
+          title: titles.get(id) || id.slice(0, 8),
+          location: decodeDatabaseLocation(places.get(id) ?? null),
+          image: image?.first
+            ? {
+                id: image.first.id,
+                revision: assetRevision(parse(image.first.metadata)),
+              }
+            : null,
+          imageCount: image?.count ?? 0,
+        };
+      });
+      return { records, total: records.length };
     })();
   }
   importCsv(

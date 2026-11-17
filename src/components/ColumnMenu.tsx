@@ -25,6 +25,7 @@ import {
   Trash2,
   WrapText,
   X,
+  ArrowLeftRight,
 } from "lucide-react";
 import {
   columnTypeDef,
@@ -216,7 +217,7 @@ export function ColumnMenu({
 
   if (confirm)
     return (
-      <Modal
+      <Modal icon={confirm.kind === "delete" ? Trash2 : ArrowLeftRight}
         title={t(
           confirm.kind === "delete" ? "Eliminar propiedad" : "Cambiar tipo",
         )}

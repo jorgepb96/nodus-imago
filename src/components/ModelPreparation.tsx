@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Database,
   KeyRound,
+  Scale,
 } from "lucide-react";
 import type { ModelPreparation as Plan } from "../../shared/modelPreparation";
 import type { Status } from "../../shared/imago";
@@ -436,7 +437,7 @@ export function ModelPreparation({
         </>
       )}
       {license && (
-        <Modal title={license.label} wide onClose={() => setLicense(null)}>
+        <Modal icon={Scale} title={license.label} wide onClose={() => setLicense(null)}>
           <div className="modal-body">
             <p className="muted">{license.source}</p>
             <pre className="license-text">{license.text}</pre>

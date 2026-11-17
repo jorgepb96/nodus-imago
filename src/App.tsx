@@ -3067,7 +3067,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </div>
       )}
       {modal === "bulkAdd" && detail && (
-        <Modal title={t("Añadir registros")} onClose={() => setModal(null)}>
+        <Modal icon={Plus} title={t("Añadir registros")} onClose={() => setModal(null)}>
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -3116,7 +3116,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </Modal>
       )}
       {(modal === "create" || modal === "rename") && (
-        <Modal
+        <Modal icon={Database}
           title={t(
             modal === "rename"
               ? "Renombrar base de datos"
@@ -3170,7 +3170,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </Modal>
       )}
       {modal === "saveSearch" && (
-        <Modal title={t("Guardar búsqueda")} onClose={() => setModal(null)}>
+        <Modal icon={Bookmark} title={t("Guardar búsqueda")} onClose={() => setModal(null)}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -3220,7 +3220,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </Modal>
       )}
       {(modal === "deleteRows" || modal === "deleteDatabase") && (
-        <Modal
+        <Modal icon={Trash2}
           title={t("Confirmar eliminación")}
           onClose={() => setModal(null)}
         >
@@ -3480,7 +3480,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         />
       )}
       {modal === "jobs" && (
-        <Modal title={t("Tareas")} wide onClose={() => setModal(null)}>
+        <Modal icon={Clock3} title={t("Tareas")} wide onClose={() => setModal(null)}>
           <div className="modal-body">
             <Jobs
               jobs={status?.jobs ?? []}
@@ -3491,7 +3491,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </Modal>
       )}
       {modal === "analyze" && (
-        <Modal title={t("Generar propuestas")} onClose={() => setModal(null)}>
+        <Modal icon={Sparkles} title={t("Generar propuestas")} onClose={() => setModal(null)}>
           <div className="modal-body stack">
             <p>
               {selected.size} {t("registros")} ·{" "}
@@ -3591,7 +3591,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </Modal>
       )}
       {modal === "proposals" && (
-        <Modal
+        <Modal icon={Sparkles}
           wide
           title={t("Revisar propuestas")}
           onClose={() => setModal(null)}
