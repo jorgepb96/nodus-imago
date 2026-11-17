@@ -1,11 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   Copy,
   Filter,
+  GripVertical,
   Plus,
+  Search,
   SlidersHorizontal,
   Trash2,
   X,
@@ -36,6 +44,17 @@ import {
 import { Button } from "./ui";
 
 type FilterColumn = DatabaseColumn & { databaseName: string };
+function criteriaColumns(details: DatabaseDetail[]): FilterColumn[] {
+  return [
+    ...details.flatMap((detail) =>
+      detail.columns.map((column) => ({
+        ...column,
+        databaseName: details.length > 1 ? detail.database.name : "",
+      })),
+    ),
+    ...metadataColumns,
+  ];
+}
 const newId = () => crypto.randomUUID();
 const metadataColumns: FilterColumn[] = [
   { id: "$created", name: "Fecha de incorporación", type: "created_time" },
@@ -52,6 +71,268 @@ const metadataColumns: FilterColumn[] = [
       options: [],
     }) as FilterColumn,
 );
+/** Drag-and-drop reordering that starts only from a row's grip, so text
+ * fields and pickers inside the row keep their own pointer behaviour. The grip
+ * also moves its row with the arrow keys. */
+function useReorder(onMove: (from: number, to: number) => void) {
+  const [drag, setDrag] = useState<number | null>(null),
+    [armed, setArmed] = useState<number | null>(null),
+    [over, setOver] = useState<{
+      index: number;
+      side: "before" | "after";
+    } | null>(null);
+  const finish = () => {
+    setDrag(null);
+    setArmed(null);
+    setOver(null);
+  };
+  const row = (index: number) => ({
+    draggable: armed === index || drag === index,
+    onDragStart: (event: DragEvent<HTMLElement>) => {
+      event.stopPropagation();
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(index));
+      setDrag(index);
+    },
+    onDragOver: (event: DragEvent<HTMLElement>) => {
+      if (drag === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = event.currentTarget.getBoundingClientRect(),
+        side = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      if (over?.index !== index || over.side !== side) setOver({ index, side });
+    },
+    onDrop: (event: DragEvent<HTMLElement>) => {
+      if (drag === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (over) {
+        let to = over.index + (over.side === "after" ? 1 : 0);
+        if (to > drag) to--;
+        if (to !== drag) onMove(drag, to);
+      }
+      finish();
+    },
+    onDragEnd: finish,
+    "data-dragging": drag === index ? "" : undefined,
+    "data-drop":
+      drag !== null && drag !== index && over?.index === index
+        ? over.side
+        : undefined,
+  });
+  const handle = (index: number, count: number) => ({
+    onPointerDown: () => setArmed(index),
+    onPointerUp: () => setArmed(null),
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      const to =
+        event.key === "ArrowUp"
+          ? index - 1
+          : event.key === "ArrowDown"
+            ? index + 1
+            : -1;
+      if (to < 0 || to >= count) return;
+      event.preventDefault();
+      onMove(index, to);
+    },
+  });
+  return { row, handle };
+}
+const moveItem = <T,>(items: T[], from: number, to: number) => {
+  const next = [...items],
+    [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+};
+type ChoiceItem = CriteriaOption & { count?: number };
+/** Inline multi-select for option-like filters: always-visible checklist with
+ * its own search box, record counts and the current selection as chips. */
+function ChoiceChecklist({
+  items,
+  selected,
+  values,
+  onChange,
+  query,
+  onQueryChange,
+  loading = false,
+  more = false,
+  onMore,
+  custom = false,
+}: {
+  items: ChoiceItem[];
+  /** Known labels for selected values that the visible list may not contain. */
+  selected: ChoiceItem[];
+  values: string[];
+  onChange: (values: string[]) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
+  loading?: boolean;
+  more?: boolean;
+  onMore?: () => void;
+  custom?: boolean;
+}) {
+  const t = useT();
+  const known = new Map(
+    [...selected, ...items].map((item) => [item.value, item]),
+  );
+  const toggle = (value: string) =>
+    onChange(
+      values.includes(value)
+        ? values.filter((item) => item !== value)
+        : [...values, value].slice(0, 1000),
+    );
+  const trimmed = query.trim();
+  const canAdd =
+    custom && !!trimmed && !items.some((item) => item.value === trimmed);
+  return (
+    <div className="choice-checklist">
+      <div className="choice-search">
+        <Search size={13} />
+        <input
+          aria-label={t("Buscar opciones")}
+          placeholder={t("Buscar opciones…")}
+          value={query}
+          maxLength={300}
+          onChange={(event) => onQueryChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            if (canAdd) {
+              toggle(trimmed);
+              onQueryChange("");
+            } else if (items[0] && !items[0].disabled) toggle(items[0].value);
+          }}
+        />
+        {query && (
+          <button
+            type="button"
+            aria-label={t("Limpiar búsqueda")}
+            onClick={() => onQueryChange("")}
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      {values.length > 0 && (
+        <div className="choice-chips" aria-label={t("Valores seleccionados")}>
+          {values.map((value) => {
+            const item = known.get(value);
+            return (
+              <span className="choice-chip" key={value}>
+                {item?.color && (
+                  <i
+                    className="criteria-option-color"
+                    style={{ background: item.color }}
+                  />
+                )}
+                <span title={item?.label ?? value}>{item?.label ?? value}</span>
+                <button
+                  type="button"
+                  aria-label={`${t("Quitar")}: ${item?.label ?? value}`}
+                  onClick={() => toggle(value)}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div className="choice-list" role="group" aria-label={t("Valores del filtro")}>
+        {items.map((item) => (
+          <label
+            key={item.value}
+            className={`choice-item ${values.includes(item.value) ? "checked" : ""}`}
+          >
+            <input
+              type="checkbox"
+              checked={values.includes(item.value)}
+              disabled={item.disabled}
+              onChange={() => toggle(item.value)}
+            />
+            {item.color && (
+              <i
+                className="criteria-option-color"
+                style={{ background: item.color }}
+              />
+            )}
+            <span className="choice-label" title={item.label}>
+              {item.label}
+              {item.description && <small>{item.description}</small>}
+            </span>
+            {item.count !== undefined && (
+              <small className="choice-count">
+                {item.count.toLocaleString()}
+              </small>
+            )}
+          </label>
+        ))}
+        {canAdd && (
+          <button
+            type="button"
+            className="choice-add"
+            onClick={() => {
+              toggle(trimmed);
+              onQueryChange("");
+            }}
+          >
+            <Plus size={12} />
+            {t("Usar este valor")}: {trimmed}
+          </button>
+        )}
+        {loading && (
+          <p className="hint" role="status">
+            {t("Cargando opciones…")}
+          </p>
+        )}
+        {!items.length && !loading && !canAdd && (
+          <p className="hint">{t("Sin coincidencias")}</p>
+        )}
+        {more && (
+          <button
+            type="button"
+            className="choice-add"
+            disabled={loading}
+            onClick={onMore}
+          >
+            {t("Cargar más opciones")}
+          </button>
+        )}
+      </div>
+      <div className="choice-footer">
+        <span>
+          {values.length
+            ? `${values.length.toLocaleString()} ${t(values.length === 1 ? "seleccionado" : "seleccionados")}`
+            : t("Ninguno seleccionado")}
+        </span>
+        <button
+          type="button"
+          disabled={!items.length}
+          onClick={() =>
+            onChange(
+              [
+                ...new Set([
+                  ...values,
+                  ...items
+                    .filter((item) => !item.disabled)
+                    .map((item) => item.value),
+                ]),
+              ].slice(0, 1000),
+            )
+          }
+        >
+          {t(query ? "Seleccionar resultados" : "Seleccionar todo")}
+        </button>
+        <button
+          type="button"
+          disabled={!values.length}
+          onClick={() => onChange([])}
+        >
+          {t("Limpiar selección")}
+        </button>
+      </div>
+    </div>
+  );
+}
 function Operand({
   filter,
   columns,
@@ -65,12 +346,13 @@ function Operand({
     column = columns[0],
     kind = filterKind(column),
     [query, setQuery] = useState("");
-  const [choices, setChoices] = useState<CriteriaOption[]>([]),
+  const [choices, setChoices] = useState<ChoiceItem[]>([]),
     [loading, setLoading] = useState(false),
     [more, setMore] = useState(false),
     [offset, setOffset] = useState(0),
-    [error, setError] = useState(false);
-  const [selectedOptions, setSelectedOptions] = useState<CriteriaOption[]>([]);
+    [error, setError] = useState(false),
+    [counts, setCounts] = useState<Map<string, number> | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<ChoiceItem[]>([]);
   const ids = columns.map((column) => column.id).join("|");
   const choiceMode = ["any", "all", "none"].includes(filter.op);
   const selectedSignature = JSON.stringify(
@@ -80,9 +362,41 @@ function Operand({
         ? [filter.value]
         : [],
   );
+  const asItem = (item: { value: string; label: string; count: number }) => ({
+    value: item.value,
+    label: item.label,
+    count: item.count,
+  });
   useEffect(() => {
     setOffset(0);
   }, [query, ids]);
+  // Option properties list every option locally; one lookup adds how many
+  // records currently use each one.
+  useEffect(() => {
+    if (!choiceMode || kind !== "options") return;
+    let cancelled = false;
+    const optionIds = [
+      ...new Set(columns.flatMap((source) => source.options.map((o) => o.id))),
+    ].slice(0, 1000);
+    if (!optionIds.length) return;
+    void window.imago
+      .call("propertyChoices", { columnIds: ids.split("|"), selected: optionIds })
+      .then((result) => {
+        if (cancelled) return;
+        const next = new Map<string, number>();
+        for (const item of result.selections)
+          next.set(item.value, (next.get(item.value) ?? 0) + item.count);
+        setCounts(next);
+      })
+      .catch(() => {
+        if (!cancelled) setCounts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // The option catalogue is part of the column identity for this lookup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [choiceMode, kind, ids]);
   useEffect(() => {
     if (!choiceMode || kind === "options" || column.id.startsWith("$")) return;
     let cancelled = false;
@@ -103,23 +417,14 @@ function Operand({
               offset
                 ? [
                     ...new Map(
-                      [
-                        ...previous,
-                        ...result.choices.map((item) => ({
-                          value: item.value,
-                          label: item.label,
-                          description: `${item.count} ${t("registros")}`,
-                        })),
-                      ].map((item) => [item.value, item]),
+                      [...previous, ...result.choices.map(asItem)].map(
+                        (item) => [item.value, item],
+                      ),
                     ).values(),
                   ]
-                : result.choices.map((item) => ({
-                    value: item.value,
-                    label: item.label,
-                    description: `${item.count} ${t("registros")}`,
-                  })),
+                : result.choices.map(asItem),
             );
-            setSelectedOptions(result.selections);
+            setSelectedOptions(result.selections.map(asItem));
             setMore(result.more);
           }
         })
@@ -151,45 +456,46 @@ function Operand({
       />
     );
   if (choiceMode) {
-    const options =
+    const values = Array.isArray(filter.value)
+      ? filter.value
+      : filter.value
+        ? [filter.value]
+        : [];
+    const fold = (text: string) =>
+      text
+        .normalize("NFKD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase();
+    const items: ChoiceItem[] =
       kind === "options"
-        ? columns.flatMap((source) =>
-            source.options.map((option) => ({
-              value: option.id,
-              label: option.label,
-              color: option.color,
-              description:
-                columns.length > 1
-                  ? `${source.databaseName} · ${source.name}`
-                  : undefined,
-            })),
-          )
+        ? columns
+            .flatMap((source) =>
+              source.options.map((option) => ({
+                value: option.id,
+                label: option.label,
+                color: option.color,
+                count: counts ? (counts.get(option.id) ?? 0) : undefined,
+                description:
+                  columns.length > 1
+                    ? `${source.databaseName} · ${source.name}`
+                    : undefined,
+              })),
+            )
+            .filter((option) => fold(option.label).includes(fold(query)))
         : choices;
     return (
       <div className="criteria-operand">
-        <CriteriaSelect
-          label={t("Valores del filtro")}
-          options={options}
-          values={
-            Array.isArray(filter.value)
-              ? filter.value
-              : filter.value
-                ? [filter.value]
-                : []
-          }
+        <ChoiceChecklist
+          items={items}
+          selected={selectedOptions}
+          values={values}
           onChange={onChange}
-          multiple
-          selectedOptions={selectedOptions}
+          query={query}
+          onQueryChange={setQuery}
+          loading={kind !== "options" && loading}
+          more={kind !== "options" && more}
+          onMore={() => setOffset((n) => n + 50)}
           custom={!["options", "relation", "person"].includes(kind)}
-          {...(kind !== "options"
-            ? {
-                query,
-                onQueryChange: setQuery,
-                loading,
-                more,
-                onMore: () => setOffset((n) => n + 50),
-              }
-            : {})}
         />
         {error && (
           <small role="alert">
@@ -269,6 +575,9 @@ function FilterEditor({
   onRemove?: () => void;
 }) {
   const t = useT();
+  const reorder = useReorder((from, to) =>
+    onChange(moveItem(filters, from, to), groups, logic),
+  );
   const options: CriteriaOption[] = [
     ...columns.map((column) => ({
       value: column.id,
@@ -390,8 +699,19 @@ function FilterEditor({
           <div
             className={`criteria-filter-row ${filter.disabled ? "disabled" : ""}`}
             key={filter.id ?? `${filter.columnId}-${index}`}
+            {...reorder.row(index)}
           >
             <div className="criteria-rule-heading">
+              <button
+                type="button"
+                className="criteria-grip"
+                aria-label={t("Mover condición (arrastra o usa las flechas)")}
+                title={t("Arrastra para reordenar")}
+                disabled={filters.length < 2}
+                {...reorder.handle(index, filters.length)}
+              >
+                <GripVertical size={14} />
+              </button>
               <input
                 type="checkbox"
                 checked={!filter.disabled}
@@ -428,6 +748,8 @@ function FilterEditor({
               <Button
                 icon
                 aria-label={t("Eliminar condición")}
+                title={t("Eliminar condición")}
+                className="criteria-delete"
                 onClick={() =>
                   onChange(
                     filters.filter((_, i) => i !== index),
@@ -436,11 +758,13 @@ function FilterEditor({
                   )
                 }
               >
-                <X size={14} />
+                <Trash2 size={13} />
               </Button>
             </div>
             {column ? (
-              <div className="criteria-rule-value">
+              <div
+                className={`criteria-rule-value ${["any", "all", "none"].includes(filter.op) ? "choices" : ""}`}
+              >
                 <CriteriaSelect
                   label={t("Condición del filtro")}
                   options={operators.map((value) => ({
@@ -561,6 +885,33 @@ function FilterEditor({
     </div>
   );
 }
+/** Labels for each direction, worded for what the property holds. */
+function sortDirectionLabels(
+  sort: ViewSort,
+  column: FilterColumn | undefined,
+  t: (text: string) => string,
+): [string, string] {
+  const kind = column ? filterKind(column) : "text";
+  if (["$created", "$modified"].includes(sort.columnId) || kind === "date" || kind === "period")
+    return [t("Más antiguos primero"), t("Más recientes primero")];
+  if (kind === "checkbox") return [t("Sin marcar primero"), t("Marcados primero")];
+  if (kind === "time") return [t("Más temprano primero"), t("Más tarde primero")];
+  if (kind === "options")
+    return sort.by === "label"
+      ? [t("A → Z"), t("Z → A")]
+      : sort.by === "count"
+        ? [t("Menos valores primero"), t("Más valores primero")]
+        : [t("Orden de las opciones"), t("Orden inverso")];
+  if (
+    kind === "number" ||
+    kind === "files" ||
+    kind === "relation" ||
+    sort.columnId === "$images" ||
+    sort.columnId === "$position"
+  )
+    return [t("Menor a mayor"), t("Mayor a menor")];
+  return [t("A → Z"), t("Z → A")];
+}
 function SortEditor({
   sorts,
   onChange,
@@ -570,8 +921,8 @@ function SortEditor({
   onChange: (sorts: ViewSort[]) => void;
   columns: FilterColumn[];
 }) {
-  const t = useT(),
-    [drag, setDrag] = useState<number | null>(null);
+  const t = useT();
+  const reorder = useReorder((from, to) => onChange(moveItem(sorts, from, to)));
   const options = [
     ...SORT_META.map(([value, label]) => ({
       value,
@@ -586,18 +937,22 @@ function SortEditor({
         description: column.databaseName,
       })),
   ];
-  const move = (from: number, to: number) => {
-    if (to < 0 || to >= sorts.length) return;
-    const next = [...sorts],
-      [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
-    onChange(next);
-  };
+  const update = (index: number, patch: Partial<ViewSort>) =>
+    onChange(
+      sorts.map((sort, i) => {
+        if (i !== index) return sort;
+        const next = { ...sort, ...patch };
+        // Optional refinements are stored only when they differ from the default.
+        if (next.empty !== "first") delete next.empty;
+        if (!next.by) delete next.by;
+        return next;
+      }),
+    );
   return (
     <div className="criteria-sort-editor">
       <p className="hint">
         {t(
-          "Se aplica primero el criterio superior. Los valores vacíos quedan al final.",
+          "Se aplica primero el criterio superior; los siguientes deshacen los empates. Arrastra desde el asa para cambiar la prioridad.",
         )}
       </p>
       <CriteriaSelect
@@ -633,141 +988,159 @@ function SortEditor({
           onChange(presets[values[0]] ?? []);
         }}
       />
-      {sorts.map((sort, index) => {
-        const column = columns.find((column) => column.id === sort.columnId),
-          kind = column ? filterKind(column) : "text";
-        const dated =
-          ["$created", "$modified"].includes(sort.columnId) || kind === "date" || kind === "period";
-        const asc = dated
-          ? t("Más antiguos primero")
-          : kind === "checkbox"
-            ? t("Sin marcar primero")
-            : kind === "time"
-              ? t("Más temprano primero")
-              : kind === "number" ||
-                  kind === "files" ||
-                  kind === "relation" ||
-                  sort.columnId === "$images"
-                ? t("Menor a mayor")
-                : kind === "options"
-                  ? t("Orden de las opciones")
-                  : t("Ascendente: A → Z");
-        const desc = dated
-          ? t("Más recientes primero")
-          : kind === "checkbox"
-            ? t("Marcados primero")
-            : kind === "time"
-              ? t("Más tarde primero")
-              : kind === "number" ||
-                  kind === "files" ||
-                  kind === "relation" ||
-                  sort.columnId === "$images"
-                ? t("Mayor a menor")
-                : kind === "options"
-                  ? t("Orden inverso de las opciones")
-                  : t("Descendente: Z → A");
-        return (
-          <div
-            className="criteria-sort-row"
-            key={sort.columnId}
-            draggable
-            onDragStart={() => setDrag(index)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              if (drag !== null) move(drag, index);
-              setDrag(null);
-            }}
-            onDragEnd={() => setDrag(null)}
-          >
-            <span
-              className="criteria-sort-priority"
-              title={t("Arrastra para cambiar la prioridad")}
+      {!sorts.length && (
+        <p className="criteria-empty">
+          {t("Sin ordenamientos: los registros siguen su orden original.")}
+        </p>
+      )}
+      <div className="criteria-sort-list">
+        {sorts.map((sort, index) => {
+          const column = columns.find((column) => column.id === sort.columnId),
+            kind = column ? filterKind(column) : "text",
+            [asc, desc] = sortDirectionLabels(sort, column, t);
+          const name =
+            options.find((option) => option.value === sort.columnId)?.label ??
+            sort.columnId;
+          return (
+            <div
+              className="criteria-sort-row"
+              key={sort.columnId}
+              {...reorder.row(index)}
             >
-              {index + 1}
-            </span>
-            <CriteriaSelect
-              label={t("Propiedad de ordenamiento")}
-              options={options.filter(
-                (option) =>
-                  option.value === sort.columnId ||
-                  !sorts.some((sort) => sort.columnId === option.value),
-              )}
-              values={[sort.columnId]}
-              onChange={(values) =>
-                onChange(
-                  sorts.map((sort, i) =>
-                    i === index ? { ...sort, columnId: values[0] } : sort,
-                  ),
-                )
-              }
-            />
-            <CriteriaSelect
-              label={t("Dirección del ordenamiento")}
-              options={[
-                { value: "asc", label: asc },
-                { value: "desc", label: desc },
-              ]}
-              values={[sort.direction]}
-              onChange={(values) =>
-                onChange(
-                  sorts.map((sort, i) =>
-                    i === index
-                      ? {
-                          ...sort,
-                          direction: values[0] === "desc" ? "desc" : "asc",
-                        }
-                      : sort,
-                  ),
-                )
-              }
-            />
-            <div className="criteria-sort-actions">
-              <Button
-                icon
-                aria-label={t("Subir prioridad")}
-                disabled={index === 0}
-                onClick={() => move(index, index - 1)}
-              >
-                <ArrowUp size={13} />
-              </Button>
-              <Button
-                icon
-                aria-label={t("Bajar prioridad")}
-                disabled={index === sorts.length - 1}
-                onClick={() => move(index, index + 1)}
-              >
-                <ArrowDown size={13} />
-              </Button>
-              <Button
-                icon
-                aria-label={t("Eliminar ordenamiento")}
-                onClick={() => onChange(sorts.filter((_, i) => i !== index))}
-              >
-                <X size={13} />
-              </Button>
+              <div className="criteria-sort-main">
+                <button
+                  type="button"
+                  className="criteria-grip"
+                  aria-label={`${t("Mover ordenamiento (arrastra o usa las flechas)")}: ${name}`}
+                  title={t("Arrastra para cambiar la prioridad")}
+                  disabled={sorts.length < 2}
+                  {...reorder.handle(index, sorts.length)}
+                >
+                  <GripVertical size={14} />
+                </button>
+                <span
+                  className="criteria-sort-priority"
+                  aria-label={`${t("Prioridad")} ${index + 1}`}
+                >
+                  {index === 0 ? t("Ordenar por") : t("y después por")}
+                </span>
+                <CriteriaSelect
+                  label={t("Propiedad de ordenamiento")}
+                  options={options.filter(
+                    (option) =>
+                      option.value === sort.columnId ||
+                      !sorts.some((sort) => sort.columnId === option.value),
+                  )}
+                  values={[sort.columnId]}
+                  onChange={(values) =>
+                    update(index, { columnId: values[0], by: undefined })
+                  }
+                />
+                <Button
+                  icon
+                  className="criteria-delete"
+                  aria-label={`${t("Eliminar ordenamiento")}: ${name}`}
+                  title={t("Eliminar ordenamiento")}
+                  onClick={() => onChange(sorts.filter((_, i) => i !== index))}
+                >
+                  <Trash2 size={13} />
+                </Button>
+              </div>
+              <div className="criteria-sort-extra">
+                <div
+                  className="criteria-segmented"
+                  role="group"
+                  aria-label={t("Dirección del ordenamiento")}
+                >
+                  {(
+                    [
+                      ["asc", asc, ArrowUp],
+                      ["desc", desc, ArrowDown],
+                    ] as const
+                  ).map(([direction, label, Icon]) => (
+                    <button
+                      type="button"
+                      key={direction}
+                      aria-pressed={sort.direction === direction}
+                      onClick={() => update(index, { direction })}
+                    >
+                      <Icon size={12} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {kind === "options" && (
+                  <div className="criteria-sort-mode">
+                    <span>{t("Según")}</span>
+                    <CriteriaSelect
+                      label={t("Criterio de las opciones")}
+                      options={[
+                        { value: "position", label: t("Orden de las opciones") },
+                        { value: "label", label: t("Nombre de la opción") },
+                        ...(column?.type === "multi_select"
+                          ? [{ value: "count", label: t("Número de valores") }]
+                          : []),
+                      ]}
+                      values={[sort.by ?? "position"]}
+                      onChange={(values) =>
+                        update(index, {
+                          by:
+                            values[0] === "label" || values[0] === "count"
+                              ? values[0]
+                              : undefined,
+                        })
+                      }
+                    />
+                  </div>
+                )}
+                <div
+                  className="criteria-segmented compact"
+                  role="group"
+                  aria-label={t("Registros sin valor")}
+                >
+                  <span>{t("Vacíos")}</span>
+                  {(
+                    [
+                      ["last", t("Al final")],
+                      ["first", t("Al principio")],
+                    ] as const
+                  ).map(([empty, label]) => (
+                    <button
+                      type="button"
+                      key={empty}
+                      aria-pressed={(sort.empty ?? "last") === empty}
+                      onClick={() => update(index, { empty })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        );
-      })}
-      {sorts.length < 8 && (
-        <CriteriaSelect
-          label={t("Añadir ordenamiento")}
-          placeholder={t("+ Añadir ordenamiento")}
-          options={options.filter(
-            (option) => !sorts.some((sort) => sort.columnId === option.value),
-          )}
-          values={[]}
-          onChange={(values) =>
-            onChange([...sorts, { columnId: values[0], direction: "asc" }])
-          }
-        />
-      )}
-      {!!sorts.length && (
-        <Button onClick={() => onChange([])}>
-          {t("Quitar ordenamientos")}
-        </Button>
-      )}
+          );
+        })}
+      </div>
+      <div className="criteria-add-row">
+        {sorts.length < 8 && (
+          <CriteriaSelect
+            label={t("Añadir ordenamiento")}
+            placeholder={t(sorts.length ? "+ Añadir criterio de desempate" : "+ Añadir ordenamiento")}
+            options={options.filter(
+              (option) => !sorts.some((sort) => sort.columnId === option.value),
+            )}
+            values={[]}
+            onChange={(values) =>
+              onChange([...sorts, { columnId: values[0], direction: "asc" }])
+            }
+          />
+        )}
+        {!!sorts.length && (
+          <Button onClick={() => onChange([])}>
+            <Trash2 size={13} />
+            {t("Quitar ordenamientos")}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -782,6 +1155,7 @@ export function ViewControls({
   equivalences = [],
   deferred = false,
   openRequest = 0,
+  sortRequest = 0,
 }: {
   details: DatabaseDetail[];
   filters: PropertyFilter[];
@@ -798,6 +1172,8 @@ export function ViewControls({
   deferred?: boolean;
   /** Bumped by the column menu's "Filter" to open the panel on the filters. */
   openRequest?: number;
+  /** Bumped by the criteria bar to open the panel on the sorts. */
+  sortRequest?: number;
 }) {
   const t = useT(),
     anchor = useRef<HTMLButtonElement>(null),
@@ -808,15 +1184,12 @@ export function ViewControls({
     setTab("filters");
     setOpen(true);
   }, [openRequest]);
-  const columns: FilterColumn[] = [
-    ...details.flatMap((detail) =>
-      detail.columns.map((column) => ({
-        ...column,
-        databaseName: details.length > 1 ? detail.database.name : "",
-      })),
-    ),
-    ...metadataColumns,
-  ];
+  useEffect(() => {
+    if (!sortRequest) return;
+    setTab("sorts");
+    setOpen(true);
+  }, [sortRequest]);
+  const columns = criteriaColumns(details);
   const count = activeFilterCount(filters, groups);
   const nodeCount = (
     filters: PropertyFilter[],
@@ -914,6 +1287,180 @@ export function ViewControls({
           </footer>
         </CriteriaPopover>
       )}
+    </div>
+  );
+}
+
+/** One-line summary of the active criteria under the toolbar: each filter and
+ * sort is a chip that opens the panel or removes itself. */
+export function CriteriaBar({
+  details,
+  filters,
+  groups,
+  logic,
+  sorts,
+  onChange,
+  onSorts,
+  onOpenFilters,
+  onOpenSorts,
+}: {
+  details: DatabaseDetail[];
+  filters: PropertyFilter[];
+  groups: PropertyFilterGroup[];
+  logic: "and" | "or";
+  sorts: ViewSort[];
+  onChange: (
+    filters: PropertyFilter[],
+    groups: PropertyFilterGroup[],
+    logic: "and" | "or",
+  ) => void;
+  onSorts: (sorts: ViewSort[]) => void;
+  onOpenFilters: () => void;
+  onOpenSorts: () => void;
+}) {
+  const t = useT();
+  const columns = criteriaColumns(details);
+  const ready = filters
+    .map((filter, index) => ({ filter, index }))
+    .filter(({ filter }) => isFilterReady(filter));
+  const groupCount = groups.reduce(
+    (n, group) => n + activeFilterCount(group.filters, group.groups ?? []),
+    0,
+  );
+  if (!ready.length && !groupCount && !sorts.length) return null;
+  const nameOf = (id: string) => {
+    const meta = SORT_META.find(([key]) => key === id);
+    if (meta) return t(meta[1]);
+    return columns.find((column) => column.id === id)?.name ?? id;
+  };
+  const describe = (filter: PropertyFilter) => {
+    const column = columns.find((item) => item.id === filter.columnId);
+    const kind = column ? filterKind(column) : "text";
+    const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+    let shown = "";
+    if (filterNeedsValue(filter.op)) {
+      if (filter.op === "relative_date")
+        shown = t(
+          RELATIVE_DATES.find(([key]) => key === filter.value)?.[1] ??
+            String(filter.value),
+        );
+      else if (filter.op === "between") shown = `${values[0]} – ${values[1]}`;
+      else if (kind === "options")
+        shown = values
+          .map(
+            (value) =>
+              columns
+                .flatMap((item) => item.options)
+                .find((option) => option.id === value)?.label ?? value,
+          )
+          .join(", ");
+      else if (kind === "person" || kind === "relation")
+        shown =
+          values.length === 1
+            ? `1 ${t("valor")}`
+            : `${values.length} ${t("valores")}`;
+      else shown = values.join(", ");
+    }
+    return `${t(FILTER_LABELS[filter.op]).toLowerCase()}${shown ? ` ${shown}` : ""}`;
+  };
+  return (
+    <div className="criteria-bar" aria-label={t("Criterios activos")}>
+      {ready.map(({ filter, index }, position) => {
+        const name = filter.groupId
+          ? (columns.find((column) => column.id === filter.columnId)?.name ?? "")
+          : nameOf(filter.columnId);
+        const text = `${name} ${describe(filter)}`;
+        return (
+          <span className="criteria-chip" key={filter.id ?? index}>
+            {position > 0 && (
+              <em className="criteria-chip-logic">
+                {t(logic === "or" ? "o" : "y")}
+              </em>
+            )}
+            <button type="button" title={text} onClick={onOpenFilters}>
+              <Filter size={11} />
+              <b>{name}</b>
+              <span>{describe(filter)}</span>
+            </button>
+            <button
+              type="button"
+              className="criteria-chip-remove"
+              aria-label={`${t("Quitar filtro")}: ${text}`}
+              onClick={() =>
+                onChange(
+                  filters.filter((_, i) => i !== index),
+                  groups,
+                  logic,
+                )
+              }
+            >
+              <X size={11} />
+            </button>
+          </span>
+        );
+      })}
+      {!!groupCount && (
+        <span className="criteria-chip">
+          <button type="button" onClick={onOpenFilters}>
+            <Filter size={11} />
+            <b>{t("Grupos de condiciones")}</b>
+            <span>{groupCount}</span>
+          </button>
+          <button
+            type="button"
+            className="criteria-chip-remove"
+            aria-label={t("Quitar grupos de condiciones")}
+            onClick={() => onChange(filters, [], logic)}
+          >
+            <X size={11} />
+          </button>
+        </span>
+      )}
+      {(ready.length > 0 || groupCount > 0) && sorts.length > 0 && (
+        <i className="criteria-bar-divider" aria-hidden="true" />
+      )}
+      {sorts.map((sort, index) => {
+        const column = columns.find((item) => item.id === sort.columnId);
+        const label = sortDirectionLabels(sort, column, t)[
+          sort.direction === "desc" ? 1 : 0
+        ];
+        const name = nameOf(sort.columnId);
+        return (
+          <span className="criteria-chip sort" key={sort.columnId}>
+            <button
+              type="button"
+              title={`${index + 1}. ${name}: ${label}`}
+              onClick={onOpenSorts}
+            >
+              {sort.direction === "desc" ? (
+                <ArrowDown size={11} />
+              ) : (
+                <ArrowUp size={11} />
+              )}
+              <b>{name}</b>
+              <span>{label}</span>
+            </button>
+            <button
+              type="button"
+              className="criteria-chip-remove"
+              aria-label={`${t("Quitar ordenamiento")}: ${name}`}
+              onClick={() => onSorts(sorts.filter((_, i) => i !== index))}
+            >
+              <X size={11} />
+            </button>
+          </span>
+        );
+      })}
+      <button
+        type="button"
+        className="criteria-bar-clear"
+        onClick={() => {
+          onChange([], [], logic);
+          onSorts([]);
+        }}
+      >
+        {t("Borrar todo")}
+      </button>
     </div>
   );
 }

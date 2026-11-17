@@ -33,6 +33,48 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.1.6",
+    date: "2026-11-17",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "Ordenamientos encadenados por propiedades: cada criterio deshace los empates del anterior, se reordenan arrastrando desde el asa (o con las flechas) y se quitan con la papelera. Cada uno elige la dirección, si los vacíos van al principio o al final y, en las propiedades de selección, si se ordena por el orden de las opciones, por su nombre o por cuántos valores tiene el registro.",
+        en: "Chained sorts by property: each rule breaks the ties of the one above, rules are reordered by dragging their handle (or with the arrow keys) and removed with the bin. Each one chooses its direction, whether empty values go first or last and, for select properties, whether to sort by option order, option name or how many values a record has.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "Los filtros de selección y selección múltiple muestran todas las opciones como casillas, con buscador, su color y cuántos registros tiene cada una. Las condiciones también se reordenan arrastrando.",
+        en: "Select and multi-select filters list every option as a checkbox, with a search box, its colour and how many records use it. Conditions can also be reordered by dragging.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Bajo la barra de herramientas, cada filtro y ordenamiento activo aparece como una etiqueta: al pulsarla se abre el panel y con la × se quita.",
+        en: "Below the toolbar, each active filter and sort shows as a chip: click it to open the panel, or use × to remove it.",
+      },
+      {
+        scope: "search",
+        category: "enhancement",
+        es: "La tabla de Búsqueda muestra las propiedades de cada base de datos y la miniatura de sus imágenes. Las propiedades con el mismo nombre y tipo de varias bases se juntan en una columna.",
+        en: "The Search table shows each database's properties and image thumbnails. Same-named properties of the same type across databases share one column.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "La ficha de un registro sigue el orden de las columnas de la tabla, y las propiedades ocultas quedan plegadas al final.",
+        en: "A record's panel follows the table's column order, and hidden properties are folded away at the end.",
+      },
+      {
+        scope: "compare",
+        category: "enhancement",
+        es: "La barra lateral de la Mesa de comparación tiene el mismo ancho que la de Restauraciones, con su icono y una descripción.",
+        en: "The Comparison table sidebar has the same width as the Restorations one, with its icon and a description.",
+      },
+    ],
+  },
+  {
     version: "0.1.5",
     date: "2026-11-16",
     highlights: [

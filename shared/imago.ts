@@ -120,6 +120,11 @@ export type PropertyFilterGroup = {
 export type ViewSort = {
   columnId: string;
   direction: "asc" | "desc";
+  /** Where records without a value go. Defaults to the end in both directions. */
+  empty?: "first" | "last";
+  /** Option properties sort by their option order unless told to use the
+   * option label (alphabetical) or, for multiple selection, how many are set. */
+  by?: "label" | "count";
 };
 export type SearchInput = {
   databaseIds?: string[];

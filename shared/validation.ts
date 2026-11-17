@@ -56,7 +56,12 @@ const filter = z
   })
   .strict();
 const sort = z
-  .object({ columnId: id, direction: z.enum(["asc", "desc"]) })
+  .object({
+    columnId: id,
+    direction: z.enum(["asc", "desc"]),
+    empty: z.enum(["first", "last"]).optional(),
+    by: z.enum(["label", "count"]).optional(),
+  })
   .strict();
 function groupSchema(depth: number): z.ZodType<PropertyFilterGroup> {
   return z

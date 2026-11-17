@@ -57,7 +57,11 @@ import {
   Star,
   StarOff,
 } from "lucide-react";
-import type { DatabaseDetail, DatabaseSummary } from "../shared/databases";
+import type {
+  DatabaseColumn,
+  DatabaseDetail,
+  DatabaseSummary,
+} from "../shared/databases";
 import { decodeMultiSelect } from "../shared/databases";
 import type { CsvImportPlanData } from "../shared/databaseCsv";
 import type {
@@ -82,7 +86,7 @@ import { Button, Empty, Modal, Spinner, Thumbnail } from "./components/ui";
 import { Cell } from "./components/Cell";
 import { Properties, type Perform } from "./components/Properties";
 import { CsvImport, ImageImport } from "./components/ImportDialogs";
-import { ViewControls } from "./components/ViewControls";
+import { CriteriaBar, ViewControls } from "./components/ViewControls";
 import { CriteriaPopover, CriteriaSelect } from "./components/CriteriaSelect";
 import { askIndexQuality, IndexQualityDialog } from "./components/IndexQualityDialog";
 import { ChatView } from "./components/chat/ChatView";
@@ -769,6 +773,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [viewMenuAt, setViewMenuAt] = useState<{ id: DatabaseViewId; tab: HTMLElement } | null>(null),
     [editColumn, setEditColumn] = useState<string | null>(null),
     [filterRequest, setFilterRequest] = useState(0),
+    [sortRequest, setSortRequest] = useState(0),
     [summaries, setSummaries] = useState<Record<string, string>>({}),
     [stickyLeft, setStickyLeft] = useState<Record<string, number>>({});
   const [prefs, updatePrefs] = useColumnPrefs(detail?.database.id ?? null),
@@ -784,6 +789,49 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     frozenKey = frozenIds.join("|");
   const saveWidths = (next: Record<string, number>) =>
     updatePrefs((p) => ({ ...p, widths: next }));
+  /** One table cell for a property: images as a thumbnail, relations as a
+   * link to the record and everything else as an editable cell. */
+  const renderCell = (row: RecordRow, c: DatabaseColumn) => {
+    if (["attachment", "files"].includes(c.type)) {
+      const images = row.images.filter((a) => a.columnId === c.id);
+      return (
+        <button
+          className="cell-images"
+          onClick={() => void perform(() => open(row))}
+        >
+          <Thumbnail revision={images[0]?.revision} id={images[0]?.id} />
+          <span>{images.length || "—"}</span>
+        </button>
+      );
+    }
+    if (c.type === "relation")
+      return (
+        <button
+          className="text-link"
+          onClick={() => void perform(() => open(row))}
+        >
+          {t("Relación")} ↗
+        </button>
+      );
+    return (
+      <Cell
+        compact
+        wrap={area !== "search" && prefs.wrap.includes(c.id)}
+        column={c}
+        value={row.cells[c.id] ?? null}
+        onSave={(v) =>
+          perform(async () => {
+            await api.call("setCell", {
+              rowId: row.id,
+              columnId: c.id,
+              value: v,
+            });
+            refresh();
+          })
+        }
+      />
+    );
+  };
   const columnStyle = (id: string): React.CSSProperties | undefined => {
     const width = columnWidths[id],
       left = stickyLeft[id];
@@ -930,6 +978,29 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       ]);
     setFilterRequest((n) => n + 1);
   };
+  const changeCriteria = (
+    nextFilters: PropertyFilter[],
+    nextGroups: PropertyFilterGroup[],
+    nextLogic: "and" | "or",
+  ) => {
+    setFilters(nextFilters);
+    setFilterGroups(nextGroups);
+    setLogic(nextLogic);
+    setOffset(0);
+    setSelected(new Set());
+  };
+  const changeSorts = (nextSorts: ViewSort[]) => {
+    setSorts(nextSorts);
+    setOffset(0);
+    setSelected(new Set());
+    if (area === "search")
+      setExecuted((previous) => ({
+        ...previous,
+        sortColumn: undefined,
+        descending: undefined,
+        sorts: nextSorts,
+      }));
+  };
   const sortColumn = (columnId: string, direction: "asc" | "desc" | null) => {
     setSorts((current) => {
       const rest = current.filter((s) => s.columnId !== columnId);
@@ -1040,6 +1111,34 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       : detail
         ? [detail]
         : [];
+  // Search results span databases: show each one's visible properties in its
+  // own order, merging same-named properties of the same type into one column.
+  const searchColumns = useMemo(() => {
+    if (area !== "search") return [];
+    const merged = new Map<
+      string,
+      { key: string; name: string; byDatabase: Map<string, DatabaseColumn> }
+    >();
+    for (const d of allDetails) {
+      if (scope !== undefined && !scope.includes(d.database.id)) continue;
+      for (const c of visibleColumns(d.columns, readColumnPrefs(d.database.id))) {
+        if (c.type === "title") continue;
+        const key = `${c.type}:${c.name.trim().toLocaleLowerCase()}`;
+        const entry = merged.get(key) ?? {
+          key,
+          name: c.name,
+          byDatabase: new Map<string, DatabaseColumn>(),
+        };
+        entry.byDatabase.set(d.database.id, c);
+        merged.set(key, entry);
+      }
+    }
+    return [...merged.values()];
+  }, [area, allDetails, scope]);
+  const searchDatabases = new Set(page.rows.map((row) => row.databaseId)).size;
+  const searchMatches = page.rows.some(
+    (row) => row.snippet || row.score !== undefined,
+  );
   const exportRows = (format: "csv" | "json" | "xlsx") =>
     void perform(async () => {
       const rows = selected.size
@@ -2099,6 +2198,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         )}
                       <ViewControls
                         openRequest={filterRequest}
+                        sortRequest={sortRequest}
                         deferred={area === "search"}
                         details={visibleDetails}
                         filters={filters}
@@ -2106,25 +2206,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         logic={logic}
                         sorts={sorts}
                         equivalences={status?.settings.fieldEquivalences ?? []}
-                        onChange={(nextFilters, nextGroups, nextLogic) => {
-                          setFilters(nextFilters);
-                          setFilterGroups(nextGroups);
-                          setLogic(nextLogic);
-                          setOffset(0);
-                          setSelected(new Set());
-                        }}
-                        onSorts={(nextSorts) => {
-                          setSorts(nextSorts);
-                          setOffset(0);
-                          setSelected(new Set());
-                          if (area === "search")
-                            setExecuted((previous) => ({
-                              ...previous,
-                              sortColumn: undefined,
-                              descending: undefined,
-                              sorts: nextSorts,
-                            }));
-                        }}
+                        onChange={changeCriteria}
+                        onSorts={changeSorts}
                       />
                       {area === "search" ? (
                         <CriteriaSelect
@@ -2202,6 +2285,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       modelReady={modelReady}
                     />
                   )}
+                  <CriteriaBar
+                    details={visibleDetails}
+                    filters={filters}
+                    groups={filterGroups}
+                    logic={logic}
+                    sorts={sorts}
+                    onChange={changeCriteria}
+                    onSorts={changeSorts}
+                    onOpenFilters={() => setFilterRequest((n) => n + 1)}
+                    onOpenSorts={() => setSortRequest((n) => n + 1)}
+                  />
                   <div className="result-meta">
                     <span>
                       {loading ? (
@@ -2567,9 +2661,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             {area === "search" ? (
                               <>
                                 <th>{t("Título")}</th>
-                                <th>{t("Bases de datos")}</th>
-                                <th>{t("Imágenes")}</th>
-                                <th>{t("Resultados")}</th>
+                                {searchDatabases > 1 && (
+                                  <th>{t("Base de datos")}</th>
+                                )}
+                                {searchColumns.map((column) => (
+                                  <th key={column.key}>{column.name}</th>
+                                ))}
+                                {searchMatches && <th>{t("Coincidencia")}</th>}
                               </>
                             ) : (
                               shownColumns.map((c, index, all) => (
@@ -2699,14 +2797,31 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                       {row.title}
                                     </button>
                                   </td>
-                                  <td>{row.databaseName}</td>
-                                  <td>{row.images.length}</td>
-                                  <td className="snippet-cell">
-                                    {row.snippet ??
-                                      (row.score !== undefined
-                                        ? row.score.toFixed(3)
-                                        : "—")}
-                                  </td>
+                                  {searchDatabases > 1 && (
+                                    <td>{row.databaseName}</td>
+                                  )}
+                                  {searchColumns.map((column) => {
+                                    const c = column.byDatabase.get(
+                                      row.databaseId,
+                                    );
+                                    return (
+                                      <td key={column.key}>
+                                        {c ? (
+                                          renderCell(row, c)
+                                        ) : (
+                                          <span className="muted">—</span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                  {searchMatches && (
+                                    <td className="snippet-cell">
+                                      {row.snippet ??
+                                        (row.score !== undefined
+                                          ? row.score.toFixed(3)
+                                          : "—")}
+                                    </td>
+                                  )}
                                 </>
                               ) : (
                                 shownColumns.map((c) => (
@@ -2720,60 +2835,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                       (prefs.wrap.includes(c.id) ? " wrap" : "")
                                     }
                                   >
-                                    {["attachment", "files"].includes(
-                                      c.type,
-                                    ) ? (
-                                      <button
-                                        className="cell-images"
-                                        onClick={() =>
-                                          void perform(() => open(row))
-                                        }
-                                      >
-                                        <Thumbnail
-                                          revision={
-                                            row.images.find(
-                                              (a) => a.columnId === c.id,
-                                            )?.revision
-                                          }
-                                          id={
-                                            row.images.find(
-                                              (a) => a.columnId === c.id,
-                                            )?.id
-                                          }
-                                        />
-                                        <span>
-                                          {row.images.filter(
-                                            (a) => a.columnId === c.id,
-                                          ).length || "—"}
-                                        </span>
-                                      </button>
-                                    ) : c.type === "relation" ? (
-                                      <button
-                                        className="text-link"
-                                        onClick={() =>
-                                          void perform(() => open(row))
-                                        }
-                                      >
-                                        {t("Relación")} ↗
-                                      </button>
-                                    ) : (
-                                      <Cell
-                                        compact
-                                        wrap={prefs.wrap.includes(c.id)}
-                                        column={c}
-                                        value={row.cells[c.id] ?? null}
-                                        onSave={(v) =>
-                                          perform(async () => {
-                                            await api.call("setCell", {
-                                              rowId: row.id,
-                                              columnId: c.id,
-                                              value: v,
-                                            });
-                                            refresh();
-                                          })
-                                        }
-                                      />
-                                    )}
+                                    {renderCell(row, c)}
                                   </td>
                                 ))
                               )}
@@ -3647,7 +3709,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       {openRow && recordDetail && (
         <RecordPanel
           row={openRow}
-          detail={recordDetail}
+          detail={
+            // The open database's detail follows column moves live.
+            detail?.database.id === recordDetail.database.id
+              ? detail
+              : recordDetail
+          }
+          hidden={
+            detail?.database.id === recordDetail.database.id
+              ? prefs.hidden
+              : readColumnPrefs(recordDetail.database.id).hidden
+          }
           onClose={() => setOpenRow(null)}
           onChanged={refresh}
           onSimilar={similar}

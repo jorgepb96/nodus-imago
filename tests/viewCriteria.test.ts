@@ -84,6 +84,18 @@ test('nested groups, pending/disabled rules and deterministic multi-property sor
     assert.deepEqual(f.search({ sorts:[{ columnId:f.number.id, direction:'asc' }], offset:2, limit:2 }), [f.rows[4], f.rows[2]]);
   } finally { f.close(); }
 });
+test('sort rules place empty values first on request and order options by label or by how many are set', () => {
+  const f = fixture(); try {
+    const r = f.rows;
+    assert.deepEqual(f.search({ sorts:[{ columnId:f.number.id, direction:'asc', empty:'first' }] }), [r[3], r[0], r[1], r[4], r[2], r[5]]);
+    assert.deepEqual(f.search({ sorts:[{ columnId:f.number.id, direction:'desc', empty:'last' }] }), [r[2], r[5], r[4], r[1], r[0], r[3]]);
+    assert.deepEqual(f.search({ sorts:[{ columnId:f.tags.id, direction:'desc', by:'count' }] }), [r[2], r[0], r[1], r[4], r[3], r[5]]);
+    assert.deepEqual(f.search({ sorts:[{ columnId:f.tags.id, direction:'desc', by:'label' }] }), [r[1], r[0], r[2], r[4], r[3], r[5]]);
+    assert.deepEqual(f.search({ sorts:[{ columnId:f.tags.id, direction:'asc', by:'label', empty:'first' },{ columnId:'$title', direction:'desc' }] }), [r[3], r[5], r[0], r[4], r[2], r[1]]);
+    const restored = restoreViewCriteria(JSON.stringify({ sorts:[{ columnId:'a', direction:'asc', empty:'first', by:'label' },{ columnId:'b', direction:'desc', empty:'sideways', by:'drop table' }] }));
+    assert.deepEqual(restored.sorts, [{ columnId:'a', direction:'asc', empty:'first', by:'label' },{ columnId:'b', direction:'desc' }]);
+  } finally { f.close(); }
+});
 test('saved criteria prune deleted references and calendar presets handle leap days and Monday weeks', () => {
   const criteria = restoreViewCriteria(JSON.stringify({ logic:'or', filters:[{ columnId:'gone', op:'equals', value:'a' }], groups:[{ id:'group', logic:'and', filters:[{ columnId:'kept', op:'contains', value:'x' }] }], sorts:[{ columnId:'$created',direction:'desc' },{ columnId:'gone',direction:'asc' }] }));
   const pruned = pruneViewCriteria(criteria, new Set(['kept']));
