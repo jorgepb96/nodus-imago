@@ -86,7 +86,7 @@ export function DatabaseSearch({
         )}
       </label>
       <div className="segmented" role="group" aria-label={t("Tipo de búsqueda")}>
-        {(["literal", "semantic", "hybrid"] as const).map((m) => (
+        {(["hybrid", "semantic", "literal"] as const).map((m) => (
           <button
             key={m}
             type="button"

@@ -1014,6 +1014,21 @@ summary::-webkit-details-marker {
   background: var(--accent-soft);
   border-color: var(--a-300);
 }
+/* Electron hands a click to a window drag region (the title bar and the
+   header) even when something is painted over it. Dialogs open in the top
+   layer above the header, so they clear the drag region underneath; without
+   this a button that happens to sit over the header never gets its click.
+   Menus and popovers floating over the header need the same. */
+dialog,
+[role="dialog"],
+[role="menu"],
+[role="listbox"],
+.place-suggestions,
+.text-cell-popover,
+.research-history-menu,
+.research-project-style-backdrop {
+  -webkit-app-region: no-drag;
+}
 .app-shell {
   height: 100vh;
   display: flex;
@@ -1639,6 +1654,12 @@ summary::-webkit-details-marker {
   font-size: 10px;
   color: var(--muted);
 }
+/* The same controls above the records, so a long page needs no scrolling. */
+.pagination.is-top {
+  margin: 0 0 12px;
+  border-top: 0;
+  padding-top: 0;
+}
 .pagination > .button:not(.icon-button) {
   font-size: 10px;
   border-color: transparent;
@@ -1716,6 +1737,16 @@ thead th:last-child {
 .data-table td:first-child {
   min-width: 35px;
   width: 35px;
+  /* The header and row boxes share one centre line (th and td have
+     different side padding). */
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+}
+.data-table th:first-child > input[type="checkbox"],
+.data-table td:first-child > input[type="checkbox"] {
+  display: block;
+  margin: 0 auto;
 }
 .data-table td:last-child {
   min-width: 35px;
@@ -6743,6 +6774,508 @@ body.resizing-column * {
 .tour-card {
   width: min(380px, calc(100vw - 24px));
 }
+/* Tutorials (tutorials.ts): the researcher works on the interface while the
+   card guides, so nothing is dimmed when no control is highlighted, and a
+   card waiting for its control says what to do to make it appear. */
+.tour-layer.is-tutorial .tour-spotlight {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 6px color-mix(in srgb, var(--accent) 28%, transparent),
+    0 0 0 9999px rgb(8 9 15 / 0.28);
+  animation: tour-pulse 1.8s ease-in-out infinite;
+}
+@keyframes tour-pulse {
+  50% {
+    outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    outline-offset: 5px;
+  }
+}
+.tour-waiting {
+  display: block;
+  margin-top: 10px !important;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-ink) !important;
+  font-size: 12px;
+  line-height: 1.5;
+}
+/* Controls shown only on hover stay visible while a tutorial points at them. */
+body:has(.tour-layer.is-tutorial) .record-image-tools {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-layer.is-tutorial .tour-spotlight {
+    animation: none;
+  }
+}
+
+/* Tutorials section (TutorialsView.tsx). */
+.tutorials-page {
+  max-width: 1170px;
+  margin: 0 auto;
+  padding: 32px 40px 40px;
+}
+.tutorials-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.tutorials-head-icon {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
+.tutorials-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+}
+.tutorials-head p {
+  max-width: 640px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.tutorials-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 0 14px;
+  height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--muted);
+}
+.tutorials-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.tutorials-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+}
+.tutorials-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.tutorials-clear {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.tutorials-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.tutorials-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.tutorials-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+}
+.tutorials-filters button span {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.tutorials-filters button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.tutorials-filters button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.tutorials-filters button.active span {
+  color: var(--accent-ink);
+}
+.tutorials-filters button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.tutorial-tour {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--panel));
+  color: var(--accent-ink);
+}
+.tutorial-tour h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.tutorial-tour p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.tutorial-tour .button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.tutorial-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+.tutorial-card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tutorial-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  box-shadow: var(--shadow);
+}
+.tutorial-card > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.tutorial-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
+.tutorial-category {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.tutorial-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #15803d;
+  background: #dcfce7;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+:root.dark .tutorial-done {
+  color: #4ade80;
+  background: #22c55e1f;
+}
+.tutorial-card h2 {
+  margin: 13px 0 0;
+  font-size: 14.5px;
+  font-weight: 620;
+  line-height: 1.35;
+}
+.tutorial-card > p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.tutorial-card > p.tutorial-needs {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.tutorial-needs svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.tutorial-needs b {
+  color: var(--text);
+  font-weight: 600;
+}
+.tutorial-card > footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+.tutorial-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.tutorial-card > footer .button {
+  margin-left: auto;
+}
+/* The learning path: overall progress, where to go on, and the levels. */
+.tutorials-path {
+  margin-top: 24px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.tutorials-path-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.tutorials-path-top span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.tutorials-meter {
+  height: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hover);
+}
+.tutorials-meter i {
+  display: block;
+  height: 100%;
+  min-width: 8px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #22c55e));
+  transition: width 0.6s ease;
+}
+.tutorials-continue {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.tutorials-continue-label {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.tutorials-continue-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.tutorials-continue-title small {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.tutorials-continue .button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.tutorials-complete {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.tutorials-filters button b {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.tutorials-filters button.active b {
+  background: var(--accent);
+  color: #fff;
+}
+.tutorial-level {
+  margin-top: 28px;
+}
+.tutorial-level > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tutorial-level h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+.tutorial-level > header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.tutorial-level-number {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.tutorial-level-number.is-done {
+  border-color: #22c55e;
+  background: #22c55e;
+  color: #fff;
+}
+.tutorial-level-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.tutorial-level .tutorial-grid {
+  margin-top: 12px;
+}
+.tutorial-card.is-next {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.tutorial-card.is-done .tutorial-icon {
+  color: #15803d;
+  background: #dcfce7;
+}
+:root.dark .tutorial-card.is-done .tutorial-icon {
+  color: #4ade80;
+  background: #22c55e1f;
+}
+.tutorial-next-badge {
+  margin-left: auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--accent);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.tutorial-finished {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  color: #15803d;
+  background: linear-gradient(120deg, #dcfce7, color-mix(in srgb, var(--accent-soft) 70%, #dcfce7));
+  animation: tutorial-finished-in 0.45s ease-out;
+}
+:root.dark .tutorial-finished {
+  color: #4ade80;
+  background: linear-gradient(120deg, #22c55e1f, color-mix(in srgb, var(--accent) 14%, transparent));
+}
+.tutorial-finished h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+}
+.tutorial-finished p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+@keyframes tutorial-finished-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-finished {
+    animation: none;
+  }
+  .tutorials-meter i {
+    transition: none;
+  }
+}
+/* Inside the window opened from the top bar. */
+.tutorials-modal {
+  padding-top: 4px;
+}
+.tutorials-page.is-compact {
+  max-width: none;
+  padding: 0;
+}
+.tutorials-page.is-compact .tutorials-path {
+  margin-top: 8px;
+}
+.tutorials-page.is-compact .tutorial-grid {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+.tutorials-empty {
+  margin: 40px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .tutorials-page {
+    padding: 20px 16px 32px;
+  }
+  .tutorials-head {
+    flex-wrap: wrap;
+  }
+  .tutorial-tour,
+  .tutorials-continue {
+    flex-wrap: wrap;
+  }
+}
 
 /* Historical dates: the text as written and the period read from it. */
 .historical-date-cell { display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%; }
@@ -6783,6 +7316,10 @@ body.resizing-column * {
 .image-viewer::backdrop { background: #000c; }
 .image-viewer[open] { display: flex; flex-direction: column; }
 .viewer-bar { display: flex; align-items: center; gap: 10px; flex-shrink: 0; height: 56px; padding: 0 14px; border-bottom: 1px solid #ffffff14; background: #111113; }
+/* The full-screen viewer covers the app header, whose drag region would
+   otherwise keep taking the clicks meant for these buttons (see dialog). */
+.viewer-bar { -webkit-app-region: drag; }
+.viewer-bar :is(button, input, select, a) { -webkit-app-region: no-drag; }
 .viewer-title { display: flex; flex-direction: column; min-width: 0; max-width: 34%; }
 .viewer-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .viewer-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: #a1a1aa; }

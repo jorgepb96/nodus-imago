@@ -49,6 +49,7 @@ import {
   Columns2,
   Copy,
   Wand2,
+  GraduationCap,
   Lightbulb,
   FileImage,
   Globe,
@@ -113,7 +114,9 @@ import { Welcome, WELCOME_VERSION } from "./components/Welcome";
 import { WhatsNewModal } from "./components/WhatsNewModal";
 import { RELEASE_NOTES, releaseNotesUpTo } from "../shared/releaseNotes";
 import { version as APP_VERSION } from "../package.json";
-import { GuidedTour, TOUR_VERSION } from "./components/GuidedTour";
+import { GuidedTour, TOUR_VERSION, type TourArea } from "./components/GuidedTour";
+import { markTutorialDone, readDoneTutorials, TutorialsView } from "./components/TutorialsView";
+import type { Tutorial } from "./tutorials";
 import { TimelineView } from "./components/TimelineView";
 import { StatisticsView } from "./components/StatisticsView";
 import {
@@ -162,7 +165,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const t = useT(),
     api = window.imago;
   const [area, setArea] = useState<
-      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "restorations"
+      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "restorations" | "tutorials"
     >("home"),
     [databases, setDatabases] = useState<DatabaseSummary[]>([]),
     [databaseId, setDatabaseId] = useState(""),
@@ -186,7 +189,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [view, setView] = useState<DatabaseViewId>("gallery"),
     [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(""),
-    [mode, setMode] = useState<"literal" | "semantic" | "hybrid">("literal"),
+    // Search starts as Hybrid (words and meaning together); it is Literal
+    // while no model is ready for semantic search.
+    [chosenMode, setMode] = useState<"literal" | "semantic" | "hybrid">("hybrid"),
     [match, setMatch] = useState<"words" | "phrase" | "partial">("words"),
     [sources, setSources] = useState<"both" | "images" | "text">("both"),
     [scope, setScope] = useState<string[] | undefined>(),
@@ -205,6 +210,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [criteriaContext, setCriteriaContext] = useState(""),
     [allDetails, setAllDetails] = useState<DatabaseDetail[]>([]),
     [saved, setSaved] = useState<SavedSearch[]>([]);
+  const mode = status?.semanticReady ? chosenMode : "literal";
   const [modal, setModal] = useState<
       | "create"
       | "rename"
@@ -459,6 +465,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     };
   }, [databaseId, filters, logic, filterGroups, dbSearch, status?.semanticReady]);
   const viewSearchKey = JSON.stringify(viewSearch);
+  // The last pages seen, by query: coming back to a database (from the
+  // comparison table, say) shows its rows at once while they are refreshed,
+  // instead of an empty table until the query answers.
+  const pageCache = useRef(new Map<string, typeof page>());
   useEffect(() => {
     const id = ++sequence.current;
     if (
@@ -468,6 +478,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       area === "chat" ||
       area === "compare" ||
       area === "restorations" ||
+      area === "tutorials" ||
       (area === "databases" && !databaseId) ||
       criteriaContext !== criteriaKey
     ) {
@@ -485,9 +496,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             offset,
             limit: 100,
           };
+    const cacheKey = JSON.stringify(input),
+      cached = pageCache.current.get(cacheKey);
+    // The cached page answers exactly this query: show it until the fresh one.
+    if (cached) setPage(cached);
     void api
       .call("search", input)
       .then((p) => {
+        pageCache.current.delete(cacheKey);
+        pageCache.current.set(cacheKey, p);
+        if (pageCache.current.size > 12) pageCache.current.delete(pageCache.current.keys().next().value!);
         if (id === sequence.current) setPage(p);
       })
       .catch((e) => {
@@ -543,6 +561,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const [welcomeOpen, setWelcomeOpen] = useState(false),
     [tourOpen, setTourOpen] = useState(false),
     [afterTour, setAfterTour] = useState<"api" | null>(null),
+    // The tutorial being followed, and those finished on this computer.
+    [tutorial, setTutorial] = useState<Tutorial | null>(null),
+    [doneTutorials, setDoneTutorials] = useState(readDoneTutorials),
+    // The tutorials window of the top bar, and the tutorial just finished
+    // (it opens the window to congratulate and point to the next one).
+    [tutorialsOpen, setTutorialsOpen] = useState(false),
+    [justFinished, setJustFinished] = useState<Tutorial | null>(null),
     welcomeChecked = useRef(false);
   // After an update: what is new, once (as in Nodus Research). A first
   // installation sees the introduction instead and starts from this version.
@@ -620,9 +645,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setArea("settings");
   };
   const tourArea = useCallback(
-    (target: "home" | "databases" | "search" | "settings") => {
+    (target: TourArea, tab?: string) => {
       setArea(target);
-      if (target === "settings") setSettingsTab("api");
+      if (target === "settings") setSettingsTab(tab ?? "api");
       if (target === "databases") {
         const first = databaseId || databases[0]?.id;
         if (first && first !== databaseId) setDatabaseId(first);
@@ -653,12 +678,28 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setRecordDetail(d);
     setOpenRow(await api.call("getRow", { id: row.id }));
   };
-  const select = (id: string) =>
+  // The last box ticked or unticked: Shift+click applies the same to every
+  // record between it and the one clicked, as in a file manager.
+  const selectAnchor = useRef<string | null>(null);
+  const select = (id: string, range = false) => {
+    const anchor = selectAnchor.current;
+    selectAnchor.current = id;
     setSelected((old) => {
-      const next = new Set(old);
-      next.has(id) ? next.delete(id) : next.add(id);
+      const next = new Set(old),
+        on = !old.has(id);
+      const from = range && anchor ? page.rows.findIndex((r) => r.id === anchor) : -1,
+        to = page.rows.findIndex((r) => r.id === id);
+      const ids = from >= 0 && to >= 0 ? page.rows.slice(Math.min(from, to), Math.max(from, to) + 1).map((r) => r.id) : [id];
+      for (const rowId of ids) {
+        if (on) next.add(rowId);
+        else next.delete(rowId);
+      }
       return next;
     });
+  };
+  /** A checkbox change, with Shift held when it came from a Shift+click. */
+  const selectFrom = (id: string, event: React.ChangeEvent<HTMLInputElement>) =>
+    select(id, (event.nativeEvent as MouseEvent).shiftKey === true);
   const startCsv = () =>
     void perform(async () => {
       const p = await api.call("csvPreview");
@@ -933,6 +974,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const viewTab = (id: DatabaseViewId) =>
     area === "databases" && detail
       ? {
+          "data-tour": `view-${id}`,
           "aria-haspopup": "menu" as const,
           onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => {
             event.preventDefault();
@@ -1259,6 +1301,49 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       ))}
     </ul>
   );
+  /** Page controls and the proposals review, above and below the records. */
+  const pager = (top = false) => (
+    <div className={"pagination" + (top ? " is-top" : "")} data-testid={top ? "pagination-top" : undefined}>
+      {!["map", "timeline", "stats", "variants", "network", "visualmap"].includes(effectiveView) && (
+        <>
+          <Button
+            icon
+            aria-label={t("Anterior")}
+            disabled={!offset}
+            onClick={() => setOffset(Math.max(0, offset - 100))}
+          >
+            <ChevronLeft size={16} />
+          </Button>
+          <span>
+            {page.total ? offset + 1 : 0}–
+            {Math.min(offset + 100, page.total)} {t("de")}{" "}
+            {page.total.toLocaleString()}
+          </span>
+          <Button
+            icon
+            aria-label={t("Siguiente")}
+            disabled={offset + 100 >= page.total}
+            onClick={() => setOffset(offset + 100)}
+          >
+            <ChevronRight size={16} />
+          </Button>
+        </>
+      )}
+      <span className="spacer" />
+      <Button
+        data-tour={top ? "review-proposals" : undefined}
+        onClick={() =>
+          void perform(async () => {
+            setProposals(await api.call("proposals"));
+            setModal("proposals");
+          })
+        }
+      >
+        <Sparkles size={14} />
+        {t("Revisar propuestas")}
+      </Button>
+    </div>
+  );
   return (
     <div
       className={
@@ -1300,6 +1385,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </span>
         <div className="nodus-header-actions" data-tour="header-actions">
           {!!busy && <Spinner />}
+          <Button
+            icon
+            data-tour="header-tutorials"
+            className={tutorialsOpen ? "is-active" : ""}
+            title={t("Tutoriales")}
+            aria-label={t("Tutoriales")}
+            onClick={() => setTutorialsOpen(true)}
+          >
+            <GraduationCap size={18} />
+          </Button>
           <Button
             icon
             title={t("Búsqueda")}
@@ -1437,6 +1532,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <span className="nav-label">{t("COLECCIONES")}</span>
               <Button
                 icon
+                data-tour="db-new"
                 aria-label={t("Nueva base de datos")}
                 onClick={() => {
                   setName("");
@@ -1462,6 +1558,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             ))}
           </div>
           <div className="sidebar-bottom">
+            <button
+              title={t("Tutoriales")}
+              data-tour="nav-tutorials"
+              className={area === "tutorials" ? "active" : ""}
+              onClick={() => setArea("tutorials")}
+            >
+              <GraduationCap size={18} />
+              <span className="nav-title">{t("Tutoriales")}</span>
+            </button>
             <button
               title={t("Ajustes")}
               data-tour="nav-settings"
@@ -1502,6 +1607,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               }}
               onSearch={() => setArea("search")}
               onQueue={() => setQueueFilter("all")}
+            />
+          ) : area === "tutorials" ? (
+            <TutorialsView
+              done={doneTutorials}
+              onStart={(next) => {
+                setTourOpen(false);
+                setTutorial(next);
+              }}
+              onTour={() => {
+                setTutorial(null);
+                setTourOpen(true);
+              }}
             />
           ) : area === "restorations" ? (
             status && (
@@ -1728,6 +1845,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         <div className="search-input-row">
                           <Search size={21} />
                           <input
+                            data-tour="search-input"
                             aria-label={t("Buscar")}
                             placeholder={t(
                               mode === "literal"
@@ -1739,6 +1857,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           />
                           <Button
                             icon
+                            data-tour="search-image"
                             aria-label={t("Adjuntar imagen")}
                             disabled={mode === "literal"}
                             onClick={() =>
@@ -1760,8 +1879,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           </Button>
                         </div>
                         <div className="search-options">
-                          <div className="segmented">
-                            {(["literal", "semantic", "hybrid"] as const).map(
+                          <div className="segmented" data-tour="search-modes">
+                            {(["hybrid", "semantic", "literal"] as const).map(
                               (m) => (
                                 <button
                                   key={m}
@@ -1989,7 +2108,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             <MessageSquare size={15} />
                             {t("Chat")}
                           </Button>
-                          <Button onClick={() => setModal("properties")}>
+                          <Button data-tour="db-properties" onClick={() => setModal("properties")}>
                             <SlidersHorizontal size={15} />
                             {t("Propiedades")}
                           </Button>
@@ -2321,7 +2440,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     </span>
                     <div className="row">
                       {(area === "databases" || selected.size > 0) && (
-                        <details className="actions-menu">
+                        <details className="actions-menu" data-tour="db-export">
                           <summary className="button export-button">
                             <Download size={14} />
                             {t("Exportar")}
@@ -2344,6 +2463,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         {selected.size} {t("seleccionados")}
                       </strong>
                       <Button
+                        data-tour="selection-analyze"
                         onClick={() => {
                           setAnalysisColumns([]);
                           setAnalysisLanguage(
@@ -2358,6 +2478,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         {t("Analizar")}
                       </Button>
                       <Button
+                        data-tour="selection-compare"
                         data-tooltip={t("Abre las imágenes principales en una mesa de comparación (hasta seis)")}
                         onClick={() =>
                           void perform(async () => {
@@ -2384,6 +2505,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       </Button>
                       {area === "databases" && detail && (
                         <Button
+                          data-tour="selection-plates"
                           data-tooltip={t("PDF con las imágenes numeradas y sus pies, para un trabajo académico, un artículo o un libro")}
                           onClick={() => setModal("plates")}
                         >
@@ -2423,6 +2545,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       </Button>
                     </div>
                   )}
+                  {!["map", "timeline", "stats", "variants", "network", "visualmap"].includes(effectiveView) && pager(true)}
                   {effectiveView === "timeline" && detail && criteriaContext === criteriaKey ? (
                     <TimelineView
                       key={detail.database.id}
@@ -2563,7 +2686,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               type="checkbox"
                               aria-label={t("seleccionar") + " " + row.title}
                               checked={selected.has(row.id)}
-                              onChange={() => select(row.id)}
+                              onChange={(event) => selectFrom(row.id, event)}
                             />
                             <button
                               type="button"
@@ -2768,7 +2891,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           </tr>
                         </thead>
                         <tbody>
-                          {page.rows.map((row) => (
+                          {page.rows.map((row, rowIndex) => (
                             <tr
                               key={row.id}
                               className={
@@ -2778,11 +2901,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               <td className={frozenIds.length ? "frozen" : undefined}>
                                 <input
                                   type="checkbox"
+                                  data-tour={rowIndex === 0 ? "row-select" : undefined}
                                   aria-label={
                                     t("seleccionar") + " " + row.title
                                   }
                                   checked={selected.has(row.id)}
-                                  onChange={() => select(row.id)}
+                                  onChange={(event) => selectFrom(row.id, event)}
                                 />
                               </td>
                               {area === "search" ? (
@@ -2842,6 +2966,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               <td className="row-actions">
                                 <Button
                                   icon
+                                  data-tour={rowIndex === 0 ? "row-image-add" : undefined}
                                   aria-label={t("Añadir imagen")}
                                   title={t("Añadir imagen")}
                                   onClick={() => attachImage(row)}
@@ -2850,6 +2975,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 </Button>
                                 <Button
                                   icon
+                                  data-tour={rowIndex === 0 ? "row-open" : undefined}
                                   aria-label={t("Abrir registro")}
                                   onClick={() => void perform(() => open(row))}
                                 >
@@ -2914,45 +3040,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     <StickyScrollbar target={tableScrollRef} />
                     </>
                   )}
-                  <div className="pagination">
-                    {!["map", "timeline", "stats", "variants", "network", "visualmap"].includes(effectiveView) && (
-                      <>
-                        <Button
-                          icon
-                          aria-label={t("Anterior")}
-                          disabled={!offset}
-                          onClick={() => setOffset(Math.max(0, offset - 100))}
-                        >
-                          <ChevronLeft size={16} />
-                        </Button>
-                        <span>
-                          {page.total ? offset + 1 : 0}–
-                          {Math.min(offset + 100, page.total)} {t("de")}{" "}
-                          {page.total.toLocaleString()}
-                        </span>
-                        <Button
-                          icon
-                          aria-label={t("Siguiente")}
-                          disabled={offset + 100 >= page.total}
-                          onClick={() => setOffset(offset + 100)}
-                        >
-                          <ChevronRight size={16} />
-                        </Button>
-                      </>
-                    )}
-                    <span className="spacer" />
-                    <Button
-                      onClick={() =>
-                        void perform(async () => {
-                          setProposals(await api.call("proposals"));
-                          setModal("proposals");
-                        })
-                      }
-                    >
-                      <Sparkles size={14} />
-                      {t("Revisar propuestas")}
-                    </Button>
-                  </div>
+                  {pager()}
                 </div>
               )}
             </>
@@ -3040,6 +3128,53 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             void api.call("updateSettings", { whatsNewVersion: APP_VERSION }).then(refresh).catch(() => {});
           }}
         />
+      )}
+      {tutorial && !tourOpen && !welcomeOpen && (
+        <GuidedTour
+          key={tutorial.id}
+          steps={tutorial.steps}
+          label="Tutorial"
+          strict
+          onArea={tourArea}
+          onClose={() => setTutorial(null)}
+          onDone={() => {
+            markTutorialDone(tutorial.id);
+            setDoneTutorials((done) => (done.includes(tutorial.id) ? done : [...done, tutorial.id]));
+            setJustFinished(tutorial);
+            setTutorialsOpen(true);
+          }}
+        />
+      )}
+      {tutorialsOpen && (
+        <Modal
+          icon={GraduationCap}
+          title={t("Tutoriales")}
+          wide
+          onClose={() => {
+            setTutorialsOpen(false);
+            setJustFinished(null);
+          }}
+        >
+          <div className="modal-body tutorials-modal" data-testid="tutorials-modal">
+            <TutorialsView
+              compact
+              done={doneTutorials}
+              finished={justFinished}
+              onStart={(next) => {
+                setTutorialsOpen(false);
+                setJustFinished(null);
+                setTourOpen(false);
+                setTutorial(next);
+              }}
+              onTour={() => {
+                setTutorialsOpen(false);
+                setJustFinished(null);
+                setTutorial(null);
+                setTourOpen(true);
+              }}
+            />
+          </div>
+        </Modal>
       )}
       {tourOpen && !welcomeOpen && (
         <GuidedTour
@@ -3481,7 +3616,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       )}
       {modal === "jobs" && (
         <Modal icon={Clock3} title={t("Tareas")} wide onClose={() => setModal(null)}>
-          <div className="modal-body">
+          <div className="modal-body" data-tour="jobs-list">
             <Jobs
               jobs={status?.jobs ?? []}
               perform={perform}
@@ -3492,7 +3627,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       )}
       {modal === "analyze" && (
         <Modal icon={Sparkles} title={t("Generar propuestas")} onClose={() => setModal(null)}>
-          <div className="modal-body stack">
+          <div className="modal-body stack" data-tour="analyze-form">
             <p>
               {selected.size} {t("registros")} ·{" "}
               {t("Solo se proponen cambios en propiedades vacías.")}
@@ -3532,7 +3667,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 onChange={(e) => setAnalysisLanguage(e.target.value)}
               />
             </label>
-            <fieldset className="analysis-task">
+            <fieldset className="analysis-task" data-tour="analyze-task">
               <legend>{t("Para las propiedades de texto")}</legend>
               <label className="check-label">
                 <input
@@ -3570,6 +3705,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           <footer>
             <Button
               primary
+              data-tour="analyze-run"
               disabled={!analysisColumns.length}
               onClick={() =>
                 void perform(async () => {
@@ -3597,7 +3733,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onClose={() => setModal(null)}
         >
           <div className="modal-body">
-            <div className="row">
+            <div className="row" data-tour="proposals-actions">
               <Button
                 primary
                 disabled={!proposals.length}

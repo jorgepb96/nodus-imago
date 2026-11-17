@@ -186,6 +186,7 @@ try {
   await close();
   await selected.uncheck();
   await page
+    .getByTestId("pagination-top")
     .getByRole("button", { name: "Revisar propuestas", exact: true })
     .click();
   await inspect("02f-review-proposals");

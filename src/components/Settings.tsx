@@ -247,6 +247,7 @@ export function Settings({
               .map(({ id, label, Icon }) => (
                 <button
                   key={id}
+                  data-tour={`settings-tab-${id}`}
                   className={tab === id ? "active" : ""}
                   onClick={() => setTab(id)}
                 >

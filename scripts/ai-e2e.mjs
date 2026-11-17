@@ -206,6 +206,7 @@ try {
   await waitJob(job.id);
   await closeDialog();
   await page
+    .getByTestId("pagination-top")
     .getByRole("button", { name: "Revisar propuestas", exact: true })
     .click();
   const proposals = await call("proposals");

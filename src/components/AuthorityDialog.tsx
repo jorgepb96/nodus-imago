@@ -138,7 +138,7 @@ export function AuthorityDialog({
 
   return (
     <Modal icon={Link2} title={`${t("Enlazar con autoridades")} · ${column.name}`} onClose={onClose} wide>
-      <div className="modal-body authority-dialog" data-testid="authority-dialog">
+      <div className="modal-body authority-dialog" data-testid="authority-dialog" data-tour="authority-dialog">
         <p className="hint">
           {t("Cada valor se puede enlazar con su registro en Wikidata, que incluye los identificadores de Getty (ULAN, TGN, AAT) cuando existen, o con Iconclass para temas iconográficos. Los enlaces se exportan junto a los datos. Solo se envía el texto de los valores que buscas.")}
         </p>

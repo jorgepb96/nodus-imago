@@ -224,7 +224,7 @@ export function Properties({
               <Pencil size={13} />
             </button>
           ))}
-          <Button onClick={add}>
+          <Button data-tour="add-property" onClick={add}>
             <Plus size={15} />
             {t("Añadir propiedad")}
           </Button>

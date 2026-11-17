@@ -447,6 +447,7 @@ export function ImageViewer({
                 aria-label={t("Recortar")}
                 data-tooltip={t("Recortar la imagen a tu gusto. El original no se modifica.")}
                 data-testid="viewer-crop"
+                data-tour="viewer-crop"
                 disabled={!image}
                 onClick={startCrop}
               >
@@ -469,6 +470,7 @@ export function ImageViewer({
               className={`viewer-annotate ${annotating ? "is-on" : ""}`}
               aria-pressed={annotating}
               data-testid="viewer-annotate"
+              data-tour="viewer-annotate"
               data-tooltip={t("Arrastra sobre la imagen para marcar una zona y escribir una nota (tecla A).")}
               onClick={() => setAnnotating(!annotating)}
             >
@@ -485,6 +487,7 @@ export function ImageViewer({
       <div className="viewer-body">
         <div
           ref={stage}
+          data-tour="viewer-stage"
           className={`viewer-stage ${annotating ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
           onWheel={(event) => {
             const r = stage.current!.getBoundingClientRect();
@@ -560,7 +563,7 @@ export function ImageViewer({
             <p className="viewer-hint">{t("Arrastra sobre la imagen para marcar la primera zona.")}</p>
           )}
         </div>
-        <aside className="viewer-side" data-testid="viewer-annotations">
+        <aside className="viewer-side" data-testid="viewer-annotations" data-tour="viewer-annotations">
           {searching ? (
             <DetailSearchPanel
               annotation={searching}
@@ -725,6 +728,7 @@ function AnnotationEditor({
     <form
       className="annotation-editor"
       data-testid="annotation-editor"
+      data-tour="annotation-editor"
       onSubmit={(event) => {
         event.preventDefault();
         if (tag.trim()) add(tag);

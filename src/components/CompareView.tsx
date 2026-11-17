@@ -70,9 +70,14 @@ export function CompareView({
   useEffect(() => {
     void refresh().catch(() => {});
   }, [refresh]);
-  // A gallery selection arrives as a new board.
+  // Open the most recent board when arriving, unless a selection arrives.
+  const opened = useRef(false);
+  // A gallery selection arrives as a new board. It also stops the most
+  // recent board from opening: both load at once, and the slower one used
+  // to win, so the selection could land on an old board.
   useEffect(() => {
     if (!seed?.length) return;
+    opened.current = true;
     onSeedUsed();
     void (async () => {
       const created = await api.call("boardSave", { name: t("Mesa sin título"), assetIds: seed.slice(0, LIMIT) });
@@ -80,8 +85,6 @@ export function CompareView({
       await open(created.id);
     })().catch((e) => setError(String(e?.message ?? e)));
   }, [seed, onSeedUsed, api, refresh, open, t]);
-  // Open the most recent board when arriving.
-  const opened = useRef(false);
   useEffect(() => {
     if (opened.current || seed?.length || !boards.length || board) return;
     opened.current = true;
@@ -185,7 +188,7 @@ export function CompareView({
               <span className="compare-count">
                 {items.length} / {LIMIT}
               </span>
-              <Button disabled={items.length >= LIMIT} onClick={() => setPicking(true)} data-testid="compare-add">
+              <Button disabled={items.length >= LIMIT} onClick={() => setPicking(true)} data-testid="compare-add" data-tour="compare-add">
                 <Plus size={14} />
                 {t("Añadir imágenes")}
               </Button>
