@@ -33,6 +33,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.2.1",
+    date: "2026-11-17",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "«Deshacer» en Revisar propuestas solo deshace propuestas aceptadas. Antes deshacía el último cambio de cualquier tipo, y un clic podía vaciar una columna entera situada en el mapa o una unificación de valores.",
+        en: "“Undo” in Review proposals only undoes accepted proposals. It used to undo the last change of any kind, so one click could empty a whole column placed on the map or a value merge.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Nuevo botón «Rehacer» junto a cada «Deshacer», que vuelve a aplicar lo último que deshiciste mientras no hayas cambiado nada después.",
+        en: "A new “Redo” button next to each “Undo” applies again what you last undid, as long as nothing has changed since.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "«Deshacer» y «Rehacer» dicen qué van a cambiar (cuántos valores, en qué propiedades, de qué operación y cuándo) y piden confirmación antes de tocar más de un valor.",
+        en: "“Undo” and “Redo” say what they will change (how many values, in which properties, from which operation and when) and ask before touching more than one value.",
+      },
+    ],
+  },
+  {
     version: "0.2.0",
     date: "2026-11-17",
     highlights: [
