@@ -265,10 +265,14 @@ export type Settings = {
   apiProfiles: Partial<Record<ApiProvider, ApiProfile>>;
   apiDelayMs: number;
   parallelJobs: number;
+  /** Cells sent at once to an API model (local models run one at a time). */
+  apiParallel?: number;
   fieldEquivalences: EquivalenceGroup[];
   /** Image models of the restoration workshop ("provider|model") and the favourites. */
   imageModels?: string[];
   favoriteImageModels?: string[];
+  /** AI property tasks the user saved. */
+  aiUserPresets?: import("./databaseAi").AiUserPreset[];
   /** Citation template of each database (property names in braces). */
   citationTemplates?: Record<string, string>;
   /** Mark added to restored images when they are downloaded. */
@@ -737,6 +741,8 @@ export type Commands = {
     result: void;
   };
   pauseAllJobs: { input: void; result: void };
+  /** Remove finished tasks from the list; returns how many were removed. */
+  clearJobs: { input: void; result: number };
   resumePausedJobs: { input: void; result: void };
   rebuildText: { input: void; result: number };
   indexImages: { input: { databaseIds?: string[] }; result: string };
@@ -758,6 +764,7 @@ export type Commands = {
       language: string;
       detailed: boolean;
       task?: "describe" | "transcribe";
+      overwrite?: boolean;
     };
     result: string;
   };
@@ -797,6 +804,10 @@ export interface ImagoApi {
   chatSend(request: import("./chat").ChatTurnRequest): Promise<import("./chat").ChatTurnResult>;
   chatCancel(conversationId: string): Promise<void>;
   onChatDelta(listener: (delta: import("./chat").ChatDelta) => void): () => void;
+  /** Text an AI property is writing into a cell; null when it is done. */
+  onCellStream(
+    listener: (delta: { rowId: string; columnId: string; text: string | null }) => void,
+  ): () => void;
   setAppIcon(dataUrl: string): Promise<void>;
   onDrop(
     listener: (payload: {

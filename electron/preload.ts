@@ -30,6 +30,14 @@ const api: ImagoApi = {
     ipcRenderer.on("imago:chat-delta", handler);
     return () => ipcRenderer.removeListener("imago:chat-delta", handler);
   },
+  onCellStream: (listener) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      delta: Parameters<typeof listener>[0],
+    ) => listener(delta);
+    ipcRenderer.on("imago:cell-stream", handler);
+    return () => ipcRenderer.removeListener("imago:cell-stream", handler);
+  },
   setAppIcon: (dataUrl) => ipcRenderer.invoke("imago:app-icon", dataUrl),
   onDrop: (listener) => {
     const handler = (

@@ -333,6 +333,9 @@ try {
         parallelJobs: 2,
         profile: "balanced",
         apiDelayMs: 0,
+        // This audit counts requests across a pause: one API cell at a time,
+        // so a pause aborts (and a resume repeats) at most one request.
+        apiParallel: 1,
       });
       assert.deepEqual(
         await call("listProviderModels", { provider: "custom" }),

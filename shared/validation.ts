@@ -239,6 +239,19 @@ export const settingsSchema = z
     imageModels: z.array(z.string().max(400)).max(200).optional(),
     citationTemplates: z.record(id, z.string().max(1000)).optional(),
     favoriteImageModels: z.array(z.string().max(400)).max(200).optional(),
+    aiUserPresets: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(100),
+            name: z.string().trim().min(1).max(120),
+            prompt: z.string().trim().min(1).max(8000),
+            output: z.enum(["text", "tags"]),
+          })
+          .strict(),
+      )
+      .max(200)
+      .optional(),
     watermark: z
       .object({
         enabled: z.boolean(),
@@ -248,6 +261,7 @@ export const settingsSchema = z
       .strict()
       .optional(),
     parallelJobs: z.number().int().min(1).max(4),
+    apiParallel: z.number().int().min(1).max(50).optional(),
     fieldEquivalences: z
       .array(
         z
@@ -693,6 +707,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({ id, action: z.enum(["pause", "resume", "cancel"]) })
     .strict(),
   pauseAllJobs: z.undefined(),
+  clearJobs: z.undefined(),
   resumePausedJobs: z.undefined(),
   rebuildText: z.undefined(),
   indexImages: z.object({ databaseIds: ids.optional() }).strict(),
@@ -710,6 +725,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       language: z.string().max(100),
       detailed: z.boolean(),
       task: z.enum(["describe", "transcribe"]).optional(),
+      overwrite: z.boolean().optional(),
     })
     .strict(),
   provenance: z.object({ rowId: id }).strict(),

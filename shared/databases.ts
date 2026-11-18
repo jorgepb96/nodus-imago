@@ -63,6 +63,14 @@ export type DatabaseColumnType =
   | 'formula' // Computed from other columns by a visual recipe (see databaseFormula.ts)
   | 'comparison'; // Most frequent exact value across two or more columns
 
+export type AiPresetId =
+  | "describe"
+  | "describe_detailed"
+  | "tags"
+  | "transcribe"
+  | "title"
+  | "custom";
+
 export interface ColumnTypeDef {
   id: DatabaseColumnType;
   /** Spanish source label; the UI translates it via t(). */
@@ -125,6 +133,14 @@ export function availableColumnTypes(): ColumnTypeDef[] {
   return COLUMN_TYPES.filter((d) => d.available);
 }
 
+/** A property the AI fills directly: AI text, or a selection with AI on. */
+export function isAiColumn(column: { type: DatabaseColumnType; config: DatabaseColumnConfig }): boolean {
+  return (
+    column.type === "ai" ||
+    (["select", "multi_select", "status"].includes(column.type) && !!column.config.aiEnabled)
+  );
+}
+
 export function columnTypeHasOptions(type: unknown): boolean {
   return columnTypeDef(type).hasOptions;
 }
@@ -159,6 +175,27 @@ export interface DatabaseColumnConfig {
   /** ai columns: the user prompt, whether it auto-recomputes, and an optional source. */
   aiPrompt?: string;
   aiAuto?: boolean;
+  /** ai columns: a ready-made task (see AI_PRESETS); "custom" uses aiPrompt alone. */
+  aiPreset?: AiPresetId;
+  /** ai columns with the "tags" preset: the allowed tags; empty means free tags. */
+  aiTags?: string[];
+  /** ai columns with their own instructions: one text value or a list of tags. */
+  aiOutput?: "text" | "tags";
+  /** select, multi_select and status: the AI fills the cell itself (button,
+   * streaming, direct write) instead of leaving proposals. */
+  aiEnabled?: boolean;
+  /** multi_select with aiEnabled: the AI may add new options (free tags). */
+  aiFreeTags?: boolean;
+  /** Tags the AI may use at most; 0 means no limit (default 5). */
+  aiMaxTags?: number;
+  /** Selections with AI: general classification criteria (used when on). */
+  aiCriteriaOn?: boolean;
+  aiCriteria?: string;
+  /** Selections with AI: a definition per option, keyed by lower-case label. */
+  aiDefinitionsOn?: boolean;
+  aiDefinitions?: Record<string, string>;
+  /** ai columns: the saved preset these instructions came from (for display). */
+  aiUserPresetId?: string;
   /** ai columns: an attachment column whose file(s) feed the prompt (vision/OCR/summary). */
   aiSourceColumnId?: string;
   /** ai columns: an optional per-column text/vision model; absent inherits Settings. */

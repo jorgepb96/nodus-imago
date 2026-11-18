@@ -205,7 +205,10 @@ export function GuidedTour({
     [box, setBox] = useState<Box | null>(null),
     card = useRef<HTMLDivElement>(null),
     [cardPos, setCardPos] = useState<{ top: number; left: number; side: string } | null>(null),
-    [host, setHost] = useState<HTMLElement | null>(null);
+    [host, setHost] = useState<HTMLElement | null>(null),
+    // A window opened on top hides the control this step points at: the
+    // tutorial steps aside until it is closed.
+    [covered, setCovered] = useState(false);
   const step = steps[index],
     last = index === steps.length - 1;
   const present = (s: TourStep) => !s.target || !!find(s.target);
@@ -268,7 +271,9 @@ export function GuidedTour({
       const dialog = topDialog();
       setHost((current) => (current === dialog ? current : dialog));
       const target = find(step.target);
-      if (!target || !target.getClientRects().length) {
+      const hidden = !!(dialog && target && !dialog.contains(target));
+      setCovered(hidden);
+      if (!target || !target.getClientRects().length || hidden) {
         setBox(null);
         return;
       }
@@ -285,6 +290,23 @@ export function GuidedTour({
           Math.max(...rects.map((x) => x.bottom)) - Math.min(...rects.map((x) => x.top)),
         );
       }
+      // An open menu of the control (Importar › Importar imágenes) is part of
+      // the step: it is lit too, and the card never covers it.
+      const menu = target.matches("details[open]")
+        ? target
+        : target.querySelector<HTMLElement>("details[open]");
+      if (menu)
+        for (const child of menu.children) {
+          if (child.tagName === "SUMMARY") continue;
+          const m = child.getBoundingClientRect();
+          if (!m.width || !m.height) continue;
+          r = new DOMRect(
+            Math.min(r.left, m.left),
+            Math.min(r.top, m.top),
+            Math.max(r.right, m.right) - Math.min(r.left, m.left),
+            Math.max(r.bottom, m.bottom) - Math.min(r.top, m.top),
+          );
+        }
       let top = r.top,
         left = r.left,
         right = r.right,
@@ -340,6 +362,34 @@ export function GuidedTour({
       vh = window.innerHeight,
       clampTop = (v: number) => Math.max(12, Math.min(vh - h - 12, v)),
       clampLeft = (v: number) => Math.max(12, Math.min(vw - w - 12, v));
+    if (covered) {
+      // In a corner the open window does not use (never over its title, its
+      // close button or its actions), or the least covered one.
+      // The window itself, or its panel when the dialog fills the screen.
+      const own = host?.getBoundingClientRect(),
+        panel =
+          own && own.width * own.height < vw * vh * 0.9
+            ? own
+            : [...(host?.children ?? [])]
+                .filter((el) => !el.classList.contains("tour-layer"))
+                .map((el) => el.getBoundingClientRect())
+                .filter((r) => r.width && r.height)
+                .sort((a, b) => b.width * b.height - a.width * a.height)[0],
+        corners = [
+          { top: vh - h - 12, left: 12 },
+          { top: 12, left: 12 },
+          { top: vh - h - 12, left: vw - w - 12 },
+          { top: 12, left: vw - w - 12 },
+        ],
+        covers = (c: { top: number; left: number }) =>
+          panel
+            ? Math.max(0, Math.min(c.left + w, panel.right) - Math.max(c.left, panel.left)) *
+              Math.max(0, Math.min(c.top + h, panel.bottom) - Math.max(c.top, panel.top))
+            : 0,
+        best = corners.reduce((a, b) => (covers(b) < covers(a) ? b : a));
+      setCardPos({ ...best, side: "corner" });
+      return;
+    }
     if (!box) {
       // A tutorial waiting for its control keeps out of the way, so the
       // researcher can still do the step it asks for.
@@ -361,7 +411,7 @@ export function GuidedTour({
     else if (box.left - gap - w >= 12)
       setCardPos({ top: clampTop(box.top), left: box.left - gap - w, side: "left" });
     else setCardPos({ top: clampTop(box.top - h - gap), left: clampLeft(box.left), side: "above" });
-  }, [box, index, strict, step, host]);
+  }, [box, index, strict, step, host, covered]);
 
   // The tour takes the keyboard; a tutorial leaves it to the interface the
   // researcher is using (arrows browse images, Escape closes a viewer).
@@ -382,7 +432,7 @@ export function GuidedTour({
     return () => window.removeEventListener("keydown", key);
   }, [go, index, last, onClose, strict]);
 
-  const waiting = strict && !!step.target && !box;
+  const waiting = strict && !!step.target && !box && !covered;
   const layer = (
     <div className={"tour-layer" + (strict ? " is-tutorial" : "")} data-testid="tour-layer">
       {box ? (
@@ -396,7 +446,7 @@ export function GuidedTour({
       )}
       <div
         ref={card}
-        className={"tour-card side-" + (cardPos?.side ?? "center")}
+        className={"tour-card side-" + (cardPos?.side ?? "center") + (covered ? " is-paused" : "")}
         role="dialog"
         aria-modal="false"
         aria-labelledby="tour-title"
@@ -413,8 +463,14 @@ export function GuidedTour({
             <X size={13} />
           </button>
         </header>
-        <h2 id="tour-title">{t(step.title)}</h2>
-        <p id="tour-body">{t(step.body)}</p>
+        {covered ? (
+          <p id="tour-body" className="tour-waiting" data-testid="tour-paused">
+            {t("Tutorial en pausa mientras usas esta ventana. Al cerrarla, seguirá donde lo dejaste.")}
+          </p>
+        ) : (
+          <>
+            <h2 id="tour-title">{t(step.title)}</h2>
+            <p id="tour-body">{t(step.body)}</p>
         {step.items && (
           <ul className="tour-items">
             {step.items.map((item) => {
@@ -443,6 +499,10 @@ export function GuidedTour({
         {strict && step.until && !last && !waiting && (
           <p className="tour-waiting">{t("Cuando lo hagas, el tutorial seguirá solo.")}</p>
         )}
+          </>
+        )}
+        {!covered && (
+          <>
         <div className="tour-progress" aria-hidden="true">
           {steps.map((_, i) => (
             <i key={i} className={i <= index ? "active" : ""} />
@@ -469,6 +529,8 @@ export function GuidedTour({
             {t(last ? (strict ? "Terminar" : "Empezar") : "Siguiente")}
           </button>
         </footer>
+          </>
+        )}
       </div>
     </div>
   );

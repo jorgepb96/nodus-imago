@@ -211,7 +211,18 @@ app.whenReady().then(async () => {
       void (
         message.input?.embedding === true
           ? providers.embed(message.input, abort.signal)
-          : providers.complete(message.input, abort.signal)
+          : message.input?.stream === true
+            ? providers.completeStream(
+                message.input,
+                (text) =>
+                  worker.postMessage({
+                    event: "completionDelta",
+                    completionId: message.completionId,
+                    text,
+                  }),
+                abort.signal,
+              )
+            : providers.complete(message.input, abort.signal)
       )
         .then(
           (result) =>
@@ -231,6 +242,10 @@ app.whenReady().then(async () => {
             }),
         )
         .finally(() => completionAborts.delete(message.completionId));
+      return;
+    }
+    if (message.event === "cellStream") {
+      window?.webContents.send("imago:cell-stream", message.delta);
       return;
     }
     if (message.event === "abortCompletion") {

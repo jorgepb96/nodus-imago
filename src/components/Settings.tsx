@@ -64,8 +64,56 @@ export function Jobs({
       failed: "Fallida",
       cancelled: "Cancelada",
     };
+  const [confirmClear, setConfirmClear] = useState(false);
+  const finished = jobs.filter(
+    (j) =>
+      ["completed", "cancelled"].includes(j.state) ||
+      (j.state === "failed" && j.kind !== "images"),
+  ).length;
   return (
     <div className="job-list">
+      {finished > 0 && (
+        <div className="job-list-actions">
+          <Button type="button" onClick={() => setConfirmClear(true)}>
+            <Trash2 size={14} />
+            {t("Limpiar terminadas")} · {finished}
+          </Button>
+        </div>
+      )}
+      {confirmClear && (
+        <Modal
+          icon={Trash2}
+          title={t("Limpiar tareas terminadas")}
+          onClose={() => setConfirmClear(false)}
+        >
+          <div className="modal-body">
+            <p>
+              {t(
+                "Se quitarán de la lista las tareas completadas, canceladas y fallidas. Las importaciones de imágenes fallidas se conservan para poder reintentarlas. Esto no borra imágenes ni registros.",
+              )}
+            </p>
+          </div>
+          <footer>
+            <Button type="button" onClick={() => setConfirmClear(false)}>
+              {t("Cancelar")}
+            </Button>
+            <Button
+              type="button"
+              className="danger"
+              onClick={() => {
+                setConfirmClear(false);
+                void perform(async () => {
+                  await window.imago.call("clearJobs");
+                  onChanged();
+                }, "Lista de tareas limpia.");
+              }}
+            >
+              <Trash2 size={14} />
+              {t("Limpiar")}
+            </Button>
+          </footer>
+        </Modal>
+      )}
       {jobs.map((j) => (
         <div className="job" key={j.id}>
           <div className="row">
@@ -751,6 +799,29 @@ export function Settings({
                 {[1, 2, 3, 4].map((n) => (
                   <option value={n} key={n}>
                     {n} trabajos
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="setting-row">
+              <span>
+                <strong>{t("Peticiones simultáneas a la API")}</strong>
+                <p className="hint">
+                  {t(
+                    "Celdas de IA que se envían a la vez a un proveedor externo. Los modelos locales trabajan de una en una. Si el proveedor limita las peticiones, baja este número.",
+                  )}
+                </p>
+              </span>
+              <select
+                aria-label={t("Peticiones simultáneas a la API")}
+                value={s.apiParallel ?? 10}
+                onChange={(e) =>
+                  update({ apiParallel: Number(e.target.value) })
+                }
+              >
+                {[1, 5, 10, 15, 20, 25, 30, 40, 50].map((n) => (
+                  <option value={n} key={n}>
+                    {n}
                   </option>
                 ))}
               </select>

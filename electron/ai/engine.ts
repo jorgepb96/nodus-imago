@@ -15,6 +15,8 @@ import {
   buildAiCellPrompt,
   buildAiRowContext,
   aiColumnSystem,
+  aiPresetInstruction,
+  aiPresetOf,
 } from "../../shared/databaseAi";
 import {
   PROVIDERS,
@@ -25,10 +27,14 @@ import {
 import type { CompletionRequest, EmbeddingRequest } from "./apiProviders";
 import { orientedImage, withInferenceImage } from "../import/images";
 import { assetView, type ImageView } from "../../shared/imageRotation";
-import { LlamaPool } from "./llama";
+import { LlamaPool, type LlamaMode } from "./llama";
+import { isAiColumn } from "../../shared/databases";
 import {
   parseClassification,
   parseDescription,
+  parseLabelList,
+  parseValueAnswer,
+  streamPreview,
 } from "../../shared/visionOutput";
 import { OnnxHost } from "./onnxHost";
 import { HarrierHost } from "./harrier";
@@ -81,6 +87,12 @@ export class Engine {
     throw new Error("Las APIs no están disponibles en este proceso.");
   };
   harrier: HarrierHost;
+  /** Text an AI property is writing, for its cell (null clears the preview). */
+  onCellStream?: (delta: {
+    rowId: string;
+    columnId: string;
+    text: string | null;
+  }) => void;
   constructor(
     public repo: Repository,
     public models: Models,
@@ -88,6 +100,7 @@ export class Engine {
     public complete: (
       input: CompletionRequest,
       signal: AbortSignal,
+      onText?: (text: string) => void,
     ) => Promise<string> = async () => {
       throw new Error("Las APIs no están disponibles en este proceso.");
     },
@@ -878,6 +891,8 @@ export class Engine {
     detailed: boolean;
     /** For text properties: describe the image, or transcribe the text visible in it. */
     task?: "describe" | "transcribe";
+    /** AI properties only: regenerate cells that already have a value. */
+    overwrite?: boolean;
   }) {
     const settings = this.repo.getSettings();
     const verifiedModels = new Set(
@@ -918,10 +933,12 @@ export class Engine {
           continue;
         if (
           ["select", "multi_select", "status"].includes(c.type) &&
-          !c.options.length
+          !c.options.length &&
+          !(c.config.aiEnabled && c.config.aiFreeTags && c.type === "multi_select")
         )
           continue;
-        if (row.cells[columnId]) continue;
+        if (row.cells[columnId] && !(input.overwrite && isAiColumn(c)))
+          continue;
         const configured = c.config.aiModel;
         const choice: ModelChoice = configured
           ? {
@@ -978,6 +995,7 @@ export class Engine {
       language: string;
       detailed: boolean;
       task?: "describe" | "transcribe";
+      overwrite?: boolean;
       items: { rowId: string; columnId: string; choice: ModelChoice }[];
     },
     index: number,
@@ -987,8 +1005,9 @@ export class Engine {
       choice = item.choice,
       row = this.repo.getRow(item.rowId),
       column = this.repo.column(item.columnId);
+    const aiColumn = isAiColumn(column);
     if (
-      row.cells[column.id] ||
+      (row.cells[column.id] && !(aiColumn && payload.overwrite)) ||
       this.repo.db
         .prepare(
           "SELECT 1 FROM proposals WHERE row_id=? AND column_id=? AND state='pending'",
@@ -1008,9 +1027,52 @@ export class Engine {
     if ((await hashFile(asset.original_path)) !== asset.content_hash)
       throw new Error("El original cambió.");
     const options = ["select", "multi_select", "status"].includes(column.type);
-    const transcribe = !options && payload.task === "transcribe";
-    const instruction =
-      (column.config.aiPrompt ? column.config.aiPrompt + "\n\n" : "") +
+    const settingsLanguage = this.repo.getSettings().language;
+    // AI properties run a ready-made task in the interface language and answer
+    // in a fixed JSON shape, so reasoning never ends up in the cell.
+    // A selection with AI on is a tags task over its own options (or free
+    // tags that become new options).
+    const freeTags =
+      options && column.type === "multi_select" && !!column.config.aiFreeTags,
+      limit = column.config.aiMaxTags ?? 5,
+      maxTags: number | null =
+        column.type === "multi_select" || column.type === "ai" ? (limit > 0 ? limit : null) : 1;
+    const preset = aiColumn
+      ? aiPresetInstruction(
+          options
+            ? {
+                aiPreset: "tags",
+                aiPrompt: column.config.aiPrompt,
+                aiTags: freeTags ? [] : column.options.map((o) => o.label),
+                aiCriteria: column.config.aiCriteriaOn ? column.config.aiCriteria : undefined,
+                aiTagDefinitions: column.config.aiDefinitionsOn
+                  ? column.options.map((o) => ({
+                      label: o.label,
+                      definition: column.config.aiDefinitions?.[o.label.toLocaleLowerCase()] ?? "",
+                    }))
+                  : undefined,
+              }
+            : column.config,
+          settingsLanguage,
+          targetLanguage(settingsLanguage),
+          maxTags,
+        )
+      : null;
+    const transcribe =
+      !options &&
+      (preset
+        ? aiPresetOf(column.config) === "transcribe"
+        : payload.task === "transcribe");
+    const mode: LlamaMode = preset
+      ? preset.output === "list"
+        ? "json"
+        : "value"
+      : options
+        ? "json"
+        : "text";
+    const instruction = preset
+      ? preset.instruction
+      : (column.config.aiPrompt ? column.config.aiPrompt + "\n\n" : "") +
       (transcribe
         ? `Transcribe literally all the text visible in this image: inscriptions, stamps and seals, signatures, handwritten notes (for example on the back of a photograph), printed captions, labels and numbers. Keep the original language, spelling, abbreviations and line breaks; do not translate or correct anything. Write [ilegible] for parts that cannot be read. Separate different texts (for example a stamp and a note) with a blank line. Do not describe the image. If there is no text at all, answer exactly: [sin texto]`
         : options
@@ -1024,6 +1086,20 @@ export class Engine {
       { excludeColumnId: column.id, language },
     );
     const prompt = buildAiCellPrompt(instruction, context, language);
+    // Show the answer in the cell while it is written (at most ~12 times a second).
+    let shown = "",
+      lastEmit = 0;
+    const stream = preset
+      ? (raw: string) => {
+          if (!this.onCellStream || Date.now() - lastEmit < 80) return;
+          const text = streamPreview(raw, preset.output);
+          if (!text || text === shown) return;
+          shown = text;
+          lastEmit = Date.now();
+          this.onCellStream({ rowId: row.id, columnId: column.id, text });
+        }
+      : undefined;
+    let streamed = "";
     let result: string, modelName: string, revision: string;
     if (choice.provider === "local") {
       this.ready(choice.model);
@@ -1037,7 +1113,7 @@ export class Engine {
           ? withInferenceImage(
               this.repo.root,
               source.original_path,
-              (file) => this.llama.describe(choice.model, file, prompt, signal, options ? "json" : "text"),
+              (file) => this.llama.describe(choice.model, file, prompt, signal, mode, stream),
               assetView(source.metadata_json),
             )
           : withInferenceImage(
@@ -1057,7 +1133,7 @@ export class Engine {
                 ),
               assetView(source.metadata_json),
             );
-      if (transcribe && sourceImages.length > 1) {
+      if (transcribe && !preset && sourceImages.length > 1) {
         const texts: string[] = [];
         for (const [i, source] of sourceImages.slice(0, 3).entries()) {
           const text = parseDescription(String(await local(this.repo.asset(source.id))));
@@ -1094,8 +1170,15 @@ export class Engine {
           prompt,
           system: aiColumnSystem(language),
           images: parts,
+          ...(stream ? { stream: true } : {}),
         },
         signal,
+        stream
+          ? (text) => {
+              streamed += text;
+              stream(streamed);
+            }
+          : undefined,
       );
       modelName = choice.provider + "/" + choice.model;
       revision = "API · " + providerBase(choice.provider, settings.apiProfiles);
@@ -1105,6 +1188,56 @@ export class Engine {
       throw new Error("El modelo no ha devuelto texto.");
     if (process.env.IMAGO_DEBUG_AI)
       console.error("[imago-ai] " + JSON.stringify(result));
+    if (preset) {
+      // Clear the live preview: the saved value (or nothing) replaces it.
+      this.onCellStream?.({ rowId: row.id, columnId: column.id, text: null });
+      if (options) {
+        const labels = parseLabelList(result, preset.tags, maxTags ?? 100);
+        if (!labels.length) return "skipped" as const;
+        const fresh = this.repo.column(column.id),
+          find = (label: string) =>
+            fresh.options.find(
+              (o) => o.label.toLocaleLowerCase() === label.toLocaleLowerCase(),
+            );
+        const missing = labels.filter((label) => !find(label));
+        if (missing.length && freeTags) {
+          const palette = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a855f7", "#ec4899", "#84cc16"];
+          this.repo.saveOptions(column.id, [
+            ...fresh.options.map((o) => ({ id: o.id, label: o.label, color: o.color ?? null })),
+            ...missing.map((label, i) => ({
+              label,
+              color: palette[(fresh.options.length + i) % palette.length],
+            })),
+          ]);
+        }
+        const after = this.repo.column(column.id),
+          ids = labels
+            .map(
+              (label) =>
+                after.options.find(
+                  (o) => o.label.toLocaleLowerCase() === label.toLocaleLowerCase(),
+                )?.id,
+            )
+            .filter((id): id is string => !!id);
+        if (!ids.length) return "skipped" as const;
+        this.repo.setCell(
+          row.id,
+          column.id,
+          column.type === "multi_select" ? JSON.stringify([...new Set(ids)]) : ids[0],
+        );
+        return "imported" as const;
+      }
+      const value =
+        preset.output === "list"
+          ? parseLabelList(result, preset.tags, maxTags ?? 100).join(", ")
+          : parseValueAnswer(result);
+      if (!value.trim() || (transcribe && /^\[?sin texto\]?\.?$/i.test(value.trim())))
+        return "skipped" as const;
+      // An AI property is filled in directly (Undo reverts it); it is not a
+      // proposal waiting in the review queue.
+      this.repo.setCell(row.id, column.id, value);
+      return "imported" as const;
+    }
     let value: string | null;
     if (options) {
       const labels = parseClassification(

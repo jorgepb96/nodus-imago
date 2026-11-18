@@ -29,6 +29,8 @@ export type CompletionRequest = {
   system: string;
   images: VisionImagePart[];
   minIntervalMs?: number;
+  /** Stream the answer: pieces of text reach the caller as they arrive. */
+  stream?: boolean;
 };
 /** An embedding call brokered by the main process: the worker never sees keys. */
 export type EmbeddingRequest = {
@@ -170,6 +172,33 @@ export class ApiProviders {
     }
     throw new ApiFailure("El proveedor no está disponible.");
   }
+  /** A vision completion streamed piece by piece (AI properties). */
+  completeStream(
+    input: CompletionRequest,
+    onText: (text: string) => void,
+    signal: AbortSignal,
+  ) {
+    const anthropic = input.choice.provider === "anthropic";
+    return this.chatStream(
+      {
+        choice: input.choice,
+        profiles: input.profiles,
+        remoteEnabled: input.remoteEnabled,
+        system: input.system,
+        messages: [
+          {
+            role: "user",
+            content: anthropic
+              ? anthropicVisionContent(input.prompt, input.images)
+              : openAiVisionContent(input.prompt, input.images),
+          },
+        ],
+        maxTokens: 1200,
+      },
+      onText,
+      signal,
+    );
+  }
   async complete(input: CompletionRequest, signal: AbortSignal) {
     if (input.choice.provider === "local")
       throw new Error("El modelo local no usa esta conexión.");
@@ -258,7 +287,8 @@ export class ApiProviders {
       profiles: Partial<Record<ApiProvider, ApiProfile>>;
       remoteEnabled: boolean;
       system: string;
-      messages: { role: "user" | "assistant"; content: string }[];
+      /** Plain text, or a provider's vision content array. */
+      messages: { role: "user" | "assistant"; content: unknown }[];
       maxTokens?: number;
     },
     onText: (text: string) => void,

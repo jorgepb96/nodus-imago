@@ -52,6 +52,19 @@ export class AutoIndexer {
     clearInterval(this.timer);
     this.timer = undefined;
   }
+  /**
+   * An import just finished: index what it brought in a few seconds instead
+   * of waiting the whole settling time, so new images become searchable
+   * (and show up in Tasks) right away.
+   */
+  soon(delayMs = 3_000) {
+    this.lastActivity = Math.min(
+      this.lastActivity,
+      this.clock() - this.options.settleMs + delayMs,
+    );
+    const timer = setTimeout(() => this.tick(), delayMs + 200);
+    timer.unref?.();
+  }
   /** A write happened: wait for it to settle before indexing. */
   touch() {
     this.lastActivity = this.clock();

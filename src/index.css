@@ -2607,11 +2607,20 @@ thead th:last-child {
   font-size: 11px;
   text-align: left;
 }
+.property-list > button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .property-list > button > small {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
   font-size: 9px;
   color: var(--muted);
   margin-left: auto;
-  max-width: 90px;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7803,3 +7812,219 @@ body:has(.tour-layer.is-tutorial) .record-image-tools {
 .app-crash-card p { margin: 0 0 14px; font-size: 13px; line-height: 1.55; color: var(--muted); }
 .app-crash-card pre { max-height: 140px; overflow: auto; margin: 0 0 18px; padding: 10px 12px; border-radius: 8px; background: var(--surface); font-size: 11.5px; white-space: pre-wrap; word-break: break-word; }
 .app-crash-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.add-property-col {
+  width: 40px;
+  text-align: right;
+}
+.add-property-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.add-property-button:hover,
+.add-property-button[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+.add-property-types {
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+}
+.column-type-icon {
+  flex: none;
+  margin-right: 6px;
+  color: var(--muted);
+}
+.column-ai-button {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: #7c3aed;
+}
+.column-ai-button:hover,
+.column-ai-button[aria-expanded="true"] {
+  background: var(--hover);
+}
+.ai-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.ai-cell-value {
+  flex: 1;
+  min-width: 0;
+}
+.ai-cell-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 5px;
+  color: #7c3aed;
+  opacity: 0.35;
+}
+tr:hover .ai-cell-button,
+.ai-cell-button:focus-visible,
+.ai-cell-button.pending {
+  opacity: 1;
+}
+.ai-cell-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+.ai-tags textarea {
+  width: 100%;
+}
+.data-table th.column-header:not(.frozen) {
+  position: relative;
+}
+.ai-cell-live {
+  display: block;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.ai-prompt-preview {
+  width: 100%;
+  color: var(--muted);
+  background: var(--hover);
+  resize: vertical;
+}
+.ai-preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ai-preset-actions input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.workspace.dropping-files {
+  box-shadow: inset 0 0 0 3px var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
+}
+.drop-files-hint {
+  position: fixed;
+  z-index: 50;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  pointer-events: none;
+}
+.job-list-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.option-menu[popover] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  color: inherit;
+}
+.tour-card.is-paused {
+  width: min(280px, calc(100vw - 24px));
+  padding: 12px 14px;
+}
+.column-type-icon.has-ai {
+  position: relative;
+  display: inline-flex;
+}
+.column-type-ai {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  color: #7c3aed;
+  background: var(--panel);
+  border-radius: 50%;
+}
+.property-ai-mark {
+  flex: none;
+  margin-left: 4px;
+  color: #7c3aed;
+  vertical-align: -1px;
+}
+/* The row actions (add image, open record) and the "+" to add a property stay
+   at the right edge while the table scrolls sideways. */
+.data-table th.add-property-col,
+.data-table td.row-actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--panel);
+  box-shadow: -1px 0 0 var(--line), -6px 0 8px -6px #0000002e;
+}
+.data-table thead th.add-property-col {
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+}
+.data-table tr:hover td.row-actions {
+  background: var(--surface);
+}
+.data-table tr.is-selected td.row-actions {
+  background: color-mix(in srgb, var(--accent-soft) 100%, var(--panel));
+}
+:root.dark .data-table th.add-property-col,
+:root.dark .data-table td.row-actions {
+  box-shadow: -1px 0 0 var(--line), -6px 0 8px -6px #000a;
+}
+.ai-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.ai-advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+.ai-advanced[open] > summary {
+  margin-bottom: 6px;
+}
+.ai-advanced textarea {
+  width: 100%;
+}
+.ai-definitions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-definitions > label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}

@@ -237,7 +237,7 @@ export function parseDescription(raw: string): string {
   for (const value of jsonCandidates(text)) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     const record = value as Record<string, unknown>;
-    for (const key of ["description", "descripcion", "descripción", "text"]) {
+    for (const key of ["value", "description", "descripcion", "descripción", "text"]) {
       const candidate = record[key];
       if (typeof candidate === "string" && candidate.trim()) {
         text = stripPromptEcho(cleanVisionText(candidate));
@@ -262,4 +262,107 @@ export function parseDescription(raw: string): string {
   if (!text || text.length < 2)
     throw new Error("El modelo no devolvió una descripción utilizable.");
   return text;
+}
+
+/** Case- and accent-insensitive key: a model writing "religion" still matches "Religión". */
+function looseLabel(label: string) {
+  return label.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+}
+
+/** "religiÃ³n" (UTF-8 read as Latin-1) back to "religión"; other text unchanged. */
+export function repairMojibake(text: string): string {
+  if (!/[ÃÂ][\u0080-\u00bf]/.test(text)) return text;
+  const bytes = Uint8Array.from([...text].map((c) => c.charCodeAt(0) & 0xff));
+  const fixed = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  return fixed.includes("\ufffd") ? text : fixed;
+}
+
+/**
+ * Parse a free list of labels (tags). Accepts a JSON array of strings or of
+ * {label} objects, or a comma/line separated list as a fallback. With an
+ * allowed vocabulary, labels outside it are dropped (matched without case or
+ * accents) instead of failing the whole cell.
+ */
+export function parseLabelList(
+  raw: string,
+  allowed: string[] | null,
+  max: number,
+): string[] {
+  const text = unwrapToolCall(cleanVisionText(raw));
+  let items: string[] | null = null;
+  for (const value of jsonCandidates(text)) {
+    const list = arrayFromValue(value);
+    if (!list) continue;
+    items = list.map((item) => labelOf(item) ?? "").filter(Boolean);
+    break;
+  }
+  if (!items)
+    items = text
+      .replace(/^```[a-zA-Z]*\s*|```$/g, "")
+      .split(/[,\n;]/)
+      .map((part) => part.replace(/^[\s\-*•\d.)"']+|["'\s.]+$/g, ""))
+      .filter((part) => part && part.length <= 60);
+  const out: string[] = [];
+  for (const raw of items) {
+    const item = repairMojibake(raw);
+    const label = allowed
+      ? allowed.find((option) => looseLabel(option) === looseLabel(item))
+      : item.trim();
+    if (label && !out.some((existing) => looseLabel(existing) === looseLabel(label)))
+      out.push(label);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/**
+ * Parse a structured {"value": "..."} answer. Returns "" when the model said
+ * there is nothing to write, and recovers the text of an answer cut off by the
+ * token limit. Falls back to prose cleaning when the model ignored the format.
+ */
+export function parseValueAnswer(raw: string): string {
+  const text = unwrapToolCall(cleanVisionText(raw));
+  for (const value of jsonCandidates(text)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const field = (value as Record<string, unknown>).value;
+      if (typeof field === "string") return cleanVisionText(field).trim();
+    }
+  }
+  const partial = /\{\s*"value"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(text);
+  if (partial) {
+    let body = partial[1].replace(/\\$/, "");
+    try {
+      body = JSON.parse(`"${body}"`);
+    } catch {
+      body = body.replace(/\\n/g, "\n").replace(/\\"/g, '"');
+    }
+    if (body.trim()) return body.trim();
+  }
+  return parseDescription(text);
+}
+
+/**
+ * What a cell shows while a structured answer is still arriving: the text of
+ * {"value": "..." so far, or the complete labels of a ["a", "b" list. Nothing
+ * is shown before the JSON starts, so reasoning never flashes in the cell.
+ */
+export function streamPreview(raw: string, output: "value" | "list"): string {
+  if (output === "list") {
+    const start = raw.indexOf("[");
+    if (start < 0) return "";
+    const labels = [...raw.slice(start).matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]);
+    return labels.join(", ");
+  }
+  // The local engine echoes the prompt, whose format line contains an
+  // example {"value": "..."}: only the last object, the model's own, counts.
+  const matches = [...raw.matchAll(/"value"\s*:\s*"((?:[^"\\]|\\.)*)/g)],
+    match = matches.at(-1);
+  if (!match || match[1] === "...") return "";
+  return match[1]
+    .replace(/\\$/, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, " ")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\")
+    .trim();
 }

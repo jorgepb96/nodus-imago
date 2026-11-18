@@ -184,8 +184,12 @@ export class JobQueue {
     }
     if (job.kind === "analyze")
       for (const item of payload.items) {
-        resources.add("column:" + item.columnId);
+        // Per cell, so a click on one cell is not kept waiting behind a long
+        // job on another part of the same column.
+        resources.add("cell:" + item.rowId + ":" + item.columnId);
         if (item.choice?.provider === "local") {
+          // The local vision model answers one cell at a time.
+          resources.add("local-vision");
           resources.add("uses:" + item.choice.model);
           if (this.models.get(item.choice.model).backend === "llama")
             resources.add("uses:llama-runtime");
@@ -200,6 +204,25 @@ export class JobQueue {
   }
   /** Fingerprints one image for the variants view (set by the service). */
   fingerprint?: (payload: { hashes: string[] }, index: number) => Promise<"imported" | "skipped">;
+  /** How many API cells to run together from `from` (1 when local or retrying). */
+  private remoteBatch(
+    payload: { items?: { choice?: { provider?: string } }[] },
+    from: number,
+    total: number,
+    retryItems: Set<number> | null,
+  ) {
+    if (retryItems || !payload.items) return 1;
+    const size = Math.max(1, Math.min(50, this.repo.getSettings().apiParallel ?? 10));
+    let count = 0;
+    while (
+      count < size &&
+      from + count < total &&
+      payload.items[from + count]?.choice?.provider &&
+      payload.items[from + count].choice!.provider !== "local"
+    )
+      count++;
+    return Math.max(1, count);
+  }
   pump() {
     if (this.closed) return;
     const queued = this.repo.db
@@ -271,6 +294,36 @@ export class JobQueue {
         }
       } else for (; done < job.total;) {
         if (signal.aborted || this.closed) break;
+        // API models answer several cells at once (Settings › simultaneous API
+        // requests); local models stay one at a time.
+        const batch =
+          job.kind === "analyze" ? this.remoteBatch(payload, done, job.total, retryItems) : 1;
+        if (batch > 1) {
+          const outcomes = await Promise.allSettled(
+            Array.from({ length: batch }, (_, i) =>
+              this.engine.analyzeOne(payload, done + i, signal),
+            ),
+          );
+          if (signal.aborted) break;
+          // Book the results in item order, as the sequential path does: a
+          // fatal error (refused key, provider offline) stops at its own item,
+          // so a resume starts there and earlier cells count as done.
+          let fatal: unknown = null;
+          for (const outcome of outcomes) {
+            if (outcome.status === "rejected") {
+              if ((outcome.reason as { fatal?: boolean })?.fatal) {
+                fatal = outcome.reason;
+                break;
+              }
+              failed++;
+              this.itemFailed(job.id, done, outcome.reason);
+            } else if (outcome.value === "skipped") skipped++;
+            done++;
+          }
+          this.progress(job.id, done, failed, skipped);
+          if (fatal) throw fatal;
+          continue;
+        }
         try {
           let outcome: "imported" | "skipped" = "imported";
           if (retryItems && !retryItems.has(done)) outcome = "skipped";
@@ -335,6 +388,7 @@ export class JobQueue {
         this.repo.db
           .prepare("UPDATE jobs SET state=?,updated_at=? WHERE id=?")
           .run(failed > 0 ? "failed" : "completed", now(), job.id);
+        this.onFinished?.(job.kind);
       }
     } catch (error) {
       if (!signal.aborted) {
@@ -373,6 +427,8 @@ export class JobQueue {
       .run(done, failed, skipped, now(), jobId);
     this.changed();
   }
+  /** A task reached its end (completed or with failed items). */
+  onFinished?: (kind: string) => void;
   /** Set by tests to observe the regulator of each image import. */
   onRegulator?: (regulator: AdaptiveParallelism) => void;
   /**
