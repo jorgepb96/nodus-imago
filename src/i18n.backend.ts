@@ -111,6 +111,7 @@ export const backendEn: Record<string, string> = {
   "Elige una propiedad de ubicación de esta base de datos.": "Choose a location property from this database.",
   "Selecciona exactamente una columna de título.": "Select exactly one title column.",
   "El valor cambió después de esta operación. No se ha deshecho ningún cambio.": "The value changed after this operation. No change has been undone.",
+  "El valor cambió después de deshacer. No se ha rehecho ningún cambio.": "The value changed after the undo. No change has been redone.",
   "Imagen no encontrada.": "Image not found.",
   "Destino de imagen incompatible.": "Incompatible image destination.",
   "Las imágenes pertenecen a otra base de datos.": "The images belong to another database.",

@@ -58,7 +58,7 @@ function singleDatabase(search: SearchInput): string {
 const CONTENT_WRITES = new Set([
   "createRow", "createRows", "setCell", "deleteRows", "csvImport", "importImages",
   "notionImport", "nodusImport", "restore", "_restoreBackup", "reviewProposals",
-  "undo", "addColumn", "updateColumn", "deleteColumn", "saveOptions", "deleteImage",
+  "undo", "redo", "addColumn", "updateColumn", "deleteColumn", "saveOptions", "deleteImage",
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
@@ -826,7 +826,11 @@ export class Service {
       case "reviewProposals":
         return this.repo.reviewProposals(input.ids, input.action);
       case "undo":
-        return this.repo.undo();
+        return this.repo.undo(input.scope);
+      case "redo":
+        return this.repo.redo(input.scope);
+      case "historyState":
+        return this.repo.historyState(input.scope);
       case "savedSearches":
         return this.repo.db
           .prepare(

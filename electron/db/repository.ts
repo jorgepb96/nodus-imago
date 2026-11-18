@@ -40,6 +40,9 @@ import type {
   Job,
   Page,
   Proposal,
+  HistoryKind,
+  HistoryScope,
+  HistoryStep,
   RecordRow,
   SearchInput,
   Settings,
@@ -107,6 +110,26 @@ export class Repository {
       this.db.exec(
         "ALTER TABLE record_embeddings ADD COLUMN stale INTEGER NOT NULL DEFAULT 0",
       );
+    // Undo history learns what made each batch (so the proposals dialog
+    // touches only proposals) and in which order batches were undone (Redo).
+    // Batches undone before this existed stay out of Redo.
+    const historyColumns = new Set(
+      (
+        this.db.prepare("PRAGMA table_info(history)").all() as {
+          name: string;
+        }[]
+      ).map((c) => c.name),
+    );
+    for (const [name, type] of [
+      ["kind", "TEXT"],
+      ["undone_seq", "INTEGER"],
+      ["undo_mark", "INTEGER"],
+    ])
+      if (!historyColumns.has(name))
+        this.db.exec(`ALTER TABLE history ADD COLUMN ${name} ${type}`);
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS history_batch ON history(batch_id); CREATE INDEX IF NOT EXISTS history_undone ON history(undone_seq) WHERE undone_seq IS NOT NULL;",
+    );
     // The full-text index used to be kept in step by row_id, an unindexed
     // FTS column, so every record edit scanned the whole index (25 ms per
     // record in a 7,000-record catalogue: minutes for a rename or a type
@@ -1370,7 +1393,7 @@ export class Repository {
         if (after !== p.before_value)
           this.db
             .prepare(
-              "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at) VALUES(?,?,?,?,?,?)",
+              "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at,kind) VALUES(?,?,?,?,?,?,'proposals')",
             )
             .run(batch, p.row_id, p.column_id, p.before_value, after, now());
         this.db
@@ -1381,19 +1404,72 @@ export class Repository {
       return { applied, conflicts };
     })();
   }
-  undo() {
-    return this.db.transaction(() => {
-      const last = this.db
+  /** The most recent batch Undo would revert in this scope. */
+  private undoBatch(scope: HistoryScope) {
+    return (
+      this.db
         .prepare(
-          "SELECT batch_id FROM history WHERE undone=0 ORDER BY id DESC LIMIT 1",
+          `SELECT batch_id FROM history WHERE undone=0${scope === "proposals" ? " AND kind='proposals'" : ""} ORDER BY id DESC LIMIT 1`,
         )
-        .get() as any;
-      if (!last) return 0;
+        .get() as { batch_id: string } | undefined
+    )?.batch_id;
+  }
+  /**
+   * The batch Redo would re-apply: the last one undone in this scope, as long
+   * as nothing was changed after that undo. «Unificar valores» is not redone
+   * (its options were restored, not kept), and it also stops older batches
+   * from being redone over it.
+   */
+  private redoBatch(scope: HistoryScope) {
+    const last = this.db
+      .prepare(
+        `SELECT batch_id,kind,undo_mark FROM history WHERE undone=1 AND undone_seq IS NOT NULL${scope === "proposals" ? " AND kind='proposals'" : ""} ORDER BY undone_seq DESC, id DESC LIMIT 1`,
+      )
+      .get() as
+      | { batch_id: string; kind: HistoryKind; undo_mark: number }
+      | undefined;
+    if (!last || last.kind === "cleanup") return undefined;
+    const changedSince = this.db
+      .prepare("SELECT 1 FROM history WHERE id>? AND undone=0 LIMIT 1")
+      .get(last.undo_mark);
+    return changedSince ? undefined : last.batch_id;
+  }
+  private historyStep(batch: string | undefined): HistoryStep | null {
+    if (!batch) return null;
+    const summary = this.db
+      .prepare(
+        "SELECT kind,count(*) changes,max(created_at) createdAt FROM history WHERE batch_id=?",
+      )
+      .get(batch) as { kind: HistoryKind; changes: number; createdAt: string };
+    const columns = (
+      this.db
+        .prepare(
+          "SELECT DISTINCT c.name FROM history h JOIN db_columns c ON c.id=h.column_id WHERE h.batch_id=? ORDER BY c.position",
+        )
+        .all(batch) as { name: string }[]
+    ).map((c) => c.name);
+    return { ...summary, columns };
+  }
+  /** What Undo and Redo would change in a scope, shown before they run. */
+  historyState(scope: HistoryScope = "all") {
+    return {
+      undo: this.historyStep(this.undoBatch(scope)),
+      redo: this.historyStep(this.redoBatch(scope)),
+    };
+  }
+  /**
+   * Reverts the last change batch. The proposals dialog passes the
+   * "proposals" scope, so it never reverts a bulk edit made elsewhere.
+   */
+  undo(scope: HistoryScope = "all") {
+    return this.db.transaction(() => {
+      const batch = this.undoBatch(scope);
+      if (!batch) return 0;
       const changes = this.db
         .prepare(
           "SELECT * FROM history WHERE batch_id=? AND undone=0 ORDER BY id DESC",
         )
-        .all(last.batch_id) as any[];
+        .all(batch) as any[];
       for (const c of changes)
         if (
           (this.getRow(c.row_id).cells[c.column_id] ?? null) !== c.after_value
@@ -1405,7 +1481,7 @@ export class Repository {
       // the cells can point to them again.
       const restores = this.db
         .prepare("SELECT option_json FROM option_restores WHERE batch_id=? ORDER BY id")
-        .all(last.batch_id) as { option_json: string }[];
+        .all(batch) as { option_json: string }[];
       const databases = new Set<string>();
       for (const r of restores) {
         const o = JSON.parse(r.option_json);
@@ -1417,12 +1493,49 @@ export class Repository {
         databases.add(o.database_id);
       }
       if (restores.length)
-        this.db.prepare("DELETE FROM option_restores WHERE batch_id=?").run(last.batch_id);
+        this.db.prepare("DELETE FROM option_restores WHERE batch_id=?").run(batch);
+      const { seq, mark } = this.db
+        .prepare(
+          "SELECT coalesce(max(undone_seq),0)+1 seq,max(id) mark FROM history",
+        )
+        .get() as { seq: number; mark: number };
       for (const c of changes) {
         this.setCell(c.row_id, c.column_id, c.before_value, false);
-        this.db.prepare("UPDATE history SET undone=1 WHERE id=?").run(c.id);
+        this.db
+          .prepare(
+            `UPDATE history SET undone=1,undone_seq=?,undo_mark=?${restores.length ? ",kind='cleanup'" : ""} WHERE id=?`,
+          )
+          .run(seq, mark, c.id);
       }
       for (const id of databases) this.rebuildText(id);
+      return changes.length;
+    })();
+  }
+  /** Re-applies the last undone batch in a scope (see redoBatch). */
+  redo(scope: HistoryScope = "all") {
+    return this.db.transaction(() => {
+      const batch = this.redoBatch(scope);
+      if (!batch) return 0;
+      const changes = this.db
+        .prepare(
+          "SELECT * FROM history WHERE batch_id=? AND undone=1 ORDER BY id",
+        )
+        .all(batch) as any[];
+      for (const c of changes)
+        if (
+          (this.getRow(c.row_id).cells[c.column_id] ?? null) !== c.before_value
+        )
+          throw new Error(
+            "El valor cambió después de deshacer. No se ha rehecho ningún cambio.",
+          );
+      for (const c of changes) {
+        this.setCell(c.row_id, c.column_id, c.after_value, false);
+        this.db
+          .prepare(
+            "UPDATE history SET undone=0,undone_seq=NULL,undo_mark=NULL WHERE id=?",
+          )
+          .run(c.id);
+      }
       return changes.length;
     })();
   }

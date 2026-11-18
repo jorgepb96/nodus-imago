@@ -717,7 +717,9 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   reviewProposals: z
     .object({ ids, action: z.enum(["accept", "reject"]) })
     .strict(),
-  undo: z.undefined(),
+  undo: z.object({ scope: z.enum(["all", "proposals"]) }).strict(),
+  redo: z.object({ scope: z.enum(["all", "proposals"]) }).strict(),
+  historyState: z.object({ scope: z.enum(["all", "proposals"]) }).strict(),
   credentialsStatus: z.undefined(),
   setApiKey: z
     .object({ provider: providerSchema, key: z.string().max(10000) })
