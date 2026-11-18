@@ -9,6 +9,7 @@ import { decodeCheckbox, decodeMultiSelect } from './databases';
 import type { DatabaseColumn, DatabaseRow } from './databases';
 type PromptLanguage = 'es'|'en'|'fr'|'de'|'pt'|'pt-BR'|'it'|'tr'|'zh-Hans'|'zh-Hant'|'vi'|'ja'|'ru'|'uk'|'ko';
 import { databasePropertyPlainText } from './databaseProperties';
+import type { AiPresetId } from './databases';
 
 /** A preset the user can drop into an AI column's prompt. */
 export interface AiColumnPreset {
@@ -59,6 +60,154 @@ export const AI_COLUMN_PRESETS: AiColumnPreset[] = [
   { id: 'describe_image', label: 'Describir imagen', prompt: 'Describe en 40-60 palabras la imagen adjunta a esta fila.', needsImage: true },
   { id: 'ocr', label: 'Transcribir (OCR)', prompt: 'Transcribe literalmente todo el texto que aparezca en la imagen o archivo adjunto. Devuelve solo la transcripción.', needsImage: true },
 ];
+
+/** Ready-made tasks for an AI property. Labels are Spanish source strings (t()). */
+export const AI_PRESETS: { id: AiPresetId; label: string; hint: string }[] = [
+  { id: 'describe', label: 'Descripción breve', hint: 'Dos o tres frases con lo esencial de la imagen.' },
+  { id: 'describe_detailed', label: 'Descripción detallada', hint: 'Un texto en prosa, en párrafos, con lo que se ve.' },
+  { id: 'tags', label: 'Etiquetas', hint: 'Palabras clave: de tu lista o libres.' },
+  { id: 'transcribe', label: 'Transcribir texto', hint: 'Copia literal del texto visible (sellos, notas, pies).' },
+  { id: 'title', label: 'Título sugerido', hint: 'Un título breve y descriptivo.' },
+  { id: 'custom', label: 'Personalizado', hint: 'Escribe tus propias instrucciones.' },
+];
+
+/** A ready-made task the user saved (Settings › aiUserPresets). */
+export interface AiUserPreset {
+  id: string;
+  name: string;
+  prompt: string;
+  /** text: one value; tags: a list of labels. */
+  output: 'text' | 'tags';
+}
+
+/** The preset a column uses: explicit, else custom when it has its own prompt. */
+export function aiPresetOf(config: { aiPreset?: AiPresetId; aiPrompt?: string }): AiPresetId {
+  if (config.aiPreset && AI_PRESETS.some((p) => p.id === config.aiPreset)) return config.aiPreset;
+  return config.aiPrompt?.trim() ? 'custom' : 'describe';
+}
+
+type PresetCopy = {
+  output: { value: string; list: string };
+  describe: string;
+  describe_detailed: string;
+  /** max null: as many as apply. */
+  tagsFree: (max: number | null) => string;
+  tagsFixed: (labels: string, max: number | null) => string;
+  transcribe: string;
+  title: string;
+  extra: string;
+  criteria: string;
+  definitions: string;
+  answerIn: (language: string) => string;
+};
+
+const PRESET_COPY: { es: PresetCopy; en: PresetCopy } = {
+  es: {
+    output: {
+      value: 'Formato de respuesta: SOLO un objeto JSON {"value": "..."} cuyo valor es el texto final de la celda. No escribas razonamientos, notas ni nada fuera del JSON.',
+      list: 'Formato de respuesta: SOLO un array JSON de cadenas, por ejemplo ["retrato", "interior"]. No escribas razonamientos, notas ni nada fuera del JSON.',
+    },
+    describe:
+      'Escribe una descripción breve de la imagen en dos o tres frases completas de prosa fluida. Empieza por el tema principal (qué o quién aparece y qué ocurre) y añade después el detalle visual más significativo: el entorno, la luz o la composición. Describe solo lo que se ve; no inventes nombres, fechas ni lugares, y cuando algo no sea seguro dilo con naturalidad ("parece", "posiblemente"). No uses listas, guiones, viñetas, títulos ni negritas.',
+    describe_detailed:
+      'Escribe una descripción detallada de la imagen en prosa, organizada en dos o tres párrafos bien construidos. El primero presenta el tema principal y la escena en conjunto; el segundo recorre los elementos relevantes (personas, objetos, espacio y relaciones entre ellos) siguiendo un orden visual claro, de lo principal a lo secundario; el último, si aporta algo, comenta la técnica, la composición, la luz o el estado de conservación. Describe solo lo observable; no inventes identidades, fechas ni lugares, y señala con naturalidad lo dudoso ("parece", "posiblemente"). No uses listas, guiones, viñetas, títulos ni negritas: solo párrafos separados por una línea en blanco.',
+    tagsFree: (max) => `Propón ${max === null ? "todas las etiquetas pertinentes" : max === 1 ? "una sola etiqueta" : `hasta ${max} etiquetas`} que describan el contenido visible de la imagen: tema, objetos, tipo de espacio, época aparente o técnica cuando sean evidentes. Cada etiqueta tiene una o dos palabras, en minúscula salvo nombres propios, sin repeticiones ni sinónimos.`,
+    tagsFixed: (labels, max) => `Elige ${max === 1 ? "la etiqueta que mejor corresponda" : "las etiquetas que correspondan claramente"} a la imagen${max === null || max === 1 ? "" : `, como máximo ${max}`}, SOLO de esta lista exacta y con la misma escritura: ${labels}. Si ninguna corresponde, devuelve [].`,
+    transcribe:
+      'Transcribe literalmente todo el texto visible en la imagen: inscripciones, sellos, firmas, notas manuscritas y pies impresos. Conserva la lengua, la ortografía, las abreviaturas y los saltos de línea originales; no traduzcas ni corrijas. Escribe [ilegible] en lo que no se pueda leer y separa con una línea en blanco los textos distintos. Si no hay texto, devuelve {"value": ""}.',
+    title: 'Propón un título breve y descriptivo para la imagen, de cuatro a diez palabras, que nombre su tema principal. Sin comillas ni punto final, y sin inventar nombres, fechas ni lugares que no se lean en la imagen.',
+    extra: 'Indicaciones adicionales del usuario',
+    criteria: 'Criterios generales de clasificación (síguelos siempre)',
+    definitions: 'Qué significa cada etiqueta (elige la que mejor encaje con estas definiciones)',
+    answerIn: (language) => `Escribe la respuesta en ${language}.`,
+  },
+  en: {
+    output: {
+      value: 'Answer format: ONLY a JSON object {"value": "..."} whose value is the final text of the cell. Do not write reasoning, notes or anything outside the JSON.',
+      list: 'Answer format: ONLY a JSON array of strings, for example ["portrait", "interior"]. Do not write reasoning, notes or anything outside the JSON.',
+    },
+    describe:
+      'Write a short description of the image in two or three complete sentences of flowing prose. Start with the main subject (what or who appears and what is happening), then add the most significant visual detail: the setting, the light or the composition. Describe only what is visible; do not invent names, dates or places, and state uncertainty naturally ("appears to", "possibly"). Do not use lists, dashes, bullet points, headings or bold text.',
+    describe_detailed:
+      'Write a detailed description of the image in prose, organised in two or three well-built paragraphs. The first introduces the main subject and the scene as a whole; the second goes through the relevant elements (people, objects, space and how they relate) in a clear visual order, from main to secondary; the last, if it adds something, comments on technique, composition, light or condition. Describe only what is observable; do not invent identities, dates or places, and state uncertainty naturally ("appears to", "possibly"). Do not use lists, dashes, bullet points, headings or bold text: only paragraphs separated by a blank line.',
+    tagsFree: (max) => `Suggest ${max === null ? "every relevant tag" : max === 1 ? "a single tag" : `up to ${max} tags`} describing the visible content of the image: subject, objects, type of space, apparent period or technique when evident. Each tag has one or two words, lower case except proper names, with no repetitions or synonyms.`,
+    tagsFixed: (labels, max) => `Choose ${max === 1 ? "the tag that best applies" : "the tags that clearly apply"} to the image${max === null || max === 1 ? "" : `, at most ${max}`}, ONLY from this exact list and with the same spelling: ${labels}. If none applies, return [].`,
+    transcribe:
+      'Transcribe literally all the text visible in the image: inscriptions, stamps, signatures, handwritten notes and printed captions. Keep the original language, spelling, abbreviations and line breaks; do not translate or correct. Write [illegible] for unreadable parts and separate different texts with a blank line. If there is no text, return {"value": ""}.',
+    title: 'Suggest a short descriptive title for the image, four to ten words long, naming its main subject. No quotation marks or final full stop, and do not invent names, dates or places that cannot be read in the image.',
+    extra: 'Additional instructions from the user',
+    criteria: 'General classification criteria (always follow them)',
+    definitions: 'What each tag means (choose the one that best fits these definitions)',
+    answerIn: (language) => `Write the answer in ${language}.`,
+  },
+};
+
+function presetCopy(language: string): PresetCopy {
+  return language === 'es' ? PRESET_COPY.es : PRESET_COPY.en;
+}
+
+/** The task text of a built-in preset, as the user reads it in Properties. */
+export function aiPresetTask(
+  preset: AiPresetId,
+  language: string,
+  tags: string[] = [],
+  /** Most tags the AI may use; null for no limit. */
+  maxTags: number | null = 5,
+): string {
+  const copy = presetCopy(language);
+  switch (preset) {
+    case 'tags':
+      return tags.length
+        ? copy.tagsFixed(JSON.stringify(tags), maxTags === null ? null : Math.min(maxTags, tags.length))
+        : copy.tagsFree(maxTags);
+    case 'custom':
+      return '';
+    default:
+      return copy[preset];
+  }
+}
+
+/**
+ * The instruction and expected output shape for an AI property, written in the
+ * interface language (Spanish or English; other languages use the English
+ * wording and ask for the answer in their own language).
+ */
+export function aiPresetInstruction(
+  config: {
+    aiPreset?: AiPresetId;
+    aiPrompt?: string;
+    aiTags?: string[];
+    aiOutput?: 'text' | 'tags';
+    /** Classification: general criteria and a definition per tag. */
+    aiCriteria?: string;
+    aiTagDefinitions?: { label: string; definition: string }[];
+  },
+  language: string,
+  languageName: string,
+  /** How many tags at most (1 for a single choice, null for no limit). */
+  maxTags: number | null = 5,
+): { instruction: string; output: 'value' | 'list'; tags: string[] | null } {
+  const copy = presetCopy(language),
+    preset = aiPresetOf(config),
+    extra = config.aiPrompt?.trim() ?? '',
+    tags = (config.aiTags ?? []).map((t) => t.trim()).filter(Boolean);
+  const output: 'value' | 'list' =
+    preset === 'tags' || (preset === 'custom' && config.aiOutput === 'tags') ? 'list' : 'value';
+  const task = preset === 'custom' ? extra || copy.describe : aiPresetTask(preset, language, tags, maxTags);
+  const parts = [task];
+  const criteria = config.aiCriteria?.trim();
+  if (criteria) parts.push(`${copy.criteria}:\n${criteria}`);
+  const definitions = (config.aiTagDefinitions ?? []).filter((d) => d.definition.trim());
+  if (definitions.length)
+    parts.push(
+      `${copy.definitions}:\n` +
+        definitions.map((d) => `- ${d.label}: ${d.definition.trim().replace(/\s+/g, ' ')}`).join('\n'),
+    );
+  if (extra && preset !== 'custom') parts.push(`${copy.extra}: ${extra}`);
+  if (preset !== 'transcribe' && !(preset === 'tags' && tags.length)) parts.push(copy.answerIn(languageName));
+  parts.push(copy.output[output]);
+  return { instruction: parts.join('\n\n'), output, tags: preset === 'tags' && tags.length ? tags : null };
+}
 
 /**
  * A plain-text block describing a row, fed to the AI cell's prompt as context. Skips

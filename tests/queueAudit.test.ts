@@ -27,6 +27,8 @@ function fixture() {
     changes++;
   });
   queue.concurrency = () => 2;
+  // These audits cover the sequential queue: one API cell at a time.
+  repo.updateSettings({ apiParallel: 1 });
   const enqueue = (column = "column", count = 1) =>
     repo.newJob(
       "analyze",
@@ -406,6 +408,77 @@ test("deterministic stress: repeated controls preserve terminal states, bounded 
     await f.close();
   }
 });
+test("API cells run in batches of the chosen size and a fatal error stops at its own item", async () => {
+  const f = fixture();
+  let inFlight = 0,
+    peak = 0;
+  const seen: number[] = [];
+  try {
+    f.repo.updateSettings({ apiParallel: 3 });
+    f.engine.analyzeOne = async (_p, i) => {
+      seen.push(i);
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await delay(5);
+      inFlight--;
+      if (i === 4) throw Object.assign(Error("provider offline"), { fatal: true });
+      return i === 1 ? "skipped" : "imported";
+    };
+    const id = f.enqueue("column", 7);
+    f.queue.pump();
+    await f.queue.task;
+    // 0-2 together, then 3-5 together: item 4 is fatal, so 3 counts and 5 waits.
+    assert.equal(peak, 3);
+    assert.deepEqual(seen, [0, 1, 2, 3, 4, 5]);
+    assert.equal(f.job(id).state, "failed");
+    assert.equal(f.job(id).done, 4);
+    assert.equal(f.job(id).skipped, 1);
+    f.engine.analyzeOne = async (_p, i) => {
+      seen.push(i);
+      return "imported";
+    };
+    f.queue.control(id, "resume");
+    await f.queue.task;
+    assert.equal(f.job(id).state, "completed");
+    assert.equal(f.job(id).done, 7);
+  } finally {
+    await f.close();
+  }
+});
+
+test("local cells never run in batches, whatever the API setting", async () => {
+  const f = fixture();
+  let inFlight = 0,
+    peak = 0;
+  try {
+    f.repo.updateSettings({ apiParallel: 10 });
+    f.engine.analyzeOne = async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await delay(2);
+      inFlight--;
+      return "imported";
+    };
+    const id = f.repo.newJob(
+      "analyze",
+      {
+        items: Array.from({ length: 4 }, (_, i) => ({
+          rowId: "row" + i,
+          columnId: "column",
+          choice: { provider: "local", model: "lfm3-vl-2b" },
+        })),
+      },
+      4,
+    );
+    f.queue.pump();
+    await f.queue.task;
+    assert.equal(f.job(id).state, "completed");
+    assert.equal(peak, 1);
+  } finally {
+    await f.close();
+  }
+});
+
 for (const retryItems of [[-1], [1.5], [0, 0], [9], "all"])
   test(`invalid retry selection ${JSON.stringify(retryItems)} is quarantined`, async () => {
     const f = fixture();

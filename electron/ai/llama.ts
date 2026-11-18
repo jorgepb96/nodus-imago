@@ -2,6 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 import { Models } from "./models";
 import type { Repository } from "../db/repository";
+import { StringDecoder } from "node:string_decoder";
+
+/** A UTF-8 locale every platform has (macOS lacks C.UTF-8 in older releases). */
+const UTF8_LOCALE = process.platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8";
 
 // llama.cpp has no JSON-line server mode. Its multimodal CLI does have a
 // persistent chat mode, which keeps the GGUF and projector loaded between
@@ -64,8 +68,19 @@ export class LlamaSession {
       shell: false,
       cwd: path.dirname(executable),
       stdio: ["pipe", "pipe", "pipe"],
+      // An app opened from the Finder has no locale: the engine then reads the
+      // prompt byte by byte and every accented letter reaches the model broken
+      // ("religiÃ³n"), which it copies into its answers. Force UTF-8.
+      env: {
+        ...process.env,
+        LANG: UTF8_LOCALE,
+        LC_ALL: UTF8_LOCALE,
+        LC_CTYPE: UTF8_LOCALE,
+      },
     });
-    this.child.stdout.on("data", (chunk) => this.onData(chunk.toString()));
+    // Decode across chunks: a letter split between two reads stays whole.
+    const decoder = new StringDecoder("utf8");
+    this.child.stdout.on("data", (chunk) => this.onData(decoder.write(chunk)));
     this.child.stderr.on("data", (chunk) => {
       this.errors = (this.errors + chunk.toString()).slice(-3000);
     });
@@ -90,9 +105,13 @@ export class LlamaSession {
     this.ready.catch(() => this.close());
   }
 
+  /** Receives the output so far while an answer is being generated. */
+  onPartial: ((output: string) => void) | null = null;
+
   private onData(chunk: string) {
     if (!this.alive) return;
     this.buffer += chunk;
+    this.onPartial?.(this.buffer);
     if (this.buffer.length > MAX_OUTPUT) {
       this.fail(new Error("La salida del motor de visión es demasiado grande."));
       return;
@@ -159,7 +178,12 @@ export class LlamaSession {
     return prompt;
   }
 
-  async run(image: string, prompt: string, signal: AbortSignal) {
+  async run(
+    image: string,
+    prompt: string,
+    signal: AbortSignal,
+    onPartial?: (output: string) => void,
+  ) {
     await this.ready;
     if (!this.alive) throw new Error("Motor de visión cerrado.");
     if (signal.aborted) throw new Error("Análisis cancelado.");
@@ -170,8 +194,21 @@ export class LlamaSession {
       throw new Error("El prompt de visión supera el límite local.");
     await this.command("/clear", signal);
     await this.command("/image " + image, signal);
-    const raw = await this.command(line, signal);
-    return extractChatAnswer(raw, line);
+    // The engine first echoes the prompt (with its example answers and the
+    // list of allowed tags), then a blank line, then the answer: only what
+    // follows that boundary is shown while it is written.
+    this.onPartial = onPartial
+      ? (output) => {
+          const boundary = output.indexOf("\n\n");
+          if (boundary >= 0) onPartial(output.slice(boundary + 2));
+        }
+      : null;
+    try {
+      const raw = await this.command(line, signal);
+      return extractChatAnswer(raw, line);
+    } finally {
+      this.onPartial = null;
+    }
   }
 
   close() {
@@ -182,10 +219,13 @@ export class LlamaSession {
   }
 }
 
+/** text: free prose; json: array of strings; value: {"value": string}. */
+export type LlamaMode = "text" | "json" | "value";
+
 type Slot = {
   key: string;
   modelId: string;
-  mode: "text" | "json";
+  mode: LlamaMode;
   session: LlamaSession | null;
   busy: boolean;
   idle?: ReturnType<typeof setTimeout>;
@@ -195,7 +235,7 @@ type Waiter = {
   assigned?: Slot;
   key: string;
   modelId: string;
-  mode: "text" | "json";
+  mode: LlamaMode;
   resolve: (slot: Slot) => void;
   reject: (error: Error) => void;
 };
@@ -231,7 +271,7 @@ export class LlamaPool {
     return Math.max(1, Math.min(cap, settings.parallelJobs, 4));
   }
 
-  private keyFor(modelId: string, mode: "text" | "json") {
+  private keyFor(modelId: string, mode: LlamaMode) {
     const settings = this.settings();
     return JSON.stringify({
       modelId,
@@ -304,6 +344,15 @@ export class LlamaPool {
       args.push(
         "--json-schema",
         JSON.stringify({ type: "array", items: { type: "string" } }),
+      );
+    else if (slot.mode === "value")
+      args.push(
+        "--json-schema",
+        JSON.stringify({
+          type: "object",
+          properties: { value: { type: "string" } },
+          required: ["value"],
+        }),
       );
     const session = new LlamaSession(executable, args);
     slot.session = session;
@@ -397,7 +446,8 @@ export class LlamaPool {
     image: string,
     prompt: string,
     signal: AbortSignal,
-    mode: "text" | "json" = "text",
+    mode: LlamaMode = "text",
+    onPartial?: (output: string) => void,
   ) {
     if (signal.aborted) throw new Error("Análisis cancelado.");
     const slot = await this.acquire({
@@ -410,7 +460,11 @@ export class LlamaPool {
     try {
       if (!slot.session)
         throw new Error("No se pudo iniciar el motor de visión.");
-      return await slot.session.run(image, prompt, signal);
+      const answer = await slot.session.run(image, prompt, signal, onPartial);
+      // A JSON-constrained session keeps its grammar finished after the first
+      // answer, and every later answer comes back empty: start a fresh one.
+      if (mode !== "text") this.retire(slot);
+      return answer;
     } catch (error) {
       this.retire(slot, false);
       throw error;

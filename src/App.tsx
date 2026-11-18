@@ -29,6 +29,7 @@ import {
   Bookmark,
   ScanSearch,
   Sparkles,
+  Loader2,
   ChartScatter,
   Trash2,
   Check,
@@ -59,10 +60,11 @@ import {
 } from "lucide-react";
 import type {
   DatabaseColumn,
+  DatabaseColumnType,
   DatabaseDetail,
   DatabaseSummary,
 } from "../shared/databases";
-import { decodeMultiSelect } from "../shared/databases";
+import { decodeMultiSelect, isAiColumn } from "../shared/databases";
 import type { CsvImportPlanData } from "../shared/databaseCsv";
 import type {
   ImagePlan,
@@ -85,6 +87,9 @@ import { applyAppIcon } from "./theme/appIcon";
 import { Button, Empty, Modal, Spinner, Thumbnail } from "./components/ui";
 import { Cell } from "./components/Cell";
 import { Properties, type Perform } from "./components/Properties";
+import { AddPropertyMenu } from "./components/AddPropertyMenu";
+import { AiColumnMenu } from "./components/AiColumnMenu";
+import { ColumnTypeIcon } from "./components/ColumnTypeIcon";
 import { HistoryButtons } from "./components/HistoryButtons";
 import { CsvImport, ImageImport } from "./components/ImportDialogs";
 import { CriteriaBar, ViewControls } from "./components/ViewControls";
@@ -236,6 +241,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [bulkCount, setBulkCount] = useState(5),
     [csv, setCsv] = useState<CsvImportPlanData | null>(null),
     [imagePlan, setImagePlan] = useState<ImagePlan | null>(null),
+    [draggingFiles, setDraggingFiles] = useState(false),
     [openRow, setOpenRow] = useState<RecordRow | null>(null),
     [recordDetail, setRecordDetail] = useState<DatabaseDetail | null>(null),
     [proposals, setProposals] = useState<Proposal[]>([]),
@@ -372,14 +378,37 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   useEffect(() => {
     if (!api) return;
     return api.onDrop((result) => {
+      setDraggingFiles(false);
       if (result.error) notify(result.error, true);
-      else if (result.plan) setImagePlan(result.plan);
+      else if (result.plan) {
+        // Images dropped on a database: one new record per image, at once.
+        const plan = result.plan;
+        if (!plan.matches.length) {
+          notify(t("No hay imágenes compatibles entre los archivos soltados."), true);
+          return;
+        }
+        void perform(async () => {
+          await api.call("importImages", {
+            token: plan.token,
+            storage: "copy",
+            createUnmatched: true,
+            columnId: plan.columnId,
+            assignments: plan.matches.map((m) => ({
+              pathToken: m.pathToken,
+              rowId: null,
+            })),
+          });
+          refresh();
+        }, plan.matches.length === 1
+          ? "Creando un registro con la imagen…"
+          : "Creando un registro por cada imagen…");
+      }
       else if (result.queryImage) {
         setImageQuery(result.queryImage);
         setSimilarId(undefined);
       }
     });
-  }, [api, notify]);
+  }, [api, notify, perform, refresh, t]);
   useEffect(() => {
     if (!api) return;
     let cancelled = false;
@@ -813,6 +842,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [menuView, setMenuView] = useState<"main" | "calc">("main"),
     [viewMenuAt, setViewMenuAt] = useState<{ id: DatabaseViewId; tab: HTMLElement } | null>(null),
     [editColumn, setEditColumn] = useState<string | null>(null),
+    [createType, setCreateType] = useState<DatabaseColumnType | null>(null),
+    [addPropertyOpen, setAddPropertyOpen] = useState(false),
+    [aiMenu, setAiMenu] = useState<string | null>(null),
+    [aiPending, setAiPending] = useState<Set<string>>(() => new Set()),
+    [cellStream, setCellStream] = useState<Record<string, string>>({}),
     [filterRequest, setFilterRequest] = useState(0),
     [sortRequest, setSortRequest] = useState(0),
     [summaries, setSummaries] = useState<Record<string, string>>({}),
@@ -820,6 +854,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const [prefs, updatePrefs] = useColumnPrefs(detail?.database.id ?? null),
     columnWidths = prefs.widths,
     menuAnchor = useRef<HTMLElement | null>(null),
+    addPropertyAnchor = useRef<HTMLElement | null>(null),
+    aiMenuAnchor = useRef<HTMLElement | null>(null),
     tableRef = useRef<HTMLTableElement>(null),
     tableScrollRef = useRef<HTMLDivElement>(null),
     shownColumns = detail ? visibleColumns(detail.columns, prefs) : [],
@@ -830,6 +866,39 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     frozenKey = frozenIds.join("|");
   const saveWidths = (next: Record<string, number>) =>
     updatePrefs((p) => ({ ...p, widths: next }));
+  // AI properties write into their cells live; the saved value replaces it.
+  useEffect(
+    () =>
+      api.onCellStream?.(({ rowId, columnId, text }) => {
+        const key = rowId + ":" + columnId;
+        setCellStream((current) => {
+          if (text != null) return { ...current, [key]: text };
+          if (!(key in current)) return current;
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+        if (text == null) {
+          setAiPending((current) => {
+            if (!current.has(key)) return current;
+            const next = new Set(current);
+            next.delete(key);
+            return next;
+          });
+          refresh();
+        }
+      }),
+    [api, refresh],
+  );
+  useEffect(() => {
+    // The cell spinners last while an analysis is waiting or running.
+    if (
+      !status?.jobs.some(
+        (j) => j.kind === "analyze" && ["queued", "running"].includes(j.state),
+      )
+    )
+      setAiPending((current) => (current.size ? new Set() : current));
+  }, [status?.jobs]);
   /** One table cell for a property: images as a thumbnail, relations as a
    * link to the record and everything else as an editable cell. */
   const renderCell = (row: RecordRow, c: DatabaseColumn) => {
@@ -854,7 +923,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           {t("Relación")} ↗
         </button>
       );
-    return (
+    const cell = (
       <Cell
         compact
         wrap={area !== "search" && prefs.wrap.includes(c.id)}
@@ -871,6 +940,79 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           })
         }
       />
+    );
+    if (!isAiColumn(c) || area === "search") return cell;
+    const key = row.id + ":" + c.id,
+      live = cellStream[key],
+      pending = aiPending.has(key) || live !== undefined;
+    return (
+      <div className="ai-cell">
+        <div className="ai-cell-value">
+          {live !== undefined && c.type !== "ai" ? (
+            // A selection being filled shows its tags as chips as they arrive.
+            <span className="chips ai-cell-live-chips" aria-live="polite">
+              {live
+                .split(", ")
+                .filter(Boolean)
+                .map((label, i) => (
+                  <span
+                    className="chip"
+                    key={i}
+                    style={
+                      {
+                        "--chip":
+                          c.options.find(
+                            (o) => o.label.toLowerCase() === label.toLowerCase(),
+                          )?.color ?? "#7c3aed",
+                      } as React.CSSProperties
+                    }
+                  >
+                    {label}
+                  </span>
+                ))}
+            </span>
+          ) : live !== undefined ? (
+            <span className="ai-cell-live" aria-live="polite">
+              {live}
+            </span>
+          ) : (
+            cell
+          )}
+        </div>
+        <button
+          type="button"
+          className={"ai-cell-button" + (pending ? " pending" : "")}
+          disabled={pending}
+          aria-label={t("Generar con IA")}
+          data-tooltip={
+            pending
+              ? t("En cola…")
+              : row.cells[c.id]
+                ? t("Regenerar con IA")
+                : t("Generar con IA")
+          }
+          onClick={(e) => {
+            e.stopPropagation();
+            void perform(async () => {
+              await api.call("analyze", {
+                rowIds: [row.id],
+                columnIds: [c.id],
+                language: status?.settings.language ?? "es",
+                detailed: true,
+                overwrite: true,
+              });
+              setAiPending((current) => new Set(current).add(key));
+              refresh();
+            });
+          }}
+        >
+          {pending ? (
+            <Loader2 size={13} className="spin" />
+          ) : (
+            <Sparkles size={13} />
+          )}
+        </button>
+      </div>
     );
   };
   const columnStyle = (id: string): React.CSSProperties | undefined => {
@@ -1582,7 +1724,21 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           </div>
         </aside>
         <main
-          className="workspace"
+          className={"workspace" + (draggingFiles ? " dropping-files" : "")}
+          onDragOver={(e) => {
+            if (
+              area === "databases" &&
+              detail &&
+              e.dataTransfer.types.includes("Files") &&
+              !draggingFiles
+            )
+              setDraggingFiles(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+              setDraggingFiles(false);
+          }}
+          onDrop={() => setDraggingFiles(false)}
           data-drop-target={
             area === "search" && mode !== "literal"
               ? "search"
@@ -1591,6 +1747,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 : ""
           }
         >
+          {draggingFiles && (
+            <div className="drop-files-hint" role="status">
+              <ImagePlus size={18} />
+              {t("Suelta las imágenes: se creará un registro por cada una")}
+            </div>
+          )}
           {area === "home" ? (
             <Home
               status={status}
@@ -2860,8 +3022,29 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                     }}
                                   >
                                     <GripVertical size={10} className="column-grip" />
+                                    <ColumnTypeIcon
+                                      type={c.type}
+                                      ai={c.type !== "ai" && isAiColumn(c)}
+                                    />
                                     <span>{c.name}</span>
                                   </span>
+                                  {isAiColumn(c) && (
+                                    <button
+                                      type="button"
+                                      className="column-ai-button"
+                                      aria-label={`${t("Generar con IA")} · ${c.name}`}
+                                      data-tooltip={t("Generar con IA")}
+                                      aria-haspopup="menu"
+                                      aria-expanded={aiMenu === c.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        aiMenuAnchor.current = e.currentTarget;
+                                        setAiMenu((open) => (open === c.id ? null : c.id));
+                                      }}
+                                    >
+                                      <Sparkles size={13} />
+                                    </button>
+                                  )}
                                   <span
                                     className="column-resize"
                                     role="separator"
@@ -2878,7 +3061,24 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 </th>
                               ))
                             )}
-                            <th />
+                            <th className="add-property-col">
+                              {area === "databases" && detail && (
+                                <button
+                                  type="button"
+                                  className="add-property-button"
+                                  aria-label={t("Añadir propiedad")}
+                                  data-tooltip={t("Añadir propiedad")}
+                                  aria-haspopup="menu"
+                                  aria-expanded={addPropertyOpen}
+                                  onClick={(e) => {
+                                    addPropertyAnchor.current = e.currentTarget;
+                                    setAddPropertyOpen((open) => !open);
+                                  }}
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              )}
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -3482,9 +3682,56 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             }
           />
         )}
+      {aiMenu &&
+        detail &&
+        area === "databases" &&
+        detail.columns.some((c) => c.id === aiMenu) && (
+          <AiColumnMenu
+            detail={detail}
+            column={detail.columns.find((c) => c.id === aiMenu)!}
+            anchor={aiMenuAnchor as React.RefObject<HTMLElement>}
+            language={status?.settings.language ?? "es"}
+            perform={perform}
+            onClose={() => setAiMenu(null)}
+            onQueued={refresh}
+          />
+        )}
+      {addPropertyOpen && detail && area === "databases" && (
+        <AddPropertyMenu
+          detail={detail}
+          anchor={addPropertyAnchor as React.RefObject<HTMLElement>}
+          perform={perform}
+          onClose={() => setAddPropertyOpen(false)}
+          onSetup={(type) => {
+            setCreateType(type);
+            setModal("properties");
+          }}
+          onCreated={async (id) => {
+            const next = await window.imago.call("detail", {
+              id: detail.database.id,
+            });
+            setDetail(next);
+            setAllDetails((all) =>
+              all.map((d) => (d.database.id === next.database.id ? next : d)),
+            );
+            refresh();
+            // Wait for the new header to render, then name it from its menu.
+            requestAnimationFrame(() => {
+              const th = tableRef.current?.querySelector<HTMLElement>(
+                `th[data-column="${id}"]`,
+              );
+              if (th) {
+                th.scrollIntoView({ block: "nearest", inline: "nearest" });
+                openColumnMenu(id, th);
+              }
+            });
+          }}
+        />
+      )}
       {modal === "properties" && detail && (
         <Properties
           initialColumnId={editColumn}
+          initialCreateType={createType}
           detail={detail}
           status={status!}
           perform={perform}
@@ -3492,6 +3739,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onClose={() => {
             setModal(null);
             setEditColumn(null);
+            setCreateType(null);
           }}
         />
       )}

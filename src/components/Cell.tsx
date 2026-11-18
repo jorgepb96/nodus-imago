@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   decodeMultiSelect,
   encodeMultiSelect,
@@ -351,7 +351,43 @@ function OptionPicker({
 }) {
   const t = useT(),
     [open, setOpen] = useState(false),
-    [query, setQuery] = useState("");
+    [query, setQuery] = useState(""),
+    picker = useRef<HTMLDetailsElement>(null),
+    menu = useRef<HTMLDivElement>(null);
+  // The list floats above the page (top layer), so a table with few rows or
+  // a scrolling container never cuts it; it opens upwards when there is no
+  // room below.
+  useLayoutEffect(() => {
+    const node = menu.current,
+      anchor = picker.current?.querySelector("summary");
+    if (!open || !node || !anchor) return;
+    node.setAttribute("popover", "manual");
+    node.showPopover?.();
+    const place = () => {
+      const r = anchor.getBoundingClientRect(),
+        h = Math.min(node.scrollHeight, 300),
+        below = window.innerHeight - r.bottom - 12;
+      node.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - node.offsetWidth - 8))}px`;
+      node.style.top =
+        below >= h || below >= r.top
+          ? `${r.bottom + 5}px`
+          : `${Math.max(8, r.top - h - 5)}px`;
+    };
+    place();
+    const close = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!node.contains(target) && !picker.current?.contains(target)) setOpen(false);
+    };
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    document.addEventListener("pointerdown", close);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+      document.removeEventListener("pointerdown", close);
+      if (node.isConnected && node.matches(":popover-open")) node.hidePopover();
+    };
+  }, [open]);
   const needle = fold(query.trim());
   const matches = open
     ? column.options.filter((o) => !needle || fold(o.label).includes(needle))
@@ -363,6 +399,7 @@ function OptionPicker({
   ];
   return (
     <details
+      ref={picker}
       className="option-picker"
       open={open}
       onToggle={(e) => {
@@ -392,7 +429,7 @@ function OptionPicker({
         </span>
       </summary>
       {open && (
-        <div className="option-menu">
+        <div className="option-menu" ref={menu}>
           {column.options.length > 10 && (
             <input
               className="option-search"

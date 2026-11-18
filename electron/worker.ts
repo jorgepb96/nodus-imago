@@ -3,13 +3,17 @@ import { Service } from "./service";
 let nextCompletion = 0;
 const completions = new Map<
   number,
-  { resolve: (v: any) => void; reject: (error: Error) => void }
+  {
+    resolve: (v: any) => void;
+    reject: (error: Error) => void;
+    onDelta?: (text: string) => void;
+  }
 >();
 const service = new Service(
   workerData.root,
   workerData.script,
   () => parentPort!.postMessage({ event: "changed" }),
-  (input, signal) =>
+  (input, signal, onDelta) =>
     new Promise((resolve, reject) => {
       if (signal.aborted) { reject(new Error("Solicitud cancelada.")); return; }
       const id = ++nextCompletion;
@@ -17,6 +21,7 @@ const service = new Service(
         parentPort!.postMessage({ event: "abortCompletion", completionId: id });
       signal.addEventListener("abort", abort, { once: true });
       completions.set(id, {
+        onDelta,
         resolve: (v) => {
           signal.removeEventListener("abort", abort);
           resolve(v);
@@ -29,7 +34,14 @@ const service = new Service(
       parentPort!.postMessage({ event: "complete", completionId: id, input });
     }),
 );
+// Text an AI property is writing, shown in its cell while it arrives.
+service.engine.onCellStream = (delta) =>
+  parentPort!.postMessage({ event: "cellStream", delta });
 parentPort!.on("message", async (message) => {
+  if (message.event === "completionDelta") {
+    completions.get(message.completionId)?.onDelta?.(message.text);
+    return;
+  }
   if (message.event === "completionReply") {
     const pending = completions.get(message.completionId);
     if (!pending) return;

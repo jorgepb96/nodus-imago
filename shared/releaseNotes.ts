@@ -33,6 +33,66 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.3.0",
+    date: "2026-11-18",
+    highlights: [
+      {
+        scope: "ai",
+        category: "new",
+        es: "Las propiedades de IA escriben el resultado directamente en la celda, sin pasar por Revisar propuestas. El texto aparece en directo mientras se genera, con un indicador a la derecha de la celda, y Deshacer lo revierte.",
+        en: "AI properties write their result straight into the cell instead of Review proposals. The text appears live while it is generated, with a spinner at the right of the cell, and Undo reverts it.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Botón de IA en cada celda para generarla o regenerarla, y en la cabecera para rellenar las celdas vacías o regenerar toda la columna (con confirmación).",
+        en: "An AI button in each cell generates or regenerates it, and one in the header fills the empty cells or regenerates the whole column (after confirming).",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Tareas predefinidas en español e inglés: descripción breve o detallada en prosa, etiquetas, transcripción del texto y título sugerido. Puedes leer su prompt, añadir indicaciones y guardar tus propios predefinidos para editarlos o borrarlos después.",
+        en: "Ready-made tasks in Spanish and English: short or detailed prose description, tags, text transcription and suggested title. You can read their prompt, add instructions and save your own presets to edit or delete later.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Las etiquetas de IA son una selección múltiple real, con chips que se filtran: la IA elige entre tus opciones o añade nuevas, con un máximo de etiquetas a tu elección. Cualquier selección puede rellenarse con IA, con criterios generales de clasificación y una definición por opción en Opciones avanzadas.",
+        en: "AI tags are a real multi-select with chips you can filter: the AI picks from your options or adds new ones, up to the number of tags you choose. Any selection can be filled by AI, with general classification criteria and a definition per option under Advanced options.",
+      },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "Con un proveedor por API, las celdas se envían en paralelo (10 a la vez por defecto, configurable hasta 50 en Ajustes); los modelos locales siguen trabajando de una en una.",
+        en: "With an API provider, cells are sent in parallel (10 at a time by default, up to 50 in Settings); local models keep working one at a time.",
+      },
+      {
+        scope: "ai",
+        category: "fix",
+        es: "El modelo local recibía mal las letras acentuadas al abrir Imago desde el Finder, lo que producía erratas y etiquetas que no encajaban con las opciones. Tampoco devolvía nada en la segunda celda de una misma tanda ni dejaba ya su razonamiento en el resultado.",
+        en: "The local model received accented letters garbled when Imago was opened from the Finder, which caused misspellings and tags that did not match the options. It also returned nothing for the second cell of a run, and its reasoning no longer ends up in the result.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Suelta imágenes sobre una base de datos y se crea un registro por cada una. Un botón + en la cabecera de la tabla añade propiedades eligiendo el tipo, y cada tipo tiene su icono.",
+        en: "Drop images on a database to create one record per image. A + button in the table header adds properties by type, and each type has its own icon.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "Añadir imagen, abrir registro y añadir propiedad quedan fijos a la derecha al desplazar la tabla, y la lista de opciones de una celda ya no se corta dentro de ella.",
+        en: "Add image, open record and add property stay at the right while the table scrolls sideways, and a cell's option list is no longer cut off inside the table.",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "Los tutoriales ya no tapan el menú que explican y se pausan mientras usas una ventana. Tareas permite limpiar las terminadas, y las imágenes nuevas se indexan a los pocos segundos de importarlas.",
+        en: "Tutorials no longer cover the menu they explain and pause while you use a window. Tasks can clear the finished ones, and new images are indexed a few seconds after they are imported.",
+      },
+    ],
+  },
+  {
     version: "0.2.1",
     date: "2026-11-17",
     highlights: [

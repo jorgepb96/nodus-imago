@@ -124,6 +124,7 @@ export class Service {
     remote?: (
       input: CompletionRequest | EmbeddingRequest,
       signal: AbortSignal,
+      onDelta?: (text: string) => void,
     ) => Promise<unknown>,
   ) {
     this.repo = new Repository(root);
@@ -142,7 +143,11 @@ export class Service {
       this.models,
       this.host,
       remote as
-        | ((input: CompletionRequest, signal: AbortSignal) => Promise<string>)
+        | ((
+            input: CompletionRequest,
+            signal: AbortSignal,
+            onDelta?: (text: string) => void,
+          ) => Promise<string>)
         | undefined,
     );
     if (remote)
@@ -194,6 +199,9 @@ export class Service {
     this.autoIndex = new AutoIndexer(this.repo, this.engine, this.queue);
     this.autoIndex.suspended = () => this.restoring || this.closing;
     this.autoIndex.start();
+    this.queue.onFinished = (kind) => {
+      if (kind === "images") this.autoIndex.soon();
+    };
     this.queue.pump();
   }
   private unfinishedJobs() {
@@ -725,6 +733,8 @@ export class Service {
         return this.repo.jobs();
       case "controlJob":
         return this.queue.control(input.id, input.action);
+      case "clearJobs":
+        return this.repo.clearJobs();
       case "pauseAllJobs":
         this.queue.pauseAll();
         return;

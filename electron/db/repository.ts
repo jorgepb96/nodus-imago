@@ -1301,6 +1301,7 @@ export class Repository {
       apiProfiles: {},
       apiDelayMs: 1000,
       parallelJobs: os.totalmem() >= 12 * 2 ** 30 ? 2 : 1,
+      apiParallel: 10,
       fieldEquivalences: [],
       ...parse(saved?.value ?? null),
     });
@@ -1322,6 +1323,20 @@ export class Repository {
         "SELECT id,kind,CASE WHEN json_valid(payload_json) THEN coalesce(json_extract(payload_json,'$.label'),'') ELSE '' END label,state,done,total,failed,skipped,message,created_at createdAt,updated_at updatedAt FROM jobs j WHERE (state IN ('queued','running','paused') OR (state='failed' AND NOT EXISTS(SELECT 1 FROM jobs later WHERE later.kind=j.kind AND later.payload_json=j.payload_json AND later.state='completed' AND later.created_at>j.created_at))) OR id IN(SELECT id FROM jobs WHERE state IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 50) ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,created_at DESC",
       )
       .all() as Job[];
+  }
+  /**
+   * Forget finished tasks: completed, cancelled and failed ones. A failed
+   * image import is kept, because its staged files can still be retried.
+   */
+  clearJobs() {
+    const finished =
+      "state IN ('completed','cancelled') OR (state='failed' AND kind<>'images')";
+    return this.db.transaction(() => {
+      this.db
+        .prepare(`DELETE FROM job_errors WHERE job_id IN (SELECT id FROM jobs WHERE ${finished})`)
+        .run();
+      return this.db.prepare(`DELETE FROM jobs WHERE ${finished}`).run().changes;
+    })();
   }
   newJob(kind: string, payload: unknown, total: number) {
     const id = uuid(),
