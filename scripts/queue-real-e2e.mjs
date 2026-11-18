@@ -3,7 +3,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import assert from "node:assert/strict";
-import os from "node:os";
 import {
   launchNative,
   seedNativeImages,
@@ -85,15 +84,18 @@ try {
     language: "English",
     detailed: false,
   });
-  const slots = Math.min(
-    2,
-    Math.max(1, Math.floor((os.totalmem() / 2 ** 30 - 4) / 3)),
-  );
+  // The local vision model answers one cell at a time: the second job waits
+  // for its turn whatever the memory of the machine.
   await pollNative(
-    async () =>
-      (await call("jobs")).filter(
-        (j) => [first, second].includes(j.id) && j.state === "running",
-      ).length === slots,
+    async () => {
+      const jobs = (await call("jobs")).filter((j) =>
+        [first, second].includes(j.id),
+      );
+      return (
+        jobs.filter((j) => j.state === "running").length === 1 &&
+        jobs.filter((j) => j.state === "queued").length === 1
+      );
+    },
   );
   const cancelStart = Date.now();
   await call("controlJob", { id: second, action: "cancel" });
@@ -108,7 +110,7 @@ try {
   await app.close();
   native = null;
   checks.push(
-    "Real model queue respects memory limit; second job cancelled, active load paused, graceful close",
+    "Real local model runs one job at a time; second job cancelled, active load paused, graceful close",
   );
   native = await launchNative(profile);
   ({ app, page, call } = native);
