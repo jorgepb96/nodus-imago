@@ -8028,3 +8028,34 @@ tr:hover .ai-cell-button,
   align-items: flex-start;
   gap: 5px;
 }
+.option-menu .option-label {
+  flex: 1;
+  min-width: 0;
+}
+.option-info {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  border-radius: 5px;
+  color: var(--muted);
+}
+.option-info:hover,
+.option-info:focus-visible {
+  background: var(--hover);
+  color: var(--accent);
+}
+.option-has-link {
+  color: var(--accent);
+}
+.option-link-input {
+  width: 100%;
+  margin: -2px 0 6px;
+  font-size: 11px;
+}
+.add-property-heading {
+  margin: 2px 8px 4px;
+}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { Info } from "lucide-react";
 import {
   decodeMultiSelect,
   encodeMultiSelect,
@@ -450,7 +451,24 @@ function OptionPicker({
                 onChange={() => onToggle(o.id)}
               />
               <i style={{ background: o.color ?? "#6366f1" }} />
-              {o.label}
+              <span className="option-label">{o.label}</span>
+              {column.config.optionLinks?.[o.label.toLocaleLowerCase()] && (
+                <button
+                  type="button"
+                  className="option-info"
+                  aria-label={`${t("Más información sobre")} ${o.label}`}
+                  data-tooltip={t("Abrir en Wikipedia")}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void window.imago.call("openExternalLink", {
+                      url: column.config.optionLinks![o.label.toLocaleLowerCase()],
+                    });
+                  }}
+                >
+                  <Info size={13} />
+                </button>
+              )}
             </label>
           ))}
           {ordered.length > OPTION_RENDER_LIMIT && (
