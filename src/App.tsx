@@ -3701,6 +3701,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           detail={detail}
           anchor={addPropertyAnchor as React.RefObject<HTMLElement>}
           perform={perform}
+          language={status?.settings.language ?? "es"}
           onClose={() => setAddPropertyOpen(false)}
           onSetup={(type) => {
             setCreateType(type);

@@ -194,6 +194,8 @@ export interface DatabaseColumnConfig {
   /** Selections with AI: a definition per option, keyed by lower-case label. */
   aiDefinitionsOn?: boolean;
   aiDefinitions?: Record<string, string>;
+  /** Options: an information page per option (Wikipedia), keyed by lower-case label. */
+  optionLinks?: Record<string, string>;
   /** ai columns: the saved preset these instructions came from (for display). */
   aiUserPresetId?: string;
   /** ai columns: an attachment column whose file(s) feed the prompt (vision/OCR/summary). */

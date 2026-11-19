@@ -2,6 +2,11 @@ import { createContext, useContext } from "react";
 import { backendEn, backendPatterns } from "./i18n.backend";
 export const LanguageContext = createContext<"es" | "en">("es");
 const en: Record<string, string> = {
+  "Más información sobre": "More information about",
+  "Abrir en Wikipedia": "Open in Wikipedia",
+  "Enlace de información": "Information link",
+  "https://es.wikipedia.org/wiki/…": "https://en.wikipedia.org/wiki/…",
+  "Fotografía histórica": "Historical photography",
   "Opciones avanzadas": "Advanced options",
   "Criterios generales de clasificación": "General classification criteria",
   "Por ejemplo: clasifica por el motivo principal de la fotografía, no por el lugar donde se tomó.": "For example: classify by the main subject of the photograph, not by the place where it was taken.",

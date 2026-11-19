@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2, ArrowUp, ArrowDown, Pencil, SlidersHorizontal, Sparkles } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import { Plus, Trash2, ArrowUp, ArrowDown, Pencil, SlidersHorizontal, Sparkles, Info } from "lucide-react";
 import type {
   DatabaseColumn,
   DatabaseColumnType,
@@ -89,7 +89,14 @@ export function Properties({
     [creating, setCreating] = useState(false),
     [confirmDelete, setConfirmDelete] = useState<DatabaseColumn | null>(null);
   const [options, setOptions] = useState<
-      { id?: string; label: string; color: string | null; definition?: string }[]
+      {
+        id?: string;
+        label: string;
+        color: string | null;
+        definition?: string;
+        /** Information page (Wikipedia) opened from the option's info icon. */
+        link?: string;
+      }[]
     >([]),
     [relationDb, setRelationDb] = useState(""),
     [databases, setDatabases] = useState<{ id: string; name: string }[]>([]);
@@ -118,6 +125,7 @@ export function Properties({
     [criteriaOn, setCriteriaOn] = useState(false),
     [criteria, setCriteria] = useState(""),
     [definitionsOn, setDefinitionsOn] = useState(false),
+    [linkRow, setLinkRow] = useState<number | null>(null),
     [userPresets, setUserPresets] = useState<AiUserPreset[]>(
       () => status.settings.aiUserPresets ?? [],
     ),
@@ -161,6 +169,11 @@ export function Properties({
     aiSourceColumnId: source || undefined,
     ...(columnTypeHasOptions(type)
       ? {
+          optionLinks: Object.fromEntries(
+            options
+              .filter((o) => o.label.trim() && /^https:\/\//.test(o.link?.trim() ?? ""))
+              .map((o) => [o.label.trim().toLocaleLowerCase(), o.link!.trim()]),
+          ),
           aiEnabled: aiOn,
           aiFreeTags: type === "multi_select" && aiOn && freeTags,
           aiMaxTags: maxTags,
@@ -244,6 +257,7 @@ export function Properties({
         label,
         color,
         definition: c.config.aiDefinitions?.[label.toLocaleLowerCase()] ?? "",
+        link: c.config.optionLinks?.[label.toLocaleLowerCase()] ?? "",
       })),
     );
     setCriteriaOn(!!c.config.aiCriteriaOn);
@@ -666,7 +680,8 @@ export function Properties({
                 <div className="stack">
                   <span className="field-label">{t("Opciones")}</span>
                   {options.map((o, i) => (
-                    <div className="row option-edit" key={o.id ?? i}>
+                    <Fragment key={o.id ?? i}>
+                    <div className="row option-edit">
                       <input
                         type="color"
                         aria-label={t("Color")}
@@ -691,6 +706,16 @@ export function Properties({
                           )
                         }
                       />
+                      <Button
+                        type="button"
+                        icon
+                        className={o.link ? "option-has-link" : ""}
+                        title={t("Enlace de información")}
+                        aria-expanded={linkRow === i}
+                        onClick={() => setLinkRow(linkRow === i ? null : i)}
+                      >
+                        <Info size={14} />
+                      </Button>
                       <Button
                         type="button"
                         icon
@@ -728,6 +753,24 @@ export function Properties({
                         <Trash2 size={14} />
                       </Button>
                     </div>
+                    {linkRow === i && (
+                      <input
+                        className="option-link-input"
+                        type="url"
+                        autoFocus
+                        aria-label={`${t("Enlace de información")} · ${o.label}`}
+                        placeholder={t("https://es.wikipedia.org/wiki/…")}
+                        value={o.link ?? ""}
+                        onChange={(e) =>
+                          setOptions(
+                            options.map((v, j) =>
+                              j === i ? { ...v, link: e.target.value } : v,
+                            ),
+                          )
+                        }
+                      />
+                    )}
+                    </Fragment>
                   ))}
                   <Button
                     type="button"
