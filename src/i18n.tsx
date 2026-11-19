@@ -5,6 +5,7 @@ const en: Record<string, string> = {
   "Más información sobre": "More information about",
   "Abrir en Wikipedia": "Open in Wikipedia",
   "Enlace de información": "Information link",
+  "https://es.wikipedia.org/wiki/…": "https://en.wikipedia.org/wiki/…",
   "Fotografía histórica": "Historical photography",
   "Opciones avanzadas": "Advanced options",
   "Criterios generales de clasificación": "General classification criteria",

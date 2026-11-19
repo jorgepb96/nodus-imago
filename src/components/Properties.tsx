@@ -759,7 +759,7 @@ export function Properties({
                         type="url"
                         autoFocus
                         aria-label={`${t("Enlace de información")} · ${o.label}`}
-                        placeholder="https://es.wikipedia.org/wiki/…"
+                        placeholder={t("https://es.wikipedia.org/wiki/…")}
                         value={o.link ?? ""}
                         onChange={(e) =>
                           setOptions(
