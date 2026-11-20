@@ -14,7 +14,7 @@ En cada foto un elemento puede **marcarse con un punto**, **con un rectángulo**
 
 ## Objetivos
 
-- Nuevo tipo de propiedad `heritage` («Patrimonio») que se comporta como una selección múltiple (filtros, orden, CSV, estadísticas existentes siguen funcionando) y cuyas opciones tienen ficha de elemento.
+- Nuevo tipo de propiedad «Patrimonio» que se comporta como una selección múltiple (filtros, orden, CSV, estadísticas existentes siguen funcionando) y cuyas opciones tienen ficha de elemento.
 - Convertir una selección múltiple existente en Patrimonio **sin perder ni un valor** (mismos ids de opción, mismas celdas), y volver atrás.
 - Vincular elementos a Wikidata uno a uno y **en lote con revisión**, obteniendo coordenadas, tipología sugerida y padre sugerido.
 - Crear y editar elementos a mano (coordenadas, tipo, padre) para lo que no está en Wikidata o ha desaparecido.
@@ -62,10 +62,9 @@ El usuario eligió **A**.
 
 ### 1. Tipo y valores
 
-- `heritage` se añade a `DatabaseColumnType` y a `COLUMN_TYPES` (etiqueta «Patrimonio», `hasOptions: true`, icono `Landmark`).
-- El valor de celda es idéntico al de `multi_select` (array JSON de ids de opción, en `value_json`). En todos los sitios donde `multi_select` tiene tratamiento propio (codecs, `viewCriteria` kind, `viewQuery`, `MULTI_TYPES`/`CATEGORICAL_TYPES`, CSV, export, fórmulas, embeddings de registro, automatizaciones, sugerencias, IA de clasificación) `heritage` se trata igual salvo donde este documento diga otra cosa. El constructor debe recorrer los puntos de contacto que ya tiene `multi_select` (grep) y decidir uno a uno.
-- `convertColumn` admite `multi_select ↔ heritage` conservando opciones, ids y celdas.
-- Al pasar de `heritage` a `multi_select`, `select` o `status` (se conservan los ids de opción), la ficha de elementos y las marcas **no se borran**: dejan de mostrarse y reaparecen al volver a Patrimonio. Al pasar a `select`, las marcas de los elementos que se caen de la celda también se conservan ocultas.
+- Para el usuario es un tipo de propiedad más («Patrimonio», icono `Landmark`). Internamente es una `multi_select` con `config.heritage = true` (decisión de implementación: una `multi_select` ya tiene más de cien puntos de tratamiento propio en filtros, orden, CSV, IA, fórmulas, unificación y conversión, y así los hereda todos sin riesgo).
+- Pasar de selección múltiple a Patrimonio y vuelta es cambiar esa bandera: opciones, ids y celdas no se tocan.
+- Al quitar la bandera o pasar a `select` o `status` (se conservan los ids de opción), la ficha de elementos y las marcas **no se borran**: dejan de mostrarse y reaparecen al volver a Patrimonio. Al pasar a `select`, las marcas de los elementos que se caen de la celda también se conservan ocultas.
 - Al pasar a un tipo sin opciones (texto, etc.) las opciones desaparecen y con ellas la ficha y las marcas: el diálogo de conversión avisa de cuántos elementos enlazados y cuántas marcas se perderán antes de aplicar. No se intenta recuperar por etiqueta.
 - Plantilla lista para usar en el menú «+»: «Patrimonio», con el esquema de tipologías por defecto (igual que las plantillas de proceso fotográfico y tipo de cámara).
 
@@ -94,7 +93,7 @@ heritage_elements(
 
 ### 3. Esquema de tipologías
 
-- Por defecto en `shared/heritageTypology.ts`; copia editable por propiedad en `config_json` (`heritageScheme`). Claves estables, etiquetas es/en, icono lucide por grupo y opcionalmente por tipo.
+- Por defecto en `shared/heritage.ts`; copia editable por propiedad en `config_json` (`heritageScheme`). Claves estables, etiquetas es/en, icono lucide por grupo y opcionalmente por tipo.
 - Esquema aprobado:
 
 | Grupo | Icono | Tipos |
@@ -148,7 +147,7 @@ heritage_elements(
 
 ### 8. Estadísticas
 
-- `heritage` entra en `CATEGORICAL_TYPES` y `MULTI_TYPES`: frecuencia, tabla cruzada, coocurrencia y tendencia funcionan como con una selección múltiple.
+- Como es una selección múltiple, frecuencia, tabla cruzada, coocurrencia y tendencia funcionan sin cambios a nivel elemento.
 - Para propiedades Patrimonio, el `StatSpec` gana:
   - `heritageLevel: 'element' | 'type' | 'group'`: el valor categórico pasa a ser el tipo o el grupo del elemento (sin tipología → «Sin tipología»). Una foto cuenta **una vez por categoría** aunque tenga varios elementos de la misma.
   - `includeParts: boolean` (solo a nivel elemento): cada foto cuenta también para todos los ancestros de sus elementos, una vez por ancestro.
