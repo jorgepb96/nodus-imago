@@ -133,11 +133,6 @@ export const TOUR_STEPS: TourStep[] = [
     body: "El logotipo de la esquina superior izquierda oculta el menú lateral para dejar más espacio a la tabla. Púlsalo otra vez para mostrarlo.",
   },
   {
-    target: "header-interface",
-    title: "Interfaz",
-    body: "Abre Ajustes › Interfaz, donde cambias el idioma, el modo claro u oscuro y los colores de la aplicación.",
-  },
-  {
     target: "header-actions",
     title: "Botones de la barra superior",
     body: "Estos botones están siempre disponibles:",

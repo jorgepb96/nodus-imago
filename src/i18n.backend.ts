@@ -319,7 +319,21 @@ export const backendEn: Record<string, string> = {
   "Enlace de autoridad no válido.": "Invalid authority link.",
   "Ningún valor enlazado tiene coordenadas en Wikidata.": "No linked value has coordinates in Wikidata.",
   "No se pudo conectar con Iconclass.": "Could not connect to Iconclass.",
-  "No se pudo conectar con Wikidata.": "Could not connect to Wikidata."
+  "No se pudo conectar con Wikidata.": "Could not connect to Wikidata.",
+  "Coordenadas no válidas.": "Invalid coordinates.",
+  "El elemento del que forma parte no está en esta propiedad.": "The element it is part of is not in this property.",
+  "El elemento necesita un nombre.": "The element needs a name.",
+  "El elemento no pertenece a una propiedad de patrimonio de esta base.": "The element does not belong to a heritage property of this database.",
+  "Elige una propiedad de patrimonio de esta base de datos.": "Choose a heritage property of this database.",
+  "Esta propiedad no es de patrimonio.": "This property is not a heritage property.",
+  "Esta vinculación ya se revirtió.": "This linking was already reverted.",
+  "Tipología desconocida.": "Unknown typology.",
+  "Un elemento no puede formar parte de sí mismo ni de una de sus partes.": "An element cannot be part of itself or of one of its parts.",
+  "Vinculación no encontrada.": "Linking not found.",
+  "Elige la imagen completa o al menos una zona.": "Choose the whole image or at least one zone.",
+  "No se pudo conectar con OpenStreetMap.": "Could not connect to OpenStreetMap.",
+  "No se pudo conectar con {service}.": "Could not connect to {service}.",
+  "Catálogo de lugares no disponible.": "Place catalogue not available.",
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */

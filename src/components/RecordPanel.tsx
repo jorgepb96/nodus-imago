@@ -377,6 +377,7 @@ export function RecordPanel({
           {viewer && (
             <ImageViewer
               row={row}
+              columns={detail.columns}
               initialIndex={imageIndex}
               initialCrop={viewer === "crop"}
               onClose={() => setViewer(false)}

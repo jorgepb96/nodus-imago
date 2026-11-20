@@ -23,6 +23,9 @@ export type AuthorityLink = {
   died?: number | null;
   /** Person, place or other, as read from Wikidata. */
   kind?: AuthorityKind | "other";
+  /** Wikidata: what it is (P31) and what it is part of (P361), as Q-numbers. */
+  instances?: string[];
+  partOf?: string[];
 };
 
 export const AUTHORITY_SOURCES: Record<AuthoritySource, string> = { wikidata: "Wikidata", iconclass: "Iconclass" };
@@ -48,6 +51,37 @@ export function wikidataEntitiesUrl(ids: string[], language: string) {
     languages: [...new Set([language, "es", "en"])].join("|"),
     format: "json",
   })}`;
+}
+/** The classes above some classes (P279, "subclass of"), one step up. */
+export function wikidataClassesUrl(ids: string[]) {
+  return `https://www.wikidata.org/w/api.php?${params({
+    action: "wbgetentities",
+    ids: ids.filter((id) => /^Q\d+$/.test(id)).slice(0, 50).join("|"),
+    props: "claims",
+    format: "json",
+  })}`;
+}
+export function parseSuperclasses(json: any): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [id, e] of Object.entries((json?.entities ?? {}) as Record<string, any>))
+    out[id] = ((e?.claims?.P279 ?? []) as any[])
+      .map((c) => c?.mainsnak?.datavalue?.value?.id)
+      .filter((q): q is string => typeof q === "string" && /^Q\d+$/.test(q));
+  return out;
+}
+/** Full-text search over Wikidata items (labels, aliases and descriptions). */
+export function wikidataFullTextUrl(query: string, limit = 6) {
+  return `https://www.wikidata.org/w/api.php?${params({
+    action: "query",
+    list: "search",
+    srsearch: query.slice(0, 250),
+    srnamespace: "0",
+    srlimit: String(limit),
+    format: "json",
+  })}`;
+}
+export function parseWikidataFullText(json: any): string[] {
+  return ((json?.query?.search ?? []) as any[]).map((r) => String(r.title ?? "")).filter((id) => /^Q\d+$/.test(id));
 }
 /** Iconclass search works in English, German, French, Italian and other languages, not Spanish. */
 export function iconclassSearchUrl(query: string) {
@@ -93,6 +127,11 @@ export function parseWikidataEntities(json: any, order: string[], language: stri
         born: year(claim(e, "P569") ?? claim(e, "P571")),
         died: year(claim(e, "P570") ?? claim(e, "P576")),
         kind,
+        instances: instances.filter((q): q is string => typeof q === "string" && /^Q\d+$/.test(q)).slice(0, 20),
+        partOf: ((e.claims?.P361 ?? []) as any[])
+          .map((c) => c?.mainsnak?.datavalue?.value?.id)
+          .filter((q): q is string => typeof q === "string" && /^Q\d+$/.test(q))
+          .slice(0, 20),
       },
     ];
   });

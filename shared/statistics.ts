@@ -2,12 +2,14 @@
 // with a chi-square test, co-occurrence of tags, trends over time and
 // numeric summaries. Pure functions over already-extracted values, so the
 // maths is unit-tested apart from storage.
-import { decodeHistoricalDate, representativeYear } from "./historicalDate";
+import { decodeHistoricalDate, parseHistoricalDate, representativeYear } from "./historicalDate";
 import { decodeCheckbox, decodeMultiSelect, type DatabaseColumn } from "./databases";
 import { decodeDatabaseDate } from "./databaseProperties";
 
 export type StatChart = "bar" | "column" | "line" | "heatmap" | "table";
-export type StatSpec =
+/** Heritage properties: count elements, their types or their groups; parts in their wholes. */
+export type HeritageStatOptions = { heritageLevel?: "element" | "type" | "group"; includeParts?: boolean };
+export type StatSpec = (
   | { kind: "frequency"; columnId: string; limit?: number; chart?: StatChart }
   | {
       kind: "crosstab";
@@ -27,7 +29,9 @@ export type StatSpec =
       limit?: number;
       chart?: StatChart;
     }
-  | { kind: "numeric"; columnId: string; bins?: number; chart?: StatChart };
+  | { kind: "numeric"; columnId: string; bins?: number; chart?: StatChart }
+) &
+  HeritageStatOptions;
 export type SavedStatistic = {
   id: string;
   databaseId: string;
@@ -168,6 +172,38 @@ export function yearOf(
     if (c >= 1 && c <= 22) return (c - 1) * 100 + 50;
   }
   return null;
+}
+
+/**
+ * The years a value covers, whatever its form: a historical period, a date
+ * range, a year, or text written as a catalogue date («c. 1930», «1950-1959»,
+ * «años 50», «s. XIX», «antes de 1936»…). Open ends take the known year.
+ */
+export function yearSpan(
+  column: Pick<DatabaseColumn, "type">,
+  raw: string | null | undefined,
+  display = raw ?? "",
+): { start: number; end: number } | null {
+  if (raw == null || raw === "") return null;
+  const year = yearOf(column, raw, display);
+  const yearIn = (text: string | null | undefined) => {
+    const y = text ? Number(/^-?\d{4}/.exec(text)?.[0]) : NaN;
+    return Number.isFinite(y) ? y : null;
+  };
+  let start: number | null = null,
+    end: number | null = null;
+  if (column.type === "historical_date") {
+    const h = decodeHistoricalDate(raw);
+    [start, end] = [h?.start ?? h?.end ?? null, h?.end ?? h?.start ?? null];
+  } else if (column.type === "date") {
+    const d = decodeDatabaseDate(raw);
+    [start, end] = [yearIn(d?.start), yearIn(d?.end) ?? yearIn(d?.start)];
+  } else if (!["number", "created_time", "last_edited_time"].includes(column.type)) {
+    const p = parseHistoricalDate(display);
+    [start, end] = [p?.start ?? p?.end ?? null, p?.end ?? p?.start ?? null];
+  }
+  if (start !== null && end !== null && end >= start && end - start <= 400) return { start, end };
+  return year === null ? null : { start: year, end: year };
 }
 
 /** How likely a property is to hold each record's date, for the timeline. */

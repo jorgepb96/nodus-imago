@@ -17,29 +17,51 @@ export function annotationsW3c(repo: Repository, databaseId: string) {
   const database = repo.detail(databaseId).database;
   const rows = repo.db
     .prepare(
-      `SELECT n.id,n.x,n.y,n.w,n.h,n.note,n.tags_json,n.created_at,n.updated_at,a.file_name,a.content_hash,r.id row_id
-       FROM image_annotations n JOIN image_assets a ON a.id=n.asset_id JOIN db_rows r ON r.id=n.row_id WHERE r.database_id=? ORDER BY n.created_at`,
+      `SELECT n.id,n.x,n.y,n.w,n.h,n.note,n.tags_json,n.created_at,n.updated_at,n.kind,n.option_id,o.label option_label,oa.link_json,a.file_name,a.content_hash,r.id row_id
+       FROM image_annotations n JOIN image_assets a ON a.id=n.asset_id JOIN db_rows r ON r.id=n.row_id
+       LEFT JOIN db_select_options o ON o.id=n.option_id LEFT JOIN option_authorities oa ON oa.option_id=n.option_id
+       WHERE r.database_id=? ORDER BY n.created_at`,
     )
     .all(databaseId) as {
     id: string; x: number; y: number; w: number; h: number; note: string; tags_json: string;
     created_at: string; updated_at: string; file_name: string; content_hash: string; row_id: string;
+    kind: string | null; option_id: string | null; option_label: string | null; link_json: string | null;
   }[];
   const titles = new Map(repo.hydrate([...new Set(rows.map((r) => r.row_id))]).map((r) => [r.id, r.title]));
   const pct = (n: number) => Math.round(n * 10000) / 100;
+  // A heritage element is identified by its Wikidata entity when it has one.
+  const element = (r: (typeof rows)[number]) => {
+    if (!r.option_id || !r.option_label) return [];
+    const uri = r.link_json ? (JSON.parse(r.link_json) as { uri?: string }).uri : undefined;
+    return [
+      uri
+        ? { type: "SpecificResource", source: uri, purpose: "identifying", label: r.option_label }
+        : { type: "TextualBody", value: r.option_label, purpose: "identifying" },
+    ];
+  };
   const items = rows.map((r) => ({
     id: `urn:uuid:${r.id}`,
     type: "Annotation",
-    motivation: "describing",
+    motivation: r.option_id ? "identifying" : "describing",
     created: r.created_at,
     modified: r.updated_at,
     body: [
       ...(r.note ? [{ type: "TextualBody", value: r.note, purpose: "describing", format: "text/plain" }] : []),
       ...(JSON.parse(r.tags_json) as string[]).map((tag) => ({ type: "TextualBody", value: tag, purpose: "tagging" })),
+      ...element(r),
     ],
     target: {
       // The file is identified by its content (SHA-256) and name, never by a local path.
       source: { id: `urn:sha256:${r.content_hash}`, type: "Image", label: r.file_name, partOf: { id: `urn:imago:record:${r.row_id}`, label: titles.get(r.row_id) ?? "" } },
-      selector: { type: "FragmentSelector", conformsTo: "http://www.w3.org/TR/media-frags/", value: `xywh=percent:${pct(r.x)},${pct(r.y)},${pct(r.w)},${pct(r.h)}` },
+      // A point is exported as the smallest region around it.
+      selector: {
+        type: "FragmentSelector",
+        conformsTo: "http://www.w3.org/TR/media-frags/",
+        value:
+          r.kind === "point"
+            ? `xywh=percent:${pct(Math.max(0, r.x - 0.0025))},${pct(Math.max(0, r.y - 0.0025))},0.5,0.5`
+            : `xywh=percent:${pct(r.x)},${pct(r.y)},${pct(r.w)},${pct(r.h)}`,
+      },
     },
   }));
   return {

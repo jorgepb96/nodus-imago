@@ -33,6 +33,66 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.4.0",
+    date: "2026-11-20",
+    highlights: [
+      {
+        scope: "places",
+        category: "new",
+        es: "Nuevo tipo de propiedad Patrimonio: cada valor es un monumento, edificio, calle u obra de arte con su ficha (enlace a Wikidata, coordenadas, tipología con icono y de qué conjunto forma parte). Una foto puede tener varios, cada uno como etiqueta propia. Se crea desde el botón + o convirtiendo una selección múltiple, sin perder ningún valor.",
+        en: "New Heritage property type: each value is a monument, building, street or artwork with its own record (Wikidata link, coordinates, typology with an icon, and the ensemble it belongs to). A photo can have several, each as its own tag. Create it from the + button or by converting a multi-select, without losing any value.",
+      },
+      {
+        scope: "authorities",
+        category: "new",
+        es: "Identificar y situar en tres pasos que siguen en segundo plano en la lista de tareas: Wikidata identifica cada elemento, OpenStreetMap sitúa lo que Wikidata no tiene y el resto se sitúa en su localidad como posición aproximada. Si se corta la conexión o cierras Imago, la tarea se pausa y continúa donde se quedó; las propuestas se guardan hasta que las revisas, y cada aplicación se puede revertir.",
+        en: "Identify and place in three steps that run in the background in the task list: Wikidata identifies each element, OpenStreetMap places what Wikidata lacks, and the rest is placed at its town as an approximate position. If the connection drops or you close Imago, the task pauses and continues where it stopped; proposals are kept until you review them, and each application can be reverted.",
+      },
+      {
+        scope: "authorities",
+        category: "new",
+        es: "La tipología se deduce también del nombre («Castillo de…», «Iglesia de…», una pintura de un autor conocido), así que todo elemento identificable cuenta en su tipo aunque no esté en Wikidata. El esquema de tipologías se puede editar por propiedad.",
+        en: "The typology is also read from the name (“Castle of…”, “Church of…”, a painting by a known artist), so every identifiable element counts in its type even when it is not in Wikidata. The typology scheme can be edited per property.",
+      },
+      {
+        scope: "visual",
+        category: "new",
+        es: "En el visor, marca cada elemento con un punto, con un rectángulo o sin marcar. «Sugerir con IA» reconoce los elementos de la imagen entera o de las zonas que dibujes, y «Buscar este elemento en otras fotos» propone otras fotos donde aparece.",
+        en: "In the viewer, mark each element with a point, a rectangle or leave it unmarked. “Suggest with AI” recognises the elements in the whole image or in the zones you draw, and “Find this element in other photos” suggests other photos where it appears.",
+      },
+      {
+        scope: "places",
+        category: "new",
+        es: "El mapa puede situar las fotos según su ubicación o según su patrimonio, y tiene un modo Patrimonio con un punto por elemento. Los filtros nuevos buscan por tipo, grupo, «forma parte de», marcado o sin enlazar.",
+        en: "The map can place photos by their location or by their heritage, and has a Heritage mode with one point per element. New filters search by type, group, “part of”, marked or unlinked.",
+      },
+      {
+        scope: "analysis",
+        category: "new",
+        es: "Estadísticas por elemento, por tipo o por grupo de patrimonio, incluyendo o no sus partes. Todas las estadísticas se calculan con los filtros activos de la base de datos y muestran cuáles son.",
+        en: "Statistics by heritage element, type or group, with or without their parts. All statistics are computed with the database's active filters and show which ones they are.",
+      },
+      {
+        scope: "analysis",
+        category: "fix",
+        es: "La cronología lee cualquier forma de fecha y dibuja los periodos tal como están registrados (por ejemplo, 1939–1949), en lugar de repartirlos año a año o redondearlos a décadas.",
+        en: "The timeline reads any date form and draws periods as they are recorded (for example, 1939–1949) instead of spreading them year by year or rounding them to decades.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Plantillas listas para usar de proceso fotográfico y tipo de cámara en el menú +, con sus opciones, colores por periodo, definiciones para la IA y un enlace a Wikipedia por opción. El menú + tiene buscador.",
+        en: "Ready-made photographic process and camera type templates in the + menu, with their options, period colours, definitions for AI and a Wikipedia link per option. The + menu has a search box.",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "Nuevo tutorial guiado de Patrimonio. El botón Interfaz de la barra superior desaparece.",
+        en: "New guided tutorial for Heritage. The Interface button in the top bar is gone.",
+      },
+    ],
+  },
+  {
     version: "0.3.0",
     date: "2026-11-18",
     highlights: [

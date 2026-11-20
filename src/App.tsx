@@ -36,7 +36,6 @@ import {
   MoreHorizontal,
   RefreshCw,
   Home as HomeIcon,
-  Monitor,
   Moon,
   Sun,
   Clock3,
@@ -90,6 +89,7 @@ import { Properties, type Perform } from "./components/Properties";
 import { AddPropertyMenu } from "./components/AddPropertyMenu";
 import { AiColumnMenu } from "./components/AiColumnMenu";
 import { ColumnTypeIcon } from "./components/ColumnTypeIcon";
+import { isHeritageColumn } from "../shared/heritage";
 import { HistoryButtons } from "./components/HistoryButtons";
 import { CsvImport, ImageImport } from "./components/ImportDialogs";
 import { CriteriaBar, ViewControls } from "./components/ViewControls";
@@ -106,6 +106,8 @@ import { NetworkView } from "./components/NetworkView";
 import { VisualMapView } from "./components/VisualMapView";
 import { CleanupDialog } from "./components/CleanupDialog";
 import { AuthorityDialog } from "./components/AuthorityDialog";
+import { HeritageDialog } from "./components/HeritageDialog";
+import { refreshHeritage } from "./heritageStore";
 import { citationTemplate } from "../shared/citation";
 import {
   filterOperators,
@@ -227,6 +229,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "iiif"
       | "cleanup"
       | "authorities"
+      | "heritage"
       | "deleteRows"
       | "deleteDatabase"
       | "saveSearch"
@@ -690,8 +693,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     const next = await api.call("detail", { id });
     setDetail((current) => (current?.database.id === id ? next : current));
     setAllDetails((all) => all.map((d) => (d.database.id === id ? next : d)));
+    refreshHeritage();
     refresh();
   };
+  // A heritage element added from a cell or the viewer: the property's options changed.
+  const openDatabaseId = detail?.database.id;
+  useEffect(() => {
+    if (!openDatabaseId) return;
+    const reload = () => void reloadDetail(openDatabaseId);
+    window.addEventListener("imago:reload-detail", reload);
+    return () => window.removeEventListener("imago:reload-detail", reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDatabaseId]);
   const navigate = (id: string) => {
     setArea("databases");
     setDatabaseId(id);
@@ -1508,18 +1521,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           ) : (
             <ChevronLeft size={14} className="collapse-chevron" />
           )}
-        </button>
-        <button
-          className="interface-trigger"
-          data-tour="header-interface"
-          onClick={() => {
-            setSettingsTab("appearance");
-            setArea("settings");
-          }}
-        >
-          <Monitor size={15} />
-          <span>{t("Interfaz · Imago")}</span>
-          <ChevronRight size={12} />
         </button>
         <span className="nodus-vault-badge">
           <ImagoMark size={16} />
@@ -3024,6 +3025,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                     <GripVertical size={10} className="column-grip" />
                                     <ColumnTypeIcon
                                       type={c.type}
+                                      heritage={isHeritageColumn(c)}
                                       ai={c.type !== "ai" && isAiColumn(c)}
                                     />
                                     <span>{c.name}</span>
@@ -3066,6 +3068,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 <button
                                   type="button"
                                   className="add-property-button"
+                                  data-tour="add-property-column"
                                   aria-label={t("Añadir propiedad")}
                                   data-tooltip={t("Añadir propiedad")}
                                   aria-haspopup="menu"
@@ -3668,6 +3671,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               setToolColumn(columnMenu);
               setModal("authorities");
             }}
+            onHeritage={() => {
+              setToolColumn(columnMenu);
+              setModal("heritage");
+            }}
             onInserted={(id) =>
               // Wait for the new header to render, then name it from its menu.
               requestAnimationFrame(() => {
@@ -3775,6 +3782,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               void reloadDetail(detail.database.id);
             }
           }}
+        />
+      )}
+      {modal === "heritage" && detail && toolColumn && detail.columns.some((c) => c.id === toolColumn) && (
+        <HeritageDialog
+          column={detail.columns.find((c) => c.id === toolColumn)!}
+          onClose={() => setModal(null)}
+          onChanged={() => void reloadDetail(detail.database.id)}
         />
       )}
       {modal === "plates" && detail && status && (

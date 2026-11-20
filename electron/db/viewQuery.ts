@@ -1,3 +1,4 @@
+import { isHeritageColumn } from "../../shared/heritage";
 import { decodeHistoricalDate } from "../../shared/historicalDate";
 import type Database from "better-sqlite3";
 import type { DatabaseColumn } from "../../shared/databases";
@@ -9,6 +10,7 @@ import {
 } from "../../shared/databaseProperties";
 import { validCoordinates } from "../../shared/places";
 import {
+  HERITAGE_OPS,
   filterKind,
   filterOperators,
   isFilterReady,
@@ -188,6 +190,20 @@ export function compileViewFilters(
     if (op === "relative_date") {
       const [start, end] = relativeDateRange(values[0]);
       return `${expr} BETWEEN ${bind(start)} AND ${bind(end)}`;
+    }
+    if (HERITAGE_OPS.includes(op)) {
+      if (!isHeritageColumn(column)) throw new Error("Esta condición no corresponde al tipo de propiedad.");
+      const source = `CASE WHEN json_valid(${raw}) THEN ${raw} ELSE '[]' END`;
+      if (op === "heritage_marked")
+        return `EXISTS(SELECT 1 FROM image_annotations a JOIN json_each(${source}) j ON a.option_id=j.value WHERE a.row_id=r.id)`;
+      if (op === "heritage_unlinked")
+        return `EXISTS(SELECT 1 FROM json_each(${source}) j WHERE NOT EXISTS(SELECT 1 FROM option_authorities oa WHERE oa.option_id=j.value))`;
+      const wanted = bind(JSON.stringify([...new Set(values)]));
+      if (op === "part_of")
+        // The elements chosen and every part under them (UNION stops at loops).
+        return `EXISTS(WITH RECURSIVE d(id) AS (SELECT value FROM json_each(${wanted}) UNION SELECT h.option_id FROM heritage_elements h JOIN d ON h.parent_option_id=d.id) SELECT 1 FROM json_each(${source}) j JOIN d ON j.value=d.id)`;
+      const key = op === "heritage_group" ? "h.group_key" : "h.group_key||'/'||h.type_key";
+      return `EXISTS(SELECT 1 FROM json_each(${source}) j JOIN heritage_elements h ON h.option_id=j.value WHERE ${key} IN (SELECT value FROM json_each(${wanted})))`;
     }
     if (["any", "all", "none"].includes(op)) {
       const wanted = bind(JSON.stringify([...new Set(values)]));

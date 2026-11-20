@@ -1,3 +1,5 @@
+import { isHeritageColumn } from "../../shared/heritage";
+import { heritagePlaces, restoreHeritage, type HeritageRestore } from "./heritage";
 import Database from "better-sqlite3";
 import { createHash, randomUUID as uuid } from "node:crypto";
 import fs from "node:fs";
@@ -127,6 +129,18 @@ export class Repository {
     ])
       if (!historyColumns.has(name))
         this.db.exec(`ALTER TABLE history ADD COLUMN ${name} ${type}`);
+    // Regions can be points and name a heritage element (option) of the record.
+    const annotationColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(image_annotations)").all() as { name: string }[]).map((c) => c.name),
+    );
+    if (!annotationColumns.has("kind"))
+      this.db.exec("ALTER TABLE image_annotations ADD COLUMN kind TEXT NOT NULL DEFAULT 'rect'");
+    if (!annotationColumns.has("option_id"))
+      this.db.exec("ALTER TABLE image_annotations ADD COLUMN option_id TEXT");
+    this.db.exec("CREATE INDEX IF NOT EXISTS annotations_option ON image_annotations(option_id) WHERE option_id IS NOT NULL");
+    // Heritage elements placed from OpenStreetMap keep the object they come from.
+    if (!(this.db.prepare("PRAGMA table_info(heritage_elements)").all() as { name: string }[]).some((c) => c.name === "osm_ref"))
+      this.db.exec("ALTER TABLE heritage_elements ADD COLUMN osm_ref TEXT");
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS history_batch ON history(batch_id); CREATE INDEX IF NOT EXISTS history_undone ON history(undone_seq) WHERE undone_seq IS NOT NULL;",
     );
@@ -149,6 +163,12 @@ export class Repository {
         );
       })();
     // Interrupted work resumes at its last committed item. Cancellation remains final.
+    // Searches that send names to outside services wait for the researcher instead.
+    this.db
+      .prepare(
+        "UPDATE jobs SET state='paused',message='Pausada al cerrar Imago: reanúdala cuando quieras, sigue donde se quedó.' WHERE kind='heritage' AND state IN ('running','queued')",
+      )
+      .run();
     this.db
       .prepare("UPDATE jobs SET state='queued' WHERE state='running'")
       .run();
@@ -391,14 +411,33 @@ export class Repository {
         }
         values.push([row.id, value]);
       }
-    if (!apply) return { total, lost };
+    // A heritage property loses its element records and marks with its options.
+    const heritage =
+      isHeritageColumn(column) && !optionTypes(type)
+        ? {
+            elements: (this.db.prepare("SELECT count(*) n FROM heritage_elements WHERE column_id=?").get(id) as { n: number }).n,
+            marks: (
+              this.db
+                .prepare("SELECT count(*) n FROM image_annotations WHERE option_id IN (SELECT id FROM db_select_options WHERE column_id=?)")
+                .get(id) as { n: number }
+            ).n,
+          }
+        : null;
+    if (!apply) return heritage ? { total, lost, heritage } : { total, lost };
     const at = now();
     this.db.transaction(() => {
       this.db
         .prepare("UPDATE db_columns SET type=?,updated_at=? WHERE id=?")
         .run(type, at, id);
-      if (!optionTypes(type))
+      if (!optionTypes(type)) {
+        if (heritage) {
+          this.db
+            .prepare("DELETE FROM image_annotations WHERE option_id IN (SELECT id FROM db_select_options WHERE column_id=?)")
+            .run(id);
+          this.db.prepare("DELETE FROM heritage_elements WHERE column_id=?").run(id);
+        }
         this.db.prepare("DELETE FROM db_select_options WHERE column_id=?").run(id);
+      }
       const insert = this.db.prepare(
         "INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)",
       );
@@ -1106,11 +1145,23 @@ export class Repository {
     );
   }
   mapRecords(input: MapRecordsInput): { records: MapRecord[]; total: number } {
-    const column = this.column(input.columnId);
-    if (column.databaseId !== input.databaseId || column.type !== "location")
+    const chosen = this.column(input.columnId);
+    const heritage = isHeritageColumn(chosen) ? chosen : null;
+    const column = heritage
+      ? input.fallbackColumnId
+        ? this.column(input.fallbackColumnId)
+        : null
+      : chosen;
+    if (
+      chosen.databaseId !== input.databaseId ||
+      (!heritage && chosen.type !== "location") ||
+      (column && (column.databaseId !== input.databaseId || column.type !== "location"))
+    )
       throw new Error(
         "Elige una propiedad de ubicación de esta base de datos.",
       );
+    // Heritage elements by option: label and where each is drawn.
+    const elementPlaces = heritage ? heritagePlaces(this.db, heritage) : null;
     // Read every matching row in one consistent snapshot. A map is not a page
     // of the grid: one ordered id query, then only the title, the location and
     // the first image of each record — never every cell, annotation and
@@ -1132,6 +1183,7 @@ export class Repository {
       )?.id;
       const titles = new Map<string, string | null>(),
         places = new Map<string, string | null>(),
+        shown = new Map<string, string | null>(),
         images = new Map<
           string,
           { first: { id: string; metadata: string | null } | null; count: number }
@@ -1141,14 +1193,15 @@ export class Repository {
           p = marks(chunk);
         for (const cell of this.db
           .prepare(
-            `SELECT row_id,column_id,value_text FROM db_cells WHERE row_id IN (${p}) AND column_id IN (?,?)`,
+            `SELECT row_id,column_id,value_text FROM db_cells WHERE row_id IN (${p}) AND column_id IN (?,?,?)`,
           )
-          .all(...chunk, column.id, titleColumn ?? column.id) as {
+          .all(...chunk, column?.id ?? chosen.id, titleColumn ?? chosen.id, chosen.id) as {
           row_id: string;
           column_id: string;
           value_text: string | null;
         }[]) {
-          if (cell.column_id === column.id) places.set(cell.row_id, cell.value_text);
+          if (column && cell.column_id === column.id) places.set(cell.row_id, cell.value_text);
+          if (heritage && cell.column_id === heritage.id) shown.set(cell.row_id, cell.value_text);
           if (cell.column_id === titleColumn) titles.set(cell.row_id, cell.value_text);
         }
         for (const asset of this.db
@@ -1169,12 +1222,11 @@ export class Repository {
             entry.first = { id: asset.id, metadata: asset.metadata_json };
         }
       }
-      const records = ids.map((id): MapRecord => {
+      const records = ids.flatMap((id): MapRecord[] => {
         const image = images.get(id);
-        return {
+        const base = {
           id,
           title: titles.get(id) || id.slice(0, 8),
-          location: decodeDatabaseLocation(places.get(id) ?? null),
           image: image?.first
             ? {
                 id: image.first.id,
@@ -1183,8 +1235,29 @@ export class Repository {
             : null,
           imageCount: image?.count ?? 0,
         };
+        // A record at each of its elements (one marker per distinct place);
+        // without any placed element, at its own location.
+        if (elementPlaces) {
+          const seen = new Set<string>();
+          const placed = decodeMultiSelect(shown.get(id) ?? null).flatMap((optionId): MapRecord[] => {
+            const place = elementPlaces.get(optionId);
+            if (!place) return [];
+            const key = `${place.latitude},${place.longitude}`;
+            if (seen.has(key)) return [];
+            seen.add(key);
+            return [
+              {
+                ...base,
+                location: { name: place.label, latitude: place.latitude, longitude: place.longitude },
+                placement: { optionId, inherited: place.inherited },
+              },
+            ];
+          });
+          if (placed.length) return placed;
+        }
+        return [{ ...base, location: decodeDatabaseLocation(places.get(id) ?? null) }];
       });
-      return { records, total: records.length };
+      return { records, total: ids.length };
     })();
   }
   importCsv(
@@ -1498,8 +1571,13 @@ export class Repository {
         .prepare("SELECT option_json FROM option_restores WHERE batch_id=? ORDER BY id")
         .all(batch) as { option_json: string }[];
       const databases = new Set<string>();
+      const heritage: HeritageRestore[] = [];
       for (const r of restores) {
         const o = JSON.parse(r.option_json);
+        if (o.__heritage) {
+          heritage.push(o);
+          continue;
+        }
         this.db
           .prepare(
             "INSERT OR REPLACE INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
@@ -1507,6 +1585,8 @@ export class Repository {
           .run(o.id, o.database_id, o.column_id, o.label, o.color, o.position, o.created_at, o.updated_at);
         databases.add(o.database_id);
       }
+      // Then heritage records, parts and marks, last change first.
+      for (const entry of heritage.reverse()) restoreHeritage(this.db, entry);
       if (restores.length)
         this.db.prepare("DELETE FROM option_restores WHERE batch_id=?").run(batch);
       const { seq, mark } = this.db

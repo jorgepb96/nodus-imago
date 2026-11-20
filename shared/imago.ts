@@ -23,16 +23,37 @@ export type MapRecord = {
   location: DatabaseLocationValue | null;
   image: { id: string; revision?: string } | null;
   imageCount: number;
+  /** Placed by a heritage element (its own coordinates or its whole's). */
+  placement?: { optionId: string; inherited: boolean } | null;
 };
 export type MapRecordsInput = {
   databaseId: string;
+  /** A location property, or a heritage property (records at their elements). */
   columnId: string;
+  /** With a heritage property: the location used for records with no placed element. */
+  fallbackColumnId?: string | null;
   filters?: PropertyFilter[];
   filterLogic?: "and" | "or";
   filterGroups?: PropertyFilterGroup[];
   sorts?: ViewSort[];
 };
 
+/** One element on the heritage map: where it is and how many records show it. */
+export type HeritageMapElement = {
+  optionId: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  inherited: boolean;
+  /** Placed at the centre of its town only. */
+  approximate?: boolean;
+  group: string | null;
+  type: string | null;
+  parentId: string | null;
+  /** Records of the view that show it (with its parts when asked). */
+  count: number;
+  rowIds: string[];
+};
 export type ImageAsset = {
   id: string;
   revision?: string;
@@ -62,6 +83,10 @@ export type ImageAnnotation = {
   color: string | null;
   createdAt: string;
   updatedAt: string;
+  /** A region, or a point (w = h = 0). */
+  kind?: "rect" | "point";
+  /** The heritage element (option) this mark shows. */
+  optionId?: string | null;
 };
 /** What an import from Tropy or IIIF created. */
 export type StandardImport = { databaseId: string; records: number; photos: number; failed: number; annotations: number };
@@ -110,7 +135,14 @@ export type PropertyFilterOp =
   | "unchecked"
   | "relative_date"
   | "has_coordinates"
-  | "no_coordinates";
+  | "no_coordinates"
+  /** Heritage properties: elements of these types («grupo/tipo») or groups,
+   * parts of these elements, marked on the photo, not linked to Wikidata. */
+  | "heritage_type"
+  | "heritage_group"
+  | "part_of"
+  | "heritage_marked"
+  | "heritage_unlinked";
 export type PropertyFilterGroup = {
   id: string;
   logic: "and" | "or";
@@ -385,6 +417,10 @@ export type Commands = {
     input: MapRecordsInput;
     result: { records: MapRecord[]; total: number };
   };
+  heritageMap: {
+    input: Omit<MapRecordsInput, "fallbackColumnId"> & { includeParts: boolean };
+    result: { elements: HeritageMapElement[]; unplaced: number; records: number };
+  };
   searchPlaces: { input: { query: string }; result: GazetteerPlace[] };
   openMapAttribution: { input: void; result: void };
   status: { input: void; result: Status };
@@ -409,7 +445,8 @@ export type Commands = {
   deleteColumn: { input: { id: string }; result: void };
   convertColumn: {
     input: { id: string; type: DatabaseColumnType; apply: boolean };
-    result: { total: number; lost: number };
+    /** heritage: element records and photo marks a heritage property would lose. */
+    result: { total: number; lost: number; heritage?: { elements: number; marks: number } | null };
   };
   duplicateColumn: {
     input: { id: string; copy?: string };
@@ -474,6 +511,68 @@ export type Commands = {
   authorityLinks: { input: { columnId: string }; result: Record<string, import("./authority").AuthorityLink> };
   authoritySet: { input: { columnId: string; items: { optionId: string; link: import("./authority").AuthorityLink | null }[] }; result: number };
   authorityLocate: { input: { columnId: string; name: string }; result: { columnId: string; located: number } };
+  heritageElements: { input: { columnId: string }; result: Record<string, import("./heritage").HeritageElement> };
+  heritageSave: { input: { columnId: string; items: import("./heritage").HeritageElement[] }; result: number };
+  /** Handled in the main process: Wikidata candidates for up to 20 elements. */
+  heritageCandidates: {
+    input: { items: { optionId: string; label: string }[] };
+    result: { optionId: string; candidates: import("./heritage").HeritageCandidate[]; error?: string }[];
+  };
+  heritageApplyLinks: {
+    input: {
+      columnId: string;
+      items: { optionId: string; link: import("./authority").AuthorityLink; group?: string | null; type?: string | null; parentId?: string | null }[];
+    };
+    result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
+  };
+  heritageAddElement: { input: { columnId: string; label: string; link: import("./authority").AuthorityLink | null }; result: string };
+  /** A vision model's suggestions for the whole image and/or zones of it. */
+  heritageSuggest: {
+    input: {
+      assetId: string;
+      columnId: string;
+      whole: boolean;
+      zones: { x: number; y: number; w: number; h: number }[];
+      choice: import("./aiConfig").ModelChoice;
+    };
+    result: {
+      targets: { zone: { x: number; y: number; w: number; h: number } | null; suggestions: import("./heritage").HeritageSuggestion[] }[];
+      known: number;
+    };
+  };
+  /** Which of these records already show the element. */
+  heritageRowsWith: { input: { columnId: string; optionId: string; rowIds: string[] }; result: string[] };
+  heritageAddToRows: {
+    input: { columnId: string; optionId: string; items: { rowId: string; assetId?: string; box?: { x: number; y: number; w: number; h: number } | null }[] };
+    result: number;
+  };
+  heritageInferTypes: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null } };
+  heritageApplyPlaces: {
+    input: {
+      columnId: string;
+      items: { optionId: string; latitude: number; longitude: number; osm?: string | null; town?: boolean; group?: string | null; type?: string | null }[];
+    };
+    result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
+  };
+  /** Starts a background search (Wikidata, OpenStreetMap or towns) for what still needs it. */
+  heritageIdentifyStart: { input: { columnId: string; source: "wikidata" | "osm" | "town" }; result: string | null };
+  heritageJobs: {
+    input: { columnId: string };
+    result: { id: string; state: string; done: number; total: number; failed: number; message: string | null; source: "wikidata" | "osm" | "town" }[];
+  };
+  heritageProposals: {
+    input: { columnId: string; source: "wikidata" | "osm" | "town" };
+    result: { id: string; optionId: string; source: "wikidata" | "osm" | "town"; candidates: any[]; chosen: number; accepted: boolean }[];
+  };
+  heritageProposalUpdate: { input: { id: string; chosen?: number; accepted?: boolean }; result: null };
+  heritageProposalsAccept: { input: { ids: string[]; accepted: boolean }; result: null };
+  heritageProposalsDismiss: { input: { ids: string[] }; result: null };
+  heritageProposalsApply: {
+    input: { columnId: string; source: "wikidata" | "osm" | "town" };
+    result: { id: string; applied: number; createdAt: string; revertedAt: string | null } | null;
+  };
+  heritageLinkBatches: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null }[] };
+  heritageRevertBatch: { input: { id: string }; result: number };
   valueClusters: { input: { columnId: string }; result: import("./cleanup").ValueCluster[] };
   valueCounts: { input: { columnId: string }; result: import("./cleanup").ValueCount[] };
   valueMerge: { input: { columnId: string; groups: { members: string[]; target: string }[] }; result: number };
@@ -519,6 +618,8 @@ export type Commands = {
       note: string;
       tags: string[];
       color?: string | null;
+      kind?: "rect" | "point";
+      optionId?: string | null;
     };
     result: ImageAnnotation;
   };
@@ -585,6 +686,9 @@ export type Commands = {
         id: string;
         title: string;
         year: number;
+        /** First and last year the date covers (a period spans several). */
+        start: number;
+        end: number;
         imageId: string | null;
         revision?: string;
         period?: string;

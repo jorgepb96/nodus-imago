@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS image_fingerprints(content_hash TEXT PRIMARY KEY,hash
 CREATE TABLE IF NOT EXISTS image_pair_checks(pair TEXT PRIMARY KEY,same INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS image_miniatures(content_hash TEXT PRIMARY KEY,width INTEGER NOT NULL,height INTEGER NOT NULL,pixels BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS option_authorities(option_id TEXT PRIMARY KEY,column_id TEXT NOT NULL,link_json TEXT NOT NULL,linked_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS heritage_elements(option_id TEXT PRIMARY KEY,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,parent_option_id TEXT,group_key TEXT,type_key TEXT,latitude REAL,longitude REAL,coord_source TEXT,updated_at TEXT NOT NULL,osm_ref TEXT);
+CREATE INDEX IF NOT EXISTS heritage_column ON heritage_elements(column_id);
+CREATE TABLE IF NOT EXISTS heritage_link_batches(id TEXT PRIMARY KEY,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,applied INTEGER NOT NULL,snapshot_json TEXT NOT NULL,created_at TEXT NOT NULL,reverted_at TEXT);
+CREATE TABLE IF NOT EXISTS heritage_proposals(id TEXT PRIMARY KEY,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,option_id TEXT NOT NULL,source TEXT NOT NULL,job_id TEXT,candidates_json TEXT NOT NULL,chosen INTEGER NOT NULL DEFAULT 0,accepted INTEGER NOT NULL DEFAULT 0,state TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,UNIQUE(column_id,option_id,source));
 CREATE TABLE IF NOT EXISTS option_restores(id INTEGER PRIMARY KEY,batch_id TEXT NOT NULL,option_json TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS option_restores_batch ON option_restores(batch_id);
 CREATE TABLE IF NOT EXISTS visual_maps(database_id TEXT PRIMARY KEY REFERENCES db_databases(id) ON DELETE CASCADE,key TEXT NOT NULL,created_at TEXT NOT NULL,data TEXT NOT NULL);

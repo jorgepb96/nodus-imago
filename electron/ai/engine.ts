@@ -990,6 +990,75 @@ export class Engine {
       items.length,
     );
   }
+  /**
+   * Asks a vision model about one image, or one zone of it (fractions of the
+   * image as shown), and returns its raw answer. Local models read a prepared
+   * copy; API models receive a JPEG of at most 1600 px.
+   */
+  async askImage(
+    choice: ModelChoice,
+    assetId: string,
+    zone: { x: number; y: number; w: number; h: number } | null,
+    prompt: string,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const asset = this.repo.asset(assetId) as { original_path: string; metadata_json: string; content_hash: string };
+    if ((await hashFile(asset.original_path)) !== asset.content_hash) throw new Error("El original cambió.");
+    const base = assetView(asset.metadata_json);
+    // A zone of the image as shown is a crop of the crop.
+    const view: ImageView = zone
+      ? {
+          ...base,
+          crop: base.crop
+            ? { x: base.crop.x + zone.x * base.crop.w, y: base.crop.y + zone.y * base.crop.h, w: zone.w * base.crop.w, h: zone.h * base.crop.h }
+            : zone,
+        }
+      : base;
+    const settings = this.repo.getSettings();
+    if (choice.provider === "local") {
+      this.ready(choice.model);
+      const model = this.models.get(choice.model);
+      return String(
+        await withInferenceImage(
+          this.repo.root,
+          asset.original_path,
+          (file) =>
+            model.backend === "llama"
+              ? this.llama.describe(choice.model, file, prompt, signal, "json")
+              : this.host.request(
+                  {
+                    task: "vision",
+                    directory: this.models.directory(choice.model),
+                    device: settings.device,
+                    threads: settings.profile === "light" ? 1 : 2,
+                    image: file,
+                    prompt,
+                  },
+                  signal,
+                ),
+          view,
+        ),
+      );
+    }
+    const buffer = await (await orientedImage(asset.original_path, view))
+      .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    signal.throwIfAborted();
+    return this.complete(
+      {
+        choice,
+        profiles: settings.apiProfiles,
+        remoteEnabled: settings.remoteEnabled,
+        minIntervalMs: settings.apiDelayMs,
+        prompt,
+        system: aiColumnSystem(settings.language),
+        images: [{ base64: buffer.toString("base64"), mediaType: "image/jpeg" }],
+      },
+      signal,
+    );
+  }
+
   async analyzeOne(
     payload: {
       language: string;

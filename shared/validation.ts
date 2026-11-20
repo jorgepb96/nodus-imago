@@ -6,6 +6,25 @@ import { FILTER_LABELS } from "./viewCriteria";
 import { externalHttpsUrl } from "./externalLinks";
 import type { PropertyFilterGroup, PropertyFilterOp } from "./imago";
 const id = z.string().min(1).max(200);
+const authorityLink = z
+  .object({
+    source: z.enum(["wikidata", "iconclass"]),
+    id: z.string().min(1).max(80),
+    label: z.string().max(500),
+    description: z.string().max(1000).nullable(),
+    uri: z.string().url().max(300),
+    ulan: z.string().max(40).nullable().optional(),
+    tgn: z.string().max(40).nullable().optional(),
+    aat: z.string().max(40).nullable().optional(),
+    iconclass: z.string().max(120).nullable().optional(),
+    coordinates: z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).nullable().optional(),
+    born: z.number().int().nullable().optional(),
+    died: z.number().int().nullable().optional(),
+    kind: z.enum(["person", "place", "subject", "other"]).optional(),
+    instances: z.array(z.string().regex(/^Q\d+$/)).max(20).optional(),
+    partOf: z.array(z.string().regex(/^Q\d+$/)).max(20).optional(),
+  })
+  .strict();
 const name = z.string().trim().min(1).max(300);
 const ids = z.array(id).max(100000);
 const type = z.string().refine(isDatabaseColumnType);
@@ -113,8 +132,11 @@ export const searchSchema = z
   .strict();
 const chart = z.enum(["bar", "column", "line", "heatmap", "table"]).optional();
 const limit = z.number().int().min(2).max(60).optional();
+/** Heritage properties: count elements, their types or their groups; parts in their wholes. */
+const heritageLevel = z.enum(["element", "type", "group"]).optional();
+const includeParts = z.boolean().optional();
 export const statSpec = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart }).strict(),
+  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart, heritageLevel, includeParts }).strict(),
   z
     .object({
       kind: z.literal("crosstab"),
@@ -123,9 +145,11 @@ export const statSpec = z.discriminatedUnion("kind", [
       limit,
       measure: z.enum(["count", "row", "residual"]).optional(),
       chart,
+      heritageLevel,
+      includeParts,
     })
     .strict(),
-  z.object({ kind: z.literal("cooccurrence"), columnId: id, limit, chart }).strict(),
+  z.object({ kind: z.literal("cooccurrence"), columnId: id, limit, chart, heritageLevel, includeParts }).strict(),
   z
     .object({
       kind: z.literal("trend"),
@@ -134,6 +158,8 @@ export const statSpec = z.discriminatedUnion("kind", [
       bucket: z.enum(["year", "decade"]).optional(),
       limit,
       chart,
+      heritageLevel,
+      includeParts,
     })
     .strict(),
   z
@@ -359,7 +385,11 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .strict(),
   mapRecords: searchSchema
     .pick({ filters: true, filterLogic: true, filterGroups: true, sorts: true })
-    .extend({ databaseId: id, columnId: id })
+    .extend({ databaseId: id, columnId: id, fallbackColumnId: id.nullable().optional() })
+    .strict(),
+  heritageMap: searchSchema
+    .pick({ filters: true, filterLogic: true, filterGroups: true, sorts: true })
+    .extend({ databaseId: id, columnId: id, includeParts: z.boolean() })
     .strict(),
   propertyChoices: z
     .object({
@@ -476,24 +506,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
           z
             .object({
               optionId: id,
-              link: z
-                .object({
-                  source: z.enum(["wikidata", "iconclass"]),
-                  id: z.string().min(1).max(80),
-                  label: z.string().max(500),
-                  description: z.string().max(1000).nullable(),
-                  uri: z.string().url().max(300),
-                  ulan: z.string().max(40).nullable().optional(),
-                  tgn: z.string().max(40).nullable().optional(),
-                  aat: z.string().max(40).nullable().optional(),
-                  iconclass: z.string().max(120).nullable().optional(),
-                  coordinates: z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).nullable().optional(),
-                  born: z.number().int().nullable().optional(),
-                  died: z.number().int().nullable().optional(),
-                  kind: z.enum(["person", "place", "subject", "other"]).optional(),
-                })
-                .strict()
-                .nullable(),
+              link: authorityLink.nullable(),
             })
             .strict(),
         )
@@ -501,6 +514,99 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   authorityLocate: z.object({ columnId: id, name: z.string().trim().min(1).max(120) }).strict(),
+  heritageElements: z.object({ columnId: id }).strict(),
+  heritageSave: z
+    .object({
+      columnId: id,
+      items: z
+        .array(
+          z
+            .object({
+              optionId: id,
+              parentId: id.nullable(),
+              group: z.string().max(40).nullable(),
+              type: z.string().max(40).nullable(),
+              latitude: z.number().min(-90).max(90).nullable(),
+              longitude: z.number().min(-180).max(180).nullable(),
+              coordSource: z.enum(["wikidata", "osm", "town", "manual"]).nullable(),
+              osm: z.string().max(80).nullable().optional(),
+            })
+            .strict(),
+        )
+        .max(5000),
+    })
+    .strict(),
+  heritageCandidates: z
+    .object({ items: z.array(z.object({ optionId: id, label: z.string().trim().min(1).max(500) }).strict()).min(1).max(20) })
+    .strict(),
+  heritageApplyLinks: z
+    .object({
+      columnId: id,
+      items: z
+        .array(
+          z
+            .object({
+              optionId: id,
+              link: authorityLink,
+              group: z.string().max(40).nullable().optional(),
+              type: z.string().max(40).nullable().optional(),
+              parentId: id.nullable().optional(),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(5000),
+    })
+    .strict(),
+  heritageAddElement: z.object({ columnId: id, label: z.string().trim().min(1).max(500), link: authorityLink.nullable() }).strict(),
+  heritageSuggest: z
+    .object({
+      assetId: id,
+      columnId: id,
+      whole: z.boolean(),
+      zones: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }).strict()).max(6),
+      choice: z.object({ provider: z.string().min(1).max(40), model: z.string().min(1).max(300) }).strict(),
+    })
+    .strict(),
+  heritageRowsWith: z.object({ columnId: id, optionId: id, rowIds: z.array(id).max(500) }).strict(),
+  heritageAddToRows: z
+    .object({
+      columnId: id,
+      optionId: id,
+      items: z.array(z.object({ rowId: id, assetId: id.optional(), box: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }).strict().nullable().optional() }).strict()).min(1).max(500),
+    })
+    .strict(),
+  heritageInferTypes: z.object({ columnId: id }).strict(),
+  heritageApplyPlaces: z
+    .object({
+      columnId: id,
+      items: z
+        .array(
+          z
+            .object({
+              optionId: id,
+              latitude: z.number().min(-90).max(90),
+              longitude: z.number().min(-180).max(180),
+              osm: z.string().regex(/^(node|way|relation)\/\d+$/).nullable().optional(),
+              town: z.boolean().optional(),
+              group: z.string().max(40).nullable().optional(),
+              type: z.string().max(40).nullable().optional(),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(5000),
+    })
+    .strict(),
+  heritageIdentifyStart: z.object({ columnId: id, source: z.enum(["wikidata", "osm", "town"]) }).strict(),
+  heritageJobs: z.object({ columnId: id }).strict(),
+  heritageProposals: z.object({ columnId: id, source: z.enum(["wikidata", "osm", "town"]) }).strict(),
+  heritageProposalUpdate: z.object({ id, chosen: z.number().int().min(0).max(20).optional(), accepted: z.boolean().optional() }).strict(),
+  heritageProposalsAccept: z.object({ ids: z.array(id).max(5000), accepted: z.boolean() }).strict(),
+  heritageProposalsDismiss: z.object({ ids: z.array(id).max(5000) }).strict(),
+  heritageProposalsApply: z.object({ columnId: id, source: z.enum(["wikidata", "osm", "town"]) }).strict(),
+  heritageLinkBatches: z.object({ columnId: id }).strict(),
+  heritageRevertBatch: z.object({ id }).strict(),
   valueClusters: z.object({ columnId: id }).strict(),
   valueCounts: z.object({ columnId: id }).strict(),
   valueMerge: z
@@ -544,6 +650,8 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       note: z.string().max(20000),
       tags: z.array(z.string().max(120)).max(50),
       color: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional(),
+      kind: z.enum(["rect", "point"]).optional(),
+      optionId: id.nullable().optional(),
     })
     .strict(),
   annotationDelete: z.object({ id }).strict(),

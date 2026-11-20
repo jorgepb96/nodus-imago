@@ -13,6 +13,10 @@ import { RichTextEditor } from "./RichTextEditor";
 import { LocationCell } from "./LocationCell";
 import { HistoricalDateCell } from "./HistoricalDateCell";
 import { TextCellPopover } from "./TextCellPopover";
+import { HeritageIcon } from "./HeritageIcon";
+import { heritageScheme, isHeritageColumn, typology } from "../../shared/heritage";
+import { useHeritage } from "../heritageStore";
+import { HeritageAddFooter, HeritageOptionMeta } from "./HeritageCellParts";
 
 /** Table text cells that open the expanded editor on click, as in Notion. */
 const EXPANDABLE_TYPES = ["title", "text", "rich_text", "ai"];
@@ -355,6 +359,16 @@ function OptionPicker({
     [query, setQuery] = useState(""),
     picker = useRef<HTMLDetailsElement>(null),
     menu = useRef<HTMLDivElement>(null);
+  // Heritage elements carry the icon of their typology.
+  const heritage = isHeritageColumn(column),
+    elements = useHeritage(heritage ? column.id : null),
+    scheme = heritage ? heritageScheme(column.config) : null;
+  const labels = new Map(column.options.map((o) => [o.id, o.label]));
+  const iconOf = (optionId: string) => {
+    if (!scheme) return null;
+    const e = elements[optionId];
+    return <HeritageIcon name={typology(scheme, e?.group ?? null, e?.type ?? null)?.icon} size={11} className="chip-icon" />;
+  };
   // The list floats above the page (top layer), so a table with few rows or
   // a scrolling container never cuts it; it opens upwards when there is no
   // room below.
@@ -421,6 +435,7 @@ function OptionPicker({
                     { "--chip": o.color ?? "#6366f1" } as React.CSSProperties
                   }
                 >
+                  {iconOf(o.id)}
                   {o.label}
                 </span>
               ))
@@ -431,7 +446,7 @@ function OptionPicker({
       </summary>
       {open && (
         <div className="option-menu" ref={menu}>
-          {column.options.length > 10 && (
+          {(column.options.length > 10 || heritage) && (
             <input
               className="option-search"
               type="search"
@@ -451,7 +466,15 @@ function OptionPicker({
                 onChange={() => onToggle(o.id)}
               />
               <i style={{ background: o.color ?? "#6366f1" }} />
-              <span className="option-label">{o.label}</span>
+              {iconOf(o.id)}
+              {heritage ? (
+                <span className="option-label heritage-option">
+                  {o.label}
+                  <HeritageOptionMeta optionId={o.id} elements={elements} scheme={scheme!} labels={labels} />
+                </span>
+              ) : (
+                <span className="option-label">{o.label}</span>
+              )}
               {column.config.optionLinks?.[o.label.toLocaleLowerCase()] && (
                 <button
                   type="button"
@@ -480,10 +503,21 @@ function OptionPicker({
           {column.options.length > 0 && !ordered.length && (
             <p className="muted">{t("Sin coincidencias")}</p>
           )}
-          {!column.options.length && (
+          {!column.options.length && !heritage && (
             <p>
               {t("Añadir opción")}: {t("Propiedades")}
             </p>
+          )}
+          {heritage && !column.options.some((o) => fold(o.label) === needle) && (
+            <HeritageAddFooter
+              column={column}
+              query={query}
+              scheme={scheme!}
+              onAdded={(id) => {
+                setQuery("");
+                if (!selected.includes(id)) onToggle(id);
+              }}
+            />
           )}
         </div>
       )}

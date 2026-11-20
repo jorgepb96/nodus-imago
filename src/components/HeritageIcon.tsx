@@ -1,0 +1,60 @@
+// Icons of heritage typologies, by the lucide name the scheme stores.
+import {
+  Amphora,
+  Anchor,
+  BrickWall,
+  Building,
+  Building2,
+  Castle,
+  Church,
+  DoorOpen,
+  Frame,
+  House,
+  Landmark,
+  Library,
+  Milestone,
+  MoonStar,
+  Mountain,
+  MountainSnow,
+  Palette,
+  PersonStanding,
+  Signpost,
+  Theater,
+  TrainFront,
+  Trees,
+  University,
+  Waves,
+  type LucideIcon,
+} from "lucide-react";
+
+export const HERITAGE_ICONS: Record<string, LucideIcon> = {
+  Church,
+  MoonStar,
+  Building2,
+  Building,
+  Landmark,
+  University,
+  House,
+  Library,
+  Castle,
+  BrickWall,
+  DoorOpen,
+  Milestone,
+  Anchor,
+  TrainFront,
+  Amphora,
+  Theater,
+  PersonStanding,
+  Waves,
+  Trees,
+  Signpost,
+  Mountain,
+  MountainSnow,
+  Palette,
+  Frame,
+};
+
+export function HeritageIcon({ name, size = 13, className }: { name: string | null | undefined; size?: number; className?: string }) {
+  const Icon = (name && HERITAGE_ICONS[name]) || Landmark;
+  return <Icon size={size} className={className} aria-hidden="true" />;
+}

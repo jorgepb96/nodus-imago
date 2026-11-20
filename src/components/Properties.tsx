@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { Plus, Trash2, ArrowUp, ArrowDown, Pencil, SlidersHorizontal, Sparkles, Info } from "lucide-react";
+import { Plus, Trash2, ArrowUp, ArrowDown, Pencil, SlidersHorizontal, Sparkles, Info, Landmark } from "lucide-react";
 import type {
   DatabaseColumn,
   DatabaseColumnType,
@@ -125,6 +125,7 @@ export function Properties({
     [criteriaOn, setCriteriaOn] = useState(false),
     [criteria, setCriteria] = useState(""),
     [definitionsOn, setDefinitionsOn] = useState(false),
+    [heritage, setHeritage] = useState(false),
     [linkRow, setLinkRow] = useState<number | null>(null),
     [userPresets, setUserPresets] = useState<AiUserPreset[]>(
       () => status.settings.aiUserPresets ?? [],
@@ -176,6 +177,7 @@ export function Properties({
           ),
           aiEnabled: aiOn,
           aiFreeTags: type === "multi_select" && aiOn && freeTags,
+          ...(type === "multi_select" ? { heritage } : {}),
           aiMaxTags: maxTags,
           aiCriteriaOn: aiOn && criteriaOn,
           aiCriteria: criteria,
@@ -263,6 +265,7 @@ export function Properties({
     setCriteriaOn(!!c.config.aiCriteriaOn);
     setCriteria(c.config.aiCriteria ?? "");
     setDefinitionsOn(!!c.config.aiDefinitionsOn);
+    setHeritage(!!c.config.heritage);
     setCreating(false);
     setFormulaImported(null);
     setFormulaKind("arithmetic");
@@ -340,6 +343,7 @@ export function Properties({
     setCriteriaOn(false);
     setCriteria("");
     setDefinitionsOn(false);
+    setHeritage(false);
     setMaxTags(5);
     setOutput("text");
     setPresetName("");
@@ -782,6 +786,17 @@ export function Properties({
                     {t("Añadir opción")}
                   </Button>
                 </div>
+              )}
+              {type === "multi_select" && (
+                <label className="check-label heritage-toggle">
+                  <input
+                    type="checkbox"
+                    checked={heritage}
+                    onChange={(e) => setHeritage(e.target.checked)}
+                  />
+                  <Landmark size={14} aria-hidden="true" />
+                  {t("Patrimonio: cada opción es un elemento identificado, con ficha, tipología y lugar en el mapa")}
+                </label>
               )}
               {[
                 "text",

@@ -38,6 +38,12 @@ import { Variants } from "./db/variants";
 import { VisualMaps } from "./db/visualMap";
 import { ValueCleanup } from "./db/cleanup";
 import { Authorities } from "./db/authorities";
+import { Heritage, type HeritageSource } from "./db/heritage";
+import { HeritageFinder, type Towns } from "./heritage/finder";
+import { Gazetteer } from "./geo/gazetteer";
+import { decodeMultiSelect, encodeMultiSelect } from "../shared/databases";
+import { buildAiCellPrompt, buildAiRowContext } from "../shared/databaseAi";
+import { heritageSuggestPrompt, knownForRecord, matchSuggestion, parseSuggestions } from "../shared/heritage";
 import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
@@ -61,7 +67,7 @@ const CONTENT_WRITES = new Set([
   "undo", "redo", "addColumn", "updateColumn", "deleteColumn", "saveOptions", "deleteImage",
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
-  "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
+  "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -94,6 +100,16 @@ export class Service {
   visualMaps: VisualMaps;
   cleanup: ValueCleanup;
   authorities: Authorities;
+  heritage: Heritage;
+  /** The bundled gazetteer (set by the worker), for background heritage searches. */
+  gazetteerPath?: string;
+  private gazetteer?: Gazetteer;
+  heritageFinder = new HeritageFinder(() => {
+    if (!this.gazetteerPath) throw new Error("Catálogo de lugares no disponible.");
+    return (this.gazetteer ??= new Gazetteer(this.gazetteerPath));
+  });
+  /** Towns of a running heritage search, worked out once per run. */
+  private heritageTowns = new WeakMap<object, Promise<Towns>>();
   restorations: Restorations;
   suggestions: NeighbourSuggestions;
   details: DetailSearch;
@@ -163,6 +179,7 @@ export class Service {
     this.visualMaps = new VisualMaps(this.repo, () => this.engine.contract());
     this.cleanup = new ValueCleanup(this.repo);
     this.authorities = new Authorities(this.repo);
+    this.heritage = new Heritage(this.repo);
     this.variants = new Variants(this.repo, this.boards, () => {
       try {
         return this.engine.contract();
@@ -199,6 +216,28 @@ export class Service {
     this.autoIndex = new AutoIndexer(this.repo, this.engine, this.queue);
     this.autoIndex.suspended = () => this.restoring || this.closing;
     this.autoIndex.start();
+    // Background heritage searches: one element at a time, kept as proposals.
+    this.queue.heritageOne = async (payload, index) => {
+      const item = payload.items[index];
+      const source = payload.source as HeritageSource;
+      const column = this.repo.column(payload.columnId);
+      if (!column.options.some((o) => o.id === item.optionId)) return "skipped";
+      const towns = await (this.heritageTowns.get(payload) ??
+        this.heritageTowns.set(payload, this.heritageFinder.towns(payload.items, false)).get(payload)!);
+      await this.heritageFinder.ensureTown(towns, item.optionId);
+      if (source === "wikidata") {
+        const [found] = await this.heritageFinder.wikidata([item], this.repo.getSettings().language, towns);
+        this.heritage.saveProposal(payload.columnId, item.optionId, source, null, found.candidates, found.candidates[0]?.confidence === "high");
+      } else if (source === "osm") {
+        const candidates = await this.heritageFinder.osm(item, towns);
+        this.heritage.saveProposal(payload.columnId, item.optionId, source, null, candidates, candidates[0]?.confidence === "high");
+      } else {
+        const at = towns.near(item.optionId);
+        if (!at) return "skipped";
+        this.heritage.saveProposal(payload.columnId, item.optionId, source, null, [{ ...at, town: towns.town(item.optionId) }], true);
+      }
+      return "imported";
+    };
     this.queue.onFinished = (kind) => {
       if (kind === "images") this.autoIndex.soon();
     };
@@ -445,6 +484,8 @@ export class Service {
       }
       case "mapRecords":
         return this.repo.mapRecords(input);
+      case "heritageMap":
+        return this.heritage.map(input);
       case "propertyChoices":
         return this.repo.propertyChoices(input);
       case "csvPreview": {
@@ -924,6 +965,125 @@ export class Service {
         return this.authorities.links(input.columnId);
       case "authoritySet":
         return this.authorities.set(input.columnId, input.items);
+      case "heritageElements":
+        return this.heritage.elements(input.columnId);
+      case "heritageSave": {
+        const saved = this.heritage.save(input.columnId, input.items);
+        this.changed();
+        return saved;
+      }
+      case "heritageApplyLinks": {
+        const batch = this.heritage.applyLinks(input.columnId, input.items);
+        this.changed();
+        return batch;
+      }
+      case "heritageAddElement": {
+        const created = this.heritage.addElement(input.columnId, input.label, input.link);
+        this.changed();
+        return created;
+      }
+      case "heritageSuggest": {
+        // A vision model names the elements it sees in the whole image and
+        // in each zone; each name is matched with the property's elements.
+        const column = this.heritage.heritageColumn(input.columnId);
+        const asset = this.repo.asset(input.assetId) as { row_id: string };
+        const row = this.repo.getRow(asset.row_id);
+        if (row.databaseId !== column.databaseId) throw new Error("Elige una propiedad de patrimonio de esta base de datos.");
+        const language = this.repo.getSettings().language;
+        const context = buildAiRowContext(this.repo.detail(row.databaseId).columns, row, { excludeColumnId: column.id, language });
+        const known = knownForRecord(column.options, `${row.title} ${context}`);
+        const targets: ({ x: number; y: number; w: number; h: number } | null)[] = [...(input.whole ? [null] : []), ...input.zones];
+        if (!targets.length) throw new Error("Elige la imagen completa o al menos una zona.");
+        const controller = new AbortController();
+        const results = [];
+        for (const zone of targets) {
+          const prompt = buildAiCellPrompt(heritageSuggestPrompt(known, !!zone), context, language);
+          const raw = await this.engine.askImage(input.choice, input.assetId, zone, prompt, controller.signal);
+          results.push({ zone, suggestions: parseSuggestions(raw).map((s) => ({ ...s, optionId: matchSuggestion(s, column.options) })) });
+        }
+        return { targets: results, known: known.length };
+      }
+      case "heritageRowsWith": {
+        const column = this.heritage.heritageColumn(input.columnId);
+        const cell = this.repo.db.prepare("SELECT value_text v FROM db_cells WHERE row_id=? AND column_id=?");
+        return input.rowIds.filter((rowId: string) =>
+          decodeMultiSelect((cell.get(rowId, column.id) as { v: string | null } | undefined)?.v ?? null).includes(input.optionId),
+        );
+      }
+      case "heritageAddToRows": {
+        // One element added to many records (and, where a zone is given, marked
+        // there), as one «Deshacer» batch for the cells.
+        const column = this.heritage.heritageColumn(input.columnId);
+        if (!column.options.some((o) => o.id === input.optionId)) throw new Error("Identificador de opción ajeno a la propiedad.");
+        const db = this.repo.db;
+        let added = 0;
+        db.transaction(() => {
+          const before = (db.prepare("SELECT coalesce(max(id),0) id FROM history").get() as { id: number }).id;
+          for (const item of input.items) {
+            if (item.assetId && item.box)
+              this.annotations.save({ assetId: item.assetId, ...item.box, note: "", tags: [], optionId: input.optionId });
+            const ids = decodeMultiSelect(this.repo.getRow(item.rowId).cells[column.id] ?? null);
+            if (!ids.includes(input.optionId)) this.repo.setCell(item.rowId, column.id, encodeMultiSelect([...ids, input.optionId]));
+            added++;
+          }
+          db.prepare("UPDATE history SET batch_id=? WHERE id>?").run(uuid(), before);
+        })();
+        this.changed();
+        return added;
+      }
+      case "heritageInferTypes": {
+        const batch = this.heritage.inferTypes(input.columnId);
+        this.changed();
+        return batch;
+      }
+      case "heritageApplyPlaces": {
+        const batch = this.heritage.applyPlaces(input.columnId, input.items);
+        this.changed();
+        return batch;
+      }
+      case "heritageIdentifyStart": {
+        // A background search, paused automatically if Imago closes or a
+        // service cannot be reached; it resumes where it stopped.
+        const column = this.heritage.heritageColumn(input.columnId);
+        const items = this.heritage.pendingItems(input.columnId, input.source);
+        if (!items.length) return null;
+        const names = { wikidata: "Identificar en Wikidata", osm: "Situar con OpenStreetMap", town: "Situar en su localidad" } as const;
+        const id = this.repo.newJob("heritage", { columnId: input.columnId, source: input.source, items, label: `${names[input.source as HeritageSource]} · ${column.name}` }, items.length);
+        this.queue.pump();
+        this.changed();
+        return id;
+      }
+      case "heritageJobs":
+        return (
+          this.repo.db
+            .prepare(
+              "SELECT id,state,done,total,failed,message,json_extract(payload_json,'$.source') source FROM jobs WHERE kind='heritage' AND json_extract(payload_json,'$.columnId')=? AND state IN ('queued','running','paused','failed') ORDER BY created_at DESC",
+            )
+            .all(input.columnId) as unknown[]
+        );
+      case "heritageProposals":
+        return this.heritage.proposals(input.columnId, input.source);
+      case "heritageProposalUpdate":
+        this.heritage.updateProposal(input.id, input);
+        return null;
+      case "heritageProposalsAccept":
+        this.heritage.acceptProposals(input.ids, input.accepted);
+        return null;
+      case "heritageProposalsDismiss":
+        this.heritage.dismissProposals(input.ids);
+        return null;
+      case "heritageProposalsApply": {
+        const batch = this.heritage.applyProposals(input.columnId, input.source);
+        this.changed();
+        return batch;
+      }
+      case "heritageLinkBatches":
+        return this.heritage.batches(input.columnId);
+      case "heritageRevertBatch": {
+        const reverted = this.heritage.revertBatch(input.id);
+        this.changed();
+        return reverted;
+      }
       case "authorityLocate": {
         const result = this.authorities.locate(input.columnId, input.name);
         this.changed();

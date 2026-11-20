@@ -2,7 +2,8 @@
 // database view currently selects (filters and its search box).
 import { randomUUID as uuid } from "node:crypto";
 import type { Repository } from "./repository";
-import type { DatabaseColumn } from "../../shared/databases";
+import { decodeMultiSelect, type DatabaseColumn } from "../../shared/databases";
+import { heritageCategories, heritageScheme, isHeritageColumn } from "../../shared/heritage";
 import { exportCellText } from "../../shared/databaseExport";
 import { decodeHistoricalDate, periodLabel } from "../../shared/historicalDate";
 import {
@@ -14,6 +15,7 @@ import {
   trend,
   yearCoverage,
   yearOf,
+  yearSpan,
   type SavedStatistic,
   type StatResult,
   type StatSpec,
@@ -80,8 +82,38 @@ export class Statistics {
 
   compute(databaseId: string, ids: string[], spec: StatSpec): StatResult {
     const columns = this.columns(databaseId, specColumns(spec)),
-      values = this.values(ids, columns),
-      labels = (c: number) => values[c].map((v) => categoryValues(columns[c], v.raw, v.display));
+      values = this.values(ids, columns);
+    // Heritage properties can count types, groups, or parts in their wholes.
+    const level = spec.heritageLevel ?? "element",
+      parts = !!spec.includeParts;
+    const heritage = columns.map((column) =>
+      isHeritageColumn(column) && (level !== "element" || parts)
+        ? {
+            labels: new Map(column.options.map((o) => [o.id, o.label])),
+            byId: Object.fromEntries(
+              (
+                this.repo.db.prepare("SELECT * FROM heritage_elements WHERE column_id=?").all(column.id) as {
+                  option_id: string;
+                  parent_option_id: string | null;
+                  group_key: string | null;
+                  type_key: string | null;
+                }[]
+              ).map((r) => [
+                r.option_id,
+                { optionId: r.option_id, parentId: r.parent_option_id, group: r.group_key, type: r.type_key, latitude: null, longitude: null, coordSource: null },
+              ]),
+            ),
+            scheme: heritageScheme(column.config),
+          }
+        : null,
+    );
+    const labels = (c: number) =>
+      values[c].map((v) => {
+        const h = heritage[c];
+        return h
+          ? heritageCategories(decodeMultiSelect(v.raw), h.labels, h.byId, h.scheme, level, parts)
+          : categoryValues(columns[c], v.raw, v.display);
+      });
     switch (spec.kind) {
       case "frequency":
         return frequency(labels(0), spec.limit ?? 20);
@@ -134,6 +166,9 @@ export class Statistics {
       id: string;
       title: string;
       year: number;
+      /** First and last year the date covers (a period spans several). */
+      start: number;
+      end: number;
       imageId: string | null;
       revision?: string;
       /** For a historical date: the period and how certain it is. */
@@ -151,18 +186,24 @@ export class Statistics {
         const image = row.images.find((a) => a.width > 0) ?? row.images[0];
         const historical =
           column.type === "historical_date" ? decodeHistoricalDate(row.cells[column.id] ?? null) : null;
+        // Whatever the form of the date, the years it covers.
+        const span = yearSpan(column, row.cells[column.id] ?? null, exportCellText(column, row)) ?? { start: year, end: year };
         items.push({
           id: row.id,
           title: row.title,
           year,
+          start: span.start,
+          end: span.end,
           imageId: image?.id ?? null,
           revision: image?.revision,
           ...(historical
             ? { period: periodLabel(historical), certainty: historical.certainty }
-            : {}),
+            : span.end > span.start
+              ? { period: periodLabel(span), certainty: "exact" }
+              : {}),
         });
       }
-    items.sort((a, b) => a.year - b.year || a.title.localeCompare(b.title, "es", { numeric: true }));
+    items.sort((a, b) => a.start - b.start || a.end - b.end || a.title.localeCompare(b.title, "es", { numeric: true }));
     return { items, undated, total: ids.length };
   }
 }
