@@ -2382,6 +2382,7 @@ const en: Record<string, string> = {
   "Cambiar enlace": "Change link",
   "Filtros activos": "Active filters",
   "Sin filtros: toda la base de datos": "No filters: the whole database",
+  "Años o periodos": "Years or periods",
 };
 Object.assign(en, backendEn);
 const patterns = backendPatterns.map(([source, target]) => {

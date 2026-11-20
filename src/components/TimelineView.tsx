@@ -91,7 +91,9 @@ export function TimelineView({
     bucket =
       prefs.timelineBucket === "year" || prefs.timelineBucket === "decade"
         ? prefs.timelineBucket
-        : span > 60 || periods > items.length / 2
+        : // Dates written as periods are shown as those periods («1939–1949»),
+          // never rounded to decades; long runs of single years by decade.
+          span > 60 && periods <= items.length / 2
           ? "decade"
           : "year";
   type Group = { key: string; start: number; end: number; label: string; items: Timeline["items"] };
@@ -177,7 +179,7 @@ export function TimelineView({
               className={(prefs.timelineBucket ?? "auto") === b ? "active" : ""}
               onClick={() => onPrefs((p) => ({ ...p, timelineBucket: b }))}
             >
-              {t(b === "auto" ? "Automático" : b === "year" ? "Años" : "Décadas")}
+              {t(b === "auto" ? "Automático" : b === "year" ? "Años o periodos" : "Décadas")}
             </button>
           ))}
         </div>
