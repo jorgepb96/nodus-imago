@@ -339,13 +339,9 @@ export function ImageViewer({
     if (!heritageColumn) return;
     setError(null);
     try {
-      await window.imago.call("saveOptions", {
-        columnId: heritageColumn.id,
-        options: [...heritageColumn.options.map(({ id, label, color }) => ({ id, label, color })), { label, color: null }],
-      });
-      const detail = await window.imago.call("detail", { id: row.databaseId });
-      const created = detail.columns.find((c) => c.id === heritageColumn.id)?.options.find((o) => o.label === label);
-      if (created) await saveMark(created.id);
+      const created = await window.imago.call("heritageAddElement", { columnId: heritageColumn.id, label, link: null });
+      window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+      await saveMark(created);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

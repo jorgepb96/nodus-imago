@@ -7,9 +7,11 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { Repository } from "./repository";
 import type { AuthorityLink } from "../../shared/authority";
+import { importedOptionColor } from "../../shared/databaseCsv";
 import {
   emptyElement,
   heritageScheme,
+  typeFromInstances,
   isHeritageColumn,
   wouldCycle,
   type HeritageElement,
@@ -152,6 +154,50 @@ export class Heritage {
       }
     })();
     return items.length;
+  }
+
+  /**
+   * A new element: an option at the end of the list and, when it comes from
+   * Wikidata, its link, coordinates, suggested typology and parent.
+   */
+  addElement(columnId: string, label: string, link: AuthorityLink | null): string {
+    const column = this.heritageColumn(columnId);
+    const name = label.trim().slice(0, 500);
+    if (!name) throw new Error("El elemento necesita un nombre.");
+    const folded = name.normalize("NFKC").toLowerCase();
+    const existing = column.options.find((o) => o.label.normalize("NFKC").trim().toLowerCase() === folded);
+    if (existing) return existing.id;
+    if (link && !/^https:\/\/www\.wikidata\.org\//.test(link.uri)) throw new Error("Enlace de autoridad no válido.");
+    const id = randomUUID();
+    const at = new Date().toISOString();
+    this.db.transaction(() => {
+      const position = column.options.length;
+      this.db
+        .prepare("INSERT INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)")
+        .run(id, column.databaseId, columnId, name, importedOptionColor(position), position, at, at);
+      if (link) {
+        const typed = typeFromInstances(link.instances);
+        const scheme = heritageScheme(column.config);
+        const inScheme = typed && scheme.groups.some((g) => g.key === typed.group && g.types.some((x) => x.key === typed.type));
+        const links = this.db.prepare("SELECT option_id id,link_json json FROM option_authorities WHERE column_id=?").all(columnId) as { id: string; json: string }[];
+        const parent = links.find((l) => link.partOf?.includes((JSON.parse(l.json) as AuthorityLink).id))?.id ?? null;
+        this.db.prepare("INSERT OR REPLACE INTO option_authorities(option_id,column_id,link_json,linked_at) VALUES(?,?,?,?)").run(id, columnId, JSON.stringify(link), at);
+        const c = link.coordinates;
+        if (c || inScheme || parent)
+          writeRow(this.db, {
+            option_id: id,
+            column_id: columnId,
+            parent_option_id: parent,
+            group_key: inScheme ? typed!.group : null,
+            type_key: inScheme ? typed!.type : null,
+            latitude: c?.latitude ?? null,
+            longitude: c?.longitude ?? null,
+            coord_source: c ? "wikidata" : null,
+            updated_at: at,
+          });
+      }
+    })();
+    return id;
   }
 
   // ── Wikidata in batches ──────────────────────────────────────────────────

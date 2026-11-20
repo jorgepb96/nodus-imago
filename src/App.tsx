@@ -697,6 +697,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     refreshHeritage();
     refresh();
   };
+  // A heritage element added from a cell or the viewer: the property's options changed.
+  const openDatabaseId = detail?.database.id;
+  useEffect(() => {
+    if (!openDatabaseId) return;
+    const reload = () => void reloadDetail(openDatabaseId);
+    window.addEventListener("imago:reload-detail", reload);
+    return () => window.removeEventListener("imago:reload-detail", reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDatabaseId]);
   const navigate = (id: string) => {
     setArea("databases");
     setDatabaseId(id);

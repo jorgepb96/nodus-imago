@@ -939,6 +939,11 @@ export class Service {
         this.changed();
         return batch;
       }
+      case "heritageAddElement": {
+        const created = this.heritage.addElement(input.columnId, input.label, input.link);
+        this.changed();
+        return created;
+      }
       case "heritageLinkBatches":
         return this.heritage.batches(input.columnId);
       case "heritageRevertBatch": {

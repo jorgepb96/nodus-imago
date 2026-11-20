@@ -8142,3 +8142,13 @@ tr:hover .ai-cell-button,
 .heritage-mark-chip button, .heritage-hidden-marks button { border: 0; padding: 2px 4px; background: none; color: inherit; cursor: pointer; }
 .heritage-hidden-marks summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .heritage-hidden-marks li { display: flex; justify-content: space-between; font-size: 12px; }
+.add-property-search { margin: 4px 8px 6px; width: calc(100% - 16px); }
+.add-property-empty { margin: 6px 10px; font-size: 12.5px; }
+.heritage-option { display: flex; flex-direction: column; min-width: 0; }
+.heritage-option-meta { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 10.5px; }
+.heritage-add { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+.heritage-add > button, .heritage-add-results button { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: inherit; text-align: left; font-size: 12.5px; cursor: pointer; }
+.heritage-add > button:hover, .heritage-add-results button:hover { background: var(--surface); }
+.heritage-add-results { display: flex; flex-direction: column; gap: 1px; max-height: 220px; overflow-y: auto; }
+.heritage-add-results span { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.heritage-add-results small { color: var(--muted); font-size: 10.5px; }

@@ -493,6 +493,7 @@ export type Commands = {
     };
     result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
   };
+  heritageAddElement: { input: { columnId: string; label: string; link: import("./authority").AuthorityLink | null }; result: string };
   heritageLinkBatches: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null }[] };
   heritageRevertBatch: { input: { id: string }; result: number };
   valueClusters: { input: { columnId: string }; result: import("./cleanup").ValueCluster[] };

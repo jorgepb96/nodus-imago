@@ -546,6 +546,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
         .max(5000),
     })
     .strict(),
+  heritageAddElement: z.object({ columnId: id, label: z.string().trim().min(1).max(500), link: authorityLink.nullable() }).strict(),
   heritageLinkBatches: z.object({ columnId: id }).strict(),
   heritageRevertBatch: z.object({ id }).strict(),
   valueClusters: z.object({ columnId: id }).strict(),
