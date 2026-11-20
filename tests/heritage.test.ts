@@ -374,3 +374,19 @@ test("typologies by name and places from OpenStreetMap are applied where missing
     heritage.revertBatch(named.id);
     assert.equal(heritage.elements(columnId)[bridge], undefined);
   }));
+
+test("town names are read together: a district inside another town of the list is not the town", async () => {
+  const { resolveTowns } = await import("../shared/heritage");
+  const capital = { name: "Capital", countryCode: "ES", latitude: 40.4, longitude: -3.7 };
+  const district = { name: "Villaverde", countryCode: "ES", latitude: 40.43, longitude: -3.68 };
+  const town = { name: "Villaverde", countryCode: "ES", latitude: 40.96, longitude: -5.66 };
+  const abroad = { name: "Villaverde", countryCode: "PE", latitude: -8.1, longitude: -79 };
+  const towns = resolveTowns([
+    { id: "a", town: "Capital", found: [capital] },
+    { id: "b", town: "Villaverde", found: [district, town, abroad] },
+    { id: "c", town: "Nowhere", found: [] },
+  ]);
+  assert.deepEqual(towns.get("a"), { latitude: 40.4, longitude: -3.7 });
+  assert.deepEqual(towns.get("b"), { latitude: 40.96, longitude: -5.66 });
+  assert.equal(towns.get("c"), null);
+});
