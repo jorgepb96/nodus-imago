@@ -37,77 +37,63 @@ Download the installer for your computer and open it. There is no server to conf
 
 Imago checks for new versions and installs them when you choose to; in **Settings › Updates and news** you can also let it download them automatically. Every version, with its notes and all files, is on the [releases page](https://github.com/jorgepb96/nodus-imago/releases). You can also [run Imago from source](#development).
 
-## Catalogue, describe and tag your images
+## What Imago is for
 
-Every image has a catalogue record with the fields you choose: text, dates, places, people, single tags and multiple tags. Edit them in the table, in the gallery or in the record itself.
+### 1. Catalogue your collection
 
-Bring in a CSV or TSV file, a Notion export, a Nodus database, a Tropy project or a IIIF manifest from a digital library. Images are matched to their records by file name, and originals are never modified.
-
-Dates stay as cataloguers write them: “c. 1860”, “[1930]”, “1950s”, “before 1936”. Imago reads the period and how certain it is, and uses it in filters, sorting, the timeline and statistics.
-
-An AI model can describe images, tag them with your own vocabulary, or transcribe backs, stamps, inscriptions and captions, one record or many at a time. Results are proposals: nothing changes until you approve them.
+Every image has a record with the fields you choose: text, dates, places, people and tags, edited in the table, the gallery or the record. Bring in CSV, Notion, Nodus, Tropy or IIIF; images find their records by file name and originals are never modified. Dates stay as cataloguers write them (“c. 1860”, “[1930]”, “1950s”, “1939–1949”) and Imago reads their period and certainty.
 
 ![A gallery of nineteenth-century photographs by Jean Laurent in Nodus Imago](docs/screenshots/readme-gallery.png)
 
-![A record with a historical date, its period and a Copy citation button](docs/screenshots/readme-record.png)
+### 2. Describe and tag with AI, under your supervision
 
-## Find images by words, by likeness or by a detail
+An AI model describes images, tags them with your own vocabulary or transcribes backs, stamps and inscriptions, one record or thousands. You choose the model and the instructions, see each result appear in its cell, and undo what you do not want; batch automations wait as proposals until you approve them. Models can run on your computer or with the provider you choose.
 
-Search by exact words, by meaning (“procession with lanterns”) or with an image. Mark a region of a photograph, write a note, and search for that detail inside every other image: Imago shows where it appears.
+![English provider settings in light mode, with remote APIs disabled](docs/screenshots/readme-settings.png)
+
+### 3. Identify heritage and find it by sight
+
+A **Heritage** property turns the monuments, buildings, streets and artworks in your photographs into identified elements: linked to Wikidata, with coordinates, a typology with icons (religious, civil, defensive…) and what each one is part of. Imago identifies a whole list in the background, with Wikidata and OpenStreetMap, and keeps every proposal for you to review. Mark an element on the photograph, ask a vision model which ones appear, or select a detail and find it in every other image.
 
 ![A detail of the Court of the Lions searched for inside other photographs](docs/screenshots/readme-detail-search.png)
 
-## See the whole collection at once
+### 4. Place everything on the map
 
-The visual map places every image by likeness, so similar photographs sit together. Colour it by place, subject or year, zoom in to see the images and select an area to compare or analyse it.
-
-![The visual map of the collection, coloured by place](docs/screenshots/readme-visual-map.png)
-
-## Follow a photograph through its copies
-
-The Variants view finds the same photograph in different records: other prints, scans and crops, in date order. The comparison table puts up to six images side by side with shared zoom, or lays one over another to show what changed.
-
-![Two prints of the same view of Toledo laid over each other on the comparison table](docs/screenshots/readme-compare-overlay.png)
-
-![Variants: a portrait and its cropped version found as the same photograph](docs/screenshots/readme-variants.png)
-
-## Places, viewpoints and then and now
-
-Place records on a map with the direction the camera faced, and find photographs taken from the same spot. Then and now shows present-day photographs of the place from Wikimedia Commons next to the historical one.
+Place records with OpenStreetMap maps and a built-in gazetteer that works offline, including the direction the camera faced. Show photographs where they were taken or where the monument they show stands, see one point per heritage element, find photographs taken from the same spot, and compare them with present-day views from Wikimedia Commons.
 
 ![Then and now: the Puerta del Sol in the 1860s next to present-day photographs from Wikimedia Commons](docs/screenshots/readme-then-and-now.png)
 
-## Dates, patterns and relations
+### 5. Measure the collection
 
-The timeline orders records by period and marks approximate and attributed dates. Statistics give frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence and trends. The network shows which places, people and subjects appear together.
+Frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence, trends and networks, by heritage element, type or group, always over the records your filters show. The timeline draws periods as recorded, and the Agreement tool compares several AI models with your own classification.
 
 ![The network of places and subjects in the collection](docs/screenshots/readme-network.png)
 
-![The Agreement workspace comparing three demonstration raters with a reference classification](docs/screenshots/readme-agreement.png)
+## And also
 
-The Agreement tool compares the categories assigned by several AI models with each other and with your own classification (Cohen’s and Fleiss’ kappa, Krippendorff’s alpha). *The screenshot uses illustrative labels; its figures are not an evaluation of any model.*
+- **Search** by exact words, by meaning (“procession with lanterns”) or with an image; the **visual map** places every image by likeness.
+- **Variants** find the same photograph in other prints, scans and crops; the **comparison table** shows up to six side by side or lays one over another.
+- **Clean and link**: unify values written in different ways, link people, places and subjects to Wikidata (with Getty identifiers) and Iconclass, and complete empty fields from the most similar images.
+- **Restore** or colourise a copy with an image model, never the original, with an “AI modified” watermark on downloads.
+- **Cite and publish**: citations in Chicago, ISO 690 or APA, PDF plates with numbered figures, W3C Web Annotations.
+- **Ask the chat** about your databases; exact figures come from a calculation run over every record on your computer.
+- **Back up and export**: CSV, JSON or XLSX, and full `.imago` backups that can be scheduled and encrypted.
+- **Guided tutorials** walk you through each task on the real interface.
 
-## Clean and link your catalogue
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/readme-record.png" alt="A record with a historical date, its period and a Copy citation button"><br><sub>Record, historical date and citation</sub></td>
+    <td width="33%"><img src="docs/screenshots/readme-visual-map.png" alt="The visual map of the collection, coloured by place"><br><sub>Visual map by likeness</sub></td>
+    <td width="33%"><img src="docs/screenshots/readme-authorities.png" alt="Places of the collection with proposed links to Wikidata, Getty TGN identifiers and coordinates"><br><sub>Links to Wikidata and Getty</sub></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/readme-compare-overlay.png" alt="Two prints of the same view of Toledo laid over each other on the comparison table"><br><sub>Comparison table</sub></td>
+    <td width="33%"><img src="docs/screenshots/readme-variants.png" alt="Variants: a portrait and its cropped version found as the same photograph"><br><sub>Variants of a photograph</sub></td>
+    <td width="33%"><img src="docs/screenshots/readme-agreement.png" alt="The Agreement workspace comparing three demonstration raters with a reference classification"><br><sub>Agreement between models (illustrative figures)</sub></td>
+  </tr>
+</table>
 
-Unify values written in different ways (“N. Muller”, “Muller, Nicolás”) in one step, and undo it if needed. Link people, places and subjects to Wikidata, with their Getty identifiers, and to Iconclass. Linked places can place every record on the map.
-
-![Places of the collection with proposed links to Wikidata, Getty TGN identifiers and coordinates](docs/screenshots/readme-authorities.png)
-
-Complete empty fields from the most similar images: Imago proposes a value, such as an attributed period “[1950–1955]”, and shows the images it is based on.
-
-## Restore without touching the original
-
-Create restored, repaired or colourised versions of an image, or of one region, with an image model from OpenAI, Gemini or OpenRouter. Versions are kept apart from the original and can be downloaded with an “AI modified” watermark.
-
-## Cite and publish
-
-Copy a citation built from a template (Chicago, ISO 690 or APA). Export a PDF of plates with numbered figures and captions, and export annotations as W3C Web Annotations.
-
-## Ask questions in the chat
-
-Ask about your databases in plain language. When an answer needs an exact figure, the model writes a calculation that runs over every record in an isolated process on your computer, and the answer shows it.
-
-## Local AI or a provider of your choice
+### Local AI or a provider of your choice
 
 | Purpose | Local model |
 | --- | --- |
@@ -116,12 +102,6 @@ Ask about your databases in plain language. When an answer needs an exact figure
 | Embeddings on Intel Macs | Harrier OSS v1 0.6B through llama.cpp |
 
 Models download only when you ask, are verified before use and do not need Python. You can also use OpenRouter, Google Gemini, Ollama, LM Studio or another OpenAI-compatible server. Provider keys are stored in the operating system’s encrypted storage.
-
-![English provider settings in light mode, with remote APIs disabled](docs/screenshots/readme-settings.png)
-
-## Back up and export
-
-Export tables as CSV, JSON or XLSX. Full `.imago` backups keep the structure, originals, notes, history and search index; they can be scheduled and encrypted. When backups are set up, Imago makes one before installing an update.
 
 ## Development
 
