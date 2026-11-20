@@ -360,7 +360,7 @@ const SCULPTORS = ["juan de mena", "montanes", "martinez montanes", "salzillo", 
 /** The typology an element's name announces, if any. */
 export function typeFromName(label: string): { group: string; type: string | null } | null {
   const clean = (text: string) => foldText(text).replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  const [first = "", ...rest] = label.split(/\s+[-–—]\s+/);
+  const [first = "", ...rest] = label.split(/\s+[-–—]\s*|\s*[-–—]\s+/);
   const name = clean(first);
   for (const [words, group, type] of NAME_TYPES)
     if (name === words || name.startsWith(words + " ")) return { group, type };
@@ -444,7 +444,7 @@ export const foldText = (s: string) =>
  */
 export function heritageQuery(label: string): { queries: string[]; hints: string[] } {
   const parts = label
-    .split(/\s+[-–—]\s+/)
+    .split(/\s+[-–—]\s*|\s*[-–—]\s+/)
     .map((p) => p.trim())
     .filter(Boolean);
   const [name = label.trim(), ...hints] = parts;
@@ -502,6 +502,42 @@ export function placeNear(
   return { latitude: list[0].latitude, longitude: list[0].longitude };
 }
 
+type TownHit = { name: string; countryCode: string; latitude: number; longitude: number };
+
+/**
+ * Where the towns named by many elements are, read together: the country most
+ * of them are in; a name shared by places far apart («Salamanca», the city,
+ * and a district of Madrid) is settled by dropping the places that lie inside
+ * another town of the list. What stays ambiguous is null.
+ */
+export function resolveTowns(entries: { id: string; town: string | null; found: TownHit[] }[]): Map<string, { latitude: number; longitude: number } | null> {
+  const counts = new Map<string, number>();
+  for (const e of entries) if (e.found[0]) counts.set(e.found[0].countryCode, (counts.get(e.found[0].countryCode) ?? 0) + 1);
+  const country = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const pool = (e: { town: string | null; found: TownHit[] }) => {
+    const same = e.found.filter((p) => e.town && foldText(p.name) === foldText(e.town));
+    const inCountry = same.filter((p) => p.countryCode === country);
+    return inCountry.length ? inCountry : same.length ? same : e.found.slice(0, 1);
+  };
+  const together = (list: TownHit[]) => list.length > 0 && !list.some((p) => distanceKm(p, list[0]) > 30);
+  const out = new Map<string, { latitude: number; longitude: number } | null>();
+  const anchors: { name: string; at: TownHit }[] = [];
+  for (const e of entries) {
+    const list = pool(e);
+    if (e.town && together(list)) {
+      out.set(e.id, { latitude: list[0].latitude, longitude: list[0].longitude });
+      anchors.push({ name: foldText(e.town), at: list[0] });
+    }
+  }
+  for (const e of entries) {
+    if (out.has(e.id)) continue;
+    const name = e.town ? foldText(e.town) : "";
+    const list = pool(e).filter((p) => !anchors.some((a) => a.name !== name && distanceKm(a.at, p) <= 15));
+    out.set(e.id, together(list) ? { latitude: list[0].latitude, longitude: list[0].longitude } : null);
+  }
+  return out;
+}
+
 export type HeritageCandidate = { link: AuthorityLink; confidence: "high" | "medium" | "low"; score: number };
 
 /**
@@ -518,7 +554,7 @@ export function rankCandidates(
   const { queries, hints } = heritageQuery(label);
   // A common noun alone («Catedral») helps to search but does not name the
   // element: «calle de la Catedral» is not the cathedral.
-  const bare = hints.length && !/\s/.test(label.split(/\s+[-–—]\s+/)[0].trim()) ? foldText(label.split(/\s+[-–—]\s+/)[0]) : null;
+  const bare = hints.length && !/\s/.test(label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0].trim()) ? foldText(label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0]) : null;
   const names = queries.map(foldText).filter((n) => n !== bare);
   const folded = hints.map(foldText).filter((h) => h.length > 1);
   const seen = new Set<string>();
@@ -662,7 +698,7 @@ export function matchSuggestion(
   const name = foldText(suggestion.name),
     place = suggestion.place ? foldText(suggestion.place) : null;
   const read = options.map((o) => {
-    const parts = o.label.split(/\s+[-–—]\s+/).map(foldText);
+    const parts = o.label.split(/\s+[-–—]\s*|\s*[-–—]\s+/).map(foldText);
     return { id: o.id, full: foldText(o.label), name: parts[0], place: parts.length > 1 ? parts[parts.length - 1] : null };
   });
   const full = place ? `${name} - ${place}` : name;
@@ -676,8 +712,9 @@ export function matchSuggestion(
 
 // ── OpenStreetMap (Nominatim), for what Wikidata does not have ───────────────
 
-export function nominatimUrl(query: string, countryCode?: string | null) {
+export function nominatimUrl(query: string, countryCode?: string | null, settlement = false) {
   const params = new URLSearchParams({ q: query.slice(0, 250), format: "jsonv2", limit: "6", "accept-language": "es,en" });
+  if (settlement) params.set("featuretype", "settlement");
   if (countryCode && /^[a-z]{2}$/i.test(countryCode)) params.set("countrycodes", countryCode.toLowerCase());
   return `https://nominatim.openstreetmap.org/search?${params}`;
 }
@@ -748,7 +785,7 @@ export function scoreOsm(
   near?: { latitude: number; longitude: number } | null,
 ): OsmCandidate[] {
   const { hints } = heritageQuery(label);
-  const first = label.split(/\s+[-–—]\s+/)[0] ?? "";
+  const first = label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0] ?? "";
   const name = foldText(first);
   const place = hints.length ? foldText(hints[hints.length - 1]) : null;
   const named = typeFromName(label);

@@ -581,7 +581,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({ items: z.array(z.object({ optionId: id, label: z.string().trim().min(1).max(500) }).strict()).min(1).max(20) })
     .strict(),
   heritageTownPlaces: z
-    .object({ items: z.array(z.object({ optionId: id, label: z.string().trim().min(1).max(500) }).strict()).min(1).max(5000) })
+    .object({ items: z.array(z.object({ optionId: id, label: z.string().trim().min(1).max(500) }).strict()).min(1).max(5000), lookup: z.boolean().optional() })
     .strict(),
   heritageApplyPlaces: z
     .object({

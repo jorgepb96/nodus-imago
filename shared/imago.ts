@@ -554,8 +554,8 @@ export type Commands = {
   };
   /** Handled in the main process, with the local gazetteer: the centre of each element's town. */
   heritageTownPlaces: {
-    input: { items: { optionId: string; label: string }[] };
-    result: { optionId: string; latitude: number; longitude: number; town: string }[];
+    input: { items: { optionId: string; label: string }[]; lookup?: boolean };
+    result: { places: { optionId: string; latitude: number; longitude: number; town: string }[]; unknownTowns: number };
   };
   heritageApplyPlaces: {
     input: {
