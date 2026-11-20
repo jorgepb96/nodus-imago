@@ -44,6 +44,31 @@ import {
 import { heritageQuery, nominatimUrl, rankCandidates, rankOsm, resolveTowns, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
 /** Nominatim allows one request a second. */
 let nominatimNext = 0;
+/** Towns already looked for in OpenStreetMap during this session (null: not found). */
+const townCache = new Map<string, { latitude: number; longitude: number } | null>();
+/** Where some towns the gazetteer cannot place are, from OpenStreetMap (names only, one a second). */
+async function lookupTowns(towns: string[], country: string | undefined) {
+  for (const town of [...new Set(towns)].slice(0, 300)) {
+    if (townCache.has(`${country}|${town}`)) continue;
+    const wait = nominatimNext - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    nominatimNext = Date.now() + 1100;
+    try {
+      const response = await fetch(nominatimUrl(town, country, true), {
+        headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
+        signal: AbortSignal.timeout(20_000),
+      });
+      const first = response.ok ? ((await response.json()) as { lat?: string; lon?: string }[])[0] : undefined;
+      townCache.set(
+        `${country}|${town}`,
+        first && Number.isFinite(Number(first.lat)) ? { latitude: Number(first.lat), longitude: Number(first.lon) } : null,
+      );
+    } catch {
+      /* Left unplaced; tried again in a later session. */
+    }
+  }
+  return (town: string) => townCache.get(`${country}|${town}`) ?? null;
+}
 import { platesHtml } from "./export/plates";
 import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
@@ -826,8 +851,13 @@ app.whenReady().then(async () => {
             return { id: item.optionId, town: hints[hints.length - 1] ?? null, found: options.get(item.optionId) ?? [] };
           }),
         );
-        void country;
-        const nearOf = (optionId: string) => towns.get(optionId) ?? null;
+        // Towns the gazetteer cannot place (small, or shared with a district): OpenStreetMap.
+        const townOf = new Map(data.items.map((item) => [item.optionId, heritageQuery(item.label).hints.slice(-1)[0] ?? null]));
+        const looked = await lookupTowns(
+          data.items.filter((item) => !towns.get(item.optionId) && townOf.get(item.optionId)).map((item) => townOf.get(item.optionId)!),
+          country,
+        );
+        const nearOf = (optionId: string) => towns.get(optionId) ?? (townOf.get(optionId) ? looked(townOf.get(optionId)!) : null);
         return data.items.map((item) => ({
           optionId: item.optionId,
           candidates: rankCandidates(
@@ -853,27 +883,12 @@ app.whenReady().then(async () => {
         for (const e of entries) if (e.found[0]) counts.set(e.found[0].countryCode, (counts.get(e.found[0].countryCode) ?? 0) + 1);
         const country = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
         // Towns the gazetteer lacks, or only knows abroad (a «Trujillo» in America).
-        const missing = [...new Set(entries.filter((e) => e.town && !resolved.get(e.id) && !e.found.some((p) => p.countryCode === country)).map((e) => e.town!))];
-        const looked = new Map<string, { latitude: number; longitude: number }>();
-        if (data.lookup)
-          for (const town of missing.slice(0, 300)) {
-            const wait = nominatimNext - Date.now();
-            if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-            nominatimNext = Date.now() + 1100;
-            try {
-              const response = await fetch(nominatimUrl(town, country, true), {
-                headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
-                signal: AbortSignal.timeout(20_000),
-              });
-              const first = response.ok ? ((await response.json()) as { lat?: string; lon?: string }[])[0] : undefined;
-              if (first && Number.isFinite(Number(first.lat))) looked.set(town, { latitude: Number(first.lat), longitude: Number(first.lon) });
-            } catch {
-              /* A town not found stays unplaced. */
-            }
-          }
+        const missing = [...new Set(entries.filter((e) => e.town && !resolved.get(e.id)).map((e) => e.town!))];
+        const lookedUp = data.lookup ? await lookupTowns(missing, country) : () => null;
+        const looked = new Map(missing.flatMap((town) => (lookedUp(town) ? [[town, lookedUp(town)!] as const] : [])));
         return {
           places: entries.flatMap((e) => {
-            const at = (e.town ? looked.get(e.town) : undefined) ?? resolved.get(e.id);
+            const at = resolved.get(e.id) ?? (e.town ? looked.get(e.town) : undefined);
             return at ? [{ optionId: e.id, ...at, town: e.town! }] : [];
           }),
           unknownTowns: missing.filter((town) => !looked.has(town)).length,
@@ -898,6 +913,11 @@ app.whenReady().then(async () => {
             return { id: item.optionId, town: hints[hints.length - 1] ?? null, found: found.get(item.optionId) ?? [] };
           }),
         );
+        const townOf = new Map(data.items.map((item) => [item.optionId, heritageQuery(item.label).hints.slice(-1)[0] ?? null]));
+        const lookedTowns = await lookupTowns(
+          data.items.filter((item) => !towns.get(item.optionId) && townOf.get(item.optionId)).map((item) => townOf.get(item.optionId)!),
+          country,
+        );
         const out = [];
         for (const item of data.items) {
           const parts = item.label.split(/\s+[-–—]\s*|\s*[-–—]\s+/);
@@ -914,7 +934,7 @@ app.whenReady().then(async () => {
               throw new Error("No se pudo conectar con OpenStreetMap.");
             });
             if (!response.ok) throw new Error(`OpenStreetMap: HTTP ${response.status}`);
-            const near = towns.get(item.optionId) ?? null;
+            const near = towns.get(item.optionId) ?? (townOf.get(item.optionId) ? lookedTowns(townOf.get(item.optionId)!) : null);
             out.push({ optionId: item.optionId, candidates: rankOsm(item.label, await response.json(), near).slice(0, 4) });
           } catch (error) {
             out.push({ optionId: item.optionId, candidates: [], error: error instanceof Error ? error.message : String(error) });

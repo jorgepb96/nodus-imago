@@ -490,11 +490,14 @@ export function heritageQuery(label: string): { queries: string[]; hints: string
 export const NOT_HERITAGE = new Set([
   "Q4167836", "Q4167410", "Q13406463", "Q17633526", "Q13442814", "Q47461344", "Q571", "Q7725634", "Q732577", "Q3331189",
   "Q1004", "Q11424", "Q482994", "Q134556", "Q7366", "Q5398426", "Q5", "Q15632617", "Q11446", "Q14970", "Q27686",
-  "Q4830453", "Q43229", "Q22687",
+  "Q4830453", "Q43229", "Q22687", "Q928830",
 ]);
 /** Words of a description that say a candidate is a place, a building or a work. */
 const HERITAGE_WORDS =
   /\b(iglesia|catedral|basilica|capilla|ermita|convento|monasterio|colegiata|santuario|mezquita|sinagoga|castillo|alcazar|alcazaba|muralla|torre|puerta|arco|palacio|casa|edificio|monumento|bien de interes cultural|patrimonio|puente|acueducto|faro|puerto|plaza|calle|paseo|parque|jardin|fuente|mirador|museo|teatro|yacimiento|cuadro|pintura|escultura|retablo|estatua|tapiz|church|cathedral|castle|palace|building|monument|bridge|square|street|museum|painting|sculpture)\b/;
+
+/** First words that name a part of something or a place beside it. */
+const PART_WORDS = new Set(["torre", "puerta", "capilla", "claustro", "patio", "fachada", "portada", "retablo", "sala", "plaza", "placa", "calle", "avenida", "paseo", "museo", "estacion", "hotel", "categoria", "jardin", "jardines", "puente", "arco", "escalera", "fuente"]);
 
 /** Distance in kilometres between two points (haversine). */
 export function distanceKm(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
@@ -543,17 +546,25 @@ export function resolveTowns(entries: { id: string; town: string | null; found: 
   const together = (list: TownHit[]) => list.length > 0 && !list.some((p) => distanceKm(p, list[0]) > 30);
   const out = new Map<string, { latitude: number; longitude: number } | null>();
   const anchors: { name: string; at: TownHit }[] = [];
+  const mentions = new Map<string, number>();
+  for (const e of entries) if (e.town) mentions.set(foldText(e.town), (mentions.get(foldText(e.town)) ?? 0) + 1);
   for (const e of entries) {
     const list = pool(e);
-    if (e.town && together(list)) {
+    if (e.town && together(list)) anchors.push({ name: foldText(e.town), at: list[0] });
+  }
+  // A place inside a town named more often in the list is a district of it
+  // («Almagro», a district of Madrid, is not the town of Almagro).
+  const district = (name: string, at: TownHit) =>
+    anchors.some((a) => a.name !== name && (mentions.get(a.name) ?? 0) > (mentions.get(name) ?? 0) && distanceKm(a.at, at) <= 10);
+  for (const e of entries) {
+    const list = pool(e);
+    if (e.town && together(list) && !district(foldText(e.town), list[0]))
       out.set(e.id, { latitude: list[0].latitude, longitude: list[0].longitude });
-      anchors.push({ name: foldText(e.town), at: list[0] });
-    }
   }
   for (const e of entries) {
     if (out.has(e.id)) continue;
     const name = e.town ? foldText(e.town) : "";
-    const list = pool(e).filter((p) => !anchors.some((a) => a.name !== name && distanceKm(a.at, p) <= 15));
+    const list = pool(e).filter((p) => !anchors.some((a) => a.name !== name && distanceKm(a.at, p) <= 15) && !district(name, p));
     out.set(e.id, together(list) ? { latitude: list[0].latitude, longitude: list[0].longitude } : null);
   }
   return out;
@@ -621,7 +632,19 @@ export function rankCandidates(
             : (exact || close || nearby) && hinted
               ? "medium"
               : "low";
-      if (confidence === "high" && !textual && !close15) confidence = "medium";
+      // Certain enough to apply on its own only when: the town is named (no
+      // «Plaza Mayor» alone); where the town's position is known, the
+      // candidate is close to it (a description naming the province is not
+      // enough); otherwise its description names the town; and it is the
+      // element itself, not a part named after it («Torre de la Catedral de …»).
+      const inDescription = folded.some((h) => foldText(link.description ?? "").includes(h));
+      // A part or a neighbour named after the element («Torre de la Catedral de
+      // …», «Plaza de la Catedral», «Museo de la Alhambra») is not the element.
+      const lead = (text: string) => text.replace(/[^\p{L}\p{N}\s]/gu, " ").trim().split(/\s+/)[0] ?? "";
+      const own = lead(foldText(label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0] ?? ""));
+      const whole = !(PART_WORDS.has(lead(name)) && lead(name) !== own);
+      if (confidence === "high" && (!folded.length || !whole || (km !== null ? !close15 : !inDescription))) confidence = "medium";
+      void textual;
       return { link, confidence, score };
     })
     .sort((a, b) => b.score - a.score);
