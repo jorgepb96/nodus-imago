@@ -7,12 +7,18 @@ import { randomUUID as uuid } from "node:crypto";
 import type { Repository } from "./repository";
 import type { ImageAnnotation } from "../../shared/imago";
 import { assetView, fromShown, toShown, type ImageView } from "../../shared/imageRotation";
+import { decodeMultiSelect, encodeMultiSelect } from "../../shared/databases";
+import { isHeritageColumn } from "../../shared/heritage";
 
 const now = () => new Date().toISOString();
 const clamp = (n: number) => Math.min(1, Math.max(0, n));
 type Row = Omit<ImageAnnotation, "tags"> & { tags_json: string };
 const SELECT =
-  "SELECT id,asset_id assetId,row_id rowId,x,y,w,h,note,tags_json,color,created_at createdAt,updated_at updatedAt FROM image_annotations";
+  "SELECT id,asset_id assetId,row_id rowId,x,y,w,h,note,tags_json,color,created_at createdAt,updated_at updatedAt,kind,option_id optionId FROM image_annotations";
+/** A point travels through turns and crops as a tiny square around it. */
+const E = 1e-4;
+const around = <T extends { x: number; y: number; w: number; h: number }>(p: T): T => ({ ...p, x: p.x - E, y: p.y - E, w: 2 * E, h: 2 * E });
+const centre = <T extends { x: number; y: number; w: number; h: number }>(r: T): T => ({ ...r, x: r.x + r.w / 2, y: r.y + r.h / 2, w: 0, h: 0 });
 const decode = ({ tags_json, ...row }: Row): ImageAnnotation => ({ ...row, tags: JSON.parse(tags_json) });
 
 export function cleanTags(tags: string[]): string[] {
@@ -35,7 +41,12 @@ export class Annotations {
     const views = new Map<string, ImageView>();
     return (this.repo.db.prepare(`${SELECT} WHERE ${where}=? ORDER BY created_at`).all(value) as Row[]).flatMap((row) => {
       if (!views.has(row.assetId)) views.set(row.assetId, this.view(row.assetId));
-      const shown = toShown(decode(row), views.get(row.assetId)!);
+      const stored = decode(row);
+      if (stored.kind === "point") {
+        const shown = toShown(around(stored), views.get(row.assetId)!);
+        return shown && shown.w > E ? [centre(shown)] : [];
+      }
+      const shown = toShown(stored, views.get(row.assetId)!);
       return shown ? [shown] : [];
     });
   }
@@ -47,6 +58,10 @@ export class Annotations {
   }
   get(id: string): ImageAnnotation {
     const annotation = this.stored(id);
+    if (annotation.kind === "point") {
+      const shown = toShown(around(annotation), this.view(annotation.assetId));
+      return shown ? centre(shown) : annotation;
+    }
     return toShown(annotation, this.view(annotation.assetId)) ?? annotation;
   }
   save(input: {
@@ -59,6 +74,8 @@ export class Annotations {
     note: string;
     tags: string[];
     color?: string | null;
+    kind?: "rect" | "point";
+    optionId?: string | null;
   }): ImageAnnotation {
     const asset = this.repo.asset(input.assetId) as { row_id: string; metadata_json: string };
     const view = assetView(asset.metadata_json);
@@ -69,12 +86,17 @@ export class Annotations {
       unchanged =
         shownBefore &&
         (["x", "y", "w", "h"] as const).every((k) => Math.abs(shownBefore[k] - input[k]) < 1e-6),
-      region = unchanged ? previous! : fromShown(input, view);
+      point = (input.kind ?? previous?.kind) === "point",
+      region = unchanged ? previous! : point ? centre(fromShown(around(input), view)) : fromShown(input, view);
     const x = clamp(region.x),
       y = clamp(region.y),
-      w = Math.min(clamp(region.w), 1 - x),
-      h = Math.min(clamp(region.h), 1 - y);
-    if (w < 0.005 || h < 0.005) throw new Error("La zona es demasiado pequeña.");
+      w = point ? 0 : Math.min(clamp(region.w), 1 - x),
+      h = point ? 0 : Math.min(clamp(region.h), 1 - y);
+    if (!point && (w < 0.005 || h < 0.005)) throw new Error("La zona es demasiado pequeña.");
+    // A mark of a heritage element: the element must belong to a heritage
+    // property of the record's database, and the record shows it.
+    const optionId = input.optionId === undefined ? (previous?.optionId ?? null) : input.optionId;
+    const heritageColumn = optionId ? this.heritageColumnOf(optionId, asset.row_id) : null;
     const at = now(),
       tags = JSON.stringify(cleanTags(input.tags)),
       note = input.note.trim();
@@ -82,17 +104,35 @@ export class Annotations {
     this.repo.db.transaction(() => {
       if (input.id) {
         const done = this.repo.db
-          .prepare("UPDATE image_annotations SET x=?,y=?,w=?,h=?,note=?,tags_json=?,color=?,updated_at=? WHERE id=? AND asset_id=?")
-          .run(x, y, w, h, note, tags, input.color ?? null, at, input.id, input.assetId);
+          .prepare("UPDATE image_annotations SET x=?,y=?,w=?,h=?,note=?,tags_json=?,color=?,updated_at=?,kind=?,option_id=? WHERE id=? AND asset_id=?")
+          .run(x, y, w, h, note, tags, input.color ?? null, at, point ? "point" : "rect", optionId, input.id, input.assetId);
         if (!done.changes) throw new Error("Anotación no encontrada.");
       } else
         this.repo.db
-          .prepare("INSERT INTO image_annotations VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-          .run(id, input.assetId, asset.row_id, x, y, w, h, note, tags, input.color ?? null, at, at);
+          .prepare(
+            "INSERT INTO image_annotations(id,asset_id,row_id,x,y,w,h,note,tags_json,color,created_at,updated_at,kind,option_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          )
+          .run(id, input.assetId, asset.row_id, x, y, w, h, note, tags, input.color ?? null, at, at, point ? "point" : "rect", optionId);
+      if (heritageColumn && optionId) {
+        const cell = this.repo.getRow(asset.row_id).cells[heritageColumn] ?? null;
+        const ids = decodeMultiSelect(cell);
+        if (!ids.includes(optionId)) this.repo.setCell(asset.row_id, heritageColumn, encodeMultiSelect([...ids, optionId]));
+      }
       this.repo.touchRows([asset.row_id]);
       this.repo.indexRow(asset.row_id);
     })();
     return this.get(id);
+  }
+  /** The heritage property an element belongs to, in the record's database. */
+  private heritageColumnOf(optionId: string, rowId: string): string {
+    const found = this.repo.db
+      .prepare(
+        "SELECT c.id,c.type,c.config_json FROM db_select_options o JOIN db_columns c ON c.id=o.column_id JOIN db_rows r ON r.database_id=c.database_id WHERE o.id=? AND r.id=?",
+      )
+      .get(optionId, rowId) as { id: string; type: string; config_json: string } | undefined;
+    if (!found || !isHeritageColumn({ type: found.type, config: JSON.parse(found.config_json || "{}") }))
+      throw new Error("El elemento no pertenece a una propiedad de patrimonio de esta base.");
+    return found.id;
   }
   delete(id: string) {
     const annotation = this.get(id);

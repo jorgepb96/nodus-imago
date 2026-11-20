@@ -591,6 +591,8 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       note: z.string().max(20000),
       tags: z.array(z.string().max(120)).max(50),
       color: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional(),
+      kind: z.enum(["rect", "point"]).optional(),
+      optionId: id.nullable().optional(),
     })
     .strict(),
   annotationDelete: z.object({ id }).strict(),

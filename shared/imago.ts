@@ -62,6 +62,10 @@ export type ImageAnnotation = {
   color: string | null;
   createdAt: string;
   updatedAt: string;
+  /** A region, or a point (w = h = 0). */
+  kind?: "rect" | "point";
+  /** The heritage element (option) this mark shows. */
+  optionId?: string | null;
 };
 /** What an import from Tropy or IIIF created. */
 export type StandardImport = { databaseId: string; records: number; photos: number; failed: number; annotations: number };
@@ -536,6 +540,8 @@ export type Commands = {
       note: string;
       tags: string[];
       color?: string | null;
+      kind?: "rect" | "point";
+      optionId?: string | null;
     };
     result: ImageAnnotation;
   };

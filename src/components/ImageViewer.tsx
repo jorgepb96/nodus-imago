@@ -6,6 +6,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Pointer
 import {
   Check,
   ChevronLeft,
+  Crosshair,
+  Landmark,
   ChevronRight,
   Crop as CropIcon,
   ImageOff,
@@ -16,6 +18,7 @@ import {
   RotateCcw,
   RotateCw,
   ScanSearch,
+  Square,
   SquareDashedMousePointer,
   Trash2,
   X,
@@ -25,6 +28,11 @@ import { useT } from "../i18n";
 import { DetailSearchPanel } from "./DetailSearchPanel";
 import { Spinner } from "./ui";
 import { MIN_CROP, validCrop, type Region } from "../../shared/imageRotation";
+import { decodeMultiSelect, type DatabaseColumn } from "../../shared/databases";
+import { heritageScheme, isHeritageColumn, typology } from "../../shared/heritage";
+import { useHeritage } from "../heritageStore";
+import { HeritageIcon } from "./HeritageIcon";
+import { HeritageMarksPanel, type MarkDraft } from "./HeritageMarksPanel";
 
 type View = { scale: number; x: number; y: number };
 type Draft = { id?: string; x: number; y: number; w: number; h: number; note: string; tags: string[] };
@@ -72,8 +80,11 @@ export function ImageViewer({
   onChanged,
   onOpenRecord,
   onCompare,
+  columns,
 }: {
   row: RecordRow;
+  /** The database's properties: heritage ones can be marked on the image. */
+  columns?: DatabaseColumn[];
   initialIndex?: number;
   /** Open straight into the crop editor. */
   initialCrop?: boolean;
@@ -97,6 +108,15 @@ export function ImageViewer({
   const [known, setKnown] = useState<string[]>([]);
   const [searching, setSearching] = useState<ImageAnnotation | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Marking heritage elements: with a point or a rectangle. */
+  const [marking, setMarking] = useState<"point" | "rect" | null>(null);
+  const [markDraft, setMarkDraft] = useState<MarkDraft | null>(null);
+  const heritageColumns = (columns ?? []).filter((c) => isHeritageColumn(c));
+  const [heritageId, setHeritageId] = useState<string | null>(null);
+  const heritageColumn = heritageColumns.find((c) => c.id === heritageId) ?? heritageColumns[0] ?? null;
+  const heritageElements = useHeritage(heritageColumn?.id);
+  const inCell = heritageColumn ? decodeMultiSelect(row.cells[heritageColumn.id] ?? null) : [];
+  const heritageOptions = new Set(heritageColumn?.options.map((o) => o.id) ?? []);
   /** The crop being edited, as fractions of the whole turned image. */
   const [cropping, setCropping] = useState<Region | null>(null);
   const cropDrag = useRef<{ grip: Grip; start: Region; from: { x: number; y: number } } | null>(null);
@@ -107,6 +127,8 @@ export function ImageViewer({
   const [applying, setApplying] = useState(false);
   const startCrop = () => {
     setAnnotating(false);
+    setMarking(null);
+    setMarkDraft(null);
     setDraft(null);
     setSelected(null);
     setNatural(null);
@@ -220,9 +242,15 @@ export function ImageViewer({
       cropDrag.current = { grip: grip ?? "new", start: cropping, from };
       return;
     }
-    if ((event.target as HTMLElement).closest(".viewer-region")) return;
+    if ((event.target as HTMLElement).closest(".viewer-region, .viewer-mark")) return;
+    if (marking === "point") {
+      const p = point(event);
+      setMarkDraft({ kind: "point", x: p.x, y: p.y, w: 0, h: 0 });
+      setSelected(null);
+      return;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
-    if (annotating) {
+    if (annotating || marking === "rect") {
       const p = point(event);
       setDrawing({ x0: p.x, y0: p.y, x: p.x, y: p.y });
       setSelected(null);
@@ -253,7 +281,8 @@ export function ImageViewer({
       h = Math.abs(drawing.y - drawing.y0);
     setDrawing(null);
     if (w < 0.01 || h < 0.01) return;
-    setDraft({ x, y, w, h, note: "", tags: [] });
+    if (marking === "rect") setMarkDraft({ kind: "rect", x, y, w, h });
+    else setDraft({ x, y, w, h, note: "", tags: [] });
   };
   const save = async () => {
     if (!draft || !image) return;
@@ -282,6 +311,48 @@ export function ImageViewer({
     if (!window.confirm(t("¿Eliminar esta anotación? No se puede deshacer."))) return;
     await window.imago.call("annotationDelete", { id: annotation.id });
     if (selected === annotation.id) setSelected(null);
+    await load();
+    onChanged();
+  };
+  /** Saves the drawn mark as showing this element (added to the record if missing). */
+  const saveMark = async (optionId: string) => {
+    if (!markDraft || !image) return;
+    setError(null);
+    try {
+      const saved = await window.imago.call("annotationSave", {
+        assetId: image.id,
+        ...markDraft,
+        note: "",
+        tags: [],
+        optionId,
+      });
+      setMarkDraft(null);
+      setSelected(saved.id);
+      await load();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  /** A new element of the heritage property, then the mark. */
+  const createElement = async (label: string) => {
+    if (!heritageColumn) return;
+    setError(null);
+    try {
+      await window.imago.call("saveOptions", {
+        columnId: heritageColumn.id,
+        options: [...heritageColumn.options.map(({ id, label, color }) => ({ id, label, color })), { label, color: null }],
+      });
+      const detail = await window.imago.call("detail", { id: row.databaseId });
+      const created = detail.columns.find((c) => c.id === heritageColumn.id)?.options.find((o) => o.label === label);
+      if (created) await saveMark(created.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+  const removeMark = async (mark: ImageAnnotation) => {
+    await window.imago.call("annotationDelete", { id: mark.id });
+    if (selected === mark.id) setSelected(null);
     await load();
     onChanged();
   };
@@ -340,7 +411,10 @@ export function ImageViewer({
         if (event.key === "Enter" && natural) void applyCrop(cropping);
         return;
       }
-      if (event.key === "a" || event.key === "A") setAnnotating((v) => !v);
+      if (event.key === "a" || event.key === "A") {
+        setMarking(null);
+        setAnnotating((v) => !v);
+      }
       if (event.key === "+" || event.key === "=") zoom(1.25);
       if (event.key === "-") zoom(0.8);
       if (event.key === "0") fit();
@@ -366,6 +440,11 @@ export function ImageViewer({
     : draft && !draft.id
       ? draft
       : null;
+
+  // Notes on one side; marks of heritage elements the record shows on the other.
+  const notes = annotations.filter((a) => !a.optionId);
+  const heritageMarks = annotations.filter((a) => a.optionId && heritageOptions.has(a.optionId));
+  const shownMarks = heritageMarks.filter((m) => inCell.includes(m.optionId!));
 
   return (
     <dialog ref={dialog} className="image-viewer" aria-label={row.title} data-testid="image-viewer">
@@ -472,11 +551,70 @@ export function ImageViewer({
               data-testid="viewer-annotate"
               data-tour="viewer-annotate"
               data-tooltip={t("Arrastra sobre la imagen para marcar una zona y escribir una nota (tecla A).")}
-              onClick={() => setAnnotating(!annotating)}
+              onClick={() => {
+                setMarking(null);
+                setMarkDraft(null);
+                setAnnotating(!annotating);
+              }}
             >
               <SquareDashedMousePointer size={16} />
               {t("Anotar")}
             </button>
+            {heritageColumn && (
+              <div className="viewer-group viewer-heritage">
+                <button
+                  type="button"
+                  className={`viewer-annotate ${marking ? "is-on" : ""}`}
+                  aria-pressed={!!marking}
+                  data-testid="viewer-heritage"
+                  data-tooltip={t("Marca en la imagen un edificio, monumento u obra con un punto o un rectángulo.")}
+                  onClick={() => {
+                    setAnnotating(false);
+                    setDraft(null);
+                    setMarkDraft(null);
+                    setMarking(marking ? null : "point");
+                  }}
+                >
+                  <Landmark size={16} />
+                  {t("Patrimonio")}
+                </button>
+                {marking && (
+                  <>
+                    <button
+                      type="button"
+                      aria-pressed={marking === "point"}
+                      className={marking === "point" ? "is-on" : ""}
+                      aria-label={t("Punto")}
+                      data-tooltip={t("Punto: haz clic sobre el elemento")}
+                      data-testid="viewer-heritage-point"
+                      onClick={() => setMarking("point")}
+                    >
+                      <Crosshair size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={marking === "rect"}
+                      className={marking === "rect" ? "is-on" : ""}
+                      aria-label={t("Rectángulo")}
+                      data-tooltip={t("Rectángulo: arrastra alrededor del elemento")}
+                      data-testid="viewer-heritage-rect"
+                      onClick={() => setMarking("rect")}
+                    >
+                      <Square size={15} />
+                    </button>
+                  </>
+                )}
+                {marking && heritageColumns.length > 1 && (
+                  <select value={heritageColumn.id} aria-label={t("Propiedad de patrimonio")} onChange={(e) => setHeritageId(e.target.value)}>
+                    {heritageColumns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           </>
         )}
         <span className="viewer-spacer" />
@@ -488,7 +626,7 @@ export function ImageViewer({
         <div
           ref={stage}
           data-tour="viewer-stage"
-          className={`viewer-stage ${annotating ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
+          className={`viewer-stage ${annotating || marking ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
           onWheel={(event) => {
             const r = stage.current!.getBoundingClientRect();
             zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - r.left, event.clientY - r.top);
@@ -496,7 +634,7 @@ export function ImageViewer({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onDoubleClick={() => !annotating && !cropping && zoom(2)}
+          onDoubleClick={() => !annotating && !marking && !cropping && zoom(2)}
         >
           {image && (
             <img
@@ -544,7 +682,7 @@ export function ImageViewer({
               ))}
             </div>
           )}
-          {!cropping && annotations.map((a) => (
+          {!cropping && notes.map((a) => (
             <button
               key={a.id}
               type="button"
@@ -558,8 +696,46 @@ export function ImageViewer({
               }}
             />
           ))}
+          {!cropping &&
+            shownMarks.map((m) => {
+              const e = heritageElements[m.optionId!];
+              const icon = heritageColumn && typology(heritageScheme(heritageColumn.config), e?.group ?? null, e?.type ?? null)?.icon;
+              const label = heritageColumn?.options.find((o) => o.id === m.optionId)?.label ?? "";
+              const at = box(m) as { left?: number; top?: number };
+              return m.kind === "point" ? (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`viewer-mark ${selected === m.id ? "is-selected" : ""}`}
+                  style={natural ? { left: at.left, top: at.top } : { display: "none" }}
+                  aria-label={label}
+                  data-tooltip={label}
+                  onClick={() => setSelected(m.id)}
+                >
+                  <HeritageIcon name={icon} size={13} />
+                </button>
+              ) : (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`viewer-region is-heritage ${selected === m.id ? "is-selected" : ""}`}
+                  style={box(m)}
+                  aria-label={label}
+                  data-tooltip={label}
+                  onClick={() => setSelected(m.id)}
+                >
+                  <span className="viewer-mark-label">
+                    <HeritageIcon name={icon} size={11} /> {label}
+                  </span>
+                </button>
+              );
+            })}
+          {markDraft?.kind === "point" && natural && (
+            <span className="viewer-mark is-drawing" style={box(markDraft) as React.CSSProperties} />
+          )}
+          {markDraft?.kind === "rect" && <div className="viewer-region is-drawing is-heritage" style={box(markDraft)} />}
           {pending && <div className="viewer-region is-drawing" style={box(pending)} />}
-          {annotating && !annotations.length && !pending && (
+          {annotating && !notes.length && !pending && (
             <p className="viewer-hint">{t("Arrastra sobre la imagen para marcar la primera zona.")}</p>
           )}
         </div>
@@ -586,8 +762,26 @@ export function ImageViewer({
             />
           ) : (
           <>
+          {heritageColumn && (
+            <HeritageMarksPanel
+              column={heritageColumn}
+              inCell={inCell}
+              marks={heritageMarks}
+              draft={markDraft}
+              selected={selected}
+              onChoose={(id) => void saveMark(id)}
+              onCreate={(label) => void createElement(label)}
+              onCancel={() => setMarkDraft(null)}
+              onFocus={(m) => {
+                setSelected(m.id);
+                focus(m.kind === "point" ? { x: m.x - 0.05, y: m.y - 0.05, w: 0.1, h: 0.1 } : m);
+              }}
+              onDelete={(m) => void removeMark(m)}
+            />
+          )}
+          {error && markDraft && <p className="error">{t(error)}</p>}
           <h2>
-            {t("Anotaciones")} <span>{annotations.length}</span>
+            {t("Anotaciones")} <span>{notes.length}</span>
           </h2>
           {draft && (
             <AnnotationEditor
@@ -605,13 +799,13 @@ export function ImageViewer({
               }}
             />
           )}
-          {!annotations.length && !draft && (
+          {!notes.length && !draft && (
             <p className="viewer-empty">
               {t("Esta imagen no tiene anotaciones. Pulsa «Anotar» y arrastra sobre una parte de la imagen (una persona, una inscripción, un edificio) para describirla. Las notas se incluyen en la búsqueda.")}
             </p>
           )}
           <ul className="viewer-list">
-            {annotations
+            {notes
               .filter((a) => a.id !== draft?.id)
               .map((a) => (
                 <li key={a.id} id={`annotation-${a.id}`} className={selected === a.id ? "is-selected" : ""}>
