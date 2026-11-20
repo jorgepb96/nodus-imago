@@ -491,7 +491,7 @@ function EmbeddingApiPanel({
           >
             {EMBEDDING_API_PROVIDERS.map((p) => (
               <option key={p} value={p}>
-                {PROVIDERS[p].label}
+                {t(PROVIDERS[p].label)}
               </option>
             ))}
           </select>

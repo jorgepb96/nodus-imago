@@ -87,7 +87,7 @@ export function ApiSettings({
           {Object.entries(s.apiProfiles).flatMap(([provider, profile]) =>
             (profile?.models ?? []).map((model) => (
               <span className="provider-model-chip" key={provider + model}>
-                ★ {PROVIDERS[provider as ApiProvider].label} · {model}
+                ★ {t(PROVIDERS[provider as ApiProvider].label)} · {model}
               </span>
             )),
           )}
@@ -134,7 +134,7 @@ export function ApiSettings({
           >
             <summary>
               <ChevronRight size={13} />
-              <strong>{p.label}</strong>
+              <strong>{t(p.label)}</strong>
               <span
                 className={
                   "provider-key-state " + (keys?.providers[id] ? "saved" : "")
