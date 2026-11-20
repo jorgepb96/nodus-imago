@@ -107,6 +107,8 @@ import { NetworkView } from "./components/NetworkView";
 import { VisualMapView } from "./components/VisualMapView";
 import { CleanupDialog } from "./components/CleanupDialog";
 import { AuthorityDialog } from "./components/AuthorityDialog";
+import { HeritageDialog } from "./components/HeritageDialog";
+import { refreshHeritage } from "./heritageStore";
 import { citationTemplate } from "../shared/citation";
 import {
   filterOperators,
@@ -228,6 +230,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "iiif"
       | "cleanup"
       | "authorities"
+      | "heritage"
       | "deleteRows"
       | "deleteDatabase"
       | "saveSearch"
@@ -691,6 +694,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     const next = await api.call("detail", { id });
     setDetail((current) => (current?.database.id === id ? next : current));
     setAllDetails((all) => all.map((d) => (d.database.id === id ? next : d)));
+    refreshHeritage();
     refresh();
   };
   const navigate = (id: string) => {
@@ -3670,6 +3674,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               setToolColumn(columnMenu);
               setModal("authorities");
             }}
+            onHeritage={() => {
+              setToolColumn(columnMenu);
+              setModal("heritage");
+            }}
             onInserted={(id) =>
               // Wait for the new header to render, then name it from its menu.
               requestAnimationFrame(() => {
@@ -3777,6 +3785,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               void reloadDetail(detail.database.id);
             }
           }}
+        />
+      )}
+      {modal === "heritage" && detail && toolColumn && detail.columns.some((c) => c.id === toolColumn) && (
+        <HeritageDialog
+          column={detail.columns.find((c) => c.id === toolColumn)!}
+          onClose={() => setModal(null)}
+          onChanged={() => void reloadDetail(detail.database.id)}
         />
       )}
       {modal === "plates" && detail && status && (

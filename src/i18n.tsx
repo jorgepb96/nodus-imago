@@ -2325,6 +2325,8 @@ export const uiLocale = () =>
 /** A measured value: no thousands separator under 10,000 (years read as years). */
 export const formatNumber = (n: number, digits = 2) =>
   n.toLocaleString(uiLocale(), { maximumFractionDigits: digits, useGrouping: Math.abs(n) >= 10000 });
+/** The interface language. */
+export const useLanguage = () => useContext(LanguageContext);
 export function useT() {
   const language = useContext(LanguageContext);
   return (text: string) => translate(text, language);

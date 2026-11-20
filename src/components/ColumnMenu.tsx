@@ -26,6 +26,7 @@ import {
   WrapText,
   X,
   ArrowLeftRight,
+  Landmark,
 } from "lucide-react";
 import {
   columnTypeDef,
@@ -42,6 +43,7 @@ import {
   type ColumnPrefs,
 } from "../columnPrefs";
 import { useT } from "../i18n";
+import { isHeritageColumn } from "../../shared/heritage";
 import { CriteriaPopover } from "./CriteriaSelect";
 import type { Perform } from "./Properties";
 import { Button, Modal } from "./ui";
@@ -82,6 +84,7 @@ export function ColumnMenu({
   onInserted,
   onCleanup,
   onAuthorities,
+  onHeritage,
   initialView = "main",
 }: {
   initialView?: "main" | "calc";
@@ -104,6 +107,8 @@ export function ColumnMenu({
   onCleanup?: () => void;
   /** Link option values to Wikidata or Iconclass. */
   onAuthorities?: () => void;
+  /** A heritage property: its element records, typology and Wikidata linking. */
+  onHeritage?: () => void;
 }) {
   const t = useT(),
     api = window.imago,
@@ -421,6 +426,9 @@ export function ColumnMenu({
                 {onCleanup &&
                   ["select", "multi_select", "text"].includes(column.type) &&
                   item(<Combine size={15} />, t("Unificar valores parecidos"), () => run(async () => onCleanup()))}
+                {onHeritage &&
+                  isHeritageColumn(column) &&
+                  item(<Landmark size={15} />, t("Fichas de patrimonio"), () => run(async () => onHeritage()))}
                 {onAuthorities &&
                   ["select", "multi_select"].includes(column.type) &&
                   item(<Link2 size={15} />, t("Enlazar con autoridades"), () => run(async () => onAuthorities()))}

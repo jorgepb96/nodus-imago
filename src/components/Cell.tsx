@@ -13,6 +13,9 @@ import { RichTextEditor } from "./RichTextEditor";
 import { LocationCell } from "./LocationCell";
 import { HistoricalDateCell } from "./HistoricalDateCell";
 import { TextCellPopover } from "./TextCellPopover";
+import { HeritageIcon } from "./HeritageIcon";
+import { heritageScheme, isHeritageColumn, typology } from "../../shared/heritage";
+import { useHeritage } from "../heritageStore";
 
 /** Table text cells that open the expanded editor on click, as in Notion. */
 const EXPANDABLE_TYPES = ["title", "text", "rich_text", "ai"];
@@ -355,6 +358,15 @@ function OptionPicker({
     [query, setQuery] = useState(""),
     picker = useRef<HTMLDetailsElement>(null),
     menu = useRef<HTMLDivElement>(null);
+  // Heritage elements carry the icon of their typology.
+  const heritage = isHeritageColumn(column),
+    elements = useHeritage(heritage ? column.id : null),
+    scheme = heritage ? heritageScheme(column.config) : null;
+  const iconOf = (optionId: string) => {
+    if (!scheme) return null;
+    const e = elements[optionId];
+    return <HeritageIcon name={typology(scheme, e?.group ?? null, e?.type ?? null)?.icon} size={11} className="chip-icon" />;
+  };
   // The list floats above the page (top layer), so a table with few rows or
   // a scrolling container never cuts it; it opens upwards when there is no
   // room below.
@@ -421,6 +433,7 @@ function OptionPicker({
                     { "--chip": o.color ?? "#6366f1" } as React.CSSProperties
                   }
                 >
+                  {iconOf(o.id)}
                   {o.label}
                 </span>
               ))
@@ -451,6 +464,7 @@ function OptionPicker({
                 onChange={() => onToggle(o.id)}
               />
               <i style={{ background: o.color ?? "#6366f1" }} />
+              {iconOf(o.id)}
               <span className="option-label">{o.label}</span>
               {column.config.optionLinks?.[o.label.toLocaleLowerCase()] && (
                 <button
