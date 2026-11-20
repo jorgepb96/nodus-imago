@@ -473,7 +473,7 @@ export function heritageQuery(label: string): { queries: string[]; hints: string
   // A single common noun («Catedral», «Alcázar») only means something with its place.
   const generic = !!place && !/\s/.test(name);
   // A single word may be a common noun («Catedral») or a proper name
-  // («Generalife»): both readings are searched.
+  // («Miravalle»): both readings are searched.
   const queries = place
     ? generic
       ? [`${name} de ${place}`, name, `${name} ${place}`]
@@ -511,7 +511,7 @@ export function distanceKm(a: { latitude: number; longitude: number }, b: { lati
 /**
  * Where the place named in a label is, from gazetteer matches: in the
  * country most elements are in, and only when the name is not shared by
- * places far apart («Salamanca», the city, and the Madrid district).
+ * places far apart (a town and a district of a city with the same name).
  */
 export function placeNear(
   name: string,
@@ -530,8 +530,8 @@ type TownHit = { name: string; countryCode: string; latitude: number; longitude:
 
 /**
  * Where the towns named by many elements are, read together: the country most
- * of them are in; a name shared by places far apart («Salamanca», the city,
- * and a district of Madrid) is settled by dropping the places that lie inside
+ * of them are in; a name shared by places far apart (a town and a district
+ * of a city with the same name) is settled by dropping the places that lie inside
  * another town of the list. What stays ambiguous is null.
  */
 export function resolveTowns(entries: { id: string; town: string | null; found: TownHit[] }[]): Map<string, { latitude: number; longitude: number } | null> {
@@ -553,7 +553,7 @@ export function resolveTowns(entries: { id: string; town: string | null; found: 
     if (e.town && together(list)) anchors.push({ name: foldText(e.town), at: list[0] });
   }
   // A place inside a town named more often in the list is a district of it
-  // («Almagro», a district of Madrid, is not the town of Almagro).
+  // (a district of a city is not the town that shares its name).
   const district = (name: string, at: TownHit) =>
     anchors.some((a) => a.name !== name && (mentions.get(a.name) ?? 0) > (mentions.get(name) ?? 0) && distanceKm(a.at, at) <= 10);
   for (const e of entries) {
@@ -599,7 +599,7 @@ export function rankCandidates(
       const about = foldText(`${link.label} ${link.description ?? ""}`);
       const exact = names.includes(name);
       // Close: one name inside the other, but not a short name lost in a
-      // much longer label («Alhambra, Generalife y Albaicín» is not «Generalife»).
+      // much longer label («Palacio, jardines y murallas de Miravalle» is not «Miravalle»).
       const close = !exact && names.some((n) => n.includes(name) || (name.includes(n) && name.length - n.length <= 15));
       // Near the place named (when both positions are known) settles it; far away rules it out.
       const km = near && link.coordinates ? distanceKm(near, link.coordinates) : null;
@@ -608,8 +608,8 @@ export function rankCandidates(
       const hinted = !faraway && (nearby || !folded.length || folded.some((h) => about.includes(h)));
       const kind = typeFromInstances(link.instances);
       const typed = !!kind;
-      // What the name says it is must agree with what Wikidata says («Las Meninas -
-      // Velázquez» is a painting, not «plaza de las Meninas»).
+      // What the name says it is must agree with what Wikidata says («Retrato de
+      // caballero - Pintor» is a painting, not «plaza del Caballero»).
       const disagrees = !!named && !!kind && !kind.weak && !compatibleGroups(named.group, kind.group);
       // Without the town named in its text, a namesake must be really close.
       const close15 = km !== null && km <= 15;
@@ -760,7 +760,7 @@ export function matchSuggestion(
   const full = place ? `${name} - ${place}` : name;
   const exact = read.find((o) => o.full === full || o.full === name);
   if (exact) return exact.id;
-  // «Catedral de Sevilla» and «Catedral - Sevilla» are the same element.
+  // «Catedral de Villaverde» and «Catedral - Villaverde» are the same element.
   const sameName = read.filter((o) => o.name === name || (o.place && `${o.name} de ${o.place}` === name));
   const placed = sameName.filter((o) => !place || !o.place || o.place === place || name.includes(o.place));
   return placed.length === 1 ? placed[0].id : sameName.length === 1 && !place ? sameName[0].id : null;
@@ -832,7 +832,7 @@ export function readOsm(json: unknown): Omit<OsmCandidate, "confidence">[] {
  * be near the town named or be one of the parts of the address (not a region
  * that contains the word); what the name says it is must agree with the map
  * («Castillo …» is not «Avenida del Castillo»); a bare common noun
- * («Catedral - Sevilla») needs the map to say the same kind of thing. Works
+ * («Catedral - Villaverde») needs the map to say the same kind of thing. Works
  * of art are not looked for on a map.
  */
 export function scoreOsm(
