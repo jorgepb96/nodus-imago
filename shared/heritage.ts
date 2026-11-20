@@ -697,34 +697,84 @@ export type OsmCandidate = {
   confidence: "high" | "medium" | "low";
 };
 
-/**
- * Nominatim answers for an element, best first: the name must match and the
- * place be near the town named (or named in the address).
- */
-export function rankOsm(label: string, json: unknown, near?: { latitude: number; longitude: number } | null): OsmCandidate[] {
-  const { hints } = heritageQuery(label);
-  const name = foldText(label.split(/\s+[-–—]\s+/)[0] ?? "");
-  const place = hints.length ? foldText(hints[hints.length - 1]) : null;
+/** Map objects that are never the element (stops, stations of transport). */
+const OSM_SKIP = /^(public_transport|highway\/bus_stop|railway\/(stop|halt|tram_stop|subway_entrance)|amenity\/(bus_station|taxi|parking))/;
+
+/** A Nominatim answer read as candidates, before ranking. */
+export function readOsm(json: unknown): Omit<OsmCandidate, "confidence">[] {
   const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
-  return rows
-    .flatMap((r): (OsmCandidate & { score: number })[] => {
-      const latitude = Number(r.lat),
-        longitude = Number(r.lon);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !r.osm_type || !r.osm_id) return [];
-      const own = foldText(String(r.name ?? ""));
-      const display = String(r.display_name ?? "");
+  return rows.flatMap((r) => {
+    const latitude = Number(r.lat),
+      longitude = Number(r.lon);
+    const tag = `${r.category ?? r.class}/${r.type}`;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !r.osm_type || !r.osm_id || OSM_SKIP.test(tag)) return [];
+    const type = OSM_TYPES[tag] ?? null;
+    return [
+      {
+        name: String(r.name ?? ""),
+        display: String(r.display_name ?? ""),
+        latitude,
+        longitude,
+        osm: `${r.osm_type}/${r.osm_id}`,
+        group: type ? groupOfType(DEFAULT_HERITAGE_SCHEME, type) : null,
+        type,
+      },
+    ];
+  });
+}
+
+/**
+ * Candidates for an element, best first. The name must match; the place must
+ * be near the town named or be one of the parts of the address (not a region
+ * that contains the word); what the name says it is must agree with the map
+ * («Castillo …» is not «Avenida del Castillo»); a bare common noun
+ * («Catedral - Sevilla») needs the map to say the same kind of thing. Works
+ * of art are not looked for on a map.
+ */
+export function scoreOsm(
+  label: string,
+  candidates: Omit<OsmCandidate, "confidence">[],
+  near?: { latitude: number; longitude: number } | null,
+): OsmCandidate[] {
+  const { hints } = heritageQuery(label);
+  const first = label.split(/\s+[-–—]\s+/)[0] ?? "";
+  const name = foldText(first);
+  const place = hints.length ? foldText(hints[hints.length - 1]) : null;
+  const named = typeFromName(label);
+  if (named?.group === "artworks") return [];
+  const bare = !!place && !/\s/.test(first.trim());
+  // A name that is only a kind of thing («Plaza de toros», «Teatro romano»)
+  // exists in many towns around: it must be close to the town's centre.
+  const plain = name.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  const generic = bare || NAME_TYPES.some(([words]) => words === plain);
+  const radius = generic ? 8 : 30;
+  return candidates
+    .flatMap((c) => {
+      const own = foldText(c.name);
       const exact = !!own && own === name;
       const close = !!own && !exact && (own.includes(name) || (name.includes(own) && own.length > 3));
-      const km = near ? distanceKm(near, { latitude, longitude }) : null;
-      const nearby = km !== null && km <= 30;
-      const inPlace = !!place && foldText(display).includes(place);
-      if (km !== null && km > 60 && !inPlace) return [];
-      const type = OSM_TYPES[`${r.category ?? r.class}/${r.type}`] ?? null;
-      const group = type ? groupOfType(DEFAULT_HERITAGE_SCHEME, type) : null;
-      const score = (exact ? 4 : close ? 2 : 0) + (nearby || inPlace ? 3 : 0) + (type ? 1 : 0);
-      const confidence = (exact || close) && (nearby || inPlace) ? (exact ? "high" : "medium") : exact || close ? "medium" : "low";
-      return [{ name: String(r.name ?? ""), display, latitude, longitude, osm: `${r.osm_type}/${r.osm_id}`, group, type, confidence, score }];
+      const km = near ? distanceKm(near, c) : null;
+      const nearby = km !== null && km <= radius;
+      // Where the town is known, distance decides (a province is often called
+      // like its capital); otherwise the town must be part of the address.
+      const inPlace = km === null && !!place && c.display.split(",").some((part) => foldText(part) === place);
+      if (km !== null && km > 60) return [];
+      const agrees = !named || !c.group || c.group === named.group || (named.group === "religious" && c.type === "church");
+      const kindKnown = !!named && !!c.group && agrees;
+      let confidence: OsmCandidate["confidence"] =
+        (exact || close) && (nearby || inPlace) ? (exact ? "high" : "medium") : exact || close ? "medium" : "low";
+      if (!agrees) confidence = "low";
+      // Without knowing where the town is, nothing is certain enough to apply on its own.
+      if (km === null && confidence === "high") confidence = "medium";
+      if (bare && !kindKnown) confidence = confidence === "high" ? "medium" : "low";
+      const score = (exact ? 4 : close ? 2 : 0) + (nearby || inPlace ? 3 : 0) + (c.type ? 1 : 0) + (agrees ? 0 : -5);
+      return [{ ...c, confidence, score }];
     })
     .sort((a, b) => b.score - a.score)
     .map(({ score: _score, ...c }) => c);
+}
+
+/** Nominatim answers for an element, best first. */
+export function rankOsm(label: string, json: unknown, near?: { latitude: number; longitude: number } | null): OsmCandidate[] {
+  return scoreOsm(label, readOsm(json), near);
 }
