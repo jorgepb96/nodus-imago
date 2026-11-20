@@ -48,7 +48,7 @@ export function HeritageIdentify({
   const common = { column, elements, links, counts, scheme, onApplied: applied };
 
   return (
-    <div className="heritage-identify" data-testid="heritage-identify">
+    <div className="heritage-identify" data-testid="heritage-identify" data-tour="heritage-identify">
       <p className="hint">
         {t(
           "Tres pasos, en este orden: Wikidata identifica cada elemento (enlace, tipología y coordenadas); OpenStreetMap sitúa lo que Wikidata no tiene; por último, lo que quede se sitúa en el centro de su localidad, como posición aproximada. Las búsquedas siguen en segundo plano en la lista de tareas; las propuestas se guardan hasta que las revisas.",

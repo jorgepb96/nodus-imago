@@ -150,13 +150,13 @@ export function HeritageDialog({
 
   return (
     <Modal icon={Landmark} title={`${t("Elementos patrimoniales")} · ${column.name}`} onClose={onClose} wide>
-      <div className="modal-body heritage-dialog" data-testid="heritage-dialog">
+      <div className="modal-body heritage-dialog" data-testid="heritage-dialog" data-tour="heritage-dialog">
         <div className="heritage-toolbar">
           <div className="segmented" role="tablist" aria-label={t("Vista")}>
             <button type="button" className={view === "elements" ? "active" : ""} onClick={() => setView("elements")}>
               <ListTree size={13} /> {t("Elementos")}
             </button>
-            <button type="button" className={view === "identify" ? "active" : ""} onClick={() => setView("identify")}>
+            <button type="button" className={view === "identify" ? "active" : ""} onClick={() => setView("identify")} data-tour="heritage-identify-tab">
               <Wand2 size={13} /> {t("Identificar y situar")}
             </button>
             <button type="button" className={view === "scheme" ? "active" : ""} onClick={() => setView("scheme")}>

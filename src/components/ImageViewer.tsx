@@ -577,6 +577,7 @@ export function ImageViewer({
                   className={`viewer-annotate ${marking ? "is-on" : ""}`}
                   aria-pressed={!!marking}
                   data-testid="viewer-heritage"
+                  data-tour="viewer-heritage"
                   data-tooltip={t("Marca en la imagen un edificio, monumento u obra con un punto o un rectángulo.")}
                   onClick={() => {
                     setAnnotating(false);

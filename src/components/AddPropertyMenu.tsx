@@ -187,6 +187,7 @@ export function AddPropertyMenu({
               className="column-menu-item"
               disabled={!!busy}
               onClick={createHeritage}
+              data-tour="add-heritage"
             >
               <Landmark size={15} />
               <span>{t("Patrimonio")}</span>

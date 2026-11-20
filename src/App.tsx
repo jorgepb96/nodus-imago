@@ -3068,6 +3068,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 <button
                                   type="button"
                                   className="add-property-button"
+                                  data-tour="add-property-column"
                                   aria-label={t("Añadir propiedad")}
                                   data-tooltip={t("Añadir propiedad")}
                                   aria-haspopup="menu"
