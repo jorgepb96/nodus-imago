@@ -107,11 +107,12 @@ export class Statistics {
           }
         : null,
     );
+    const language = this.repo.getSettings().language;
     const labels = (c: number) =>
       values[c].map((v) => {
         const h = heritage[c];
         return h
-          ? heritageCategories(decodeMultiSelect(v.raw), h.labels, h.byId, h.scheme, level, parts)
+          ? heritageCategories(decodeMultiSelect(v.raw), h.labels, h.byId, h.scheme, level, parts, language)
           : categoryValues(columns[c], v.raw, v.display);
       });
     switch (spec.kind) {
