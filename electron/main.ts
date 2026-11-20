@@ -807,9 +807,20 @@ app.whenReady().then(async () => {
         for (let i = 0; i < unknown.length; i += 50) Object.assign(above, parseSuperclasses(await get(wikidataClassesUrl(unknown.slice(i, i + 50)))));
         for (const link of links.values()) link.instances = withSuperclasses(link.instances, above);
         // The place named in each label, from the local gazetteer (no request).
-        const nearOf = (label: string) => {
-          const hints = heritageQuery(label).hints;
-          const place = hints.length ? places.search(hints[hints.length - 1])[0] : undefined;
+        // A name shared by several places («Córdoba») is read in the country
+        // most places of these elements are in.
+        const options = new Map(
+          data.items.map((item) => {
+            const hints = heritageQuery(item.label).hints;
+            return [item.optionId, hints.length ? places.search(hints[hints.length - 1]).slice(0, 8) : []] as const;
+          }),
+        );
+        const countries = new Map<string, number>();
+        for (const found of options.values()) if (found[0]) countries.set(found[0].countryCode, (countries.get(found[0].countryCode) ?? 0) + 1);
+        const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
+        const nearOf = (optionId: string) => {
+          const found = options.get(optionId) ?? [];
+          const place = found.find((p) => p.countryCode === country) ?? found[0];
           return place ? { latitude: place.latitude, longitude: place.longitude } : null;
         };
         return data.items.map((item) => ({
@@ -817,7 +828,7 @@ app.whenReady().then(async () => {
           candidates: rankCandidates(
             item.label,
             (found.get(item.optionId) ?? []).flatMap((id) => (links.has(id) ? [links.get(id)!] : [])),
-            nearOf(item.label),
+            nearOf(item.optionId),
           ).slice(0, 4),
           ...(errors.has(item.optionId) ? { error: errors.get(item.optionId) } : {}),
         }));
