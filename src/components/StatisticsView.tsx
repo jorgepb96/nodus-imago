@@ -28,6 +28,7 @@ import { BarList, ColumnChart, Heatmap, LineChart } from "./charts";
 import { CriteriaSelect } from "./CriteriaSelect";
 import type { Perform } from "./Properties";
 import { Button, Empty, Modal, Spinner } from "./ui";
+import { ActiveFilters } from "./ActiveFilters";
 
 type Kind = StatSpec["kind"];
 const KINDS: { id: Kind; label: string; hint: string; icon: typeof Sigma }[] = [
@@ -466,6 +467,7 @@ export function StatisticsView({
           </div>
         ) : (
           <div className={"stats-result stat-viz" + (loading ? " is-loading" : "")} aria-busy={loading}>
+            <ActiveFilters detail={detail} search={search} records={result.records} />
             <ResultView result={result} spec={spec} name={name} />
             {table && (
               <details className="stats-table">

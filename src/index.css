@@ -8173,3 +8173,7 @@ tr:hover .ai-cell-button,
 .heritage-map-element header { display: flex; align-items: center; gap: 6px; }
 .heritage-map-element header strong { flex: 1; }
 .heritage-stat-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 0 0 10px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 12.5px; }
+.active-filters.is-filtered { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--text); }
+.active-filters-list { font-weight: 550; }
+.active-filters-query { display: inline-flex; align-items: center; gap: 3px; }

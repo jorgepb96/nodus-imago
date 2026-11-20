@@ -2380,6 +2380,8 @@ const en: Record<string, string> = {
   "Obras de arte": "Works of art",
   "Buscar en Wikidata": "Search in Wikidata",
   "Cambiar enlace": "Change link",
+  "Filtros activos": "Active filters",
+  "Sin filtros: toda la base de datos": "No filters: the whole database",
 };
 Object.assign(en, backendEn);
 const patterns = backendPatterns.map(([source, target]) => {
