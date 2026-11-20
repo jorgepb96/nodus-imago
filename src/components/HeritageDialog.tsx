@@ -102,7 +102,7 @@ export function HeritageDialog({
     setError(null);
     try {
       const batch = await window.imago.call("heritageInferTypes", { columnId: column.id });
-      setNotice(t("{n} elementos tipificados por su nombre. Puedes revertirlo en «Identificar en Wikidata › Vinculaciones anteriores».").replace("{n}", formatNumber(batch.applied, 0)));
+      setNotice(t("{n} elementos tipificados por su nombre. Puedes revertirlo en «Identificar y situar › Vinculaciones anteriores».").replace("{n}", formatNumber(batch.applied, 0)));
       await reload();
       refreshHeritage(column.id);
     } catch (e) {
@@ -157,7 +157,7 @@ export function HeritageDialog({
               <ListTree size={13} /> {t("Elementos")}
             </button>
             <button type="button" className={view === "identify" ? "active" : ""} onClick={() => setView("identify")}>
-              <Wand2 size={13} /> {t("Identificar en Wikidata")}
+              <Wand2 size={13} /> {t("Identificar y situar")}
             </button>
             <button type="button" className={view === "scheme" ? "active" : ""} onClick={() => setView("scheme")}>
               <Shapes size={13} /> {t("Tipologías")}
