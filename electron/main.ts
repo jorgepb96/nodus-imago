@@ -41,7 +41,7 @@ import {
   type AuthorityLink,
   type AuthoritySource,
 } from "../shared/authority";
-import { heritageQuery, nominatimUrl, placeNear, rankCandidates, rankOsm, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
+import { heritageQuery, nominatimUrl, rankCandidates, rankOsm, resolveTowns, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
 /** Nominatim allows one request a second. */
 let nominatimNext = 0;
 import { platesHtml } from "./export/plates";
@@ -786,7 +786,7 @@ app.whenReady().then(async () => {
             data.items.slice(i, i + 4).map(async (item) => {
               try {
                 const { queries, hints } = heritageQuery(item.label);
-                const name = item.label.split(/\s+[-–—]\s+/)[0];
+                const name = item.label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0];
                 const place = hints[hints.length - 1];
                 const ids: string[] = [];
                 if (place) ids.push(...parseWikidataFullText(await get(wikidataFullTextUrl(`${name} ${place}`))));
@@ -820,11 +820,14 @@ app.whenReady().then(async () => {
         const countries = new Map<string, number>();
         for (const found of options.values()) if (found[0]) countries.set(found[0].countryCode, (countries.get(found[0].countryCode) ?? 0) + 1);
         const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
-        const nearOf = (optionId: string) => {
-          const item = data.items.find((i) => i.optionId === optionId);
-          const hints = item ? heritageQuery(item.label).hints : [];
-          return hints.length ? placeNear(hints[hints.length - 1], options.get(optionId) ?? [], country) : null;
-        };
+        const towns = resolveTowns(
+          data.items.map((item) => {
+            const hints = heritageQuery(item.label).hints;
+            return { id: item.optionId, town: hints[hints.length - 1] ?? null, found: options.get(item.optionId) ?? [] };
+          }),
+        );
+        void country;
+        const nearOf = (optionId: string) => towns.get(optionId) ?? null;
         return data.items.map((item) => ({
           optionId: item.optionId,
           candidates: rankCandidates(
@@ -836,23 +839,45 @@ app.whenReady().then(async () => {
         }));
       }
       if (command === "heritageTownPlaces") {
-        // No request: the town named in each label, from the bundled gazetteer.
-        const data = safe as { items: { optionId: string; label: string }[] };
-        const found = new Map(
-          data.items.map((item) => {
-            const hints = heritageQuery(item.label).hints;
-            return [item.optionId, hints.length ? places.search(hints[hints.length - 1]).slice(0, 8) : []] as const;
-          }),
-        );
-        const countries = new Map<string, number>();
-        for (const f of found.values()) if (f[0]) countries.set(f[0].countryCode, (countries.get(f[0].countryCode) ?? 0) + 1);
-        const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
-        return data.items.flatMap((item) => {
+        // The town named in each label, from the bundled gazetteer; the towns
+        // it does not know are looked for in OpenStreetMap when asked (only
+        // their names, one a second).
+        const data = safe as { items: { optionId: string; label: string }[]; lookup?: boolean };
+        const entries = data.items.map((item) => {
           const hints = heritageQuery(item.label).hints;
-          const town = hints[hints.length - 1];
-          const at = town ? placeNear(town, found.get(item.optionId) ?? [], country) : null;
-          return at ? [{ optionId: item.optionId, ...at, town }] : [];
+          const town = hints[hints.length - 1] ?? null;
+          return { id: item.optionId, town, found: town ? places.search(town).slice(0, 8) : [] };
         });
+        const resolved = resolveTowns(entries);
+        const counts = new Map<string, number>();
+        for (const e of entries) if (e.found[0]) counts.set(e.found[0].countryCode, (counts.get(e.found[0].countryCode) ?? 0) + 1);
+        const country = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+        // Towns the gazetteer lacks, or only knows abroad (a «Trujillo» in America).
+        const missing = [...new Set(entries.filter((e) => e.town && !resolved.get(e.id) && !e.found.some((p) => p.countryCode === country)).map((e) => e.town!))];
+        const looked = new Map<string, { latitude: number; longitude: number }>();
+        if (data.lookup)
+          for (const town of missing.slice(0, 300)) {
+            const wait = nominatimNext - Date.now();
+            if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+            nominatimNext = Date.now() + 1100;
+            try {
+              const response = await fetch(nominatimUrl(town, country, true), {
+                headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
+                signal: AbortSignal.timeout(20_000),
+              });
+              const first = response.ok ? ((await response.json()) as { lat?: string; lon?: string }[])[0] : undefined;
+              if (first && Number.isFinite(Number(first.lat))) looked.set(town, { latitude: Number(first.lat), longitude: Number(first.lon) });
+            } catch {
+              /* A town not found stays unplaced. */
+            }
+          }
+        return {
+          places: entries.flatMap((e) => {
+            const at = (e.town ? looked.get(e.town) : undefined) ?? resolved.get(e.id);
+            return at ? [{ optionId: e.id, ...at, town: e.town! }] : [];
+          }),
+          unknownTowns: missing.filter((town) => !looked.has(town)).length,
+        };
       }
       if (command === "heritageOsmCandidates") {
         // OpenStreetMap's search for what Wikidata does not have. Only the
@@ -867,9 +892,15 @@ app.whenReady().then(async () => {
         const countries = new Map<string, number>();
         for (const f of found.values()) if (f[0]) countries.set(f[0].countryCode, (countries.get(f[0].countryCode) ?? 0) + 1);
         const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
+        const towns = resolveTowns(
+          data.items.map((item) => {
+            const hints = heritageQuery(item.label).hints;
+            return { id: item.optionId, town: hints[hints.length - 1] ?? null, found: found.get(item.optionId) ?? [] };
+          }),
+        );
         const out = [];
         for (const item of data.items) {
-          const parts = item.label.split(/\s+[-–—]\s+/);
+          const parts = item.label.split(/\s+[-–—]\s*|\s*[-–—]\s+/);
           const hints = heritageQuery(item.label).hints;
           const query = hints.length ? `${parts[0]}, ${hints[hints.length - 1]}` : parts[0];
           try {
@@ -883,7 +914,7 @@ app.whenReady().then(async () => {
               throw new Error("No se pudo conectar con OpenStreetMap.");
             });
             if (!response.ok) throw new Error(`OpenStreetMap: HTTP ${response.status}`);
-            const near = hints.length ? placeNear(hints[hints.length - 1], found.get(item.optionId) ?? [], country) : null;
+            const near = towns.get(item.optionId) ?? null;
             out.push({ optionId: item.optionId, candidates: rankOsm(item.label, await response.json(), near).slice(0, 4) });
           } catch (error) {
             out.push({ optionId: item.optionId, candidates: [], error: error instanceof Error ? error.message : String(error) });
