@@ -603,6 +603,8 @@ export function DatabaseMap({
         </Button>
       </div>
     );
+  // With no heritage property the picker only lists locations: keep its usual name.
+  const placementLabel = t(heritageColumns.length > 0 ? "Situar las fotos según" : "Propiedad de ubicación");
   return (
     <section className="database-map-view" aria-label={t("Vista de mapa")}>
       <div className="database-map-toolbar">
@@ -642,9 +644,9 @@ export function DatabaseMap({
         )}
         {mode === "photos" && (
         <label>
-          {t("Situar las fotos según")}
+          {placementLabel}
           <CriteriaSelect
-            label={t("Situar las fotos según")}
+            label={placementLabel}
             values={[columnId]}
             options={columns.map((column) => ({
               value: column.id,
