@@ -41,7 +41,7 @@ import {
   type AuthorityLink,
   type AuthoritySource,
 } from "../shared/authority";
-import { heritageQuery, rankCandidates, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
+import { heritageQuery, placeNear, rankCandidates, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
 import { platesHtml } from "./export/plates";
 import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
@@ -819,9 +819,9 @@ app.whenReady().then(async () => {
         for (const found of options.values()) if (found[0]) countries.set(found[0].countryCode, (countries.get(found[0].countryCode) ?? 0) + 1);
         const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
         const nearOf = (optionId: string) => {
-          const found = options.get(optionId) ?? [];
-          const place = found.find((p) => p.countryCode === country) ?? found[0];
-          return place ? { latitude: place.latitude, longitude: place.longitude } : null;
+          const item = data.items.find((i) => i.optionId === optionId);
+          const hints = item ? heritageQuery(item.label).hints : [];
+          return hints.length ? placeNear(hints[hints.length - 1], options.get(optionId) ?? [], country) : null;
         };
         return data.items.map((item) => ({
           optionId: item.optionId,

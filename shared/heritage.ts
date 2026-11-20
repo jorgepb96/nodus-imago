@@ -300,6 +300,24 @@ export function distanceKm(a: { latitude: number; longitude: number }, b: { lati
   return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+/**
+ * Where the place named in a label is, from gazetteer matches: in the
+ * country most elements are in, and only when the name is not shared by
+ * places far apart («Salamanca», the city, and the Madrid district).
+ */
+export function placeNear(
+  name: string,
+  found: { name: string; countryCode: string; latitude: number; longitude: number }[],
+  country: string | undefined,
+): { latitude: number; longitude: number } | null {
+  const same = found.filter((p) => foldText(p.name) === foldText(name));
+  const pool = same.filter((p) => p.countryCode === country);
+  const list = pool.length ? pool : same.length ? same : found.slice(0, 1);
+  if (!list.length) return null;
+  if (list.some((p) => distanceKm(p, list[0]) > 30)) return null;
+  return { latitude: list[0].latitude, longitude: list[0].longitude };
+}
+
 export type HeritageCandidate = { link: AuthorityLink; confidence: "high" | "medium" | "low"; score: number };
 
 /**
@@ -314,7 +332,10 @@ export function rankCandidates(
   near?: { latitude: number; longitude: number } | null,
 ): HeritageCandidate[] {
   const { queries, hints } = heritageQuery(label);
-  const names = queries.map(foldText);
+  // A common noun alone («Catedral») helps to search but does not name the
+  // element: «calle de la Catedral» is not the cathedral.
+  const bare = hints.length && !/\s/.test(label.split(/\s+[-–—]\s+/)[0].trim()) ? foldText(label.split(/\s+[-–—]\s+/)[0]) : null;
+  const names = queries.map(foldText).filter((n) => n !== bare);
   const folded = hints.map(foldText).filter((h) => h.length > 1);
   const seen = new Set<string>();
   return links
