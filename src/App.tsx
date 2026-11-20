@@ -191,6 +191,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [settingsTab, setSettingsTab] = useState("api"),
     [queueFilter, setQueueFilter] = useState<QueueFilter | null>(null);
   const [page, setPage] = useState<Page>({ rows: [], total: 0 }),
+    // The query whose answer is on screen, and the one asked last: a refresh of
+    // the same query (a running job refreshes every 2 s) keeps the count visible.
+    [pageKey, setPageKey] = useState(""),
+    [requestKey, setRequestKey] = useState(""),
     [loading, setLoading] = useState(false),
     // Search starts in the gallery; a database sets its own view on opening.
     [view, setView] = useState<DatabaseViewId>("gallery"),
@@ -515,6 +519,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       criteriaContext !== criteriaKey
     ) {
       setPage({ rows: [], total: 0 });
+      setPageKey("");
+      setRequestKey("");
       setLoading(false);
       return;
     }
@@ -530,15 +536,22 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           };
     const cacheKey = JSON.stringify(input),
       cached = pageCache.current.get(cacheKey);
+    setRequestKey(cacheKey);
     // The cached page answers exactly this query: show it until the fresh one.
-    if (cached) setPage(cached);
+    if (cached) {
+      setPage(cached);
+      setPageKey(cacheKey);
+    }
     void api
       .call("search", input)
       .then((p) => {
         pageCache.current.delete(cacheKey);
         pageCache.current.set(cacheKey, p);
         if (pageCache.current.size > 12) pageCache.current.delete(pageCache.current.keys().next().value!);
-        if (id === sequence.current) setPage(p);
+        if (id === sequence.current) {
+          setPage(p);
+          setPageKey(cacheKey);
+        }
       })
       .catch((e) => {
         if (id === sequence.current) notify(e.message, true);
@@ -2580,7 +2593,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   />
                   <div className="result-meta">
                     <span>
-                      {loading ? (
+                      {loading && pageKey !== requestKey ? (
                         <Spinner />
                       ) : (
                         <>
