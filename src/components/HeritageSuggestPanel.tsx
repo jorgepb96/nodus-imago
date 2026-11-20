@@ -90,7 +90,8 @@ export function HeritageSuggestPanel({
           zoneIndex: target.zone ? zones.findIndex((z) => z.x === target.zone!.x && z.y === target.zone!.y) : null,
           candidates: [],
           chosen: 0,
-          selected: !!s.optionId && !inCell.includes(s.optionId),
+          // What the model itself doubts is shown unticked.
+          selected: !!s.optionId && !inCell.includes(s.optionId) && s.confidence !== "low",
         })),
       );
       // The same element named for the whole image and for a zone appears once, with its zone.
