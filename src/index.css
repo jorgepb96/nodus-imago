@@ -8208,3 +8208,10 @@ tr:hover .ai-cell-button,
 .heritage-propagate-results li.is-picked { outline: 2px solid var(--accent); border-radius: 8px; }
 .heritage-propagate-results li.is-done { opacity: 0.6; }
 .heritage-map-pin.is-approximate { opacity: 0.6; border-style: dashed; }
+/* The viewer is always dark: the heritage panels read its colours. */
+.image-viewer { --text: #e5e5e5; --muted: #a1a1aa; --line: #ffffff1f; --surface: #ffffff10; --panel: #111113; }
+.viewer-group.viewer-heritage > .viewer-annotate { display: inline-flex; width: auto; height: 28px; padding: 0 10px; border: 0; color: #e5e5e5; }
+.viewer-group.viewer-heritage > .viewer-annotate.is-on { color: #111; background: #f59e0b; }
+.viewer-group.viewer-heritage > button.is-on:not(.viewer-annotate) { color: #f59e0b; background: #ffffff14; }
+.viewer-side h2 .heritage-suggest-open { text-transform: none; letter-spacing: 0; color: #e5e5e5; background: #6366f12e; border-color: #818cf880; padding: 3px 9px; }
+.viewer-side h2 .heritage-suggest-open:hover { background: #6366f150; }
