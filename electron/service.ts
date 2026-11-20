@@ -448,6 +448,8 @@ export class Service {
       }
       case "mapRecords":
         return this.repo.mapRecords(input);
+      case "heritageMap":
+        return this.heritage.map(input);
       case "propertyChoices":
         return this.repo.propertyChoices(input);
       case "csvPreview": {

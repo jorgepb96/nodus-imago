@@ -23,16 +23,35 @@ export type MapRecord = {
   location: DatabaseLocationValue | null;
   image: { id: string; revision?: string } | null;
   imageCount: number;
+  /** Placed by a heritage element (its own coordinates or its whole's). */
+  placement?: { optionId: string; inherited: boolean } | null;
 };
 export type MapRecordsInput = {
   databaseId: string;
+  /** A location property, or a heritage property (records at their elements). */
   columnId: string;
+  /** With a heritage property: the location used for records with no placed element. */
+  fallbackColumnId?: string | null;
   filters?: PropertyFilter[];
   filterLogic?: "and" | "or";
   filterGroups?: PropertyFilterGroup[];
   sorts?: ViewSort[];
 };
 
+/** One element on the heritage map: where it is and how many records show it. */
+export type HeritageMapElement = {
+  optionId: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  inherited: boolean;
+  group: string | null;
+  type: string | null;
+  parentId: string | null;
+  /** Records of the view that show it (with its parts when asked). */
+  count: number;
+  rowIds: string[];
+};
 export type ImageAsset = {
   id: string;
   revision?: string;
@@ -388,6 +407,10 @@ export type Commands = {
   mapRecords: {
     input: MapRecordsInput;
     result: { records: MapRecord[]; total: number };
+  };
+  heritageMap: {
+    input: Omit<MapRecordsInput, "fallbackColumnId"> & { includeParts: boolean };
+    result: { elements: HeritageMapElement[]; unplaced: number; records: number };
   };
   searchPlaces: { input: { query: string }; result: GazetteerPlace[] };
   openMapAttribution: { input: void; result: void };

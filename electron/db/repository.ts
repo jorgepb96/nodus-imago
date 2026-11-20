@@ -1,5 +1,5 @@
 import { isHeritageColumn } from "../../shared/heritage";
-import { restoreHeritage, type HeritageRestore } from "./heritage";
+import { heritagePlaces, restoreHeritage, type HeritageRestore } from "./heritage";
 import Database from "better-sqlite3";
 import { createHash, randomUUID as uuid } from "node:crypto";
 import fs from "node:fs";
@@ -1136,11 +1136,23 @@ export class Repository {
     );
   }
   mapRecords(input: MapRecordsInput): { records: MapRecord[]; total: number } {
-    const column = this.column(input.columnId);
-    if (column.databaseId !== input.databaseId || column.type !== "location")
+    const chosen = this.column(input.columnId);
+    const heritage = isHeritageColumn(chosen) ? chosen : null;
+    const column = heritage
+      ? input.fallbackColumnId
+        ? this.column(input.fallbackColumnId)
+        : null
+      : chosen;
+    if (
+      chosen.databaseId !== input.databaseId ||
+      (!heritage && chosen.type !== "location") ||
+      (column && (column.databaseId !== input.databaseId || column.type !== "location"))
+    )
       throw new Error(
         "Elige una propiedad de ubicación de esta base de datos.",
       );
+    // Heritage elements by option: label and where each is drawn.
+    const elementPlaces = heritage ? heritagePlaces(this.db, heritage) : null;
     // Read every matching row in one consistent snapshot. A map is not a page
     // of the grid: one ordered id query, then only the title, the location and
     // the first image of each record — never every cell, annotation and
@@ -1162,6 +1174,7 @@ export class Repository {
       )?.id;
       const titles = new Map<string, string | null>(),
         places = new Map<string, string | null>(),
+        shown = new Map<string, string | null>(),
         images = new Map<
           string,
           { first: { id: string; metadata: string | null } | null; count: number }
@@ -1171,14 +1184,15 @@ export class Repository {
           p = marks(chunk);
         for (const cell of this.db
           .prepare(
-            `SELECT row_id,column_id,value_text FROM db_cells WHERE row_id IN (${p}) AND column_id IN (?,?)`,
+            `SELECT row_id,column_id,value_text FROM db_cells WHERE row_id IN (${p}) AND column_id IN (?,?,?)`,
           )
-          .all(...chunk, column.id, titleColumn ?? column.id) as {
+          .all(...chunk, column?.id ?? chosen.id, titleColumn ?? chosen.id, chosen.id) as {
           row_id: string;
           column_id: string;
           value_text: string | null;
         }[]) {
-          if (cell.column_id === column.id) places.set(cell.row_id, cell.value_text);
+          if (column && cell.column_id === column.id) places.set(cell.row_id, cell.value_text);
+          if (heritage && cell.column_id === heritage.id) shown.set(cell.row_id, cell.value_text);
           if (cell.column_id === titleColumn) titles.set(cell.row_id, cell.value_text);
         }
         for (const asset of this.db
@@ -1199,12 +1213,11 @@ export class Repository {
             entry.first = { id: asset.id, metadata: asset.metadata_json };
         }
       }
-      const records = ids.map((id): MapRecord => {
+      const records = ids.flatMap((id): MapRecord[] => {
         const image = images.get(id);
-        return {
+        const base = {
           id,
           title: titles.get(id) || id.slice(0, 8),
-          location: decodeDatabaseLocation(places.get(id) ?? null),
           image: image?.first
             ? {
                 id: image.first.id,
@@ -1213,8 +1226,29 @@ export class Repository {
             : null,
           imageCount: image?.count ?? 0,
         };
+        // A record at each of its elements (one marker per distinct place);
+        // without any placed element, at its own location.
+        if (elementPlaces) {
+          const seen = new Set<string>();
+          const placed = decodeMultiSelect(shown.get(id) ?? null).flatMap((optionId): MapRecord[] => {
+            const place = elementPlaces.get(optionId);
+            if (!place) return [];
+            const key = `${place.latitude},${place.longitude}`;
+            if (seen.has(key)) return [];
+            seen.add(key);
+            return [
+              {
+                ...base,
+                location: { name: place.label, latitude: place.latitude, longitude: place.longitude },
+                placement: { optionId, inherited: place.inherited },
+              },
+            ];
+          });
+          if (placed.length) return placed;
+        }
+        return [{ ...base, location: decodeDatabaseLocation(places.get(id) ?? null), placement: null }];
       });
-      return { records, total: records.length };
+      return { records, total: ids.length };
     })();
   }
   importCsv(

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Columns2, Focus, History, MapPin, X } from "lucide-react";
+import { Columns2, Focus, History, Landmark, MapPin, X } from "lucide-react";
 import { repeatedViews } from "../../shared/viewpoints";
 import { ThenNow } from "./ThenNow";
 import type { DatabaseDetail } from "../../shared/databases";
@@ -22,6 +22,8 @@ import {
 import { useT } from "../i18n";
 import { Button, Spinner, Thumbnail } from "./ui";
 import { CriteriaSelect } from "./CriteriaSelect";
+import { isHeritageColumn } from "../../shared/heritage";
+import { HeritageMap } from "./HeritageMap";
 
 type MarkerEntry = { marker: L.Marker; ids: string[]; thumb?: HTMLImageElement; src?: string };
 
@@ -199,22 +201,24 @@ function RecordMapCanvas({
           continue;
         const cover = group.records.find((record) => record.image)?.image;
         // The direction the camera faced, for a single photograph.
+        // A record placed at several heritage elements counts once per group.
+        const unique = new Set(group.records.map((record) => record.id)).size;
         const bearing =
-          group.records.length === 1 ? group.records[0].location?.bearing : null;
+          unique === 1 && !group.records[0].placement ? group.records[0].location?.bearing : null;
         const label =
-          group.records.length > 1
-            ? `${group.records.length} ${recordLabel} · ${group.records[0].location.name}`
+          unique > 1
+            ? `${unique} ${recordLabel} · ${group.records[0].location.name}`
             : group.records[0].title;
         let key = [
           group.latitude,
           group.longitude,
-          group.records.length,
+          unique,
           cover?.id ?? "",
           cover?.revision ?? "",
           typeof bearing === "number" ? bearing : "",
           label,
         ].join("|");
-        const ids = group.records.map((record) => record.id);
+        const ids = [...new Set(group.records.map((record) => record.id))];
         if (next.has(key)) key += "|" + group.id;
         const reused = previous.get(key);
         if (reused) {
@@ -259,9 +263,9 @@ function RecordMapCanvas({
           arrow.style.setProperty("--bearing", `${bearing}deg`);
           pin.append(arrow);
         }
-        if (group.records.length > 1) {
+        if (unique > 1) {
           const count = document.createElement("b");
-          count.textContent = String(group.records.length);
+          count.textContent = String(unique);
           pin.append(count);
         }
         const marker = L.marker([group.latitude, group.longitude], {
@@ -413,7 +417,28 @@ export function DatabaseMap({
   onCompare?: (assetIds: string[]) => void;
 }) {
   const t = useT(),
-    columns = detail.columns.filter((column) => column.type === "location");
+    locationColumns = detail.columns.filter((column) => column.type === "location"),
+    heritageColumns = detail.columns.filter((column) => isHeritageColumn(column)),
+    // Photos are placed by a location or by the heritage elements they show.
+    columns = [...locationColumns, ...heritageColumns];
+  const remembered = (key: string, fallback: string) => {
+    try {
+      return localStorage.getItem(key) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const remember = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      /* Device UI preference only. */
+    }
+  };
+  const [mode, setMode] = useState<"photos" | "heritage">(() =>
+    remembered(`imago.map-mode.${detail.database.id}`, "photos") === "heritage" ? "heritage" : "photos",
+  );
+  const [fallbackChosen, setFallbackChosen] = useState(() => remembered(`imago.map-fallback.${detail.database.id}`, ""));
   const [chosen, setChosen] = useState(() => {
     try {
       return (
@@ -426,6 +451,13 @@ export function DatabaseMap({
   const columnId = columns.some((column) => column.id === chosen)
     ? chosen
     : (columns[0]?.id ?? "");
+  const heritageSource = heritageColumns.find((column) => column.id === columnId) ?? null;
+  const fallbackColumnId = heritageSource
+    ? fallbackChosen === "none"
+      ? null
+      : (locationColumns.find((column) => column.id === fallbackChosen) ?? locationColumns[0])?.id ?? null
+    : null;
+  const heritageMapColumn = heritageSource ?? heritageColumns[0] ?? null;
   const [data, setData] = useState<MapRecord[]>([]),
     [loading, setLoading] = useState(false),
     [error, setError] = useState("");
@@ -444,6 +476,7 @@ export function DatabaseMap({
   const viewKey = JSON.stringify([
     detail.database.id,
     columnId,
+    fallbackColumnId,
     filters,
     groups,
     logic,
@@ -468,6 +501,7 @@ export function DatabaseMap({
           .call("mapRecords", {
             databaseId: detail.database.id,
             columnId,
+            fallbackColumnId,
             filters,
             filterLogic: logic,
             filterGroups: groups,
@@ -498,7 +532,7 @@ export function DatabaseMap({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [detail.database.id, columnId, filters, groups, sorts, logic, revision, viewKey]);
+  }, [detail.database.id, columnId, fallbackColumnId, filters, groups, sorts, logic, revision, viewKey]);
   useEffect(() => {
     setSelectedIds(null);
     setUnlocated(false);
@@ -514,6 +548,11 @@ export function DatabaseMap({
     [mapped],
   );
   const mappedIds = mappedById;
+  // Records, once each: a record can be on the map at several elements.
+  const uniqueData = useMemo(() => {
+    const seen = new Set<string>();
+    return data.filter((record) => !seen.has(record.id) && !!seen.add(record.id));
+  }, [data]);
   useEffect(() => {
     setSelectedIds((previous) => {
       if (!previous) return previous;
@@ -529,7 +568,7 @@ export function DatabaseMap({
     () => (selectedIds ? new Set(selectedIds) : null),
     [selectedIds],
   );
-  const visible = data.filter(
+  const visible = uniqueData.filter(
     (record) =>
       (unlocated
         ? !mappedIds.has(record.id)
@@ -540,7 +579,8 @@ export function DatabaseMap({
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
   );
-  const views = useMemo(() => repeatedViews(mapped), [mapped]);
+  // Repeated views are about where the camera stood: heritage placements are not.
+  const views = useMemo(() => repeatedViews(mapped.filter((record) => !record.placement)), [mapped]);
   const select = (ids: string[]) => {
     setSelectedIds(ids);
     setUnlocated(false);
@@ -566,35 +606,83 @@ export function DatabaseMap({
   return (
     <section className="database-map-view" aria-label={t("Vista de mapa")}>
       <div className="database-map-toolbar">
+        {heritageColumns.length > 0 && (
+          <div className="segmented map-mode" role="group" aria-label={t("Qué muestra el mapa")}>
+            {(["photos", "heritage"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={mode === m ? "active" : ""}
+                aria-pressed={mode === m}
+                data-testid={`map-mode-${m}`}
+                onClick={() => {
+                  setMode(m);
+                  remember(`imago.map-mode.${detail.database.id}`, m);
+                }}
+              >
+                {m === "photos" ? <MapPin size={13} /> : <Landmark size={13} />}
+                {t(m === "photos" ? "Fotos" : "Patrimonio")}
+              </button>
+            ))}
+          </div>
+        )}
+        {mode === "heritage" && heritageColumns.length > 1 && (
+          <label>
+            {t("Propiedad de patrimonio")}
+            <CriteriaSelect
+              label={t("Propiedad de patrimonio")}
+              values={[heritageMapColumn?.id ?? ""]}
+              options={heritageColumns.map((column) => ({ value: column.id, label: column.name }))}
+              onChange={(values) => {
+                setChosen(values[0]);
+                remember(`imago.map-column.${detail.database.id}`, values[0]);
+              }}
+            />
+          </label>
+        )}
+        {mode === "photos" && (
         <label>
-          {t("Propiedad de ubicación")}
+          {t("Situar las fotos según")}
           <CriteriaSelect
-            label={t("Propiedad de ubicación")}
+            label={t("Situar las fotos según")}
             values={[columnId]}
             options={columns.map((column) => ({
               value: column.id,
-              label: column.name,
+              label: isHeritageColumn(column) ? `${column.name} · ${t("elementos patrimoniales")}` : column.name,
             }))}
             onChange={(values) => {
               setChosen(values[0]);
-              try {
-                localStorage.setItem(
-                  `imago.map-column.${detail.database.id}`,
-                  values[0],
-                );
-              } catch {
-                /* Device UI preference only. */
-              }
+              remember(`imago.map-column.${detail.database.id}`, values[0]);
             }}
           />
         </label>
+        )}
+        {mode === "photos" && heritageSource && (
+          <label>
+            {t("Si no hay elemento situado")}
+            <CriteriaSelect
+              label={t("Si no hay elemento situado")}
+              values={[fallbackColumnId ?? "none"]}
+              options={[
+                ...locationColumns.map((column) => ({ value: column.id, label: column.name })),
+                { value: "none", label: t("No situar") },
+              ]}
+              onChange={(values) => {
+                setFallbackChosen(values[0]);
+                remember(`imago.map-fallback.${detail.database.id}`, values[0]);
+              }}
+            />
+          </label>
+        )}
+        {mode === "photos" && (
+        <>
         <span className="map-record-count" role="status">
           {loading ? (
             <Spinner />
           ) : (
             <>
-              <b>{mapped.length.toLocaleString()}</b> {t("situados en el mapa")}{" "}
-              · {data.length.toLocaleString()} {t("registros")}
+              <b>{mappedById.size.toLocaleString()}</b> {t("situados en el mapa")}{" "}
+              · {uniqueData.length.toLocaleString()} {t("registros")}
             </>
           )}
         </span>
@@ -608,7 +696,22 @@ export function DatabaseMap({
           <Focus size={15} />
           {t("Ajustar al contenido")}
         </Button>
+        </>
+        )}
       </div>
+      {mode === "heritage" && heritageMapColumn ? (
+        <HeritageMap
+          detail={detail}
+          column={heritageMapColumn}
+          filters={filters}
+          groups={groups}
+          sorts={sorts}
+          logic={logic}
+          revision={revision}
+          onOpen={onOpen}
+        />
+      ) : (
+      <>
       {error && (
         <p className="error" role="alert">
           {error}
@@ -636,7 +739,7 @@ export function DatabaseMap({
                 setLimit(50);
               }}
             >
-              {t("En el mapa")} ({mapped.length})
+              {t("En el mapa")} ({mappedById.size})
             </Button>
             <Button
               className={unlocated ? "selected" : ""}
@@ -647,7 +750,7 @@ export function DatabaseMap({
                 setLimit(50);
               }}
             >
-              {t("Sin coordenadas")} ({data.length - mapped.length})
+              {t("Sin coordenadas")} ({uniqueData.length - mappedById.size})
             </Button>
             <Button
               className={viewsTab ? "selected" : ""}
@@ -806,6 +909,8 @@ export function DatabaseMap({
           "Se muestran todos los registros con coordenadas que cumplen los filtros, sin limitarse a la página de la tabla.",
         )}
       </p>
+      </>
+      )}
     </section>
   );
 }

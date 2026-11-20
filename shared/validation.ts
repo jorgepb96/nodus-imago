@@ -378,7 +378,11 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .strict(),
   mapRecords: searchSchema
     .pick({ filters: true, filterLogic: true, filterGroups: true, sorts: true })
-    .extend({ databaseId: id, columnId: id })
+    .extend({ databaseId: id, columnId: id, fallbackColumnId: id.nullable().optional() })
+    .strict(),
+  heritageMap: searchSchema
+    .pick({ filters: true, filterLogic: true, filterGroups: true, sorts: true })
+    .extend({ databaseId: id, columnId: id, includeParts: z.boolean() })
     .strict(),
   propertyChoices: z
     .object({

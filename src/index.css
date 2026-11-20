@@ -8152,3 +8152,23 @@ tr:hover .ai-cell-button,
 .heritage-add-results { display: flex; flex-direction: column; gap: 1px; max-height: 220px; overflow-y: auto; }
 .heritage-add-results span { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .heritage-add-results small { color: var(--muted); font-size: 10.5px; }
+.map-mode button { display: inline-flex; align-items: center; gap: 5px; }
+.heritage-map { display: flex; flex-direction: column; gap: 10px; }
+.heritage-map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.heritage-map-legend { display: flex; flex-wrap: wrap; gap: 6px; }
+.heritage-map-legend button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--text); font-size: 12px; cursor: pointer; }
+.heritage-map-legend button.is-off { opacity: 0.45; text-decoration: line-through; }
+.heritage-map-legend small { color: var(--muted); }
+.heritage-map-marker { background: none; border: 0; }
+.heritage-map-pin { position: relative; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; background: var(--accent, #6366f1); color: #fff; box-shadow: 0 1px 5px #0007; }
+.heritage-map-pin.is-selected { outline: 3px solid color-mix(in srgb, var(--accent) 45%, #fff); }
+.heritage-map-pin b { position: absolute; right: -6px; top: -6px; min-width: 16px; padding: 0 4px; border-radius: 999px; background: var(--panel); color: var(--text); font-size: 10px; line-height: 16px; text-align: center; box-shadow: 0 0 0 1px var(--line); }
+.heritage-map-list, .heritage-map-rows { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: max(420px, 56vh); }
+.heritage-map-list li > button, .heritage-map-rows li > button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px; border: 0; border-radius: 6px; background: none; color: var(--text); text-align: left; font-size: 12.5px; cursor: pointer; }
+.heritage-map-list li > button:hover, .heritage-map-rows li > button:hover { background: var(--surface); }
+.heritage-map-list span, .heritage-map-rows span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heritage-map-list small { color: var(--muted); }
+.heritage-map-rows img, .heritage-map-rows .thumbnail { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; flex: none; }
+.heritage-map-element { display: flex; flex-direction: column; gap: 6px; }
+.heritage-map-element header { display: flex; align-items: center; gap: 6px; }
+.heritage-map-element header strong { flex: 1; }

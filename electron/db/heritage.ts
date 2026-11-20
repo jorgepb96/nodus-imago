@@ -7,10 +7,14 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { Repository } from "./repository";
 import type { AuthorityLink } from "../../shared/authority";
+import type { HeritageMapElement, MapRecordsInput } from "../../shared/imago";
+import { decodeMultiSelect, type DatabaseColumn } from "../../shared/databases";
 import { importedOptionColor } from "../../shared/databaseCsv";
 import {
+  ancestors,
   emptyElement,
   heritageScheme,
+  resolvedPosition,
   typeFromInstances,
   isHeritageColumn,
   wouldCycle,
@@ -83,6 +87,21 @@ function writeRow(db: Database.Database, r: Row) {
   db.prepare(
     "INSERT OR REPLACE INTO heritage_elements(option_id,column_id,parent_option_id,group_key,type_key,latitude,longitude,coord_source,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
   ).run(r.option_id, r.column_id, r.parent_option_id, r.group_key, r.type_key, r.latitude, r.longitude, r.coord_source, r.updated_at);
+}
+
+/** Where each element of a heritage property is drawn (own or whole's coordinates). */
+export function heritagePlaces(
+  db: Database.Database,
+  column: DatabaseColumn,
+): Map<string, { label: string; latitude: number; longitude: number; inherited: boolean }> {
+  const rows = db.prepare("SELECT * FROM heritage_elements WHERE column_id=?").all(column.id) as Row[];
+  const byId = Object.fromEntries(rows.map((r) => [r.option_id, decode(r)]));
+  const out = new Map<string, { label: string; latitude: number; longitude: number; inherited: boolean }>();
+  for (const o of column.options) {
+    const p = resolvedPosition(o.id, byId);
+    if (p) out.set(o.id, { label: o.label, latitude: p.latitude, longitude: p.longitude, inherited: p.inherited });
+  }
+  return out;
 }
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
@@ -198,6 +217,64 @@ export class Heritage {
       }
     })();
     return id;
+  }
+
+  /**
+   * The heritage map of a view: one point per element with its own
+   * coordinates and the number of the view's records that show it; with its
+   * parts, a record of a part also counts for every whole above it.
+   */
+  map(input: Omit<MapRecordsInput, "fallbackColumnId"> & { includeParts: boolean }): {
+    elements: HeritageMapElement[];
+    unplaced: number;
+    records: number;
+  } {
+    const column = this.heritageColumn(input.columnId);
+    if (column.databaseId !== input.databaseId) throw new Error("Elige una propiedad de patrimonio de esta base de datos.");
+    const ids = this.repo.literalIds({
+      databaseIds: [input.databaseId],
+      filters: input.filters,
+      filterLogic: input.filterLogic,
+      filterGroups: input.filterGroups,
+      sorts: input.sorts,
+    });
+    const byId = Object.fromEntries(this.rows(column.id).map((r) => [r.option_id, decode(r)]));
+    const shows = new Map<string, Set<string>>();
+    const add = (optionId: string, rowId: string) =>
+      (shows.get(optionId) ?? shows.set(optionId, new Set()).get(optionId)!).add(rowId);
+    const cell = this.db.prepare("SELECT value_text v FROM db_cells WHERE row_id=? AND column_id=?");
+    let records = 0;
+    for (const rowId of ids) {
+      const values = decodeMultiSelect((cell.get(rowId, column.id) as { v: string | null } | undefined)?.v ?? null);
+      if (values.length) records++;
+      for (const optionId of values) {
+        add(optionId, rowId);
+        if (input.includeParts) for (const whole of ancestors(optionId, byId)) add(whole, rowId);
+      }
+    }
+    const elements: HeritageMapElement[] = [];
+    let unplaced = 0;
+    for (const o of column.options) {
+      const rows = shows.get(o.id);
+      if (!rows?.size) continue;
+      const e = byId[o.id];
+      const p = resolvedPosition(o.id, byId);
+      if (!p) unplaced++;
+      if (!p || p.inherited) continue;
+      elements.push({
+        optionId: o.id,
+        label: o.label,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        inherited: false,
+        group: e?.group ?? null,
+        type: e?.type ?? null,
+        parentId: e?.parentId ?? null,
+        count: rows.size,
+        rowIds: [...rows].slice(0, 500),
+      });
+    }
+    return { elements: elements.sort((a, b) => b.count - a.count), unplaced, records };
   }
 
   // ── Wikidata in batches ──────────────────────────────────────────────────
