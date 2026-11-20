@@ -38,8 +38,8 @@ export function TimelineView({
     [data, setData] = useState<Timeline | null>(null),
     [error, setError] = useState<string | null>(null),
     [loading, setLoading] = useState(false),
-    [shown, setShown] = useState<Record<number, number>>({}),
-    sections = useRef(new Map<number, HTMLElement>());
+    [shown, setShown] = useState<Record<string, number>>({}),
+    sections = useRef(new Map<string, HTMLElement>());
   const databaseId = detail.database.id,
     columnSignature = detail.columns.map((c) => `${c.id}:${c.type}`).join("|");
   useEffect(() => {
@@ -81,41 +81,53 @@ export function TimelineView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnId, searchKey, revision]);
 
-  const years = data?.items.map((i) => i.year) ?? [],
-    span = years.length ? years[years.length - 1] - years[0] : 0,
+  // A record covers every year of its period («1950-1959»), not only the
+  // middle one: the overview counts it in each, the groups follow periods.
+  const items = useMemo(() => data?.items ?? [], [data]),
+    first = items.length ? Math.min(...items.map((i) => i.start)) : 0,
+    last = items.length ? Math.max(...items.map((i) => i.end)) : 0,
+    span = items.length ? last - first : 0,
+    periods = items.filter((i) => i.end - i.start >= 9).length,
     bucket =
       prefs.timelineBucket === "year" || prefs.timelineBucket === "decade"
         ? prefs.timelineBucket
-        : span > 60
+        : span > 60 || periods > items.length / 2
           ? "decade"
           : "year";
+  type Group = { key: string; start: number; end: number; label: string; items: Timeline["items"] };
   const groups = useMemo(() => {
-    const map = new Map<number, Timeline["items"]>();
-    for (const item of data?.items ?? []) {
-      const key = bucket === "decade" ? Math.floor(item.year / 10) * 10 : item.year;
-      (map.get(key) ?? map.set(key, []).get(key)!).push(item);
+    const map = new Map<string, Group>();
+    for (const item of items) {
+      // By decade: the decade of the period's middle year. By year: the year,
+      // or the whole period when it spans several.
+      const decade = Math.floor(item.year / 10) * 10;
+      const [start, end] = bucket === "decade" ? [decade, decade + 9] : [item.start, item.end];
+      const key = `${start}-${end}`;
+      const label = bucket === "decade" ? `${decade}s` : start === end ? String(start) : `${start}–${end}`;
+      (map.get(key) ?? map.set(key, { key, start, end, label, items: [] }).get(key)!).items.push(item);
     }
-    return [...map].sort((a, b) => a[0] - b[0]);
-  }, [data, bucket]);
+    return [...map.values()].sort((a, b) => a.start - b.start || a.end - b.end);
+  }, [items, bucket]);
   // The overview counts single years (decades past two centuries) whatever
   // the grouping below, and keeps empty years so gaps in the record show.
   const overviewStep = span > 200 ? 10 : 1;
   const overview = useMemo(() => {
-    if (!years.length) return [];
+    if (!items.length) return [];
     const key = (y: number) => Math.floor(y / overviewStep) * overviewStep,
       counts = new Map<number, number>();
-    for (const y of years) counts.set(key(y), (counts.get(key(y)) ?? 0) + 1);
+    for (const item of items) {
+      const seen = new Set<number>();
+      for (let y = item.start; y <= Math.min(item.end, item.start + 400); y++) seen.add(key(y));
+      for (const k of seen) counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
     const out: { key: number; count: number }[] = [];
-    for (let k = key(years[0]); k <= key(years[years.length - 1]); k += overviewStep)
-      out.push({ key: k, count: counts.get(k) ?? 0 });
+    for (let k = key(first); k <= key(last); k += overviewStep) out.push({ key: k, count: counts.get(k) ?? 0 });
     return out;
-    // years follows data.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, overviewStep]);
-  const groupOf = (year: number) => (bucket === "decade" ? Math.floor(year / 10) * 10 : year);
+  }, [items, first, last, overviewStep]);
+  /** The group a year of the overview belongs to. */
+  const groupOf = (year: number) => groups.find((g) => g.start <= year + overviewStep - 1 && g.end >= year)?.key;
   const overviewLabel = (key: number) => (overviewStep === 10 ? `${key}s` : String(key));
   const max = Math.max(1, ...overview.map((o) => o.count));
-  const label = (key: number) => (bucket === "decade" ? `${key}s` : String(key));
 
   if (candidates && !candidates.length)
     return (
@@ -167,10 +179,10 @@ export function TimelineView({
                 {data.undated.toLocaleString(uiLocale())} {t("sin fecha")}
               </>
             )}
-            {!!years.length && (
+            {!!items.length && (
               <>
                 {" · "}
-                {years[0]}–{years[years.length - 1]}
+                {first}–{last}
               </>
             )}
           </p>
@@ -190,9 +202,10 @@ export function TimelineView({
               data-tooltip={`${overviewLabel(o.key)} · ${o.count.toLocaleString(uiLocale())} ${t(o.count === 1 ? "registro" : "registros")}`}
               data-tooltip-instant=""
               aria-label={`${overviewLabel(o.key)}: ${o.count} ${t("registros")}`}
-              onClick={() =>
-                sections.current.get(groupOf(o.key))?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
+              onClick={() => {
+                const key = groupOf(o.key);
+                if (key) sections.current.get(key)?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
             >
               <span style={{ height: `${o.count ? Math.max(4, (o.count / max) * 100) : 0}%` }} />
             </button>
@@ -213,7 +226,7 @@ export function TimelineView({
         />
       )}
       <ol className="timeline">
-        {groups.map(([key, items]) => {
+        {groups.map(({ key, label, items }) => {
           const limit = shown[key] ?? FIRST;
           return (
             <li
@@ -226,7 +239,7 @@ export function TimelineView({
             >
               <div className="timeline-marker">
                 <CalendarRange size={13} />
-                <h3>{label(key)}</h3>
+                <h3>{label}</h3>
                 <span>
                   {items.length.toLocaleString(uiLocale())} {t(items.length === 1 ? "registro" : "registros")}
                 </span>

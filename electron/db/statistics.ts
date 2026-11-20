@@ -165,6 +165,9 @@ export class Statistics {
       id: string;
       title: string;
       year: number;
+      /** First and last year the date covers (a period spans several). */
+      start: number;
+      end: number;
       imageId: string | null;
       revision?: string;
       /** For a historical date: the period and how certain it is. */
@@ -182,10 +185,14 @@ export class Statistics {
         const image = row.images.find((a) => a.width > 0) ?? row.images[0];
         const historical =
           column.type === "historical_date" ? decodeHistoricalDate(row.cells[column.id] ?? null) : null;
+        const closed =
+          historical && historical.start !== null && historical.end !== null && historical.end >= historical.start;
         items.push({
           id: row.id,
           title: row.title,
           year,
+          start: closed ? historical!.start! : year,
+          end: closed ? historical!.end! : year,
           imageId: image?.id ?? null,
           revision: image?.revision,
           ...(historical
@@ -193,7 +200,7 @@ export class Statistics {
             : {}),
         });
       }
-    items.sort((a, b) => a.year - b.year || a.title.localeCompare(b.title, "es", { numeric: true }));
+    items.sort((a, b) => a.start - b.start || a.end - b.end || a.title.localeCompare(b.title, "es", { numeric: true }));
     return { items, undated, total: ids.length };
   }
 }

@@ -639,6 +639,9 @@ export type Commands = {
         id: string;
         title: string;
         year: number;
+        /** First and last year the date covers (a period spans several). */
+        start: number;
+        end: number;
         imageId: string | null;
         revision?: string;
         period?: string;
