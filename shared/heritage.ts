@@ -141,20 +141,30 @@ export const groupOfType = (scheme: HeritageScheme, type: string) =>
  * default scheme. Only used to suggest; the researcher confirms.
  */
 export const WIKIDATA_TYPES: Record<string, string> = {
+  // Religious
   Q2977: "cathedral", Q56242215: "cathedral", Q16970: "church", Q1088552: "church", Q120560: "church", Q163687: "church",
-  Q44613: "monastery", Q44539: "monastery", Q160742: "monastery", Q2750108: "monastery",
-  Q32815: "mosque", Q34627: "synagogue", Q1129743: "hermitage", Q56750657: "hermitage",
-  Q16560: "palace", Q53536964: "palace", Q543654: "town-hall", Q25550691: "town-hall",
-  Q3918: "university", Q875538: "university", Q2418495: "university", Q9842: "university",
-  Q12014225: "exchange", Q1802963: "mansion", Q3950: "mansion", Q33506: "museum", Q207694: "museum",
-  Q202570: "bullring", Q41176: "modern-building", Q11303: "modern-building", Q1021645: "modern-building",
-  Q23413: "castle", Q12020440: "alcazar", Q16748868: "wall", Q57346: "wall", Q12518: "tower", Q20034791: "tower",
-  Q82117: "gate", Q53060: "gate", Q12277: "gate", Q11765: "gate",
+  Q1509716: "church", Q108325: "church", Q1129743: "church",
+  Q44613: "monastery", Q1128397: "monastery", Q160742: "monastery", Q2750108: "monastery", Q6021560: "monastery", Q1430154: "monastery",
+  Q32815: "mosque", Q34627: "synagogue", Q56750657: "hermitage",
+  // Civil
+  Q16560: "palace", Q53536964: "palace", Q5383482: "palace", Q543654: "town-hall", Q25550691: "town-hall",
+  Q3918: "university", Q875538: "university", Q233324: "university",
+  Q3257518: "exchange", Q10882966: "exchange", Q1802963: "mansion", Q3950: "mansion", Q33506: "museum", Q207694: "museum",
+  Q1193438: "bullring", Q41176: "modern-building", Q11303: "modern-building", Q1021645: "modern-building",
+  // Defensive
+  Q23413: "castle", Q57831: "castle", Q57821: "castle", Q88291: "castle", Q613611: "alcazar", Q91717: "alcazar",
+  Q16748868: "wall", Q57346: "wall", Q12518: "tower", Q20034791: "tower", Q82117: "gate", Q53060: "gate", Q12277: "gate", Q143912: "gate",
+  // Public works
   Q12280: "bridge", Q474: "aqueduct", Q39715: "lighthouse", Q44782: "port", Q55488: "station",
-  Q2105235: "roman-theatre", Q24354: "roman-theatre", Q839954: "site", Q15661340: "site",
+  // Archaeology
+  Q19757: "roman-theatre", Q839954: "site", Q15661340: "site",
+  // Commemorative
   Q179700: "statue", Q4989906: "monument", Q575759: "monument", Q5003624: "monument", Q483453: "fountain",
-  Q79007: "street", Q174782: "square", Q22698: "park", Q1107656: "park", Q2298569: "viewpoint", Q6017969: "viewpoint",
-  Q3305213: "painting", Q860861: "sculpture", Q245117: "sculpture", Q2163013: "altarpiece", Q184296: "tapestry",
+  // Urban spaces and landscape
+  Q79007: "street", Q174782: "square", Q22698: "park", Q1107656: "park", Q6017969: "viewpoint",
+  // Works of art
+  Q3305213: "painting", Q860861: "sculpture", Q245117: "sculpture", Q46686: "altarpiece", Q15711026: "altarpiece", Q3714446: "altarpiece",
+  Q184296: "tapestry",
 };
 
 /** The first instance with a known type, as group and type of the default scheme. */
