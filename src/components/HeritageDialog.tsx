@@ -3,7 +3,7 @@
 // itself; and linking many elements to Wikidata at once, reviewed first.
 // Only the names searched are sent to Wikidata, and only when the person asks.
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Landmark, Link2, ListTree, MapPin, Plus, Search, Shapes, Trash2, Unlink, Wand2 } from "lucide-react";
+import { ExternalLink, Landmark, Link2, ListTree, MapPin, Plus, Search, Shapes, Tags, Trash2, Unlink, Wand2 } from "lucide-react";
 import type { DatabaseColumn } from "../../shared/databases";
 import type { AuthorityLink } from "../../shared/authority";
 import {
@@ -14,6 +14,7 @@ import {
   heritageScheme,
   resolvedPosition,
   typeFromInstances,
+  typeFromName,
   typology,
   type HeritageElement,
   type HeritageScheme,
@@ -91,6 +92,24 @@ export function HeritageDialog({
     [column.options, links, elements],
   );
 
+  // Elements whose name announces a typology they do not have yet.
+  const inferable = useMemo(
+    () => column.options.filter((o) => !elements[o.id]?.group && typeFromName(o.label)).length,
+    [column.options, elements],
+  );
+  const [notice, setNotice] = useState<string | null>(null);
+  const inferTypes = async () => {
+    setError(null);
+    try {
+      const batch = await window.imago.call("heritageInferTypes", { columnId: column.id });
+      setNotice(t("{n} elementos tipificados por su nombre. Puedes revertirlo en «Identificar en Wikidata › Vinculaciones anteriores».").replace("{n}", formatNumber(batch.applied, 0)));
+      await reload();
+      refreshHeritage(column.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const saveElement = async (element: HeritageElement) => {
     setError(null);
     try {
@@ -153,6 +172,16 @@ export function HeritageDialog({
           </span>
         </div>
         {error && <p className="error">{t(error)}</p>}
+        {notice && <p className="success">{notice}</p>}
+        {view === "elements" && inferable > 0 && (
+          <div className="authority-bulk">
+            <button type="button" className="button" onClick={() => void inferTypes()} data-testid="heritage-infer-types">
+              <Tags size={14} />
+              {t("Tipología por el nombre para {n} elementos").replace("{n}", formatNumber(inferable, 0))}
+            </button>
+            <span className="muted">{t("«Castillo de …» cuenta como castillo, «Iglesia de …» como iglesia, aunque Wikidata no lo conozca.")}</span>
+          </div>
+        )}
         {view === "elements" && (
           <div className="heritage-panes">
             <div className="heritage-list-pane">
@@ -502,6 +531,8 @@ function ElementRecord({
             ? t("Coordenadas puestas a mano: Wikidata no las cambia.")
             : element.coordSource === "wikidata"
               ? t("Coordenadas de Wikidata.")
+              : element.coordSource === "osm"
+                ? `${t("Coordenadas de OpenStreetMap")} (${element.osm ?? ""}).`
               : position?.inherited
                 ? `${t("Sin coordenadas propias: se usa la posición del conjunto")} (${labels[position.from] ?? ""}).`
                 : t("Sin coordenadas: no aparece en el mapa.")}

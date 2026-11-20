@@ -16,6 +16,7 @@ import {
   heritageScheme,
   resolvedPosition,
   typeFromInstances,
+  typeFromName,
   isHeritageColumn,
   wouldCycle,
   type HeritageElement,
@@ -29,8 +30,9 @@ type Row = {
   type_key: string | null;
   latitude: number | null;
   longitude: number | null;
-  coord_source: "wikidata" | "manual" | null;
+  coord_source: "wikidata" | "osm" | "manual" | null;
   updated_at: string;
+  osm_ref?: string | null;
 };
 const decode = (r: Row): HeritageElement => ({
   optionId: r.option_id,
@@ -40,6 +42,7 @@ const decode = (r: Row): HeritageElement => ({
   latitude: r.latitude,
   longitude: r.longitude,
   coordSource: r.coord_source,
+  osm: r.osm_ref ?? null,
 });
 const isEmpty = (e: HeritageElement) =>
   !e.parentId && !e.group && !e.type && e.latitude === null && e.longitude === null;
@@ -85,8 +88,8 @@ export function restoreHeritage(db: Database.Database, entry: HeritageRestore) {
 
 function writeRow(db: Database.Database, r: Row) {
   db.prepare(
-    "INSERT OR REPLACE INTO heritage_elements(option_id,column_id,parent_option_id,group_key,type_key,latitude,longitude,coord_source,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
-  ).run(r.option_id, r.column_id, r.parent_option_id, r.group_key, r.type_key, r.latitude, r.longitude, r.coord_source, r.updated_at);
+    "INSERT OR REPLACE INTO heritage_elements(option_id,column_id,parent_option_id,group_key,type_key,latitude,longitude,coord_source,updated_at,osm_ref) VALUES(?,?,?,?,?,?,?,?,?,?)",
+  ).run(r.option_id, r.column_id, r.parent_option_id, r.group_key, r.type_key, r.latitude, r.longitude, r.coord_source, r.updated_at, r.osm_ref ?? null);
 }
 
 /** Where each element of a heritage property is drawn (own or whole's coordinates). */
@@ -169,6 +172,7 @@ export class Heritage {
             longitude: element.longitude,
             coord_source: element.coordSource,
             updated_at: new Date().toISOString(),
+            osm_ref: element.coordSource === "osm" ? (element.osm ?? null) : null,
           });
       }
     })();
@@ -194,10 +198,25 @@ export class Heritage {
       this.db
         .prepare("INSERT INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)")
         .run(id, column.databaseId, columnId, name, importedOptionColor(position), position, at, at);
+      if (!link) {
+        const named = typeFromName(name);
+        if (named && heritageScheme(column.config).groups.some((g) => g.key === named.group))
+          writeRow(this.db, {
+            option_id: id,
+            column_id: columnId,
+            parent_option_id: null,
+            group_key: named.group,
+            type_key: named.type,
+            latitude: null,
+            longitude: null,
+            coord_source: null,
+            updated_at: at,
+          });
+      }
       if (link) {
-        const typed = typeFromInstances(link.instances);
+        const typed = typeFromName(name) ?? typeFromInstances(link.instances);
         const scheme = heritageScheme(column.config);
-        const inScheme = typed && scheme.groups.some((g) => g.key === typed.group && g.types.some((x) => x.key === typed.type));
+        const inScheme = typed && scheme.groups.some((g) => g.key === typed.group && (!typed.type || g.types.some((x) => x.key === typed.type)));
         const links = this.db.prepare("SELECT option_id id,link_json json FROM option_authorities WHERE column_id=?").all(columnId) as { id: string; json: string }[];
         const parent = links.find((l) => link.partOf?.includes((JSON.parse(l.json) as AuthorityLink).id))?.id ?? null;
         this.db.prepare("INSERT OR REPLACE INTO option_authorities(option_id,column_id,link_json,linked_at) VALUES(?,?,?,?)").run(id, columnId, JSON.stringify(link), at);
@@ -309,9 +328,13 @@ export class Heritage {
         const e: HeritageElement = { ...emptyElement(item.optionId), ...elements[item.optionId] };
         const c = item.link.coordinates;
         if (c && e.coordSource !== "manual") Object.assign(e, { latitude: c.latitude, longitude: c.longitude, coordSource: "wikidata" });
-        const group = item.group && scheme.groups.find((g) => g.key === item.group);
-        if (!e.group && group && (!item.type || group.types.some((x) => x.key === item.type)))
-          Object.assign(e, { group: group.key, type: item.type ?? null });
+        // The researcher's own name says what it is first («Castillo de …»); Wikidata's class after.
+        const label = column.options.find((o) => o.id === item.optionId)?.label ?? "";
+        const named = typeFromName(label);
+        const suggested = named ?? (item.group ? { group: item.group, type: item.type ?? null } : null);
+        const group = suggested && scheme.groups.find((g) => g.key === suggested.group);
+        if (!e.group && group && (!suggested!.type || group.types.some((x) => x.key === suggested!.type)))
+          Object.assign(e, { group: group.key, type: suggested!.type ?? null });
         if (!e.parentId && item.parentId && ids.has(item.parentId) && !wouldCycle(e.optionId, item.parentId, elements))
           e.parentId = item.parentId;
         elements[e.optionId] = e;
@@ -326,7 +349,108 @@ export class Heritage {
             longitude: e.longitude,
             coord_source: e.coordSource,
             updated_at: batch.createdAt,
+            osm_ref: e.coordSource === "osm" ? (e.osm ?? null) : null,
           });
+        batch.applied++;
+      }
+      db.prepare("INSERT INTO heritage_link_batches(id,column_id,applied,snapshot_json,created_at) VALUES(?,?,?,?,?)").run(
+        batch.id,
+        columnId,
+        batch.applied,
+        JSON.stringify(snapshot),
+        batch.createdAt,
+      );
+    })();
+    return batch;
+  }
+
+  /**
+   * Gives elements without a typology the one their name announces
+   * («Castillo de …» is a castle). One batch that «Revertir» undoes.
+   */
+  inferTypes(columnId: string): HeritageLinkBatch {
+    const column = this.heritageColumn(columnId);
+    const scheme = heritageScheme(column.config);
+    const db = this.db;
+    const batch: HeritageLinkBatch = { id: randomUUID(), applied: 0, createdAt: new Date().toISOString(), revertedAt: null };
+    db.transaction(() => {
+      const snapshot: LinkSnapshot[] = [];
+      const elements = this.elements(columnId);
+      for (const o of column.options) {
+        const e: HeritageElement = { ...emptyElement(o.id), ...elements[o.id] };
+        if (e.group) continue;
+        const named = typeFromName(o.label);
+        const group = named && scheme.groups.find((g) => g.key === named.group);
+        if (!group || (named!.type && !group.types.some((x) => x.key === named!.type))) continue;
+        const link = db.prepare("SELECT link_json FROM option_authorities WHERE option_id=?").get(o.id) as { link_json: string } | undefined;
+        const row = db.prepare("SELECT * FROM heritage_elements WHERE option_id=?").get(o.id) as Row | undefined;
+        snapshot.push({ optionId: o.id, link: link?.link_json ?? null, element: row ?? null });
+        writeRow(db, {
+          option_id: o.id,
+          column_id: columnId,
+          parent_option_id: e.parentId,
+          group_key: group.key,
+          type_key: named!.type,
+          latitude: e.latitude,
+          longitude: e.longitude,
+          coord_source: e.coordSource,
+          updated_at: batch.createdAt,
+          osm_ref: e.osm ?? null,
+        });
+        batch.applied++;
+      }
+      if (batch.applied)
+        db.prepare("INSERT INTO heritage_link_batches(id,column_id,applied,snapshot_json,created_at) VALUES(?,?,?,?,?)").run(
+          batch.id,
+          columnId,
+          batch.applied,
+          JSON.stringify(snapshot),
+          batch.createdAt,
+        );
+    })();
+    return batch;
+  }
+
+  /**
+   * Places elements Wikidata does not have from OpenStreetMap: coordinates
+   * where they have none and a typology where they lack it (their name first).
+   * One batch that «Revertir» undoes.
+   */
+  applyPlaces(
+    columnId: string,
+    items: { optionId: string; latitude: number; longitude: number; osm: string; group?: string | null; type?: string | null }[],
+  ): HeritageLinkBatch {
+    const column = this.heritageColumn(columnId);
+    const scheme = heritageScheme(column.config);
+    const db = this.db;
+    const batch: HeritageLinkBatch = { id: randomUUID(), applied: 0, createdAt: new Date().toISOString(), revertedAt: null };
+    db.transaction(() => {
+      const snapshot: LinkSnapshot[] = [];
+      const elements = this.elements(columnId);
+      for (const item of items) {
+        const option = column.options.find((o) => o.id === item.optionId);
+        if (!option) throw new Error("Identificador de opción ajeno a la propiedad.");
+        const e: HeritageElement = { ...emptyElement(item.optionId), ...elements[item.optionId] };
+        const link = db.prepare("SELECT link_json FROM option_authorities WHERE option_id=?").get(item.optionId) as { link_json: string } | undefined;
+        const row = db.prepare("SELECT * FROM heritage_elements WHERE option_id=?").get(item.optionId) as Row | undefined;
+        snapshot.push({ optionId: item.optionId, link: link?.link_json ?? null, element: row ?? null });
+        if (e.latitude === null) Object.assign(e, { latitude: item.latitude, longitude: item.longitude, coordSource: "osm", osm: item.osm });
+        const suggested = typeFromName(option.label) ?? (item.group ? { group: item.group, type: item.type ?? null } : null);
+        const group = suggested && scheme.groups.find((g) => g.key === suggested.group);
+        if (!e.group && group && (!suggested!.type || group.types.some((x) => x.key === suggested!.type)))
+          Object.assign(e, { group: group.key, type: suggested!.type ?? null });
+        writeRow(db, {
+          option_id: e.optionId,
+          column_id: columnId,
+          parent_option_id: e.parentId,
+          group_key: e.group,
+          type_key: e.type,
+          latitude: e.latitude,
+          longitude: e.longitude,
+          coord_source: e.coordSource,
+          updated_at: batch.createdAt,
+          osm_ref: e.coordSource === "osm" ? (e.osm ?? null) : null,
+        });
         batch.applied++;
       }
       db.prepare("INSERT INTO heritage_link_batches(id,column_id,applied,snapshot_json,created_at) VALUES(?,?,?,?,?)").run(

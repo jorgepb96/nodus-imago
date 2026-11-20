@@ -41,7 +41,9 @@ import {
   type AuthorityLink,
   type AuthoritySource,
 } from "../shared/authority";
-import { heritageQuery, placeNear, rankCandidates, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
+import { heritageQuery, nominatimUrl, placeNear, rankCandidates, rankOsm, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
+/** Nominatim allows one request a second. */
+let nominatimNext = 0;
 import { platesHtml } from "./export/plates";
 import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
@@ -832,6 +834,43 @@ app.whenReady().then(async () => {
           ).slice(0, 4),
           ...(errors.has(item.optionId) ? { error: errors.get(item.optionId) } : {}),
         }));
+      }
+      if (command === "heritageOsmCandidates") {
+        // OpenStreetMap's search for what Wikidata does not have. Only the
+        // names are sent, one request a second as Nominatim asks.
+        const data = safe as { items: { optionId: string; label: string }[] };
+        const found = new Map(
+          data.items.map((item) => {
+            const hints = heritageQuery(item.label).hints;
+            return [item.optionId, hints.length ? places.search(hints[hints.length - 1]).slice(0, 8) : []] as const;
+          }),
+        );
+        const countries = new Map<string, number>();
+        for (const f of found.values()) if (f[0]) countries.set(f[0].countryCode, (countries.get(f[0].countryCode) ?? 0) + 1);
+        const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
+        const out = [];
+        for (const item of data.items) {
+          const parts = item.label.split(/\s+[-–—]\s+/);
+          const hints = heritageQuery(item.label).hints;
+          const query = hints.length ? `${parts[0]}, ${hints[hints.length - 1]}` : parts[0];
+          try {
+            const wait = nominatimNext - Date.now();
+            if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+            nominatimNext = Date.now() + 1100;
+            const response = await fetch(nominatimUrl(query, country), {
+              headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
+              signal: AbortSignal.timeout(20_000),
+            }).catch(() => {
+              throw new Error("No se pudo conectar con OpenStreetMap.");
+            });
+            if (!response.ok) throw new Error(`OpenStreetMap: HTTP ${response.status}`);
+            const near = hints.length ? placeNear(hints[hints.length - 1], found.get(item.optionId) ?? [], country) : null;
+            out.push({ optionId: item.optionId, candidates: rankOsm(item.label, await response.json(), near).slice(0, 4) });
+          } catch (error) {
+            out.push({ optionId: item.optionId, candidates: [], error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+        return out;
       }
       if (command === "commonsNearby") {
         // Only the place's coordinates are sent, and only when the user asks.

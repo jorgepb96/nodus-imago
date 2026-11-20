@@ -2415,6 +2415,18 @@ const en: Record<string, string> = {
   "probable": "likely",
   "Compara la zona marcada con el resto de la colección. Marca las fotos que muestran el elemento.": "Compares the marked zone with the rest of the collection. Tick the photos that show the element.",
   "Sin rectángulo marcado se compara la imagen entera. Para afinar, marca el elemento con un rectángulo.": "Without a marked rectangle the whole image is compared. To refine it, mark the element with a rectangle.",
+  "Coordenadas de OpenStreetMap": "Coordinates from OpenStreetMap",
+  "{n} elementos tipificados por su nombre. Puedes revertirlo en «Identificar en Wikidata › Vinculaciones anteriores».": "{n} elements typed by their name. You can revert it in «Identify in Wikidata › Earlier linkings».",
+  "Tipología por el nombre para {n} elementos": "Typology from the name for {n} elements",
+  "«Castillo de …» cuenta como castillo, «Iglesia de …» como iglesia, aunque Wikidata no lo conozca.": "«Castillo de …» counts as a castle, «Iglesia de …» as a church, even when Wikidata does not know it.",
+  "OpenStreetMap: lo que Wikidata no tiene": "OpenStreetMap: what Wikidata does not have",
+  "Calles, plazas, comercios o edificios sin ficha en Wikidata se pueden situar con el buscador de OpenStreetMap (Nominatim). Se envía solo el nombre de cada elemento, uno por segundo. Al aplicar se guardan las coordenadas y la tipología solo donde falten.": "Streets, squares, shops or buildings without a Wikidata record can be placed with OpenStreetMap's search (Nominatim). Only each element's name is sent, one a second. Applying saves coordinates and typology only where they are missing.",
+  "Se enviarán a OpenStreetMap los nombres de {n} elementos sin situar, uno por segundo.": "The names of {n} unplaced elements will be sent to OpenStreetMap, one a second.",
+  "Buscar en OpenStreetMap": "Search OpenStreetMap",
+  "Buscando en OpenStreetMap: {d} de {n}…": "Searching OpenStreetMap: {d} of {n}…",
+  "Situar con OpenStreetMap {n} elementos sin coordenadas": "Place {n} elements without coordinates with OpenStreetMap",
+  "{n} elementos situados con OpenStreetMap. Puedes revertirlo en «Vinculaciones anteriores».": "{n} elements placed with OpenStreetMap. You can revert it in «Earlier linkings».",
+  "Tampoco está en OpenStreetMap: sitúalo a mano en su ficha.": "Not in OpenStreetMap either: place it by hand in its record.",
 };
 Object.assign(en, backendEn);
 const patterns = backendPatterns.map(([source, target]) => {

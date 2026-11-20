@@ -10,6 +10,7 @@ import { typeFromInstances, typology, type HeritageCandidate, type HeritageEleme
 import { formatNumber, useLanguage, useT } from "../i18n";
 import { Button } from "./ui";
 import { HeritageIcon } from "./HeritageIcon";
+import { HeritageOsm } from "./HeritageOsm";
 
 type Proposal = { candidates: HeritageCandidate[]; chosen: number; accepted: boolean; error?: string };
 type Batch = { id: string; applied: number; createdAt: string; revertedAt: string | null };
@@ -286,6 +287,10 @@ export function HeritageIdentify({
           );
         })}
       </ul>
+      <HeritageOsm column={column} elements={elements} scheme={scheme} onApplied={async () => {
+        await onApplied();
+        await loadBatches();
+      }} />
       {batches.length > 0 && (
         <details className="heritage-batches">
           <summary>

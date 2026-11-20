@@ -998,6 +998,16 @@ export class Service {
         this.changed();
         return added;
       }
+      case "heritageInferTypes": {
+        const batch = this.heritage.inferTypes(input.columnId);
+        this.changed();
+        return batch;
+      }
+      case "heritageApplyPlaces": {
+        const batch = this.heritage.applyPlaces(input.columnId, input.items);
+        this.changed();
+        return batch;
+      }
       case "heritageLinkBatches":
         return this.heritage.batches(input.columnId);
       case "heritageRevertBatch": {

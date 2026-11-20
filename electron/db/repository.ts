@@ -138,6 +138,9 @@ export class Repository {
     if (!annotationColumns.has("option_id"))
       this.db.exec("ALTER TABLE image_annotations ADD COLUMN option_id TEXT");
     this.db.exec("CREATE INDEX IF NOT EXISTS annotations_option ON image_annotations(option_id) WHERE option_id IS NOT NULL");
+    // Heritage elements placed from OpenStreetMap keep the object they come from.
+    if (!(this.db.prepare("PRAGMA table_info(heritage_elements)").all() as { name: string }[]).some((c) => c.name === "osm_ref"))
+      this.db.exec("ALTER TABLE heritage_elements ADD COLUMN osm_ref TEXT");
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS history_batch ON history(batch_id); CREATE INDEX IF NOT EXISTS history_undone ON history(undone_seq) WHERE undone_seq IS NOT NULL;",
     );

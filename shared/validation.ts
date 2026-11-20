@@ -528,7 +528,8 @@ export const schemas: Record<string, z.ZodTypeAny> = {
               type: z.string().max(40).nullable(),
               latitude: z.number().min(-90).max(90).nullable(),
               longitude: z.number().min(-180).max(180).nullable(),
-              coordSource: z.enum(["wikidata", "manual"]).nullable(),
+              coordSource: z.enum(["wikidata", "osm", "manual"]).nullable(),
+              osm: z.string().max(80).nullable().optional(),
             })
             .strict(),
         )
@@ -573,6 +574,30 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       columnId: id,
       optionId: id,
       items: z.array(z.object({ rowId: id, assetId: id.optional(), box: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }).strict().nullable().optional() }).strict()).min(1).max(500),
+    })
+    .strict(),
+  heritageInferTypes: z.object({ columnId: id }).strict(),
+  heritageOsmCandidates: z
+    .object({ items: z.array(z.object({ optionId: id, label: z.string().trim().min(1).max(500) }).strict()).min(1).max(20) })
+    .strict(),
+  heritageApplyPlaces: z
+    .object({
+      columnId: id,
+      items: z
+        .array(
+          z
+            .object({
+              optionId: id,
+              latitude: z.number().min(-90).max(90),
+              longitude: z.number().min(-180).max(180),
+              osm: z.string().regex(/^(node|way|relation)\/\d+$/),
+              group: z.string().max(40).nullable().optional(),
+              type: z.string().max(40).nullable().optional(),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(5000),
     })
     .strict(),
   heritageLinkBatches: z.object({ columnId: id }).strict(),

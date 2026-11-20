@@ -17,7 +17,9 @@ export type HeritageElement = {
   type: string | null;
   latitude: number | null;
   longitude: number | null;
-  coordSource: "wikidata" | "manual" | null;
+  coordSource: "wikidata" | "osm" | "manual" | null;
+  /** OpenStreetMap object the coordinates come from («way/123»), when they do. */
+  osm?: string | null;
 };
 
 export const emptyElement = (optionId: string): HeritageElement => ({
@@ -44,7 +46,7 @@ export const DEFAULT_HERITAGE_SCHEME: HeritageScheme = {
       key: "religious", label: "Arquitectura religiosa", labelEn: "Religious architecture", icon: "Church",
       types: [
         t("cathedral", "Catedral", "Cathedral"), t("church", "Iglesia", "Church"),
-        t("monastery", "Monasterio o convento", "Monastery or convent"), t("mosque", "Mezquita", "Mosque", "MoonStar"),
+        t("monastery", "Monasterio o convento", "Monastery or convent"), t("mosque", "Mezquita", "Mosque"),
         t("synagogue", "Sinagoga", "Synagogue"), t("hermitage", "Ermita", "Hermitage"),
       ],
     },
@@ -183,6 +185,177 @@ export function typeFromInstances(instances: string[] | null | undefined): { gro
     const group = type && groupOfType(DEFAULT_HERITAGE_SCHEME, type);
     if (type && group) return { group, type };
   }
+  return null;
+}
+
+// ── Typology from the name ───────────────────────────────────────────────────
+
+/**
+ * What the name of an element says it is («Castillo de …», «Iglesia de …»,
+ * «Plaza Mayor»), read from its first words: the typology an element keeps
+ * when Wikidata does not know it. Longer phrases first.
+ */
+const NAME_TYPES: [string, string, string | null][] = [
+  // [first words, group, type]
+  ["plaza de toros", "civil", "bullring"],
+  ["teatro romano", "archaeology", "roman-theatre"],
+  ["casa consistorial", "civil", "town-hall"],
+  ["casas cueva", "urban", "landscape"],
+  ["casas colgadas", "civil", "mansion"],
+  ["gran via", "urban", "street"],
+  ["concatedral", "religious", "cathedral"],
+  ["catedral", "religious", "cathedral"],
+  ["mezquita", "religious", "mosque"],
+  ["iglesia", "religious", "church"],
+  ["basilica", "religious", "church"],
+  ["colegiata", "religious", "church"],
+  ["capilla", "religious", "church"],
+  ["santuario", "religious", "church"],
+  ["parroquia", "religious", "church"],
+  ["templo", "religious", "church"],
+  ["sacristia", "religious", "church"],
+  ["portico", "religious", "church"],
+  ["monasterio", "religious", "monastery"],
+  ["convento", "religious", "monastery"],
+  ["cartuja", "religious", "monastery"],
+  ["abadia", "religious", "monastery"],
+  ["claustro", "religious", "monastery"],
+  ["priorato", "religious", "monastery"],
+  ["sinagoga", "religious", "synagogue"],
+  ["ermita", "religious", "hermitage"],
+  ["palacio", "civil", "palace"],
+  ["ayuntamiento", "civil", "town-hall"],
+  ["universidad", "civil", "university"],
+  ["colegio", "civil", "university"],
+  ["seminario", "civil", "university"],
+  ["lonja", "civil", "exchange"],
+  ["casa", "civil", "mansion"],
+  ["casas", "civil", "mansion"],
+  ["museo", "civil", "museum"],
+  ["edificio", "civil", "modern-building"],
+  ["banco", "civil", "modern-building"],
+  ["ministerio", "civil", "modern-building"],
+  ["hospital", "civil", "modern-building"],
+  ["teatro", "civil", null],
+  ["castillo", "defensive", "castle"],
+  ["fortaleza", "defensive", "castle"],
+  ["ciudadela", "defensive", "castle"],
+  ["alcazar", "defensive", "alcazar"],
+  ["alcazaba", "defensive", "alcazar"],
+  ["muralla", "defensive", "wall"],
+  ["murallas", "defensive", "wall"],
+  ["torre", "defensive", "tower"],
+  ["torres", "defensive", "tower"],
+  ["torreon", "defensive", "tower"],
+  ["puerta", "defensive", "gate"],
+  ["portal", "defensive", "gate"],
+  ["arco", "defensive", "gate"],
+  ["puente", "public-works", "bridge"],
+  ["viaducto", "public-works", "bridge"],
+  ["acueducto", "public-works", "aqueduct"],
+  ["faro", "public-works", "lighthouse"],
+  ["puerto", "public-works", "port"],
+  ["estacion", "public-works", "station"],
+  ["ruinas", "archaeology", "site"],
+  ["yacimiento", "archaeology", "site"],
+  ["anfiteatro", "archaeology", "site"],
+  ["foro", "archaeology", "site"],
+  ["necropolis", "archaeology", "site"],
+  ["termas", "archaeology", "site"],
+  ["estatua", "commemorative", "statue"],
+  ["monumento", "commemorative", "monument"],
+  ["mausoleo", "commemorative", "monument"],
+  ["sepulcro", "commemorative", "monument"],
+  ["cruz", "commemorative", "monument"],
+  ["fuente", "commemorative", "fountain"],
+  ["pilar", "commemorative", "fountain"],
+  ["calle", "urban", "street"],
+  ["calleja", "urban", "street"],
+  ["callejon", "urban", "street"],
+  ["avenida", "urban", "street"],
+  ["paseo", "urban", "street"],
+  ["rambla", "urban", "street"],
+  ["plaza", "urban", "square"],
+  ["plazuela", "urban", "square"],
+  ["parque", "urban", "park"],
+  ["jardin", "urban", "park"],
+  ["jardines", "urban", "park"],
+  ["mirador", "urban", "viewpoint"],
+  ["barrio", "urban", null],
+  ["cuevas", "urban", "landscape"],
+  ["escultura", "artworks", "sculpture"],
+  ["retablo", "artworks", "altarpiece"],
+  ["tapiz", "artworks", "tapestry"],
+  ["cuadro", "artworks", "painting"],
+  ["nuestra senora", "artworks", "sculpture"],
+  ["n p", "artworks", "sculpture"],
+  ["cristo", "artworks", "sculpture"],
+  ["virgen", "artworks", "sculpture"],
+  ["piedad", "artworks", "sculpture"],
+  ["dolorosa", "artworks", "sculpture"],
+  ["descendimiento", "artworks", "sculpture"],
+  ["esculturas", "artworks", "sculpture"],
+  ["relicario", "artworks", null],
+  ["oficina de correos", "civil", "modern-building"],
+  ["caja de ahorros", "civil", "modern-building"],
+  ["real casino", "civil", "modern-building"],
+  ["casino", "civil", "modern-building"],
+  ["parador", "civil", "mansion"],
+  ["academia", "civil", "university"],
+  ["arsenal", "defensive", null],
+  ["cine", "civil", null],
+  ["cines", "civil", null],
+  ["cementerio", "religious", null],
+  ["calvario", "religious", null],
+  ["panteon", "commemorative", "monument"],
+  ["tumba", "commemorative", "monument"],
+  ["triunfo", "commemorative", "monument"],
+  ["cueva", "archaeology", "site"],
+  ["aljibe", "archaeology", "site"],
+  ["cuesta", "urban", "street"],
+  ["playa", "urban", "landscape"],
+  ["palmeral", "urban", "park"],
+  ["real monasterio", "religious", "monastery"],
+  ["sacro convento", "religious", "monastery"],
+  ["seo", "religious", "cathedral"],
+  ["campanario", "religious", "church"],
+  ["real casa", "civil", "palace"],
+  ["patio de escuelas", "civil", "university"],
+  ["facultad", "civil", "university"],
+  ["ciudad universitaria", "civil", "university"],
+  ["archivo", "civil", "museum"],
+  ["archivos", "civil", "museum"],
+  ["parlamento", "civil", "modern-building"],
+  ["audiencia", "civil", "modern-building"],
+  ["hotel", "civil", "modern-building"],
+  ["estadio", "civil", "modern-building"],
+  ["balneario", "civil", "modern-building"],
+  ["meson", "civil", "mansion"],
+  ["molino", "civil", null],
+  ["rollo", "commemorative", "monument"],
+  ["circo romano", "archaeology", "site"],
+  ["italica", "archaeology", "site"],
+  ["naveta", "archaeology", "site"],
+  ["escalinata", "urban", "street"],
+  ["ramblas", "urban", "street"],
+  ["penon", "urban", "landscape"],
+  ["ciudad encantada", "urban", "landscape"],
+];
+
+/** Painters and sculptors whose name in a label («Obra - Autor - Lugar») makes it a work of art. */
+const PAINTERS = ["goya", "velazquez", "el greco", "zurbaran", "murillo", "ribera", "tiziano", "rubens", "el bosco", "sorolla", "picasso", "dali", "miro", "jose maria sert", "sert", "morales", "valdes leal", "alonso cano", "juan de juanes", "sanchez coello", "pantoja de la cruz", "madrazo", "fortuny", "zuloaga", "romero de torres", "rusinol", "j risueno", "risueno"];
+const SCULPTORS = ["montanes", "martinez montanes", "salzillo", "gregorio hernandez", "juan de juni", "juni", "berruguete", "pedro de mena", "mena", "damian forment", "benlliure", "ruiz de la iglesia", "la roldana", "roldan"];
+
+/** The typology an element's name announces, if any. */
+export function typeFromName(label: string): { group: string; type: string | null } | null {
+  const clean = (text: string) => foldText(text).replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  const [first = "", ...rest] = label.split(/\s+[-–—]\s+/);
+  const name = clean(first);
+  for (const [words, group, type] of NAME_TYPES)
+    if (name === words || name.startsWith(words + " ")) return { group, type };
+  const parts = rest.map(clean);
+  if (parts.some((p) => SCULPTORS.includes(p))) return { group: "artworks", type: "sculpture" };
+  if (parts.some((p) => PAINTERS.includes(p))) return { group: "artworks", type: "painting" };
   return null;
 }
 
@@ -488,4 +661,70 @@ export function matchSuggestion(
   const sameName = read.filter((o) => o.name === name || (o.place && `${o.name} de ${o.place}` === name));
   const placed = sameName.filter((o) => !place || !o.place || o.place === place || name.includes(o.place));
   return placed.length === 1 ? placed[0].id : sameName.length === 1 && !place ? sameName[0].id : null;
+}
+
+// ── OpenStreetMap (Nominatim), for what Wikidata does not have ───────────────
+
+export function nominatimUrl(query: string, countryCode?: string | null) {
+  const params = new URLSearchParams({ q: query.slice(0, 250), format: "jsonv2", limit: "6", "accept-language": "es,en" });
+  if (countryCode && /^[a-z]{2}$/i.test(countryCode)) params.set("countrycodes", countryCode.toLowerCase());
+  return `https://nominatim.openstreetmap.org/search?${params}`;
+}
+
+/** OpenStreetMap tags («category/type») → a type of the default scheme. */
+const OSM_TYPES: Record<string, string> = {
+  "place/square": "square", "highway/pedestrian": "street", "highway/residential": "street", "highway/primary": "street",
+  "highway/secondary": "street", "highway/tertiary": "street", "highway/living_street": "street", "highway/footway": "street",
+  "highway/unclassified": "street", "highway/steps": "street", "highway/service": "street", "highway/trunk": "street",
+  "leisure/park": "park", "leisure/garden": "park", "tourism/viewpoint": "viewpoint", "natural/beach": "landscape", "natural/peak": "landscape",
+  "historic/castle": "castle", "historic/fort": "castle", "historic/city_gate": "gate", "barrier/city_wall": "wall", "historic/tower": "tower",
+  "historic/monument": "monument", "historic/memorial": "monument", "amenity/fountain": "fountain", "man_made/bridge": "bridge",
+  "amenity/place_of_worship": "church", "building/church": "church", "building/cathedral": "cathedral", "building/chapel": "church",
+  "historic/monastery": "monastery", "amenity/monastery": "monastery", "building/monastery": "monastery",
+  "tourism/museum": "museum", "railway/station": "station", "historic/archaeological_site": "site", "historic/ruins": "site",
+  "building/palace": "palace", "historic/palace": "palace", "amenity/townhall": "town-hall", "amenity/university": "university",
+  "man_made/lighthouse": "lighthouse", "amenity/marketplace": "exchange",
+};
+
+export type OsmCandidate = {
+  name: string;
+  display: string;
+  latitude: number;
+  longitude: number;
+  osm: string;
+  group: string | null;
+  type: string | null;
+  confidence: "high" | "medium" | "low";
+};
+
+/**
+ * Nominatim answers for an element, best first: the name must match and the
+ * place be near the town named (or named in the address).
+ */
+export function rankOsm(label: string, json: unknown, near?: { latitude: number; longitude: number } | null): OsmCandidate[] {
+  const { hints } = heritageQuery(label);
+  const name = foldText(label.split(/\s+[-–—]\s+/)[0] ?? "");
+  const place = hints.length ? foldText(hints[hints.length - 1]) : null;
+  const rows = Array.isArray(json) ? (json as Record<string, unknown>[]) : [];
+  return rows
+    .flatMap((r): (OsmCandidate & { score: number })[] => {
+      const latitude = Number(r.lat),
+        longitude = Number(r.lon);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !r.osm_type || !r.osm_id) return [];
+      const own = foldText(String(r.name ?? ""));
+      const display = String(r.display_name ?? "");
+      const exact = !!own && own === name;
+      const close = !!own && !exact && (own.includes(name) || (name.includes(own) && own.length > 3));
+      const km = near ? distanceKm(near, { latitude, longitude }) : null;
+      const nearby = km !== null && km <= 30;
+      const inPlace = !!place && foldText(display).includes(place);
+      if (km !== null && km > 60 && !inPlace) return [];
+      const type = OSM_TYPES[`${r.category ?? r.class}/${r.type}`] ?? null;
+      const group = type ? groupOfType(DEFAULT_HERITAGE_SCHEME, type) : null;
+      const score = (exact ? 4 : close ? 2 : 0) + (nearby || inPlace ? 3 : 0) + (type ? 1 : 0);
+      const confidence = (exact || close) && (nearby || inPlace) ? (exact ? "high" : "medium") : exact || close ? "medium" : "low";
+      return [{ name: String(r.name ?? ""), display, latitude, longitude, osm: `${r.osm_type}/${r.osm_id}`, group, type, confidence, score }];
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(({ score: _score, ...c }) => c);
 }

@@ -171,7 +171,7 @@ test("element records are saved apart from the options and refuse loops and fore
     const linked = heritage.addElement(columnId, "Torre del Reloj", link("Q900", "Torre del Reloj", { instances: ["Q12518"], coordinates: { latitude: 39, longitude: -2 } }));
     assert.deepEqual(
       { ...heritage.elements(columnId)[linked] },
-      { optionId: linked, parentId: null, group: "defensive", type: "tower", latitude: 39, longitude: -2, coordSource: "wikidata" },
+      { optionId: linked, parentId: null, group: "defensive", type: "tower", latitude: 39, longitude: -2, coordSource: "wikidata", osm: null },
     );
   }));
 
@@ -326,3 +326,40 @@ test("a vision model's answer is read leniently and matched with the property's 
   assert.deepEqual(knownForRecord(options, "Vista de Villaverde desde el río"), ["Catedral - Villaverde", "Puente Viejo - Villaverde"]);
   assert.match(heritageSuggestPrompt(["Catedral - Villaverde"], true), /detail cut out[\s\S]*Catedral - Villaverde[\s\S]*JSON array/);
 });
+
+test("an element's name gives its typology when Wikidata does not, and OpenStreetMap places what Wikidata lacks", async () => {
+  const { typeFromName, rankOsm } = await import("../shared/heritage");
+  assert.deepEqual(typeFromName("Castillo de Fulanito - Villaverde"), { group: "defensive", type: "castle" });
+  assert.deepEqual(typeFromName("Colegiata - Villaverde"), { group: "religious", type: "church" });
+  assert.deepEqual(typeFromName("Convento de las Monjas - Villaverde"), { group: "religious", type: "monastery" });
+  assert.deepEqual(typeFromName("Plaza de toros - Villaverde"), { group: "civil", type: "bullring" });
+  assert.deepEqual(typeFromName("Plaza Mayor - Villaverde"), { group: "urban", type: "square" });
+  assert.deepEqual(typeFromName("Retrato de dama - Velázquez - Museo Y"), { group: "artworks", type: "painting" });
+  assert.equal(typeFromName("Café Central - Villaverde"), null);
+  // Every icon of the religious group is the church.
+  assert.ok(DEFAULT_HERITAGE_SCHEME.groups.find((g) => g.key === "religious")!.types.every((x) => !x.icon));
+  const answer = [
+    { lat: "40.001", lon: "-3.001", osm_type: "way", osm_id: 7, name: "Calle Mayor", display_name: "Calle Mayor, Villaverde, España", category: "highway", type: "residential" },
+    { lat: "43", lon: "-8", osm_type: "way", osm_id: 8, name: "Calle Mayor", display_name: "Calle Mayor, Lejos, España", category: "highway", type: "residential" },
+  ];
+  const ranked = rankOsm("Calle Mayor - Villaverde", answer, { latitude: 40, longitude: -3 });
+  assert.deepEqual(ranked.map((c) => [c.osm, c.confidence, c.type]), [["way/7", "high", "street"]]);
+});
+
+test("typologies by name and places from OpenStreetMap are applied where missing and revert as a batch", () =>
+  withCatalogue(({ heritage, columnId, option }) => {
+    const [whole, bridge] = [option("Conjunto - Villaverde"), option("Puente Viejo - Villaverde")];
+    heritage.save(columnId, [element(whole, { group: "civil", type: "palace" })]);
+    const named = heritage.inferTypes(columnId);
+    assert.equal(heritage.elements(columnId)[bridge].type, "bridge");
+    assert.equal(heritage.elements(columnId)[whole].type, "palace");
+    const placed = heritage.applyPlaces(columnId, [{ optionId: bridge, latitude: 41, longitude: -4, osm: "way/12" }]);
+    assert.deepEqual(
+      { ...heritage.elements(columnId)[bridge] },
+      { optionId: bridge, parentId: null, group: "public-works", type: "bridge", latitude: 41, longitude: -4, coordSource: "osm", osm: "way/12" },
+    );
+    heritage.revertBatch(placed.id);
+    assert.equal(heritage.elements(columnId)[bridge].latitude, null);
+    heritage.revertBatch(named.id);
+    assert.equal(heritage.elements(columnId)[bridge], undefined);
+  }));

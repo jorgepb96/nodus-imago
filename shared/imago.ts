@@ -544,6 +544,16 @@ export type Commands = {
     input: { columnId: string; optionId: string; items: { rowId: string; assetId?: string; box?: { x: number; y: number; w: number; h: number } | null }[] };
     result: number;
   };
+  heritageInferTypes: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null } };
+  /** Handled in the main process: OpenStreetMap candidates for up to 20 elements. */
+  heritageOsmCandidates: {
+    input: { items: { optionId: string; label: string }[] };
+    result: { optionId: string; candidates: import("./heritage").OsmCandidate[]; error?: string }[];
+  };
+  heritageApplyPlaces: {
+    input: { columnId: string; items: { optionId: string; latitude: number; longitude: number; osm: string; group?: string | null; type?: string | null }[] };
+    result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
+  };
   heritageLinkBatches: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null }[] };
   heritageRevertBatch: { input: { id: string }; result: number };
   valueClusters: { input: { columnId: string }; result: import("./cleanup").ValueCluster[] };
