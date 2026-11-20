@@ -547,22 +547,29 @@ export type Commands = {
     result: number;
   };
   heritageInferTypes: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null } };
-  /** Handled in the main process: OpenStreetMap candidates for up to 20 elements. */
-  heritageOsmCandidates: {
-    input: { items: { optionId: string; label: string }[] };
-    result: { optionId: string; candidates: import("./heritage").OsmCandidate[]; error?: string }[];
-  };
-  /** Handled in the main process, with the local gazetteer: the centre of each element's town. */
-  heritageTownPlaces: {
-    input: { items: { optionId: string; label: string }[]; lookup?: boolean };
-    result: { places: { optionId: string; latitude: number; longitude: number; town: string }[]; unknownTowns: number };
-  };
   heritageApplyPlaces: {
     input: {
       columnId: string;
       items: { optionId: string; latitude: number; longitude: number; osm?: string | null; town?: boolean; group?: string | null; type?: string | null }[];
     };
     result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
+  };
+  /** Starts a background search (Wikidata, OpenStreetMap or towns) for what still needs it. */
+  heritageIdentifyStart: { input: { columnId: string; source: "wikidata" | "osm" | "town" }; result: string | null };
+  heritageJobs: {
+    input: { columnId: string };
+    result: { id: string; state: string; done: number; total: number; failed: number; message: string | null; source: "wikidata" | "osm" | "town" }[];
+  };
+  heritageProposals: {
+    input: { columnId: string; source: "wikidata" | "osm" | "town" };
+    result: { id: string; optionId: string; source: "wikidata" | "osm" | "town"; candidates: any[]; chosen: number; accepted: boolean }[];
+  };
+  heritageProposalUpdate: { input: { id: string; chosen?: number; accepted?: boolean }; result: null };
+  heritageProposalsAccept: { input: { ids: string[]; accepted: boolean }; result: null };
+  heritageProposalsDismiss: { input: { ids: string[] }; result: null };
+  heritageProposalsApply: {
+    input: { columnId: string; source: "wikidata" | "osm" | "town" };
+    result: { id: string; applied: number; createdAt: string; revertedAt: string | null } | null;
   };
   heritageLinkBatches: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null }[] };
   heritageRevertBatch: { input: { id: string }; result: number };

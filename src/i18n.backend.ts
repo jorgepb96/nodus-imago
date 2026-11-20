@@ -332,6 +332,8 @@ export const backendEn: Record<string, string> = {
   "Vinculación no encontrada.": "Linking not found.",
   "Elige la imagen completa o al menos una zona.": "Choose the whole image or at least one zone.",
   "No se pudo conectar con OpenStreetMap.": "Could not connect to OpenStreetMap.",
+  "No se pudo conectar con {service}.": "Could not connect to {service}.",
+  "Catálogo de lugares no disponible.": "Place catalogue not available.",
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */

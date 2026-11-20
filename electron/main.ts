@@ -29,10 +29,6 @@ import {
   parseIconclassItem,
   parseIconclassSearch,
   parseWikidataEntities,
-  parseWikidataFullText,
-  wikidataFullTextUrl,
-  parseSuperclasses,
-  wikidataClassesUrl,
   rankIconclass,
   parseWikidataSearch,
   wikidataEntitiesUrl,
@@ -41,34 +37,8 @@ import {
   type AuthorityLink,
   type AuthoritySource,
 } from "../shared/authority";
-import { heritageQuery, nominatimUrl, rankCandidates, rankOsm, resolveTowns, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
-/** Nominatim allows one request a second. */
-let nominatimNext = 0;
-/** Towns already looked for in OpenStreetMap during this session (null: not found). */
-const townCache = new Map<string, { latitude: number; longitude: number } | null>();
-/** Where some towns the gazetteer cannot place are, from OpenStreetMap (names only, one a second). */
-async function lookupTowns(towns: string[], country: string | undefined) {
-  for (const town of [...new Set(towns)].slice(0, 300)) {
-    if (townCache.has(`${country}|${town}`)) continue;
-    const wait = nominatimNext - Date.now();
-    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-    nominatimNext = Date.now() + 1100;
-    try {
-      const response = await fetch(nominatimUrl(town, country, true), {
-        headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
-        signal: AbortSignal.timeout(20_000),
-      });
-      const first = response.ok ? ((await response.json()) as { lat?: string; lon?: string }[])[0] : undefined;
-      townCache.set(
-        `${country}|${town}`,
-        first && Number.isFinite(Number(first.lat)) ? { latitude: Number(first.lat), longitude: Number(first.lon) } : null,
-      );
-    } catch {
-      /* Left unplaced; tried again in a later session. */
-    }
-  }
-  return (town: string) => townCache.get(`${country}|${town}`) ?? null;
-}
+import { HeritageFinder } from "./heritage/finder";
+
 import { platesHtml } from "./export/plates";
 import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
@@ -83,17 +53,6 @@ import { promisify } from "node:util";
 /** Wikimedia asks automated clients to name themselves and a way to find them. */
 const WIKIMEDIA_USER_AGENT = "NodusImago/0.1 (https://github.com/jorgepb96/nodus-imago)";
 
-/** A Wikidata answer; an error inside a 200 answer (lag, limits) is retried. */
-async function wikidataJson(url: string) {
-  for (let attempt = 0; ; attempt++) {
-    const json = await wikimediaJson(url, "wikidata");
-    if (!json?.error || attempt >= 3) {
-      if (json?.error) throw new Error(`Wikidata: ${json.error.info ?? json.error.code ?? "error"}`);
-      return json;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
-  }
-}
 /** A JSON answer from a Wikimedia or Iconclass API, waiting when asked to slow down (429). */
 async function wikimediaJson(url: string, source: AuthoritySource) {
   for (let attempt = 0; ; attempt++) {
@@ -224,6 +183,7 @@ app.whenReady().then(async () => {
   const places = new Gazetteer(
     path.join(app.getAppPath(), "electron/assets/gazetteer/cities.tsv.gz"),
   );
+  const heritageFinder = new HeritageFinder(() => places);
   const root = path.join(app.getPath("userData"), "collection");
   await fs.mkdir(root, { recursive: true });
   const secrets = new Secrets(path.join(app.getPath("userData"), "secrets"), {
@@ -264,6 +224,7 @@ app.whenReady().then(async () => {
   worker = new Worker(path.join(__dirname, "worker.cjs"), {
     workerData: {
       root,
+      gazetteer: path.join(app.getAppPath(), "electron/assets/gazetteer/cities.tsv.gz"),
       script: app.isPackaged
         ? path.join(process.resourcesPath, "runtime", "inference.py")
         : path.join(app.getAppPath(), "runtime", "inference.py"),
@@ -798,149 +759,10 @@ app.whenReady().then(async () => {
           .slice(0, 6);
       }
       if (command === "heritageCandidates") {
-        // Only the names of the elements are sent, and only when the user asks.
+        // One-off lookups (new names an AI suggests). Only the names are sent.
         const data = safe as { items: { optionId: string; label: string }[] };
-        const language = await interfaceLanguage();
-        const get = (url: string) => wikidataJson(url);
-        // Searches first (four elements at a time): by name, and by name and
-        // place in full text; then what Wikidata says about every candidate.
-        const found = new Map<string, string[]>();
-        const errors = new Map<string, string>();
-        for (let i = 0; i < data.items.length; i += 4)
-          await Promise.all(
-            data.items.slice(i, i + 4).map(async (item) => {
-              try {
-                const { queries, hints } = heritageQuery(item.label);
-                const name = item.label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0];
-                const place = hints[hints.length - 1];
-                const ids: string[] = [];
-                if (place) ids.push(...parseWikidataFullText(await get(wikidataFullTextUrl(`${name} ${place}`))));
-                for (const query of queries.slice(0, 2)) ids.push(...parseWikidataSearch(await get(wikidataSearchUrl(query, language, 6))));
-                found.set(item.optionId, [...new Set(ids)].slice(0, 12));
-              } catch (error) {
-                errors.set(item.optionId, error instanceof Error ? error.message : String(error));
-              }
-            }),
-          );
-        const all = [...new Set([...found.values()].flat())];
-        const links = new Map<string, AuthorityLink>();
-        for (let i = 0; i < all.length; i += 25) {
-          const ids = all.slice(i, i + 25);
-          for (const link of parseWikidataEntities(await get(wikidataEntitiesUrl(ids, language)), ids, language)) links.set(link.id, link);
-        }
-        // Classes Imago does not know: one step up, to suggest a type.
-        const unknown = [...new Set([...links.values()].flatMap((l) => l.instances ?? []).filter((q) => !WIKIDATA_TYPES[q]))];
-        const above: Record<string, string[]> = {};
-        for (let i = 0; i < unknown.length; i += 50) Object.assign(above, parseSuperclasses(await get(wikidataClassesUrl(unknown.slice(i, i + 50)))));
-        for (const link of links.values()) link.instances = withSuperclasses(link.instances, above);
-        // The place named in each label, from the local gazetteer (no request).
-        // A name shared by several places («Córdoba») is read in the country
-        // most places of these elements are in.
-        const options = new Map(
-          data.items.map((item) => {
-            const hints = heritageQuery(item.label).hints;
-            return [item.optionId, hints.length ? places.search(hints[hints.length - 1]).slice(0, 8) : []] as const;
-          }),
-        );
-        const countries = new Map<string, number>();
-        for (const found of options.values()) if (found[0]) countries.set(found[0].countryCode, (countries.get(found[0].countryCode) ?? 0) + 1);
-        const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
-        const towns = resolveTowns(
-          data.items.map((item) => {
-            const hints = heritageQuery(item.label).hints;
-            return { id: item.optionId, town: hints[hints.length - 1] ?? null, found: options.get(item.optionId) ?? [] };
-          }),
-        );
-        // Towns the gazetteer cannot place (small, or shared with a district): OpenStreetMap.
-        const townOf = new Map(data.items.map((item) => [item.optionId, heritageQuery(item.label).hints.slice(-1)[0] ?? null]));
-        const looked = await lookupTowns(
-          data.items.filter((item) => !towns.get(item.optionId) && townOf.get(item.optionId)).map((item) => townOf.get(item.optionId)!),
-          country,
-        );
-        const nearOf = (optionId: string) => towns.get(optionId) ?? (townOf.get(optionId) ? looked(townOf.get(optionId)!) : null);
-        return data.items.map((item) => ({
-          optionId: item.optionId,
-          candidates: rankCandidates(
-            item.label,
-            (found.get(item.optionId) ?? []).flatMap((id) => (links.has(id) ? [links.get(id)!] : [])),
-            nearOf(item.optionId),
-          ).slice(0, 4),
-          ...(errors.has(item.optionId) ? { error: errors.get(item.optionId) } : {}),
-        }));
-      }
-      if (command === "heritageTownPlaces") {
-        // The town named in each label, from the bundled gazetteer; the towns
-        // it does not know are looked for in OpenStreetMap when asked (only
-        // their names, one a second).
-        const data = safe as { items: { optionId: string; label: string }[]; lookup?: boolean };
-        const entries = data.items.map((item) => {
-          const hints = heritageQuery(item.label).hints;
-          const town = hints[hints.length - 1] ?? null;
-          return { id: item.optionId, town, found: town ? places.search(town).slice(0, 8) : [] };
-        });
-        const resolved = resolveTowns(entries);
-        const counts = new Map<string, number>();
-        for (const e of entries) if (e.found[0]) counts.set(e.found[0].countryCode, (counts.get(e.found[0].countryCode) ?? 0) + 1);
-        const country = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-        // Towns the gazetteer lacks, or only knows abroad (a «Trujillo» in America).
-        const missing = [...new Set(entries.filter((e) => e.town && !resolved.get(e.id)).map((e) => e.town!))];
-        const lookedUp = data.lookup ? await lookupTowns(missing, country) : () => null;
-        const looked = new Map(missing.flatMap((town) => (lookedUp(town) ? [[town, lookedUp(town)!] as const] : [])));
-        return {
-          places: entries.flatMap((e) => {
-            const at = resolved.get(e.id) ?? (e.town ? looked.get(e.town) : undefined);
-            return at ? [{ optionId: e.id, ...at, town: e.town! }] : [];
-          }),
-          unknownTowns: missing.filter((town) => !looked.has(town)).length,
-        };
-      }
-      if (command === "heritageOsmCandidates") {
-        // OpenStreetMap's search for what Wikidata does not have. Only the
-        // names are sent, one request a second as Nominatim asks.
-        const data = safe as { items: { optionId: string; label: string }[] };
-        const found = new Map(
-          data.items.map((item) => {
-            const hints = heritageQuery(item.label).hints;
-            return [item.optionId, hints.length ? places.search(hints[hints.length - 1]).slice(0, 8) : []] as const;
-          }),
-        );
-        const countries = new Map<string, number>();
-        for (const f of found.values()) if (f[0]) countries.set(f[0].countryCode, (countries.get(f[0].countryCode) ?? 0) + 1);
-        const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
-        const towns = resolveTowns(
-          data.items.map((item) => {
-            const hints = heritageQuery(item.label).hints;
-            return { id: item.optionId, town: hints[hints.length - 1] ?? null, found: found.get(item.optionId) ?? [] };
-          }),
-        );
-        const townOf = new Map(data.items.map((item) => [item.optionId, heritageQuery(item.label).hints.slice(-1)[0] ?? null]));
-        const lookedTowns = await lookupTowns(
-          data.items.filter((item) => !towns.get(item.optionId) && townOf.get(item.optionId)).map((item) => townOf.get(item.optionId)!),
-          country,
-        );
-        const out = [];
-        for (const item of data.items) {
-          const parts = item.label.split(/\s+[-–—]\s*|\s*[-–—]\s+/);
-          const hints = heritageQuery(item.label).hints;
-          const query = hints.length ? `${parts[0]}, ${hints[hints.length - 1]}` : parts[0];
-          try {
-            const wait = nominatimNext - Date.now();
-            if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-            nominatimNext = Date.now() + 1100;
-            const response = await fetch(nominatimUrl(query, country), {
-              headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
-              signal: AbortSignal.timeout(20_000),
-            }).catch(() => {
-              throw new Error("No se pudo conectar con OpenStreetMap.");
-            });
-            if (!response.ok) throw new Error(`OpenStreetMap: HTTP ${response.status}`);
-            const near = towns.get(item.optionId) ?? (townOf.get(item.optionId) ? lookedTowns(townOf.get(item.optionId)!) : null);
-            out.push({ optionId: item.optionId, candidates: rankOsm(item.label, await response.json(), near).slice(0, 4) });
-          } catch (error) {
-            out.push({ optionId: item.optionId, candidates: [], error: error instanceof Error ? error.message : String(error) });
-          }
-        }
-        return out;
+        const towns = await heritageFinder.towns(data.items);
+        return heritageFinder.wikidata(data.items, await interfaceLanguage(), towns);
       }
       if (command === "commonsNearby") {
         // Only the place's coordinates are sent, and only when the user asks.

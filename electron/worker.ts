@@ -34,6 +34,7 @@ const service = new Service(
       parentPort!.postMessage({ event: "complete", completionId: id, input });
     }),
 );
+service.gazetteerPath = workerData.gazetteer;
 // Text an AI property is writing, shown in its cell while it arrives.
 service.engine.onCellStream = (delta) =>
   parentPort!.postMessage({ event: "cellStream", delta });

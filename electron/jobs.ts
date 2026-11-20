@@ -128,7 +128,7 @@ export class JobQueue {
     )
       throw new Error("Progreso de tarea inválido.");
     if (
-      !["images", "download", "prepare", "index", "analyze", "fingerprints"].includes(job.kind)
+      !["images", "download", "prepare", "index", "analyze", "fingerprints", "heritage"].includes(job.kind)
     )
       throw new Error("Tipo de tarea desconocido.");
     const payload = JSON.parse(job.payload_json),
@@ -140,6 +140,7 @@ export class JobQueue {
         analyze: "items",
         prepare: "steps",
         fingerprints: "hashes",
+        heritage: "items",
       } as Record<string, string>
     )[job.kind];
     // Index jobs carry record texts before images; older ones only images.
@@ -170,6 +171,8 @@ export class JobQueue {
     )
       throw new Error("Selección de reintento inválida.");
     if (job.kind === "images") resources.add("image-import");
+    // Public services are asked one search at a time, whatever the property.
+    if (job.kind === "heritage") resources.add("heritage-network");
     if (job.kind === "download") resources.add("model:" + payload.id);
     if (job.kind === "prepare")
       for (const step of payload.steps) resources.add("model:" + step.id);
@@ -202,6 +205,8 @@ export class JobQueue {
       }
     return resources;
   }
+  /** Looks for one heritage element outside Imago (set by the service). */
+  heritageOne?: (payload: { columnId: string; source: string; items: { optionId: string; label: string }[] }, index: number, signal: AbortSignal) => Promise<"imported" | "skipped">;
   /** Fingerprints one image for the variants view (set by the service). */
   fingerprint?: (payload: { hashes: string[] }, index: number) => Promise<"imported" | "skipped">;
   /** How many API cells to run together from `from` (1 when local or retrying). */
@@ -333,6 +338,8 @@ export class JobQueue {
             outcome = await this.engine.analyzeOne(payload, done, signal);
           else if (job.kind === "fingerprints" && this.fingerprint)
             outcome = await this.fingerprint(payload, done);
+          else if (job.kind === "heritage" && this.heritageOne)
+            outcome = await this.heritageOne(payload, done, signal);
           else if (job.kind === "download" || job.kind === "prepare") {
             const step =
               job.kind === "prepare"
@@ -367,6 +374,21 @@ export class JobQueue {
           if (outcome === "skipped") skipped++;
         } catch (error) {
           if (signal.aborted) break;
+          // A service that cannot be reached pauses the work at this element.
+          if ((error as { pause?: boolean })?.pause) {
+            this.repo.db
+              .prepare("UPDATE jobs SET state='paused',done=?,failed=?,skipped=?,message=?,updated_at=? WHERE id=?")
+              .run(
+                done,
+                failed,
+                skipped,
+                `${error instanceof Error ? error.message : String(error)} Pausada: reanúdala cuando vuelva la conexión, sigue donde se quedó.`,
+                now(),
+                job.id,
+              );
+            this.changed();
+            return;
+          }
           if (
             (error as { fatal?: boolean })?.fatal ||
             ["download", "prepare"].includes(job.kind)

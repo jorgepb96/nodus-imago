@@ -163,6 +163,12 @@ export class Repository {
         );
       })();
     // Interrupted work resumes at its last committed item. Cancellation remains final.
+    // Searches that send names to outside services wait for the researcher instead.
+    this.db
+      .prepare(
+        "UPDATE jobs SET state='paused',message='Pausada al cerrar Imago: reanúdala cuando quieras, sigue donde se quedó.' WHERE kind='heritage' AND state IN ('running','queued')",
+      )
+      .run();
     this.db
       .prepare("UPDATE jobs SET state='queued' WHERE state='running'")
       .run();

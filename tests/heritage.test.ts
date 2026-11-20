@@ -390,3 +390,88 @@ test("town names are read together: a district inside another town of the list i
   assert.deepEqual(towns.get("b"), { latitude: 40.96, longitude: -5.66 });
   assert.equal(towns.get("c"), null);
 });
+
+test("background searches pause where a service fails or Imago closes, resume there, and their proposals apply and revert", () =>
+  withCatalogue(async ({ repo, heritage, columnId, option, root }) => {
+    const { Images } = await import("../electron/import/images");
+    const { Models } = await import("../electron/ai/models");
+    const { InferenceHost } = await import("../electron/ai/host");
+    const { Engine } = await import("../electron/ai/engine");
+    const { JobQueue } = await import("../electron/jobs");
+    const { HeritageNetworkError } = await import("../electron/heritage/finder");
+    const models = new Models(repo);
+    const queue = new JobQueue(repo, new Images(repo), models, new Engine(repo, models, new InferenceHost(repo, "unused")), () => {});
+    const items = heritage.pendingItems(columnId, "wikidata");
+    assert.equal(items.length, 3);
+    // The second element meets a service that is down.
+    let down = true;
+    const seen: string[] = [];
+    queue.heritageOne = async (payload, index) => {
+      const item = payload.items[index];
+      if (index === 1 && down) throw new HeritageNetworkError("No se pudo conectar con Wikidata.");
+      seen.push(item.label);
+      heritage.saveProposal(payload.columnId, item.optionId, "wikidata", null, [
+        { link: link(`Q${100 + index}`, item.label, { coordinates: { latitude: 40, longitude: -3 } }), confidence: "high", score: 9 },
+      ], true);
+      return "imported";
+    };
+    const id = repo.newJob("heritage", { columnId, source: "wikidata", items, label: "x" }, items.length);
+    const job = () => repo.db.prepare("SELECT state,done,message FROM jobs WHERE id=?").get(id) as { state: string; done: number; message: string };
+    const settle = async (state: string) => {
+      const deadline = Date.now() + 5000;
+      while (job().state !== state) {
+        if (Date.now() > deadline) throw new Error(`job stayed ${job().state}`);
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    };
+    queue.pump();
+    await settle("paused");
+    assert.deepEqual([job().done, seen.length], [1, 1]);
+    assert.match(job().message, /Pausada/);
+    // Resumed when the service is back: it continues at the second element.
+    down = false;
+    queue.control(id, "resume");
+    await settle("completed");
+    assert.equal(seen.length, 3);
+    assert.equal(heritage.proposals(columnId, "wikidata").length, 3);
+    // A search running when Imago closes is paused, not restarted on its own.
+    const again = repo.newJob("heritage", { columnId, source: "osm", items, label: "y" }, items.length);
+    repo.db.prepare("UPDATE jobs SET state='running' WHERE id=?").run(again);
+    const reopened = new Repository(root);
+    assert.equal((reopened.db.prepare("SELECT state FROM jobs WHERE id=?").get(again) as { state: string }).state, "paused");
+    reopened.close();
+    // Reviewing: one declined, the rest applied as one revertible batch.
+    const [first, ...rest] = heritage.proposals(columnId, "wikidata");
+    heritage.updateProposal(first.id, { accepted: false });
+    const batch = heritage.applyProposals(columnId, "wikidata")!;
+    assert.equal(batch.applied, 2);
+    assert.equal(heritage.proposals(columnId, "wikidata").length, 1);
+    assert.equal(heritage.elements(columnId)[rest[0].optionId].coordSource, "wikidata");
+    heritage.revertBatch(batch.id);
+    assert.equal(heritage.elements(columnId)[rest[0].optionId]?.latitude ?? null, null);
+    void option;
+    await queue.close();
+  }));
+
+test("the finder ranks Wikidata answers and pauses on unreachable services", async () => {
+  const { HeritageFinder, HeritageNetworkError } = await import("../electron/heritage/finder");
+  const places = { search: (q: string) => (q === "Villaverde" ? [{ gazetteerId: "g:1", name: "Villaverde", admin1: "", countryCode: "ES", country: "España", latitude: 40, longitude: -3, population: 1 }] : []) };
+  const answer = (url: string) => {
+    if (url.includes("list=search")) return { query: { search: [{ title: "Q1" }] } };
+    if (url.includes("wbsearchentities")) return { search: [{ id: "Q1" }, { id: "Q2" }] };
+    if (url.includes("wbgetentities") && url.includes("props=claims%7Clabels")) return { entities: {
+      Q1: { labels: { es: { value: "Castillo de Villaverde" } }, descriptions: { es: { value: "castillo en Villaverde" } }, claims: { P31: [{ mainsnak: { datavalue: { value: { id: "Q23413" } } } }], P625: [{ mainsnak: { datavalue: { value: { latitude: 40.01, longitude: -3.01 } } } }] } },
+      Q2: { labels: { es: { value: "Calle del Castillo" } }, descriptions: { es: { value: "calle" } }, claims: { P31: [{ mainsnak: { datavalue: { value: { id: "Q79007" } } } }] } },
+    } };
+    return { entities: {} };
+  };
+  const finder = new HeritageFinder(() => places, (async (url: string) => new Response(JSON.stringify(answer(url)))) as typeof fetch);
+  const items = [{ optionId: "a", label: "Castillo - Villaverde" }];
+  const towns = await finder.towns(items, false);
+  const [found] = await finder.wikidata(items, "es", towns);
+  assert.deepEqual([found.candidates[0].link.id, found.candidates[0].confidence], ["Q1", "high"]);
+  const offline = new HeritageFinder(() => places, (async () => {
+    throw new Error("offline");
+  }) as typeof fetch);
+  await assert.rejects(offline.wikidata(items, "es", towns), (e: unknown) => e instanceof HeritageNetworkError && (e as { pause: boolean }).pause);
+});

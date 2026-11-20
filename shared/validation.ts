@@ -577,12 +577,6 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   heritageInferTypes: z.object({ columnId: id }).strict(),
-  heritageOsmCandidates: z
-    .object({ items: z.array(z.object({ optionId: id, label: z.string().trim().min(1).max(500) }).strict()).min(1).max(20) })
-    .strict(),
-  heritageTownPlaces: z
-    .object({ items: z.array(z.object({ optionId: id, label: z.string().trim().min(1).max(500) }).strict()).min(1).max(5000), lookup: z.boolean().optional() })
-    .strict(),
   heritageApplyPlaces: z
     .object({
       columnId: id,
@@ -604,6 +598,13 @@ export const schemas: Record<string, z.ZodTypeAny> = {
         .max(5000),
     })
     .strict(),
+  heritageIdentifyStart: z.object({ columnId: id, source: z.enum(["wikidata", "osm", "town"]) }).strict(),
+  heritageJobs: z.object({ columnId: id }).strict(),
+  heritageProposals: z.object({ columnId: id, source: z.enum(["wikidata", "osm", "town"]) }).strict(),
+  heritageProposalUpdate: z.object({ id, chosen: z.number().int().min(0).max(20).optional(), accepted: z.boolean().optional() }).strict(),
+  heritageProposalsAccept: z.object({ ids: z.array(id).max(5000), accepted: z.boolean() }).strict(),
+  heritageProposalsDismiss: z.object({ ids: z.array(id).max(5000) }).strict(),
+  heritageProposalsApply: z.object({ columnId: id, source: z.enum(["wikidata", "osm", "town"]) }).strict(),
   heritageLinkBatches: z.object({ columnId: id }).strict(),
   heritageRevertBatch: z.object({ id }).strict(),
   valueClusters: z.object({ columnId: id }).strict(),

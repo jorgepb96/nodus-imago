@@ -13,6 +13,8 @@ import { importedOptionColor } from "../../shared/databaseCsv";
 import {
   ancestors,
   emptyElement,
+  type HeritageCandidate,
+  type OsmCandidate,
   heritageScheme,
   resolvedPosition,
   typeFromInstances,
@@ -46,6 +48,16 @@ const decode = (r: Row): HeritageElement => ({
 });
 const isEmpty = (e: HeritageElement) =>
   !e.parentId && !e.group && !e.type && e.latitude === null && e.longitude === null;
+
+export type HeritageSource = "wikidata" | "osm" | "town";
+export type HeritageProposal = {
+  id: string;
+  optionId: string;
+  source: HeritageSource;
+  candidates: unknown[];
+  chosen: number;
+  accepted: boolean;
+};
 
 /** One change of a linking batch, as it was before. */
 type LinkSnapshot = { optionId: string; link: string | null; element: Row | null };
@@ -467,6 +479,105 @@ export class Heritage {
       );
     })();
     return batch;
+  }
+
+  // ── Proposals found by background searches, kept until reviewed ──────────
+
+  /** What still needs looking for: unlinked elements, unplaced ones, or without exact place. */
+  pendingItems(columnId: string, source: HeritageSource): { optionId: string; label: string }[] {
+    const column = this.heritageColumn(columnId);
+    const elements = this.elements(columnId);
+    const linked = new Set((this.db.prepare("SELECT option_id id FROM option_authorities WHERE column_id=?").all(columnId) as { id: string }[]).map((r) => r.id));
+    const waiting = new Set(
+      (this.db.prepare("SELECT option_id id FROM heritage_proposals WHERE column_id=? AND source=? AND state='pending'").all(columnId, source) as { id: string }[]).map((r) => r.id),
+    );
+    return column.options
+      .filter((o) => !waiting.has(o.id))
+      .filter((o) =>
+        source === "wikidata"
+          ? !linked.has(o.id)
+          : source === "osm"
+            ? !linked.has(o.id) && (elements[o.id]?.latitude == null || elements[o.id]?.coordSource === "town")
+            : !resolvedPosition(o.id, elements),
+      )
+      .map((o) => ({ optionId: o.id, label: o.label }));
+  }
+
+  saveProposal(columnId: string, optionId: string, source: HeritageSource, jobId: string | null, candidates: unknown[], accepted: boolean) {
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO heritage_proposals(id,column_id,option_id,source,job_id,candidates_json,chosen,accepted,state,created_at) VALUES(?,?,?,?,?,?,0,?,'pending',?)",
+      )
+      .run(randomUUID(), columnId, optionId, source, jobId, JSON.stringify(candidates), accepted ? 1 : 0, new Date().toISOString());
+  }
+
+  proposals(columnId: string, source: HeritageSource): HeritageProposal[] {
+    this.heritageColumn(columnId);
+    const options = new Set(this.repo.column(columnId).options.map((o) => o.id));
+    return (
+      this.db
+        .prepare("SELECT id,option_id,candidates_json,chosen,accepted FROM heritage_proposals WHERE column_id=? AND source=? AND state='pending' ORDER BY created_at")
+        .all(columnId, source) as { id: string; option_id: string; candidates_json: string; chosen: number; accepted: number }[]
+    )
+      .filter((r) => options.has(r.option_id))
+      .map((r) => ({ id: r.id, optionId: r.option_id, source, candidates: JSON.parse(r.candidates_json), chosen: r.chosen, accepted: !!r.accepted }));
+  }
+
+  updateProposal(id: string, change: { chosen?: number; accepted?: boolean }) {
+    if (change.chosen !== undefined) this.db.prepare("UPDATE heritage_proposals SET chosen=? WHERE id=?").run(change.chosen, id);
+    if (change.accepted !== undefined) this.db.prepare("UPDATE heritage_proposals SET accepted=? WHERE id=?").run(change.accepted ? 1 : 0, id);
+  }
+
+  /** Accepts or declines many at once (all of a confidence, say). */
+  acceptProposals(ids: string[], accepted: boolean) {
+    const update = this.db.prepare("UPDATE heritage_proposals SET accepted=? WHERE id=? AND state='pending'");
+    this.db.transaction(() => ids.forEach((id) => update.run(accepted ? 1 : 0, id)))();
+  }
+
+  dismissProposals(ids: string[]) {
+    const update = this.db.prepare("UPDATE heritage_proposals SET state='dismissed' WHERE id=? AND state='pending'");
+    this.db.transaction(() => ids.forEach((id) => update.run(id)))();
+  }
+
+  /** Applies the accepted proposals of a source as one batch («Revertir» undoes it). */
+  applyProposals(columnId: string, source: HeritageSource): HeritageLinkBatch | null {
+    const accepted = this.proposals(columnId, source).filter((p) => p.accepted && p.candidates[p.chosen]);
+    if (!accepted.length) return null;
+    let batch: HeritageLinkBatch;
+    if (source === "wikidata") {
+      const links = this.links(columnId);
+      const byQ = new Map<string, string>(Object.entries(links).map(([id, l]) => [l.id, id]));
+      for (const p of accepted) byQ.set((p.candidates[p.chosen] as HeritageCandidate).link.id, p.optionId);
+      batch = this.applyLinks(
+        columnId,
+        accepted.map((p) => {
+          const link = (p.candidates[p.chosen] as HeritageCandidate).link;
+          const typed = typeFromInstances(link.instances);
+          const parentId = (link.partOf ?? []).map((q) => byQ.get(q)).find((id) => id && id !== p.optionId) ?? null;
+          return { optionId: p.optionId, link, group: typed?.group ?? null, type: typed?.type ?? null, parentId };
+        }),
+      );
+    } else
+      batch = this.applyPlaces(
+        columnId,
+        accepted.map((p) => {
+          const c = p.candidates[p.chosen] as OsmCandidate & { town?: string };
+          return source === "osm"
+            ? { optionId: p.optionId, latitude: c.latitude, longitude: c.longitude, osm: c.osm, group: c.group, type: c.type }
+            : { optionId: p.optionId, latitude: c.latitude, longitude: c.longitude, town: true };
+        }),
+      );
+    const mark = this.db.prepare("UPDATE heritage_proposals SET state='applied' WHERE id=?");
+    this.db.transaction(() => accepted.forEach((p) => mark.run(p.id)))();
+    return batch;
+  }
+
+  private links(columnId: string): Record<string, AuthorityLink> {
+    return Object.fromEntries(
+      (this.db.prepare("SELECT option_id id,link_json json FROM option_authorities WHERE column_id=?").all(columnId) as { id: string; json: string }[]).map(
+        (r) => [r.id, JSON.parse(r.json) as AuthorityLink],
+      ),
+    );
   }
 
   batches(columnId: string): HeritageLinkBatch[] {
