@@ -33,6 +33,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.4.3",
+    date: "2026-11-21",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "El número de registros ya no se sustituye por el icono de carga cada dos segundos mientras hay una tarea en marcha: solo se muestra al cambiar la búsqueda, los filtros o la página.",
+        en: "The record count is no longer replaced by the loading icon every two seconds while a task is running: it only shows when the search, filters or page change.",
+      },
+      {
+        scope: "analysis",
+        category: "fix",
+        es: "Las estadísticas por tipología de patrimonio nombran los grupos y tipos en el idioma de la interfaz.",
+        en: "Statistics by heritage typology name groups and types in the interface language.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "En inglés, los filtros de las fichas de patrimonio y el nombre del proveedor personalizado ya aparecen traducidos.",
+        en: "In English, the heritage record filters and the custom provider name are now translated.",
+      },
+    ],
+  },
+  {
     version: "0.4.2",
     date: "2026-11-20",
     highlights: [
