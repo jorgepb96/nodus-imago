@@ -2433,6 +2433,7 @@ const en: Record<string, string> = {
   "Situar en su localidad los {n} restantes (aproximado)": "Place the remaining {n} in their town (approximate)",
   "Situado en el centro de su localidad: posición aproximada.": "Placed at the centre of its town: approximate position.",
   "posición aproximada": "approximate position",
+  "Usa el nomenclátor de la app y, para los pueblos que no conoce, OpenStreetMap (solo el nombre del pueblo). Las posiciones quedan marcadas como aproximadas y se sustituyen al situar el elemento con precisión.": "Uses the app's gazetteer and, for towns it does not know, OpenStreetMap (only the town's name). The positions are marked as approximate and are replaced when the element is placed precisely.",
 };
 Object.assign(en, backendEn);
 const patterns = backendPatterns.map(([source, target]) => {
