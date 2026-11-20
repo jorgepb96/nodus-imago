@@ -1,0 +1,293 @@
+// Heritage («Patrimonio») properties: element records, typology, hierarchy,
+// Wikidata linking in reviewed batches, marks on photographs, the map, the
+// statistics and the filters. Invented data only.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { Repository } from "../electron/db/repository";
+import { Heritage } from "../electron/db/heritage";
+import { Annotations } from "../electron/db/annotations";
+import { ValueCleanup } from "../electron/db/cleanup";
+import { Statistics } from "../electron/db/statistics";
+import { annotationsW3c } from "../electron/import/standards";
+import { decodeMultiSelect } from "../shared/databases";
+import type { AuthorityLink } from "../shared/authority";
+import {
+  DEFAULT_HERITAGE_SCHEME,
+  ancestors,
+  emptyElement,
+  heritageCategories,
+  heritageQuery,
+  isHeritageColumn,
+  rankCandidates,
+  resolvedPosition,
+  typeFromInstances,
+  wouldCycle,
+  WIKIDATA_TYPES,
+  type HeritageElement,
+} from "../shared/heritage";
+import { filterOperators } from "../shared/viewCriteria";
+
+const link = (id: string, label: string, extra: Partial<AuthorityLink> = {}): AuthorityLink => ({
+  source: "wikidata",
+  id,
+  label,
+  description: null,
+  uri: `https://www.wikidata.org/wiki/${id}`,
+  kind: "place",
+  ...extra,
+});
+const element = (optionId: string, change: Partial<HeritageElement> = {}): HeritageElement => ({ ...emptyElement(optionId), ...change });
+
+test("names become searches, candidates are ranked and Wikidata classes give a typology", () => {
+  assert.deepEqual(heritageQuery("Catedral - Villaverde"), {
+    queries: ["Catedral de Villaverde", "Catedral Villaverde", "Catedral"],
+    hints: ["Villaverde"],
+  });
+  assert.deepEqual(heritageQuery("Puente de los Arcos - Villaverde").queries, ["Puente de los Arcos", "Puente de los Arcos Villaverde"]);
+  assert.deepEqual(heritageQuery("Retrato de dama - Pintor X - Museo Y").hints, ["Pintor X", "Museo Y"]);
+  assert.deepEqual(heritageQuery("Torre Mayor").queries, ["Torre Mayor"]);
+
+  const ranked = rankCandidates("Catedral - Villaverde", [
+    link("Q1", "Catedral de Villaverde", { description: "catedral en Villaverde", instances: ["Q2977"], coordinates: { latitude: 40, longitude: -3 } }),
+    link("Q2", "Catedral de Otraparte", { description: "catedral en Otraparte", instances: ["Q2977"] }),
+    link("Q3", "Catedral de Villaverde", { description: "pintor", kind: "person" }),
+  ]);
+  assert.equal(ranked[0].link.id, "Q1");
+  assert.equal(ranked[0].confidence, "high");
+  assert.equal(ranked.find((c) => c.link.id === "Q3")!.confidence, "low");
+
+  assert.deepEqual(typeFromInstances(["Q5", "Q2977"]), { group: "religious", type: "cathedral" });
+  assert.deepEqual(typeFromInstances(["Q12280"]), { group: "public-works", type: "bridge" });
+  assert.equal(typeFromInstances(["Q5"]), null);
+  // Every type the map suggests exists in the default scheme.
+  for (const type of new Set(Object.values(WIKIDATA_TYPES)))
+    assert.ok(DEFAULT_HERITAGE_SCHEME.groups.some((g) => g.types.some((x) => x.key === type)), type);
+});
+
+test("parts hang from wholes without loops and take the whole's position when they have none", () => {
+  const byId = {
+    whole: element("whole", { latitude: 40, longitude: -3, coordSource: "manual" }),
+    part: element("part", { parentId: "whole" }),
+    detail: element("detail", { parentId: "part" }),
+    alone: element("alone"),
+  };
+  assert.deepEqual(ancestors("detail", byId), ["part", "whole"]);
+  assert.equal(wouldCycle("whole", "detail", byId), true);
+  assert.equal(wouldCycle("alone", "whole", byId), false);
+  assert.deepEqual(resolvedPosition("detail", byId), { latitude: 40, longitude: -3, inherited: true, from: "whole" });
+  assert.equal(resolvedPosition("alone", byId), null);
+  // A loop already stored does not hang the walk.
+  assert.deepEqual(ancestors("a", { a: element("a", { parentId: "b" }), b: element("b", { parentId: "a" }) }), ["b"]);
+
+  const labels = new Map([["whole", "Conjunto"], ["part", "Patio"], ["detail", "Fuente del patio"], ["alone", "Calle Mayor"]]);
+  byId.whole.group = "civil";
+  byId.whole.type = "palace";
+  byId.detail.group = "commemorative";
+  byId.detail.type = "fountain";
+  assert.deepEqual(heritageCategories(["detail"], labels, byId, DEFAULT_HERITAGE_SCHEME, "element", true).sort(), ["Conjunto", "Fuente del patio", "Patio"]);
+  assert.deepEqual(heritageCategories(["detail", "whole"], labels, byId, DEFAULT_HERITAGE_SCHEME, "group"), ["Monumentos conmemorativos", "Arquitectura civil"]);
+  assert.deepEqual(heritageCategories(["alone", "part"], labels, byId, DEFAULT_HERITAGE_SCHEME, "type"), ["Sin tipología"]);
+});
+
+/** A database of four photographs with a heritage property and a location. */
+async function withCatalogue(
+  run: (c: { repo: Repository; heritage: Heritage; databaseId: string; columnId: string; locationId: string; ids: string[]; option: (label: string) => string; root: string }) => Promise<void> | void,
+) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-heritage-")),
+    repo = new Repository(root);
+  try {
+    const detail = repo.importCsv(
+      "Fotos",
+      ["ID", "Patrimonio", "Fecha"],
+      ["title", "multi_select", "historical_date"],
+      [
+        ["A", "Conjunto - Villaverde, Patio - Villaverde", "1950-1959"],
+        ["B", "Patio - Villaverde", "1960-1969"],
+        ["C", "Puente Viejo - Villaverde", "c. 1955"],
+        ["D", "", "1950-1959"],
+      ],
+    );
+    const column = repo.detail(detail.database.id).columns.find((c) => c.name === "Patrimonio")!;
+    repo.updateColumn(column.id, undefined, { ...column.config, heritage: true });
+    const location = repo.addColumn(detail.database.id, "Ubicación", "location");
+    const ids = (repo.db.prepare("SELECT id FROM db_rows WHERE database_id=? ORDER BY position").all(detail.database.id) as { id: string }[]).map((r) => r.id);
+    repo.setCell(ids[3], location.id, JSON.stringify({ name: "Villaverde", latitude: 41, longitude: -4 }));
+    repo.setCell(ids[1], location.id, JSON.stringify({ name: "Villaverde", latitude: 41, longitude: -4 }));
+    const option = (label: string) => repo.column(column.id).options.find((o) => o.label === label)!.id;
+    // One image per record: asset-0 … asset-3.
+    repo.db
+      .prepare("INSERT INTO db_columns(id,database_id,name,type,position,config_json,created_at,updated_at) VALUES('img',?,'Imagen','files',9,'{}','x','x')")
+      .run(detail.database.id);
+    ids.forEach((rowId, i) =>
+      repo.db
+        .prepare("INSERT INTO image_assets VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        .run(`asset-${i}`, detail.database.id, rowId, "img", `f${i}.png`, path.join(root, `f${i}.png`), 0, `hash-${i}`, 1, 100, 100, "{}", null, 0, "x"),
+    );
+    await run({ repo, heritage: new Heritage(repo), databaseId: detail.database.id, columnId: column.id, locationId: location.id, ids, option, root });
+  } finally {
+    repo.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
+
+test("element records are saved apart from the options and refuse loops and foreign parents", () =>
+  withCatalogue(({ repo, heritage, columnId, option }) => {
+    assert.ok(isHeritageColumn(repo.column(columnId)));
+    const [whole, part] = [option("Conjunto - Villaverde"), option("Patio - Villaverde")];
+    heritage.save(columnId, [
+      element(whole, { latitude: 40.5, longitude: -3.5, group: "civil", type: "palace" }),
+      element(part, { parentId: whole }),
+    ]);
+    assert.equal(heritage.elements(columnId)[whole].coordSource, "manual");
+    assert.throws(() => heritage.save(columnId, [element(whole, { parentId: part })]), /parte de sí mismo/);
+    assert.throws(() => heritage.save(columnId, [element(part, { group: "civil", type: "cathedral" })]), /desconocida/);
+    assert.throws(() => heritage.save(columnId, [element(part, { parentId: "elsewhere" })]), /no está en esta propiedad/);
+    // Renaming options keeps the records.
+    repo.saveOptions(columnId, repo.column(columnId).options.map((o) => ({ id: o.id, label: o.label + " (renombrado)", color: o.color })));
+    assert.equal(heritage.elements(columnId)[part].parentId, whole);
+    // An empty record is removed.
+    heritage.save(columnId, [element(part)]);
+    assert.equal(heritage.elements(columnId)[part], undefined);
+    // A new element by name, and one from Wikidata with its place and type.
+    const plain = heritage.addElement(columnId, "Fuente Nueva", null);
+    assert.equal(heritage.addElement(columnId, "fuente nueva", null), plain);
+    const linked = heritage.addElement(columnId, "Torre del Reloj", link("Q900", "Torre del Reloj", { instances: ["Q12518"], coordinates: { latitude: 39, longitude: -2 } }));
+    assert.deepEqual(
+      { ...heritage.elements(columnId)[linked] },
+      { optionId: linked, parentId: null, group: "defensive", type: "tower", latitude: 39, longitude: -2, coordSource: "wikidata" },
+    );
+  }));
+
+test("Wikidata batches fill only what is missing, keep manual coordinates and revert as a whole", () =>
+  withCatalogue(({ heritage, columnId, option }) => {
+    const [whole, part, bridge] = [option("Conjunto - Villaverde"), option("Patio - Villaverde"), option("Puente Viejo - Villaverde")];
+    heritage.save(columnId, [element(bridge, { latitude: 1, longitude: 2 })]);
+    const batch = heritage.applyLinks(columnId, [
+      { optionId: whole, link: link("Q10", "Conjunto", { coordinates: { latitude: 40, longitude: -3 } }), group: "civil", type: "palace" },
+      { optionId: part, link: link("Q11", "Patio", { partOf: ["Q10"] }), parentId: whole },
+      { optionId: bridge, link: link("Q12", "Puente Viejo", { coordinates: { latitude: 9, longitude: 9 } }), group: "public-works", type: "bridge" },
+    ]);
+    assert.equal(batch.applied, 3);
+    const after = heritage.elements(columnId);
+    assert.deepEqual([after[whole].group, after[whole].latitude, after[part].parentId], ["civil", 40, whole]);
+    assert.deepEqual([after[bridge].latitude, after[bridge].coordSource, after[bridge].type], [1, "manual", "bridge"]);
+    assert.throws(() => heritage.applyLinks(columnId, [{ optionId: whole, link: { ...link("Q1", "x"), uri: "https://evil.example/Q1" } }]), /no válido/);
+    assert.equal(heritage.revertBatch(batch.id), 3);
+    const reverted = heritage.elements(columnId);
+    assert.equal(reverted[whole], undefined);
+    assert.deepEqual([reverted[bridge].latitude, reverted[bridge].type], [1, null]);
+    assert.equal(heritage.batches(columnId)[0].revertedAt !== null, true);
+    assert.throws(() => heritage.revertBatch(batch.id), /ya se revirtió/);
+  }));
+
+test("merging elements keeps records, parts and marks, and «Deshacer» puts everything back", () =>
+  withCatalogue(({ repo, heritage, columnId, option, ids }) => {
+    const [whole, part, bridge] = [option("Conjunto - Villaverde"), option("Patio - Villaverde"), option("Puente Viejo - Villaverde")];
+    heritage.save(columnId, [element(part, { latitude: 40, longitude: -3, group: "civil", type: "palace" }), element(bridge, { parentId: part })]);
+    repo.db
+      .prepare("INSERT INTO image_annotations(id,asset_id,row_id,x,y,w,h,note,tags_json,color,created_at,updated_at,kind,option_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run("mark-1", "asset-1", ids[1], 0.5, 0.5, 0, 0, "", "[]", null, "x", "x", "point", part);
+    new ValueCleanup(repo).merge(columnId, [{ members: [whole, part], target: "Conjunto - Villaverde" }]);
+    const merged = heritage.elements(columnId);
+    assert.deepEqual([merged[whole].latitude, merged[whole].group, merged[bridge].parentId], [40, "civil", whole]);
+    assert.equal((repo.db.prepare("SELECT option_id o FROM image_annotations WHERE id='mark-1'").get() as { o: string }).o, whole);
+    repo.undo();
+    const back = heritage.elements(columnId);
+    assert.equal(back[whole], undefined);
+    assert.equal(back[bridge].parentId, part);
+    assert.equal((repo.db.prepare("SELECT option_id o FROM image_annotations WHERE id='mark-1'").get() as { o: string }).o, part);
+  }));
+
+test("converting away from options warns about the records and marks it would lose", () =>
+  withCatalogue(({ repo, heritage, columnId, option }) => {
+    heritage.save(columnId, [element(option("Patio - Villaverde"), { latitude: 1, longitude: 1 })]);
+    // Between option types nothing is lost: the records come back.
+    repo.convertColumn(columnId, "select", true);
+    repo.convertColumn(columnId, "multi_select", true);
+    assert.ok(isHeritageColumn(repo.column(columnId)));
+    assert.equal(Object.keys(heritage.elements(columnId)).length, 1);
+    const preview = repo.convertColumn(columnId, "text", false);
+    assert.deepEqual(preview.heritage, { elements: 1, marks: 0 });
+    repo.convertColumn(columnId, "text", true);
+    assert.equal((repo.db.prepare("SELECT count(*) n FROM heritage_elements WHERE column_id=?").get(columnId) as { n: number }).n, 0);
+  }));
+
+test("marks are points or rectangles of an element, add it to the record and follow crops", () =>
+  withCatalogue(({ repo, columnId, option, ids, databaseId }) => {
+    const notes = new Annotations(repo);
+    const bridge = option("Puente Viejo - Villaverde");
+    const point = notes.save({ assetId: "asset-3", x: 0.25, y: 0.75, w: 0, h: 0, note: "", tags: [], kind: "point", optionId: bridge });
+    assert.deepEqual([point.kind, point.optionId, point.w, point.h], ["point", bridge, 0, 0]);
+    assert.ok(Math.abs(point.x - 0.25) < 1e-9 && Math.abs(point.y - 0.75) < 1e-9);
+    // The record now shows the element.
+    assert.deepEqual(decodeMultiSelect(repo.getRow(ids[3]).cells[columnId] ?? null), [bridge]);
+    const rect = notes.save({ assetId: "asset-3", x: 0.1, y: 0.1, w: 0.2, h: 0.2, note: "", tags: [], optionId: option("Patio - Villaverde") });
+    assert.equal(rect.kind, "rect");
+    assert.throws(() => notes.save({ assetId: "asset-3", x: 0.1, y: 0.1, w: 0.2, h: 0.2, note: "", tags: [], optionId: "elsewhere" }), /no pertenece/);
+    // With a crop that leaves the point out, it is not shown; inside, it moves with the crop.
+    repo.db.prepare("UPDATE image_assets SET metadata_json=? WHERE id='asset-3'").run(JSON.stringify({ imagoCrop: { x: 0, y: 0.5, w: 0.5, h: 0.5 } }));
+    const shown = notes.list({ assetId: "asset-3" }).find((a) => a.id === point.id)!;
+    assert.ok(Math.abs(shown.x - 0.5) < 1e-6 && Math.abs(shown.y - 0.5) < 1e-6);
+    repo.db.prepare("UPDATE image_assets SET metadata_json=? WHERE id='asset-3'").run(JSON.stringify({ imagoCrop: { x: 0.5, y: 0, w: 0.5, h: 0.5 } }));
+    assert.equal(notes.list({ assetId: "asset-3" }).some((a) => a.id === point.id), false);
+    // The W3C export identifies the element.
+    const exported = annotationsW3c(repo, databaseId).first.items.find((i) => i.id === `urn:uuid:${point.id}`)!;
+    assert.equal(exported.motivation, "identifying");
+    assert.match(exported.target.selector.value, /^xywh=percent:/);
+  }));
+
+test("the map places photos at their elements, falls back to their location and draws one point per element", () =>
+  withCatalogue(({ repo, heritage, columnId, locationId, option, ids, databaseId }) => {
+    const [whole, part, bridge] = [option("Conjunto - Villaverde"), option("Patio - Villaverde"), option("Puente Viejo - Villaverde")];
+    heritage.save(columnId, [element(whole, { latitude: 40, longitude: -3 }), element(part, { parentId: whole }), element(bridge, { latitude: 42, longitude: -5 })]);
+    const records = repo.mapRecords({ databaseId, columnId, fallbackColumnId: locationId }).records;
+    // A: whole and part share a place → one marker; B: inherits; C: bridge; D: its location.
+    assert.deepEqual(
+      records.map((r) => [ids.indexOf(r.id), r.location?.latitude ?? null, r.placement?.inherited ?? null]),
+      [[0, 40, false], [1, 40, true], [2, 42, false], [3, 41, null]],
+    );
+    assert.equal(repo.mapRecords({ databaseId, columnId, fallbackColumnId: null }).records.find((r) => r.id === ids[3])!.location, null);
+    const map = heritage.map({ databaseId, columnId, includeParts: false });
+    assert.deepEqual(map.elements.map((e) => [e.label, e.count]), [["Conjunto - Villaverde", 1], ["Puente Viejo - Villaverde", 1]]);
+    assert.equal(map.records, 3);
+    const withParts = heritage.map({ databaseId, columnId, includeParts: true });
+    assert.equal(withParts.elements.find((e) => e.optionId === whole)!.count, 2);
+  }));
+
+test("statistics count elements, types or groups, and filters find types, parts, marks and unlinked elements", () =>
+  withCatalogue(({ repo, heritage, columnId, option, ids, databaseId }) => {
+    const [whole, part, bridge] = [option("Conjunto - Villaverde"), option("Patio - Villaverde"), option("Puente Viejo - Villaverde")];
+    heritage.save(columnId, [
+      element(whole, { group: "civil", type: "palace" }),
+      element(part, { parentId: whole }),
+      element(bridge, { group: "public-works", type: "bridge" }),
+    ]);
+    const stats = new Statistics(repo);
+    const frequency = (spec: object) =>
+      (stats.compute(databaseId, ids, { kind: "frequency", columnId, ...spec }) as { categories: { label: string; count: number }[] }).categories;
+    assert.deepEqual(frequency({ includeParts: true }).find((r) => r.label === "Conjunto - Villaverde")!.count, 2);
+    assert.deepEqual(frequency({}).find((r) => r.label === "Conjunto - Villaverde")!.count, 1);
+    assert.deepEqual(
+      frequency({ heritageLevel: "group" }).map((r) => [r.label, r.count]).sort(),
+      // A part with no typology of its own counts as such.
+      [["Arquitectura civil", 1], ["Obra pública", 1], ["Sin tipología", 2]],
+    );
+    const column = repo.column(columnId);
+    assert.ok(filterOperators(column).includes("part_of"));
+    const find = (op: string, value: string | string[] = []) =>
+      repo.literal({ databaseIds: [databaseId], filters: [{ columnId, op: op as never, value }], limit: 10 }).rows.map((r) => ids.indexOf(r.id)).sort();
+    assert.deepEqual(find("part_of", [whole]), [0, 1]);
+    assert.deepEqual(find("heritage_group", ["public-works"]), [2]);
+    assert.deepEqual(find("heritage_type", ["civil/palace"]), [0]);
+    assert.deepEqual(find("heritage_unlinked"), [0, 1, 2]);
+    repo.db
+      .prepare("INSERT INTO image_annotations(id,asset_id,row_id,x,y,w,h,note,tags_json,color,created_at,updated_at,kind,option_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run("mark-2", "asset-2", ids[2], 0.5, 0.5, 0, 0, "", "[]", null, "x", "x", "point", bridge);
+    assert.deepEqual(find("heritage_marked"), [2]);
+    // A plain multi-select does not offer heritage conditions.
+    repo.updateColumn(columnId, undefined, { ...column.config, heritage: false });
+    assert.ok(!filterOperators(repo.column(columnId)).includes("part_of"));
+  }));

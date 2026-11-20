@@ -12,6 +12,7 @@ import {
   numeric,
   trend,
   yearOf,
+  yearSpan,
 } from "../shared/statistics";
 import { Repository } from "../electron/db/repository";
 import { Statistics } from "../electron/db/statistics";
@@ -91,6 +92,25 @@ test("years come from dates, numbers, free text and centuries", () => {
   assert.equal(yearOf({ type: "text" }, "s. XIX"), 1850);
   assert.equal(yearOf({ type: "text" }, "Foto 12345"), null);
   assert.equal(yearOf({ type: "text" }, "s.d."), null);
+});
+
+test("the timeline reads the years any form of date covers", () => {
+  const cases: [Parameters<typeof yearSpan>[0]["type"], string, string | undefined, [number, number] | null][] = [
+    ["historical_date", '{"text":"1950-1959","start":1950,"end":1959,"certainty":"exact"}', undefined, [1950, 1959]],
+    ["historical_date", '{"text":"ant. 1936","start":null,"end":1936,"certainty":"approx"}', undefined, [1936, 1936]],
+    ["date", '{"start":"1958-05-02","end":"1961-01-01"}', undefined, [1958, 1961]],
+    ["date", "1958-05-02", undefined, [1958, 1958]],
+    ["number", "1925", undefined, [1925, 1925]],
+    ["text", "1950-1959", undefined, [1950, 1959]],
+    ["text", "años 60", undefined, [1960, 1969]],
+    ["text", "c. 1930", undefined, [1925, 1935]],
+    ["select", "x", "s. XIX", [1801, 1900]],
+    ["text", "Foto 12345", undefined, null],
+  ];
+  for (const [type, raw, display, expected] of cases) {
+    const span = yearSpan({ type }, raw, display);
+    assert.deepEqual(span && [span.start, span.end], expected, `${type} ${display ?? raw}`);
+  }
 });
 
 test("trends by decade with series, and numeric summaries", () => {
