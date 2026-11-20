@@ -49,25 +49,25 @@ Every image has a record with the fields you choose: text, dates, places, people
 
 An AI model describes images, tags them with your own vocabulary or transcribes backs, stamps and inscriptions, one record or thousands. You choose the model and the instructions, see each result appear in its cell, and undo what you do not want; batch automations wait as proposals until you approve them. Models can run on your computer or with the provider you choose.
 
-![English provider settings in light mode, with remote APIs disabled](docs/screenshots/readme-settings.png)
+![AI models chosen by task, all running locally](docs/screenshots/readme-settings.png)
 
 ### 3. Identify heritage and find it by sight
 
 A **Heritage** property turns the monuments, buildings, streets and artworks in your photographs into identified elements: linked to Wikidata, with coordinates, a typology with icons (religious, civil, defensive…) and what each one is part of. Imago identifies a whole list in the background, with Wikidata and OpenStreetMap, and keeps every proposal for you to review. Mark an element on the photograph, ask a vision model which ones appear, or select a detail and find it in every other image.
 
-![A detail of the Court of the Lions searched for inside other photographs](docs/screenshots/readme-detail-search.png)
+![Heritage records: the Court of the Lions linked to Wikidata, with its typology, coordinates and the ensemble it is part of](docs/screenshots/readme-heritage.png)
 
 ### 4. Place everything on the map
 
 Place records with OpenStreetMap maps and a built-in gazetteer that works offline, including the direction the camera faced. Show photographs where they were taken or where the monument they show stands, see one point per heritage element, find photographs taken from the same spot, and compare them with present-day views from Wikimedia Commons.
 
-![Then and now: the Puerta del Sol in the 1860s next to present-day photographs from Wikimedia Commons](docs/screenshots/readme-then-and-now.png)
+![The photographs of the collection placed on an OpenStreetMap map](docs/screenshots/readme-map.png)
 
 ### 5. Measure the collection
 
 Frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence, trends and networks, by heritage element, type or group, always over the records your filters show. The timeline draws periods as recorded, and the Agreement tool compares several AI models with your own classification.
 
-![The network of places and subjects in the collection](docs/screenshots/readme-network.png)
+![Statistics: the photographs counted by heritage group](docs/screenshots/readme-statistics.png)
 
 ## And also
 
@@ -83,13 +83,17 @@ Frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence, trends
 <table>
   <tr>
     <td width="33%"><img src="docs/screenshots/readme-record.png" alt="A record with a historical date, its period and a Copy citation button"><br><sub>Record, historical date and citation</sub></td>
-    <td width="33%"><img src="docs/screenshots/readme-visual-map.png" alt="The visual map of the collection, coloured by place"><br><sub>Visual map by likeness</sub></td>
-    <td width="33%"><img src="docs/screenshots/readme-authorities.png" alt="Places of the collection with proposed links to Wikidata, Getty TGN identifiers and coordinates"><br><sub>Links to Wikidata and Getty</sub></td>
+    <td width="33%"><img src="docs/screenshots/readme-heritage-map.png" alt="The heritage map: one point per element, by typology"><br><sub>Heritage map by typology</sub></td>
+    <td width="33%"><img src="docs/screenshots/readme-then-and-now.png" alt="Then and now: the Puerta del Sol next to present-day photographs from Wikimedia Commons"><br><sub>Then and now</sub></td>
   </tr>
   <tr>
+    <td width="33%"><img src="docs/screenshots/readme-detail-search.png" alt="A detail of the Court of the Lions searched for inside other photographs"><br><sub>Search a detail in every image</sub></td>
     <td width="33%"><img src="docs/screenshots/readme-compare-overlay.png" alt="Two prints of the same view of Toledo laid over each other on the comparison table"><br><sub>Comparison table</sub></td>
-    <td width="33%"><img src="docs/screenshots/readme-variants.png" alt="Variants: a portrait and its cropped version found as the same photograph"><br><sub>Variants of a photograph</sub></td>
-    <td width="33%"><img src="docs/screenshots/readme-agreement.png" alt="The Agreement workspace comparing three demonstration raters with a reference classification"><br><sub>Agreement between models (illustrative figures)</sub></td>
+    <td width="33%"><img src="docs/screenshots/readme-variants.png" alt="Variants: two prints of the same view of Toledo found as the same photograph"><br><sub>Variants of a photograph</sub></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/readme-network.png" alt="The network of places and subjects in the collection"><br><sub>Network of places and subjects</sub></td>
+    <td width="33%"><img src="docs/screenshots/readme-visual-map.png" alt="The visual map of the collection: similar images sit together"><br><sub>Visual map by likeness</sub></td>
   </tr>
 </table>
 

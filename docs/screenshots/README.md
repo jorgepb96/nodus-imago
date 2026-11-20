@@ -1,6 +1,6 @@
 # README screenshots and image credits
 
-The screenshots show the real Nodus Imago desktop application in **English** with the **light theme**. They were captured from a separate demonstration profile. No private research material, saved API keys or paid inference requests were used.
+The screenshots show the real Nodus Imago desktop application in **English** with the **light theme**. They were captured on 2026-11-21 from a separate demonstration profile built only from the photographs listed below. No private research material, saved API keys or paid inference requests were used. Heritage elements were linked to Wikidata (CC0) and placed with OpenStreetMap data (© OpenStreetMap contributors, ODbL); map tiles are © OpenStreetMap contributors.
 
 ## Photographs
 

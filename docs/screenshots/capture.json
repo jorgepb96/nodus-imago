@@ -1,75 +1,87 @@
 {
-  "applicationCommit": "c2111f0a6b776f4f44d93d0b27357e007be4060d",
-  "date": "2026-11-14",
+  "applicationCommit": "14e86d503c41e832f5bb25170d7df66a347430d3",
+  "date": "2026-11-21",
   "locale": "en",
   "theme": "light",
-  "method": "Native Electron window capture, resized to 1600 px and palette-compressed",
+  "method": "Playwright capture of the Electron window, resized to 1600 px",
   "images": [
-    {
-      "file": "readme-agreement.png",
-      "width": 1600,
-      "height": 999,
-      "sha256": "7bf7c75036d0475ba93d97d6d1d8f005958cb593f44b9de598c7b81754db847a"
-    },
-    {
-      "file": "readme-authorities.png",
-      "width": 1600,
-      "height": 1000,
-      "sha256": "d677334860f348d4684cece13d1a63735be159c887f44c458d9af07e01ed6621"
-    },
     {
       "file": "readme-compare-overlay.png",
       "width": 1600,
       "height": 1000,
-      "sha256": "d7c1e37661b0cb9a325a35f647b0ec537f557feafcaad3c0be76706ba239f746"
+      "sha256": "6863188378dc3121b16bfb1d5b6051c0050cb015dff09cf14b3c24d7efc6a310"
     },
     {
       "file": "readme-detail-search.png",
       "width": 1600,
       "height": 1000,
-      "sha256": "5b55042f01b7f2af995327d1cb84ee0c280ac92779874d9800981d3eb176642f"
+      "sha256": "a009408beceaf6cd8b1ef919b9e0c985c29ba1057487924412e917bdf615a78f"
     },
     {
       "file": "readme-gallery.png",
       "width": 1600,
       "height": 1000,
-      "sha256": "e26f18e38d7982b40df07068a5345d00754e8e6248e0e95fefa6a1b30a1f0ce9"
+      "sha256": "8250f2957d4771437ecfd74e5d6bc9dae57a4feee1989430b46b76e85cc476c0"
+    },
+    {
+      "file": "readme-heritage-map.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "61e0ba7a77e9043f4126eaffc44c657202a4c73fb7ba0d0f8a63cd619aa4de9f"
+    },
+    {
+      "file": "readme-heritage.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "85e45c5351f1b0edd942c8bd53d4d27b38debb4ee991dc37e3f5fb13ca59b8a3"
+    },
+    {
+      "file": "readme-map.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "bc8c823cba236302af9c4373da4d2bd233d9d38b8471fea4845a8f9fc11f7b59"
     },
     {
       "file": "readme-network.png",
       "width": 1600,
       "height": 1000,
-      "sha256": "526d6243be87d4d37327a73cc66f742c6dd59e0c453efeb311345208fec73a6b"
+      "sha256": "b74fb37cc7dce9157358899114a6a639b33c555e12486a1fccd18730e6537577"
     },
     {
       "file": "readme-record.png",
       "width": 1600,
       "height": 1000,
-      "sha256": "3b3f3b0d0d030a6eb980dc34c8176531a9a2e59959723e6a088f8d12d67c4b8f"
+      "sha256": "58a7d158d784e70601043d279662e5031535f55621efa4bb3c333245b029ffaa"
     },
     {
       "file": "readme-settings.png",
       "width": 1600,
-      "height": 850,
-      "sha256": "cf210375d0cae5be4fb73849231d5c523259e18f4fed34d02a0d99f552f9b9a2"
+      "height": 1000,
+      "sha256": "6bd6fa7619a5eaaac9f090de645300b75fba25c25b4231184070aac4d31caf8e"
+    },
+    {
+      "file": "readme-statistics.png",
+      "width": 1600,
+      "height": 1000,
+      "sha256": "f895508e0ca3e35ee02745b0281db6b22dfd2f4810ccc4a20eb587b414079ad3"
     },
     {
       "file": "readme-then-and-now.png",
       "width": 1600,
       "height": 1000,
-      "sha256": "09e578e277a5c3eee080c33ffa60c89f15ab9a0f4a0cccbfe2a807cb851c5aa2"
+      "sha256": "5a9a64a24cbdbc66d9fa08fccf741098975698050ae46e727eac06e47d13ccbf"
     },
     {
       "file": "readme-variants.png",
       "width": 1600,
       "height": 1000,
-      "sha256": "9fa472b54b79108a298cdf44cdede79eb900177e58b320ca5db13894d7f3487f"
+      "sha256": "e1e3981e059a001d90efad342487e131fefc1e3170f80cae8da5864799211dc6"
     },
     {
       "file": "readme-visual-map.png",
       "width": 1600,
       "height": 1000,
-      "sha256": "8ce718fb1bcca6b41c08d317aa37a307b26ef1de01d31f86e81c7eab1757bdf2"
+      "sha256": "e78c8d765327ff335ccb563b592c801f6dd264b12f9959b377c70cd3dc593809"
     }
   ]
 }
