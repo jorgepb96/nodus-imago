@@ -38,6 +38,7 @@ import { Variants } from "./db/variants";
 import { VisualMaps } from "./db/visualMap";
 import { ValueCleanup } from "./db/cleanup";
 import { Authorities } from "./db/authorities";
+import { Heritage } from "./db/heritage";
 import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
@@ -94,6 +95,7 @@ export class Service {
   visualMaps: VisualMaps;
   cleanup: ValueCleanup;
   authorities: Authorities;
+  heritage: Heritage;
   restorations: Restorations;
   suggestions: NeighbourSuggestions;
   details: DetailSearch;
@@ -163,6 +165,7 @@ export class Service {
     this.visualMaps = new VisualMaps(this.repo, () => this.engine.contract());
     this.cleanup = new ValueCleanup(this.repo);
     this.authorities = new Authorities(this.repo);
+    this.heritage = new Heritage(this.repo);
     this.variants = new Variants(this.repo, this.boards, () => {
       try {
         return this.engine.contract();
@@ -924,6 +927,25 @@ export class Service {
         return this.authorities.links(input.columnId);
       case "authoritySet":
         return this.authorities.set(input.columnId, input.items);
+      case "heritageElements":
+        return this.heritage.elements(input.columnId);
+      case "heritageSave": {
+        const saved = this.heritage.save(input.columnId, input.items);
+        this.changed();
+        return saved;
+      }
+      case "heritageApplyLinks": {
+        const batch = this.heritage.applyLinks(input.columnId, input.items);
+        this.changed();
+        return batch;
+      }
+      case "heritageLinkBatches":
+        return this.heritage.batches(input.columnId);
+      case "heritageRevertBatch": {
+        const reverted = this.heritage.revertBatch(input.id);
+        this.changed();
+        return reverted;
+      }
       case "authorityLocate": {
         const result = this.authorities.locate(input.columnId, input.name);
         this.changed();

@@ -6,6 +6,25 @@ import { FILTER_LABELS } from "./viewCriteria";
 import { externalHttpsUrl } from "./externalLinks";
 import type { PropertyFilterGroup, PropertyFilterOp } from "./imago";
 const id = z.string().min(1).max(200);
+const authorityLink = z
+  .object({
+    source: z.enum(["wikidata", "iconclass"]),
+    id: z.string().min(1).max(80),
+    label: z.string().max(500),
+    description: z.string().max(1000).nullable(),
+    uri: z.string().url().max(300),
+    ulan: z.string().max(40).nullable().optional(),
+    tgn: z.string().max(40).nullable().optional(),
+    aat: z.string().max(40).nullable().optional(),
+    iconclass: z.string().max(120).nullable().optional(),
+    coordinates: z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).nullable().optional(),
+    born: z.number().int().nullable().optional(),
+    died: z.number().int().nullable().optional(),
+    kind: z.enum(["person", "place", "subject", "other"]).optional(),
+    instances: z.array(z.string().regex(/^Q\d+$/)).max(20).optional(),
+    partOf: z.array(z.string().regex(/^Q\d+$/)).max(20).optional(),
+  })
+  .strict();
 const name = z.string().trim().min(1).max(300);
 const ids = z.array(id).max(100000);
 const type = z.string().refine(isDatabaseColumnType);
@@ -476,24 +495,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
           z
             .object({
               optionId: id,
-              link: z
-                .object({
-                  source: z.enum(["wikidata", "iconclass"]),
-                  id: z.string().min(1).max(80),
-                  label: z.string().max(500),
-                  description: z.string().max(1000).nullable(),
-                  uri: z.string().url().max(300),
-                  ulan: z.string().max(40).nullable().optional(),
-                  tgn: z.string().max(40).nullable().optional(),
-                  aat: z.string().max(40).nullable().optional(),
-                  iconclass: z.string().max(120).nullable().optional(),
-                  coordinates: z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).nullable().optional(),
-                  born: z.number().int().nullable().optional(),
-                  died: z.number().int().nullable().optional(),
-                  kind: z.enum(["person", "place", "subject", "other"]).optional(),
-                })
-                .strict()
-                .nullable(),
+              link: authorityLink.nullable(),
             })
             .strict(),
         )
@@ -501,6 +503,51 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   authorityLocate: z.object({ columnId: id, name: z.string().trim().min(1).max(120) }).strict(),
+  heritageElements: z.object({ columnId: id }).strict(),
+  heritageSave: z
+    .object({
+      columnId: id,
+      items: z
+        .array(
+          z
+            .object({
+              optionId: id,
+              parentId: id.nullable(),
+              group: z.string().max(40).nullable(),
+              type: z.string().max(40).nullable(),
+              latitude: z.number().min(-90).max(90).nullable(),
+              longitude: z.number().min(-180).max(180).nullable(),
+              coordSource: z.enum(["wikidata", "manual"]).nullable(),
+            })
+            .strict(),
+        )
+        .max(5000),
+    })
+    .strict(),
+  heritageCandidates: z
+    .object({ items: z.array(z.object({ optionId: id, label: z.string().trim().min(1).max(500) }).strict()).min(1).max(20) })
+    .strict(),
+  heritageApplyLinks: z
+    .object({
+      columnId: id,
+      items: z
+        .array(
+          z
+            .object({
+              optionId: id,
+              link: authorityLink,
+              group: z.string().max(40).nullable().optional(),
+              type: z.string().max(40).nullable().optional(),
+              parentId: id.nullable().optional(),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(5000),
+    })
+    .strict(),
+  heritageLinkBatches: z.object({ columnId: id }).strict(),
+  heritageRevertBatch: z.object({ id }).strict(),
   valueClusters: z.object({ columnId: id }).strict(),
   valueCounts: z.object({ columnId: id }).strict(),
   valueMerge: z

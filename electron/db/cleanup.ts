@@ -5,6 +5,8 @@
 import { randomUUID } from "node:crypto";
 import type { Repository } from "./repository";
 import { decodeMultiSelect } from "../../shared/databases";
+import { isHeritageColumn } from "../../shared/heritage";
+import { Heritage } from "./heritage";
 import { clusterValues, type ValueCluster, type ValueCount } from "../../shared/cleanup";
 
 export const CLEANABLE = ["select", "multi_select", "text"];
@@ -69,6 +71,9 @@ export class ValueCleanup {
           snapshots.push(raw(keep.id));
           db.prepare("UPDATE db_select_options SET label=?,updated_at=? WHERE id=?").run(target, new Date().toISOString(), keep.id);
         }
+        // A heritage element keeps the records, parts and marks of those it absorbs.
+        if (isHeritageColumn(column))
+          snapshots.push(...new Heritage(this.repo).mergeInto(columnId, keep.id, others.map((o) => o.id)));
         const moved = new Set(others.map((o) => o.id));
         for (const { r, v } of cells()) {
           if (column.type === "select" || column.type === "status") {

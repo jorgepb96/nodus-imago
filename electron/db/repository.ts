@@ -1,3 +1,5 @@
+import { isHeritageColumn } from "../../shared/heritage";
+import { restoreHeritage, type HeritageRestore } from "./heritage";
 import Database from "better-sqlite3";
 import { createHash, randomUUID as uuid } from "node:crypto";
 import fs from "node:fs";
@@ -127,6 +129,15 @@ export class Repository {
     ])
       if (!historyColumns.has(name))
         this.db.exec(`ALTER TABLE history ADD COLUMN ${name} ${type}`);
+    // Regions can be points and name a heritage element (option) of the record.
+    const annotationColumns = new Set(
+      (this.db.prepare("PRAGMA table_info(image_annotations)").all() as { name: string }[]).map((c) => c.name),
+    );
+    if (!annotationColumns.has("kind"))
+      this.db.exec("ALTER TABLE image_annotations ADD COLUMN kind TEXT NOT NULL DEFAULT 'rect'");
+    if (!annotationColumns.has("option_id"))
+      this.db.exec("ALTER TABLE image_annotations ADD COLUMN option_id TEXT");
+    this.db.exec("CREATE INDEX IF NOT EXISTS annotations_option ON image_annotations(option_id) WHERE option_id IS NOT NULL");
     this.db.exec(
       "CREATE INDEX IF NOT EXISTS history_batch ON history(batch_id); CREATE INDEX IF NOT EXISTS history_undone ON history(undone_seq) WHERE undone_seq IS NOT NULL;",
     );
@@ -391,14 +402,33 @@ export class Repository {
         }
         values.push([row.id, value]);
       }
-    if (!apply) return { total, lost };
+    // A heritage property loses its element records and marks with its options.
+    const heritage =
+      isHeritageColumn(column) && !optionTypes(type)
+        ? {
+            elements: (this.db.prepare("SELECT count(*) n FROM heritage_elements WHERE column_id=?").get(id) as { n: number }).n,
+            marks: (
+              this.db
+                .prepare("SELECT count(*) n FROM image_annotations WHERE option_id IN (SELECT id FROM db_select_options WHERE column_id=?)")
+                .get(id) as { n: number }
+            ).n,
+          }
+        : null;
+    if (!apply) return { total, lost, heritage };
     const at = now();
     this.db.transaction(() => {
       this.db
         .prepare("UPDATE db_columns SET type=?,updated_at=? WHERE id=?")
         .run(type, at, id);
-      if (!optionTypes(type))
+      if (!optionTypes(type)) {
+        if (heritage) {
+          this.db
+            .prepare("DELETE FROM image_annotations WHERE option_id IN (SELECT id FROM db_select_options WHERE column_id=?)")
+            .run(id);
+          this.db.prepare("DELETE FROM heritage_elements WHERE column_id=?").run(id);
+        }
         this.db.prepare("DELETE FROM db_select_options WHERE column_id=?").run(id);
+      }
       const insert = this.db.prepare(
         "INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)",
       );
@@ -1498,8 +1528,13 @@ export class Repository {
         .prepare("SELECT option_json FROM option_restores WHERE batch_id=? ORDER BY id")
         .all(batch) as { option_json: string }[];
       const databases = new Set<string>();
+      const heritage: HeritageRestore[] = [];
       for (const r of restores) {
         const o = JSON.parse(r.option_json);
+        if (o.__heritage) {
+          heritage.push(o);
+          continue;
+        }
         this.db
           .prepare(
             "INSERT OR REPLACE INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
@@ -1507,6 +1542,8 @@ export class Repository {
           .run(o.id, o.database_id, o.column_id, o.label, o.color, o.position, o.created_at, o.updated_at);
         databases.add(o.database_id);
       }
+      // Then heritage records, parts and marks, last change first.
+      for (const entry of heritage.reverse()) restoreHeritage(this.db, entry);
       if (restores.length)
         this.db.prepare("DELETE FROM option_restores WHERE batch_id=?").run(batch);
       const { seq, mark } = this.db

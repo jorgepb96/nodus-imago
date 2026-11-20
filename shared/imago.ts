@@ -409,7 +409,8 @@ export type Commands = {
   deleteColumn: { input: { id: string }; result: void };
   convertColumn: {
     input: { id: string; type: DatabaseColumnType; apply: boolean };
-    result: { total: number; lost: number };
+    /** heritage: element records and photo marks a heritage property would lose. */
+    result: { total: number; lost: number; heritage?: { elements: number; marks: number } | null };
   };
   duplicateColumn: {
     input: { id: string; copy?: string };
@@ -474,6 +475,22 @@ export type Commands = {
   authorityLinks: { input: { columnId: string }; result: Record<string, import("./authority").AuthorityLink> };
   authoritySet: { input: { columnId: string; items: { optionId: string; link: import("./authority").AuthorityLink | null }[] }; result: number };
   authorityLocate: { input: { columnId: string; name: string }; result: { columnId: string; located: number } };
+  heritageElements: { input: { columnId: string }; result: Record<string, import("./heritage").HeritageElement> };
+  heritageSave: { input: { columnId: string; items: import("./heritage").HeritageElement[] }; result: number };
+  /** Handled in the main process: Wikidata candidates for up to 20 elements. */
+  heritageCandidates: {
+    input: { items: { optionId: string; label: string }[] };
+    result: { optionId: string; candidates: import("./heritage").HeritageCandidate[]; error?: string }[];
+  };
+  heritageApplyLinks: {
+    input: {
+      columnId: string;
+      items: { optionId: string; link: import("./authority").AuthorityLink; group?: string | null; type?: string | null; parentId?: string | null }[];
+    };
+    result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
+  };
+  heritageLinkBatches: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null }[] };
+  heritageRevertBatch: { input: { id: string }; result: number };
   valueClusters: { input: { columnId: string }; result: import("./cleanup").ValueCluster[] };
   valueCounts: { input: { columnId: string }; result: import("./cleanup").ValueCount[] };
   valueMerge: { input: { columnId: string; groups: { members: string[]; target: string }[] }; result: number };

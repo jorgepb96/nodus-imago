@@ -90,6 +90,7 @@ import { Properties, type Perform } from "./components/Properties";
 import { AddPropertyMenu } from "./components/AddPropertyMenu";
 import { AiColumnMenu } from "./components/AiColumnMenu";
 import { ColumnTypeIcon } from "./components/ColumnTypeIcon";
+import { isHeritageColumn } from "../shared/heritage";
 import { HistoryButtons } from "./components/HistoryButtons";
 import { CsvImport, ImageImport } from "./components/ImportDialogs";
 import { CriteriaBar, ViewControls } from "./components/ViewControls";
@@ -3024,6 +3025,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                     <GripVertical size={10} className="column-grip" />
                                     <ColumnTypeIcon
                                       type={c.type}
+                                      heritage={isHeritageColumn(c)}
                                       ai={c.type !== "ai" && isAiColumn(c)}
                                     />
                                     <span>{c.name}</span>

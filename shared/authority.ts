@@ -23,6 +23,9 @@ export type AuthorityLink = {
   died?: number | null;
   /** Person, place or other, as read from Wikidata. */
   kind?: AuthorityKind | "other";
+  /** Wikidata: what it is (P31) and what it is part of (P361), as Q-numbers. */
+  instances?: string[];
+  partOf?: string[];
 };
 
 export const AUTHORITY_SOURCES: Record<AuthoritySource, string> = { wikidata: "Wikidata", iconclass: "Iconclass" };
@@ -93,6 +96,11 @@ export function parseWikidataEntities(json: any, order: string[], language: stri
         born: year(claim(e, "P569") ?? claim(e, "P571")),
         died: year(claim(e, "P570") ?? claim(e, "P576")),
         kind,
+        instances: instances.filter((q): q is string => typeof q === "string" && /^Q\d+$/.test(q)).slice(0, 20),
+        partOf: ((e.claims?.P361 ?? []) as any[])
+          .map((c) => c?.mainsnak?.datavalue?.value?.id)
+          .filter((q): q is string => typeof q === "string" && /^Q\d+$/.test(q))
+          .slice(0, 20),
       },
     ];
   });

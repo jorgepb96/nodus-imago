@@ -1,0 +1,326 @@
+// Records of heritage elements: the options of a heritage property with their
+// coordinates, typology and the element they are part of. Kept apart from the
+// options (like authority links) so editing the options never loses them.
+// Linking many elements to Wikidata at once is recorded in batches that can be
+// reverted as a whole.
+import { randomUUID } from "node:crypto";
+import type Database from "better-sqlite3";
+import type { Repository } from "./repository";
+import type { AuthorityLink } from "../../shared/authority";
+import {
+  emptyElement,
+  heritageScheme,
+  isHeritageColumn,
+  wouldCycle,
+  type HeritageElement,
+} from "../../shared/heritage";
+
+type Row = {
+  option_id: string;
+  column_id: string;
+  parent_option_id: string | null;
+  group_key: string | null;
+  type_key: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  coord_source: "wikidata" | "manual" | null;
+  updated_at: string;
+};
+const decode = (r: Row): HeritageElement => ({
+  optionId: r.option_id,
+  parentId: r.parent_option_id,
+  group: r.group_key,
+  type: r.type_key,
+  latitude: r.latitude,
+  longitude: r.longitude,
+  coordSource: r.coord_source,
+});
+const isEmpty = (e: HeritageElement) =>
+  !e.parentId && !e.group && !e.type && e.latitude === null && e.longitude === null;
+
+/** One change of a linking batch, as it was before. */
+type LinkSnapshot = { optionId: string; link: string | null; element: Row | null };
+export type HeritageLinkBatch = { id: string; applied: number; createdAt: string; revertedAt: string | null };
+export type HeritageLinkItem = {
+  optionId: string;
+  link: AuthorityLink;
+  /** Fill coordinates, typology and parent only where the record has none. */
+  group?: string | null;
+  type?: string | null;
+  parentId?: string | null;
+};
+
+/**
+ * Undo of «Unificar valores» on a heritage property: entries saved in
+ * option_restores next to the options themselves.
+ */
+export type HeritageRestore =
+  | { __heritage: "element"; optionId: string; row: Row | null }
+  | { __heritage: "mark"; id: string; optionId: string | null }
+  | { __heritage: "authority"; optionId: string; columnId: string; link: string | null };
+
+export function restoreHeritage(db: Database.Database, entry: HeritageRestore) {
+  if (entry.__heritage === "element") {
+    if (!entry.row) db.prepare("DELETE FROM heritage_elements WHERE option_id=?").run(entry.optionId);
+    else writeRow(db, entry.row);
+  } else if (entry.__heritage === "mark") {
+    db.prepare("UPDATE image_annotations SET option_id=? WHERE id=?").run(entry.optionId, entry.id);
+  } else if (entry.link === null) {
+    db.prepare("DELETE FROM option_authorities WHERE option_id=?").run(entry.optionId);
+  } else {
+    db.prepare("INSERT OR REPLACE INTO option_authorities(option_id,column_id,link_json,linked_at) VALUES(?,?,?,?)").run(
+      entry.optionId,
+      entry.columnId,
+      entry.link,
+      new Date().toISOString(),
+    );
+  }
+}
+
+function writeRow(db: Database.Database, r: Row) {
+  db.prepare(
+    "INSERT OR REPLACE INTO heritage_elements(option_id,column_id,parent_option_id,group_key,type_key,latitude,longitude,coord_source,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+  ).run(r.option_id, r.column_id, r.parent_option_id, r.group_key, r.type_key, r.latitude, r.longitude, r.coord_source, r.updated_at);
+}
+
+const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+export class Heritage {
+  constructor(private repo: Repository) {}
+
+  private get db() {
+    return this.repo.db;
+  }
+
+  heritageColumn(columnId: string) {
+    const column = this.repo.column(columnId);
+    if (!isHeritageColumn(column)) throw new Error("Esta propiedad no es de patrimonio.");
+    return column;
+  }
+
+  private rows(columnId: string): Row[] {
+    return this.db.prepare("SELECT * FROM heritage_elements WHERE column_id=?").all(columnId) as Row[];
+  }
+
+  /** Records of the property's current options, by option id. */
+  elements(columnId: string): Record<string, HeritageElement> {
+    const column = this.heritageColumn(columnId);
+    const ids = new Set(column.options.map((o) => o.id));
+    return Object.fromEntries(this.rows(columnId).filter((r) => ids.has(r.option_id)).map((r) => [r.option_id, decode(r)]));
+  }
+
+  /** Saves records; an empty one is removed. Refuses loops and foreign parents. */
+  save(columnId: string, items: HeritageElement[]): number {
+    const column = this.heritageColumn(columnId);
+    const ids = new Set(column.options.map((o) => o.id));
+    const scheme = heritageScheme(column.config);
+    const db = this.db;
+    db.transaction(() => {
+      const current = this.elements(columnId);
+      for (const raw of items) {
+        if (!ids.has(raw.optionId)) throw new Error("Identificador de opción ajeno a la propiedad.");
+        const item: HeritageElement = { ...emptyElement(raw.optionId), ...raw };
+        if (item.parentId && !ids.has(item.parentId)) throw new Error("El elemento del que forma parte no está en esta propiedad.");
+        if (wouldCycle(item.optionId, item.parentId, current))
+          throw new Error("Un elemento no puede formar parte de sí mismo ni de una de sus partes.");
+        const group = item.group ? scheme.groups.find((g) => g.key === item.group) : null;
+        if (item.group && !group) throw new Error("Tipología desconocida.");
+        if (item.type && !group?.types.some((x) => x.key === item.type)) throw new Error("Tipología desconocida.");
+        const located = finite(item.latitude) && finite(item.longitude);
+        if (located && (Math.abs(item.latitude!) > 90 || Math.abs(item.longitude!) > 180))
+          throw new Error("Coordenadas no válidas.");
+        const element: HeritageElement = {
+          ...item,
+          latitude: located ? item.latitude : null,
+          longitude: located ? item.longitude : null,
+          coordSource: located ? (item.coordSource ?? "manual") : null,
+        };
+        current[item.optionId] = element;
+        if (isEmpty(element)) db.prepare("DELETE FROM heritage_elements WHERE option_id=?").run(item.optionId);
+        else
+          writeRow(db, {
+            option_id: element.optionId,
+            column_id: columnId,
+            parent_option_id: element.parentId,
+            group_key: element.group,
+            type_key: element.type,
+            latitude: element.latitude,
+            longitude: element.longitude,
+            coord_source: element.coordSource,
+            updated_at: new Date().toISOString(),
+          });
+      }
+    })();
+    return items.length;
+  }
+
+  // ── Wikidata in batches ──────────────────────────────────────────────────
+
+  /**
+   * Links many elements at once and fills, where empty, coordinates (manual
+   * ones are never replaced), typology and parent. Recorded as one batch.
+   */
+  applyLinks(columnId: string, items: HeritageLinkItem[]): HeritageLinkBatch {
+    const column = this.heritageColumn(columnId);
+    const ids = new Set(column.options.map((o) => o.id));
+    const scheme = heritageScheme(column.config);
+    const db = this.db;
+    const batch: HeritageLinkBatch = { id: randomUUID(), applied: 0, createdAt: new Date().toISOString(), revertedAt: null };
+    db.transaction(() => {
+      const snapshot: LinkSnapshot[] = [];
+      const elements = this.elements(columnId);
+      for (const item of items) {
+        if (!ids.has(item.optionId)) throw new Error("Identificador de opción ajeno a la propiedad.");
+        if (!/^https:\/\/www\.wikidata\.org\//.test(item.link.uri)) throw new Error("Enlace de autoridad no válido.");
+        const before = db.prepare("SELECT link_json FROM option_authorities WHERE option_id=?").get(item.optionId) as
+          | { link_json: string }
+          | undefined;
+        const row = db.prepare("SELECT * FROM heritage_elements WHERE option_id=?").get(item.optionId) as Row | undefined;
+        snapshot.push({ optionId: item.optionId, link: before?.link_json ?? null, element: row ?? null });
+        db.prepare("INSERT OR REPLACE INTO option_authorities(option_id,column_id,link_json,linked_at) VALUES(?,?,?,?)").run(
+          item.optionId,
+          columnId,
+          JSON.stringify(item.link),
+          batch.createdAt,
+        );
+        const e: HeritageElement = { ...emptyElement(item.optionId), ...elements[item.optionId] };
+        const c = item.link.coordinates;
+        if (c && e.coordSource !== "manual") Object.assign(e, { latitude: c.latitude, longitude: c.longitude, coordSource: "wikidata" });
+        const group = item.group && scheme.groups.find((g) => g.key === item.group);
+        if (!e.group && group && (!item.type || group.types.some((x) => x.key === item.type)))
+          Object.assign(e, { group: group.key, type: item.type ?? null });
+        if (!e.parentId && item.parentId && ids.has(item.parentId) && !wouldCycle(e.optionId, item.parentId, elements))
+          e.parentId = item.parentId;
+        elements[e.optionId] = e;
+        if (!isEmpty(e))
+          writeRow(db, {
+            option_id: e.optionId,
+            column_id: columnId,
+            parent_option_id: e.parentId,
+            group_key: e.group,
+            type_key: e.type,
+            latitude: e.latitude,
+            longitude: e.longitude,
+            coord_source: e.coordSource,
+            updated_at: batch.createdAt,
+          });
+        batch.applied++;
+      }
+      db.prepare("INSERT INTO heritage_link_batches(id,column_id,applied,snapshot_json,created_at) VALUES(?,?,?,?,?)").run(
+        batch.id,
+        columnId,
+        batch.applied,
+        JSON.stringify(snapshot),
+        batch.createdAt,
+      );
+    })();
+    return batch;
+  }
+
+  batches(columnId: string): HeritageLinkBatch[] {
+    this.heritageColumn(columnId);
+    return this.db
+      .prepare(
+        "SELECT id,applied,created_at createdAt,reverted_at revertedAt FROM heritage_link_batches WHERE column_id=? ORDER BY created_at DESC LIMIT 20",
+      )
+      .all(columnId) as HeritageLinkBatch[];
+  }
+
+  /** Puts links and records back as they were before the batch. */
+  revertBatch(batchId: string): number {
+    const db = this.db;
+    const batch = db.prepare("SELECT column_id,snapshot_json,reverted_at FROM heritage_link_batches WHERE id=?").get(batchId) as
+      | { column_id: string; snapshot_json: string; reverted_at: string | null }
+      | undefined;
+    if (!batch) throw new Error("Vinculación no encontrada.");
+    if (batch.reverted_at) throw new Error("Esta vinculación ya se revirtió.");
+    const snapshot = JSON.parse(batch.snapshot_json) as LinkSnapshot[];
+    db.transaction(() => {
+      // Last change first, so an element changed twice ends as it began.
+      for (const s of [...snapshot].reverse()) {
+        restoreHeritage(db, { __heritage: "authority", optionId: s.optionId, columnId: batch.column_id, link: s.link });
+        restoreHeritage(db, { __heritage: "element", optionId: s.optionId, row: s.element });
+      }
+      db.prepare("UPDATE heritage_link_batches SET reverted_at=? WHERE id=?").run(new Date().toISOString(), batchId);
+    })();
+    return snapshot.length;
+  }
+
+  // ── «Unificar valores» ───────────────────────────────────────────────────
+
+  /**
+   * Before options are merged into `keepId`: the kept element takes what it
+   * lacks from the absorbed ones, their parts hang from it and their marks
+   * point to it. Returns what «Deshacer» needs to put it all back.
+   */
+  mergeInto(columnId: string, keepId: string, absorbedIds: string[]): HeritageRestore[] {
+    const db = this.db;
+    const absorbed = new Set(absorbedIds.filter((id) => id !== keepId));
+    if (!absorbed.size) return [];
+    const rows = new Map(this.rows(columnId).map((r) => [r.option_id, r]));
+    const restores: HeritageRestore[] = [];
+    const remember = (id: string) => {
+      if (!restores.some((r) => r.__heritage === "element" && r.optionId === id))
+        restores.push({ __heritage: "element", optionId: id, row: rows.get(id) ? { ...rows.get(id)! } : null });
+    };
+    const at = new Date().toISOString();
+    // The kept record, completed with the absorbed ones.
+    remember(keepId);
+    const kept: Row = rows.get(keepId) ?? {
+      option_id: keepId,
+      column_id: columnId,
+      parent_option_id: null,
+      group_key: null,
+      type_key: null,
+      latitude: null,
+      longitude: null,
+      coord_source: null,
+      updated_at: at,
+    };
+    for (const id of absorbed) {
+      const r = rows.get(id);
+      if (!r) continue;
+      if (kept.latitude === null && r.latitude !== null)
+        Object.assign(kept, { latitude: r.latitude, longitude: r.longitude, coord_source: r.coord_source });
+      if (!kept.group_key && r.group_key) Object.assign(kept, { group_key: r.group_key, type_key: r.type_key });
+      if (!kept.parent_option_id && r.parent_option_id && !absorbed.has(r.parent_option_id))
+        kept.parent_option_id = r.parent_option_id;
+    }
+    if (kept.parent_option_id && absorbed.has(kept.parent_option_id)) kept.parent_option_id = null;
+    kept.updated_at = at;
+    rows.set(keepId, kept);
+    // Parts of the absorbed elements now hang from the kept one, unless that makes a loop.
+    const byId = Object.fromEntries([...rows.values()].map((r) => [r.option_id, decode(r)]));
+    for (const r of rows.values()) {
+      if (!r.parent_option_id || !absorbed.has(r.parent_option_id) || r.option_id === keepId) continue;
+      remember(r.option_id);
+      r.parent_option_id = wouldCycle(r.option_id, keepId, byId) ? null : keepId;
+      r.updated_at = at;
+      byId[r.option_id] = decode(r);
+    }
+    for (const entry of restores) {
+      if (entry.__heritage !== "element") continue;
+      const r = rows.get(entry.optionId);
+      if (r) writeRow(db, r);
+    }
+    // The kept element takes an authority link it lacks.
+    const link = (id: string) =>
+      (db.prepare("SELECT link_json FROM option_authorities WHERE option_id=?").get(id) as { link_json: string } | undefined)?.link_json ?? null;
+    if (!link(keepId)) {
+      const found = [...absorbed].map(link).find((l): l is string => !!l);
+      if (found) {
+        restores.push({ __heritage: "authority", optionId: keepId, columnId, link: null });
+        restoreHeritage(db, { __heritage: "authority", optionId: keepId, columnId, link: found });
+      }
+    }
+    // Marks on the photos follow.
+    const marks = db
+      .prepare(`SELECT id,option_id FROM image_annotations WHERE option_id IN (${[...absorbed].map(() => "?").join(",")})`)
+      .all(...absorbed) as { id: string; option_id: string }[];
+    for (const m of marks) {
+      restores.push({ __heritage: "mark", id: m.id, optionId: m.option_id });
+      db.prepare("UPDATE image_annotations SET option_id=? WHERE id=?").run(keepId, m.id);
+    }
+    return restores;
+  }
+}

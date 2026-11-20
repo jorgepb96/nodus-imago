@@ -49,7 +49,13 @@ import { Button, Modal } from "./ui";
 type View = "main" | "type" | "calc";
 type Confirm =
   | { kind: "delete" }
-  | { kind: "convert"; type: DatabaseColumnType; total: number; lost: number };
+  | {
+      kind: "convert";
+      type: DatabaseColumnType;
+      total: number;
+      lost: number;
+      heritage?: { elements: number; marks: number } | null;
+    };
 
 const UNDELETABLE = new Set<DatabaseColumnType>(["title"]);
 const UNDUPLICABLE = new Set<DatabaseColumnType>([
@@ -184,7 +190,7 @@ export function ColumnMenu({
         type,
         apply: false,
       });
-      if (preview.lost > 0) {
+      if (preview.lost > 0 || (preview.heritage && (preview.heritage.elements || preview.heritage.marks))) {
         setConfirm({ kind: "convert", type, ...preview });
         return;
       }
@@ -238,6 +244,14 @@ export function ColumnMenu({
               )} «${t(columnTypeDef(confirm.type).label)}» ${t(
                 "y se vaciarán. Esta operación no se puede deshacer.",
               )}`}
+              {confirm.heritage && (confirm.heritage.elements > 0 || confirm.heritage.marks > 0) && (
+                <>
+                  {" "}
+                  {`${t("También se perderán las fichas de")} ${confirm.heritage.elements.toLocaleString()} ${t(
+                    "elementos patrimoniales y",
+                  )} ${confirm.heritage.marks.toLocaleString()} ${t("marcas en las fotos.")}`}
+                </>
+              )}
             </p>
           )}
         </div>

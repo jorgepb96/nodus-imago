@@ -37,6 +37,7 @@ import {
   type AuthorityLink,
   type AuthoritySource,
 } from "../shared/authority";
+import { heritageQuery, rankCandidates } from "../shared/heritage";
 import { platesHtml } from "./export/plates";
 import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
@@ -50,6 +51,25 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 /** Wikimedia asks automated clients to name themselves and a way to find them. */
 const WIKIMEDIA_USER_AGENT = "NodusImago/0.1 (https://github.com/jorgepb96/nodus-imago)";
+
+/** A JSON answer from a Wikimedia or Iconclass API, waiting when asked to slow down (429). */
+async function wikimediaJson(url: string, source: AuthoritySource) {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(url, {
+      headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
+      signal: AbortSignal.timeout(20_000),
+    }).catch(() => {
+      throw new Error(source === "iconclass" ? "No se pudo conectar con Iconclass." : "No se pudo conectar con Wikidata.");
+    });
+    if (response.status === 429 && attempt < 3) {
+      const wait = Math.min(30, Number(response.headers.get("retry-after")) || 5 * (attempt + 1));
+      await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+      continue;
+    }
+    if (!response.ok) throw new Error(`${AUTHORITY_SOURCES[source]}: HTTP ${response.status}`);
+    return response.json();
+  }
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -79,6 +99,11 @@ const pending = new Map<
   number,
   { resolve: (v: any) => void; reject: (e: Error) => void }
 >();
+/** Interface language, for the labels Wikidata answers with. */
+async function interfaceLanguage(): Promise<"es" | "en"> {
+  const status = (await call("status")) as { settings: { language: string } };
+  return status.settings.language === "en" ? "en" : "es";
+}
 function call(command: string, input?: unknown): Promise<any> {
   const id = ++nextId;
   return new Promise((resolve, reject) => {
@@ -714,26 +739,8 @@ app.whenReady().then(async () => {
       if (command === "authoritySearch") {
         // Only the text being searched is sent, and only when the user asks.
         const data = safe as { source: AuthoritySource; query: string; kind?: AuthorityKind | null };
-        const status = (await call("status")) as { settings: { language: string } };
-        const language = status.settings.language === "en" ? "en" : "es";
-        const get = async (url: string) => {
-          // A public service may ask to slow down (429): wait as it says, then try again.
-          for (let attempt = 0; ; attempt++) {
-            const response = await fetch(url, {
-              headers: { "User-Agent": WIKIMEDIA_USER_AGENT, Accept: "application/json" },
-              signal: AbortSignal.timeout(20_000),
-            }).catch(() => {
-              throw new Error(data.source === "iconclass" ? "No se pudo conectar con Iconclass." : "No se pudo conectar con Wikidata.");
-            });
-            if (response.status === 429 && attempt < 3) {
-              const wait = Math.min(30, Number(response.headers.get("retry-after")) || 5 * (attempt + 1));
-              await new Promise((resolve) => setTimeout(resolve, wait * 1000));
-              continue;
-            }
-            if (!response.ok) throw new Error(`${AUTHORITY_SOURCES[data.source]}: HTTP ${response.status}`);
-            return response.json();
-          }
-        };
+        const language = await interfaceLanguage();
+        const get = (url: string) => wikimediaJson(url, data.source);
         if (data.source === "iconclass") {
           const notations = parseIconclassSearch(await get(iconclassSearchUrl(data.query)));
           // The texts, eight requests at a time.
@@ -747,6 +754,45 @@ app.whenReady().then(async () => {
         return parseWikidataEntities(await get(wikidataEntitiesUrl(ids, language)), ids, language)
           .filter((link) => fitsKind(link, data.kind))
           .slice(0, 6);
+      }
+      if (command === "heritageCandidates") {
+        // Only the names of the elements are sent, and only when the user asks.
+        const data = safe as { items: { optionId: string; label: string }[] };
+        const language = await interfaceLanguage();
+        const get = (url: string) => wikimediaJson(url, "wikidata");
+        // Searches first (four elements at a time), then what Wikidata says
+        // about every candidate, fifty at a time.
+        const found = new Map<string, string[]>();
+        const errors = new Map<string, string>();
+        for (let i = 0; i < data.items.length; i += 4)
+          await Promise.all(
+            data.items.slice(i, i + 4).map(async (item) => {
+              try {
+                const ids: string[] = [];
+                for (const query of heritageQuery(item.label).queries.slice(0, 2)) {
+                  ids.push(...parseWikidataSearch(await get(wikidataSearchUrl(query, language, 6))));
+                  if (ids.length >= 6) break;
+                }
+                found.set(item.optionId, [...new Set(ids)].slice(0, 8));
+              } catch (error) {
+                errors.set(item.optionId, error instanceof Error ? error.message : String(error));
+              }
+            }),
+          );
+        const all = [...new Set([...found.values()].flat())];
+        const links = new Map<string, AuthorityLink>();
+        for (let i = 0; i < all.length; i += 50) {
+          const ids = all.slice(i, i + 50);
+          for (const link of parseWikidataEntities(await get(wikidataEntitiesUrl(ids, language)), ids, language)) links.set(link.id, link);
+        }
+        return data.items.map((item) => ({
+          optionId: item.optionId,
+          candidates: rankCandidates(
+            item.label,
+            (found.get(item.optionId) ?? []).flatMap((id) => (links.has(id) ? [links.get(id)!] : [])),
+          ).slice(0, 4),
+          ...(errors.has(item.optionId) ? { error: errors.get(item.optionId) } : {}),
+        }));
       }
       if (command === "commonsNearby") {
         // Only the place's coordinates are sent, and only when the user asks.

@@ -16,6 +16,7 @@ import {
   History,
   Image,
   ImagePlus,
+  Landmark,
   Layers,
   Link,
   List,
@@ -72,14 +73,17 @@ export function ColumnTypeIcon({
   size = 13,
   className = "column-type-icon",
   ai = false,
+  heritage = false,
 }: {
   type: DatabaseColumnType;
   size?: number;
   className?: string;
   /** A selection the AI fills: its own icon with a small AI mark. */
   ai?: boolean;
+  /** A heritage property (a multi-select of identified elements). */
+  heritage?: boolean;
 }) {
-  const Icon = ICONS[type] ?? Equal;
+  const Icon = heritage ? Landmark : (ICONS[type] ?? Equal);
   if (!ai) return <Icon size={size} className={className} aria-hidden="true" />;
   return (
     <span className={className + " has-ai"} aria-hidden="true">
