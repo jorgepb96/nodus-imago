@@ -179,14 +179,35 @@ export function withSuperclasses(instances: string[] | undefined, above: Record<
   return [...new Set([...own, ...own.filter((q) => !WIKIDATA_TYPES[q]).flatMap((q) => above[q] ?? [])])].slice(0, 20);
 }
 
-/** The first instance with a known type, as group and type of the default scheme. */
-export function typeFromInstances(instances: string[] | null | undefined): { group: string; type: string } | null {
+/**
+ * Whether two typology groups can describe the same element: buildings of
+ * any kind among themselves, open spaces among themselves, works of art
+ * among themselves; a statue is both a monument and a work of art.
+ */
+export function compatibleGroups(a: string, b: string): boolean {
+  const family = (g: string) => (g === "urban" ? "place" : g === "artworks" ? "art" : "built");
+  if (a === b || family(a) === family(b)) return true;
+  return [a, b].includes("commemorative") && [a, b].includes("artworks");
+}
+
+/** Classes too general to say what an element is (any listed building is a «monument»). */
+const WEAK_CLASSES = new Set(["Q4989906", "Q41176", "Q1021645"]);
+
+/**
+ * The type of the most specific known class, as group and type of the
+ * default scheme; a general one («monument», «building») only when there is
+ * nothing better. `weak` tells which it was.
+ */
+export function typeFromInstances(instances: string[] | null | undefined): { group: string; type: string; weak?: boolean } | null {
+  let fallback: { group: string; type: string; weak: boolean } | null = null;
   for (const q of instances ?? []) {
     const type = WIKIDATA_TYPES[q];
     const group = type && groupOfType(DEFAULT_HERITAGE_SCHEME, type);
-    if (type && group) return { group, type };
+    if (!type || !group) continue;
+    if (!WEAK_CLASSES.has(q)) return { group, type };
+    fallback ??= { group, type, weak: true };
   }
-  return null;
+  return fallback;
 }
 
 // ── Typology from the name ───────────────────────────────────────────────────
@@ -556,6 +577,7 @@ export function rankCandidates(
   // element: «calle de la Catedral» is not the cathedral.
   const bare = hints.length && !/\s/.test(label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0].trim()) ? foldText(label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0]) : null;
   const names = queries.map(foldText).filter((n) => n !== bare);
+  const named = typeFromName(label);
   const folded = hints.map(foldText).filter((h) => h.length > 1);
   const seen = new Set<string>();
   return links
@@ -573,15 +595,25 @@ export function rankCandidates(
       const nearby = km !== null && km <= 30;
       const faraway = km !== null && km > 60;
       const hinted = !faraway && (nearby || !folded.length || folded.some((h) => about.includes(h)));
-      const typed = !!typeFromInstances(link.instances);
+      const kind = typeFromInstances(link.instances);
+      const typed = !!kind;
+      // What the name says it is must agree with what Wikidata says («Las Meninas -
+      // Velázquez» is a painting, not «plaza de las Meninas»).
+      const disagrees = !!named && !!kind && !kind.weak && !compatibleGroups(named.group, kind.group);
+      // Without the town named in its text, a namesake must be really close.
+      const close15 = km !== null && km <= 15;
       // A building, monument or work: by its class, or by what its description says.
       const heritage = typed || HERITAGE_WORDS.test(foldText(link.description ?? ""));
       let score = (exact ? 4 : close ? 2 : 0) + (hinted ? 3 : 0) + (nearby ? 3 : 0) + (typed ? 2 : 0) + (heritage ? 1 : 0) + (link.coordinates ? 1 : 0);
       if (faraway) score -= 6;
       if (link.kind === "person") score -= 6;
-      const confidence: HeritageCandidate["confidence"] =
-        link.kind === "person" || faraway
+      if (disagrees) score -= 5;
+      const textual = !folded.length || folded.some((h) => about.includes(h));
+      let confidence: HeritageCandidate["confidence"] =
+        link.kind === "person" || faraway || (disagrees && !(exact && hinted))
           ? "low"
+          : disagrees
+            ? "medium"
           : (exact || close) && hinted && heritage && (typed || !!link.coordinates)
             ? exact || nearby
               ? "high"
@@ -589,6 +621,7 @@ export function rankCandidates(
             : (exact || close || nearby) && hinted
               ? "medium"
               : "low";
+      if (confidence === "high" && !textual && !close15) confidence = "medium";
       return { link, confidence, score };
     })
     .sort((a, b) => b.score - a.score);
@@ -807,7 +840,7 @@ export function scoreOsm(
       // like its capital); otherwise the town must be part of the address.
       const inPlace = km === null && !!place && c.display.split(",").some((part) => foldText(part) === place);
       if (km !== null && km > 60) return [];
-      const agrees = !named || !c.group || c.group === named.group || (named.group === "religious" && c.type === "church");
+      const agrees = !named || !c.group || compatibleGroups(c.group, named.group);
       const kindKnown = !!named && !!c.group && agrees;
       let confidence: OsmCandidate["confidence"] =
         (exact || close) && (nearby || inPlace) ? (exact ? "high" : "medium") : exact || close ? "medium" : "low";
