@@ -305,3 +305,24 @@ test("statistics count elements, types or groups, and filters find types, parts,
     repo.updateColumn(columnId, undefined, { ...column.config, heritage: false });
     assert.ok(!filterOperators(repo.column(columnId)).includes("part_of"));
   }));
+
+test("a vision model's answer is read leniently and matched with the property's elements", async () => {
+  const { parseSuggestions, matchSuggestion, knownForRecord, heritageSuggestPrompt } = await import("../shared/heritage");
+  const raw = 'Here you go:\n[{"name":"Catedral de Villaverde","place":"Villaverde","confidence":"high"},"Puente Viejo",{"name":"catedral de villaverde"},{"x":1}]';
+  assert.deepEqual(parseSuggestions(raw), [
+    { name: "Catedral de Villaverde", place: "Villaverde", confidence: "high" },
+    { name: "Puente Viejo", place: null, confidence: "medium" },
+  ]);
+  assert.deepEqual(parseSuggestions("no JSON here"), []);
+  const options = [
+    { id: "a", label: "Catedral - Villaverde" },
+    { id: "b", label: "Puente Viejo - Villaverde" },
+    { id: "c", label: "Catedral - Otraparte" },
+  ];
+  assert.equal(matchSuggestion({ name: "Catedral de Villaverde", place: "Villaverde" }, options), "a");
+  assert.equal(matchSuggestion({ name: "Puente Viejo", place: null }, options), "b");
+  assert.equal(matchSuggestion({ name: "Catedral", place: null }, options), null);
+  assert.equal(matchSuggestion({ name: "Torre Nueva", place: "Villaverde" }, options), null);
+  assert.deepEqual(knownForRecord(options, "Vista de Villaverde desde el río"), ["Catedral - Villaverde", "Puente Viejo - Villaverde"]);
+  assert.match(heritageSuggestPrompt(["Catedral - Villaverde"], true), /detail cut out[\s\S]*Catedral - Villaverde[\s\S]*JSON array/);
+});

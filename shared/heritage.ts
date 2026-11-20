@@ -382,3 +382,89 @@ export function heritageCategories(
   }
   return [...out];
 }
+
+// ── Suggestions from a vision model ──────────────────────────────────────────
+
+export type HeritageSuggestion = {
+  name: string;
+  place: string | null;
+  confidence: "high" | "medium" | "low";
+  /** The element of the property it matches, when there is one. */
+  optionId: string | null;
+};
+
+/** The elements worth naming to the model: those of the places the record mentions. */
+export function knownForRecord(options: { id: string; label: string }[], recordText: string, limit = 200): string[] {
+  const text = foldText(recordText);
+  return options
+    .filter((o) => {
+      const hints = heritageQuery(o.label).hints;
+      const place = hints[hints.length - 1];
+      return !!place && foldText(place).length > 2 && text.includes(foldText(place));
+    })
+    .map((o) => o.label)
+    .slice(0, limit);
+}
+
+/** What the model is asked about the whole image or one zone of it. */
+export function heritageSuggestPrompt(known: string[], zone: boolean): string {
+  return [
+    zone
+      ? "This image is a detail cut out of a larger photograph."
+      : "This is a photograph, possibly historical.",
+    "Identify the specific, named heritage elements that are visible: buildings, monuments, churches, castles, bridges, fountains, statues, squares, streets, landscapes or works of art (paintings, sculptures, altarpieces).",
+    "Name each one as it is commonly known, with the town or city where it is.",
+    known.length
+      ? `When one of these elements is visible, use its exact name from this list: ${JSON.stringify(known)}`
+      : "",
+    "Use the record data below only as a hint about where the photograph was taken.",
+    'Return ONLY a JSON array, at most 6 items, each {"name": string, "place": string or null, "confidence": "high" | "medium" | "low"}.',
+    "Return [] if no specific named element can be recognised. Do not list generic things (people, cars, trees, sky) and do not explain.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** The model's answer, read leniently (a JSON array, possibly inside other text). */
+export function parseSuggestions(raw: string): Omit<HeritageSuggestion, "optionId">[] {
+  const start = raw.indexOf("["),
+    end = raw.lastIndexOf("]");
+  if (start < 0 || end <= start) return [];
+  let items: unknown;
+  try {
+    items = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(items)) return [];
+  const seen = new Set<string>();
+  return items.flatMap((item) => {
+    const value = typeof item === "string" ? { name: item } : (item as Record<string, unknown>);
+    const name = typeof value?.name === "string" ? value.name.trim().slice(0, 200) : "";
+    if (!name || seen.has(foldText(name))) return [];
+    seen.add(foldText(name));
+    const place = typeof value.place === "string" && value.place.trim() ? value.place.trim().slice(0, 120) : null;
+    const confidence = ["high", "medium", "low"].includes(value.confidence as string) ? (value.confidence as HeritageSuggestion["confidence"]) : "medium";
+    return [{ name, place, confidence }];
+  }).slice(0, 6);
+}
+
+/** The element of the property a suggestion names, if any. */
+export function matchSuggestion(
+  suggestion: { name: string; place: string | null },
+  options: { id: string; label: string }[],
+): string | null {
+  const name = foldText(suggestion.name),
+    place = suggestion.place ? foldText(suggestion.place) : null;
+  const read = options.map((o) => {
+    const parts = o.label.split(/\s+[-–—]\s+/).map(foldText);
+    return { id: o.id, full: foldText(o.label), name: parts[0], place: parts.length > 1 ? parts[parts.length - 1] : null };
+  });
+  const full = place ? `${name} - ${place}` : name;
+  const exact = read.find((o) => o.full === full || o.full === name);
+  if (exact) return exact.id;
+  // «Catedral de Sevilla» and «Catedral - Sevilla» are the same element.
+  const sameName = read.filter((o) => o.name === name || (o.place && `${o.name} de ${o.place}` === name));
+  const placed = sameName.filter((o) => !place || !o.place || o.place === place || name.includes(o.place));
+  return placed.length === 1 ? placed[0].id : sameName.length === 1 && !place ? sameName[0].id : null;
+}

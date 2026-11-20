@@ -3,7 +3,7 @@
 // rectangle or not at all; choosing the element of a new mark; and marks of
 // elements no longer in the record (hidden, kept until deleted).
 import { useMemo, useState } from "react";
-import { Crosshair, Plus, Square, Trash2, X } from "lucide-react";
+import { Crosshair, Plus, ScanSearch, Sparkles, Square, Trash2, X } from "lucide-react";
 import type { DatabaseColumn } from "../../shared/databases";
 import type { ImageAnnotation } from "../../shared/imago";
 import { foldText, heritageScheme, typology } from "../../shared/heritage";
@@ -24,6 +24,8 @@ export function HeritageMarksPanel({
   onCancel,
   onFocus,
   onDelete,
+  onSuggest,
+  onPropagate,
 }: {
   column: DatabaseColumn;
   /** Elements in the record's cell. */
@@ -38,6 +40,10 @@ export function HeritageMarksPanel({
   onCancel: () => void;
   onFocus: (mark: ImageAnnotation) => void;
   onDelete: (mark: ImageAnnotation) => void;
+  /** Opens the AI suggestions for this photograph. */
+  onSuggest: () => void;
+  /** Looks for this element in the other photographs. */
+  onPropagate: (optionId: string) => void;
 }) {
   const t = useT(),
     language = useLanguage();
@@ -57,6 +63,9 @@ export function HeritageMarksPanel({
     <section className="heritage-marks" data-testid="heritage-marks">
       <h2>
         {t("Patrimonio en esta foto")} <span>{inCell.length}</span>
+        <button type="button" className="heritage-suggest-open" onClick={onSuggest} data-testid="heritage-suggest-open">
+          <Sparkles size={13} /> {t("Sugerir con IA")}
+        </button>
       </h2>
       {draft && (
         <div className="heritage-chooser" data-testid="heritage-chooser">
@@ -112,6 +121,15 @@ export function HeritageMarksPanel({
                 <HeritageIcon name={iconOf(id)} size={14} />
                 {labels.get(id) ?? id}
               </span>
+              <button
+                type="button"
+                className="heritage-propagate-open"
+                aria-label={t("Buscar en otras fotos")}
+                data-tooltip={t("Buscar este elemento en otras fotos")}
+                onClick={() => onPropagate(id)}
+              >
+                <ScanSearch size={12} />
+              </button>
               {own.length ? (
                 own.map((m) => (
                   <span key={m.id} className={`heritage-mark-chip ${selected === m.id ? "is-selected" : ""}`}>

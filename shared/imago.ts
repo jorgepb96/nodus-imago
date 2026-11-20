@@ -524,6 +524,26 @@ export type Commands = {
     result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
   };
   heritageAddElement: { input: { columnId: string; label: string; link: import("./authority").AuthorityLink | null }; result: string };
+  /** A vision model's suggestions for the whole image and/or zones of it. */
+  heritageSuggest: {
+    input: {
+      assetId: string;
+      columnId: string;
+      whole: boolean;
+      zones: { x: number; y: number; w: number; h: number }[];
+      choice: import("./aiConfig").ModelChoice;
+    };
+    result: {
+      targets: { zone: { x: number; y: number; w: number; h: number } | null; suggestions: import("./heritage").HeritageSuggestion[] }[];
+      known: number;
+    };
+  };
+  /** Which of these records already show the element. */
+  heritageRowsWith: { input: { columnId: string; optionId: string; rowIds: string[] }; result: string[] };
+  heritageAddToRows: {
+    input: { columnId: string; optionId: string; items: { rowId: string; assetId?: string; box?: { x: number; y: number; w: number; h: number } | null }[] };
+    result: number;
+  };
   heritageLinkBatches: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null }[] };
   heritageRevertBatch: { input: { id: string }; result: number };
   valueClusters: { input: { columnId: string }; result: import("./cleanup").ValueCluster[] };

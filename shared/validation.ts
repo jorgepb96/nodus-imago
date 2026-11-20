@@ -558,6 +558,23 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   heritageAddElement: z.object({ columnId: id, label: z.string().trim().min(1).max(500), link: authorityLink.nullable() }).strict(),
+  heritageSuggest: z
+    .object({
+      assetId: id,
+      columnId: id,
+      whole: z.boolean(),
+      zones: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }).strict()).max(6),
+      choice: z.object({ provider: z.string().min(1).max(40), model: z.string().min(1).max(300) }).strict(),
+    })
+    .strict(),
+  heritageRowsWith: z.object({ columnId: id, optionId: id, rowIds: z.array(id).max(500) }).strict(),
+  heritageAddToRows: z
+    .object({
+      columnId: id,
+      optionId: id,
+      items: z.array(z.object({ rowId: id, assetId: id.optional(), box: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }).strict().nullable().optional() }).strict()).min(1).max(500),
+    })
+    .strict(),
   heritageLinkBatches: z.object({ columnId: id }).strict(),
   heritageRevertBatch: z.object({ id }).strict(),
   valueClusters: z.object({ columnId: id }).strict(),

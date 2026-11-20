@@ -39,6 +39,9 @@ import { VisualMaps } from "./db/visualMap";
 import { ValueCleanup } from "./db/cleanup";
 import { Authorities } from "./db/authorities";
 import { Heritage } from "./db/heritage";
+import { decodeMultiSelect, encodeMultiSelect } from "../shared/databases";
+import { buildAiCellPrompt, buildAiRowContext } from "../shared/databaseAi";
+import { heritageSuggestPrompt, knownForRecord, matchSuggestion, parseSuggestions } from "../shared/heritage";
 import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
@@ -62,7 +65,7 @@ const CONTENT_WRITES = new Set([
   "undo", "redo", "addColumn", "updateColumn", "deleteColumn", "saveOptions", "deleteImage",
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
-  "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
+  "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -945,6 +948,55 @@ export class Service {
         const created = this.heritage.addElement(input.columnId, input.label, input.link);
         this.changed();
         return created;
+      }
+      case "heritageSuggest": {
+        // A vision model names the elements it sees in the whole image and
+        // in each zone; each name is matched with the property's elements.
+        const column = this.heritage.heritageColumn(input.columnId);
+        const asset = this.repo.asset(input.assetId) as { row_id: string };
+        const row = this.repo.getRow(asset.row_id);
+        if (row.databaseId !== column.databaseId) throw new Error("Elige una propiedad de patrimonio de esta base de datos.");
+        const language = this.repo.getSettings().language;
+        const context = buildAiRowContext(this.repo.detail(row.databaseId).columns, row, { excludeColumnId: column.id, language });
+        const known = knownForRecord(column.options, `${row.title} ${context}`);
+        const targets: ({ x: number; y: number; w: number; h: number } | null)[] = [...(input.whole ? [null] : []), ...input.zones];
+        if (!targets.length) throw new Error("Elige la imagen completa o al menos una zona.");
+        const controller = new AbortController();
+        const results = [];
+        for (const zone of targets) {
+          const prompt = buildAiCellPrompt(heritageSuggestPrompt(known, !!zone), context, language);
+          const raw = await this.engine.askImage(input.choice, input.assetId, zone, prompt, controller.signal);
+          results.push({ zone, suggestions: parseSuggestions(raw).map((s) => ({ ...s, optionId: matchSuggestion(s, column.options) })) });
+        }
+        return { targets: results, known: known.length };
+      }
+      case "heritageRowsWith": {
+        const column = this.heritage.heritageColumn(input.columnId);
+        const cell = this.repo.db.prepare("SELECT value_text v FROM db_cells WHERE row_id=? AND column_id=?");
+        return input.rowIds.filter((rowId: string) =>
+          decodeMultiSelect((cell.get(rowId, column.id) as { v: string | null } | undefined)?.v ?? null).includes(input.optionId),
+        );
+      }
+      case "heritageAddToRows": {
+        // One element added to many records (and, where a zone is given, marked
+        // there), as one «Deshacer» batch for the cells.
+        const column = this.heritage.heritageColumn(input.columnId);
+        if (!column.options.some((o) => o.id === input.optionId)) throw new Error("Identificador de opción ajeno a la propiedad.");
+        const db = this.repo.db;
+        let added = 0;
+        db.transaction(() => {
+          const before = (db.prepare("SELECT coalesce(max(id),0) id FROM history").get() as { id: number }).id;
+          for (const item of input.items) {
+            if (item.assetId && item.box)
+              this.annotations.save({ assetId: item.assetId, ...item.box, note: "", tags: [], optionId: input.optionId });
+            const ids = decodeMultiSelect(this.repo.getRow(item.rowId).cells[column.id] ?? null);
+            if (!ids.includes(input.optionId)) this.repo.setCell(item.rowId, column.id, encodeMultiSelect([...ids, input.optionId]));
+            added++;
+          }
+          db.prepare("UPDATE history SET batch_id=? WHERE id>?").run(uuid(), before);
+        })();
+        this.changed();
+        return added;
       }
       case "heritageLinkBatches":
         return this.heritage.batches(input.columnId);

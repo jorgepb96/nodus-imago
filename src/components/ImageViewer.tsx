@@ -33,6 +33,8 @@ import { heritageScheme, isHeritageColumn, typology } from "../../shared/heritag
 import { useHeritage } from "../heritageStore";
 import { HeritageIcon } from "./HeritageIcon";
 import { HeritageMarksPanel, type MarkDraft } from "./HeritageMarksPanel";
+import { HeritageSuggestPanel } from "./HeritageSuggestPanel";
+import { HeritagePropagatePanel } from "./HeritagePropagatePanel";
 
 type View = { scale: number; x: number; y: number };
 type Draft = { id?: string; x: number; y: number; w: number; h: number; note: string; tags: string[] };
@@ -111,6 +113,10 @@ export function ImageViewer({
   /** Marking heritage elements: with a point or a rectangle. */
   const [marking, setMarking] = useState<"point" | "rect" | null>(null);
   const [markDraft, setMarkDraft] = useState<MarkDraft | null>(null);
+  /** The heritage side panel: the photo's elements, AI suggestions, or spreading one element. */
+  const [heritagePanel, setHeritagePanel] = useState<null | "suggest" | { optionId: string }>(null);
+  const [aiZones, setAiZones] = useState<{ x: number; y: number; w: number; h: number }[]>([]);
+  const [drawingZone, setDrawingZone] = useState(false);
   const heritageColumns = (columns ?? []).filter((c) => isHeritageColumn(c));
   const [heritageId, setHeritageId] = useState<string | null>(null);
   const heritageColumn = heritageColumns.find((c) => c.id === heritageId) ?? heritageColumns[0] ?? null;
@@ -243,6 +249,12 @@ export function ImageViewer({
       return;
     }
     if ((event.target as HTMLElement).closest(".viewer-region, .viewer-mark")) return;
+    if (drawingZone) {
+      const p = point(event);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setDrawing({ x0: p.x, y0: p.y, x: p.x, y: p.y });
+      return;
+    }
     if (marking === "point") {
       const p = point(event);
       setMarkDraft({ kind: "point", x: p.x, y: p.y, w: 0, h: 0 });
@@ -281,7 +293,8 @@ export function ImageViewer({
       h = Math.abs(drawing.y - drawing.y0);
     setDrawing(null);
     if (w < 0.01 || h < 0.01) return;
-    if (marking === "rect") setMarkDraft({ kind: "rect", x, y, w, h });
+    if (drawingZone) setAiZones((all) => [...all, { x, y, w, h }].slice(0, 6));
+    else if (marking === "rect") setMarkDraft({ kind: "rect", x, y, w, h });
     else setDraft({ x, y, w, h, note: "", tags: [] });
   };
   const save = async () => {
@@ -622,7 +635,7 @@ export function ImageViewer({
         <div
           ref={stage}
           data-tour="viewer-stage"
-          className={`viewer-stage ${annotating || marking ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
+          className={`viewer-stage ${annotating || marking || drawingZone ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
           onWheel={(event) => {
             const r = stage.current!.getBoundingClientRect();
             zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - r.left, event.clientY - r.top);
@@ -731,6 +744,12 @@ export function ImageViewer({
           )}
           {markDraft?.kind === "rect" && <div className="viewer-region is-drawing is-heritage" style={box(markDraft)} />}
           {pending && <div className="viewer-region is-drawing" style={box(pending)} />}
+          {heritagePanel === "suggest" &&
+            aiZones.map((z, i) => (
+              <div key={i} className="viewer-ai-zone" style={box(z)}>
+                <b>{i + 1}</b>
+              </div>
+            ))}
           {annotating && !notes.length && !pending && (
             <p className="viewer-hint">{t("Arrastra sobre la imagen para marcar la primera zona.")}</p>
           )}
@@ -758,8 +777,47 @@ export function ImageViewer({
             />
           ) : (
           <>
-          {heritageColumn && (
+          {heritageColumn && image && heritagePanel === "suggest" ? (
+            <HeritageSuggestPanel
+              column={heritageColumn}
+              rowId={row.id}
+              assetId={image.id}
+              inCell={inCell}
+              zones={aiZones}
+              drawing={drawingZone}
+              onDraw={(on) => {
+                setAnnotating(false);
+                setMarking(null);
+                setDrawingZone(on);
+              }}
+              onRemoveZone={(i) => setAiZones((all) => all.filter((_, j) => j !== i))}
+              onBack={() => {
+                setHeritagePanel(null);
+                setDrawingZone(false);
+                setAiZones([]);
+              }}
+              onAdded={async () => {
+                await load();
+                onChanged();
+              }}
+            />
+          ) : heritageColumn && image && heritagePanel && typeof heritagePanel === "object" ? (
+            <HeritagePropagatePanel
+              column={heritageColumn}
+              optionId={heritagePanel.optionId}
+              assetId={image.id}
+              mark={heritageMarks.find((m) => m.optionId === heritagePanel.optionId && m.kind !== "point") ?? null}
+              databaseId={row.databaseId}
+              onBack={() => setHeritagePanel(null)}
+              onAdded={() => onChanged()}
+            />
+          ) : heritageColumn && (
             <HeritageMarksPanel
+              onSuggest={() => {
+                setMarkDraft(null);
+                setHeritagePanel("suggest");
+              }}
+              onPropagate={(optionId) => setHeritagePanel({ optionId })}
               column={heritageColumn}
               inCell={inCell}
               marks={heritageMarks}

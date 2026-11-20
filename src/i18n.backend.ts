@@ -330,6 +330,7 @@ export const backendEn: Record<string, string> = {
   "Tipología desconocida.": "Unknown typology.",
   "Un elemento no puede formar parte de sí mismo ni de una de sus partes.": "An element cannot be part of itself or of one of its parts.",
   "Vinculación no encontrada.": "Linking not found.",
+  "Elige la imagen completa o al menos una zona.": "Choose the whole image or at least one zone.",
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */
