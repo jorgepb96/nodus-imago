@@ -1,6 +1,6 @@
 # Propiedad «Patrimonio»: diseño
 
-Fecha: 2026-11-20 · Estado: borrador para aprobación
+Fecha: 2026-11-20 · Estado: implementado (v0.4.0). Las secciones 11–14 recogen lo añadido durante la implementación.
 
 ## Intención
 
@@ -27,8 +27,8 @@ En cada foto un elemento puede **marcarse con un punto**, **con un rectángulo**
 
 ## No objetivos (esta versión)
 
-- Catálogos descargados (MonumentosES, OpenStreetMap/Overpass, catálogos autonómicos). Quedan para una versión posterior.
-- Detección automática de monumentos por IA en las fotos.
+- Catálogos descargados (MonumentosES, Overpass, catálogos autonómicos). Quedan para una versión posterior. (OpenStreetMap sí se consulta por Nominatim: ver sección 11.)
+- Detección automática de monumentos por IA en lote sobre muchas fotos. (La sugerencia con IA foto a foto sí está: ver sección 13.)
 - Calcular la importancia visual (proporción de la foto). El rectángulo guarda su tamaño para poder hacerlo después, pero no se calcula ni se muestra.
 - Polígonos.
 - Icono personalizado por elemento (el icono viene del tipo o del grupo).
@@ -79,7 +79,8 @@ heritage_elements(
   parent_option_id TEXT,               -- «forma parte de», misma columna
   group_key TEXT, type_key TEXT,       -- tipología (claves del esquema)
   latitude REAL, longitude REAL,
-  coord_source TEXT,                   -- 'wikidata' | 'manual'
+  coord_source TEXT,                   -- 'wikidata' | 'osm' | 'town' | 'manual'
+  osm_ref TEXT,                        -- objeto de OpenStreetMap, si la posición viene de ahí
   updated_at TEXT NOT NULL
 )
 ```
@@ -118,7 +119,10 @@ heritage_elements(
   - Pide candidatos a Wikidata, trae de los mejores P625, P31, P361 (forma parte de) y P131 (ubicado en) para desempatar por lugar.
   - Propone un candidato con una confianza (alta / media / baja), sin aplicar nada.
 - **Revisión:** lista con elemento, candidato, descripción, lugar y mini mapa; aceptar, rechazar o elegir otro candidato; aceptar todos los de confianza alta. Al aplicar: enlace + coordenadas + tipo sugerido + padre sugerido (si P361 apunta a otro elemento ya enlazado de la misma propiedad). Cada lote aplicado queda registrado y se puede **revertir entero** con «Revertir esta vinculación» (devuelve enlaces, coordenadas, tipologías y padres a como estaban). No se integra en el Deshacer/Rehacer global, que hoy solo cubre celdas y opciones.
-- Se ejecuta como trabajo de la cola existente, cancelable, con progreso, respetando el ritmo de Wikimedia. Solo arranca por acción explícita.
+- Se ejecuta como trabajo de la cola existente, cancelable, con progreso, respetando el ritmo de Wikimedia. Solo arranca por acción explícita. Detalle en la sección 12.
+- **Reglas de confianza** (`rankCandidates`, `shared/heritage.ts`): nombre exacto o muy cercano; los sustantivos genéricos sueltos («catedral», «plaza») no bastan; se excluyen categorías, listas, libros, personas, barcos, hoteles, empresas, organizaciones y estaciones de metro; distancia a la localidad del elemento (lejos → baja); «alta» solo si la etiqueta nombra una localidad, el candidato es el conjunto y no una parte (torre, puerta, capilla…), y está a menos de 15 km de esa localidad o su descripción la nombra. Si el tipo del candidato contradice el nombre (un edificio frente a una calle), la confianza baja.
+- **Localidades** (`resolveTowns`): las localidades de todas las etiquetas se leen juntas con el nomenclátor incluido; el país mayoritario desempata homónimos y los barrios de una ciudad más frecuente no se toman por pueblos. Las que el nomenclátor no sitúa se buscan en OpenStreetMap (una petición por segundo, en caché).
+- **Tipología por el nombre** (`typeFromName`): si la etiqueta dice «Castillo de…», «Iglesia de…», «Retablo…» o nombra a un pintor o escultor conocido, ese tipo manda sobre el de Wikidata; las clases demasiado generales de Wikidata (monumento, edificio) no cuentan. Así todo elemento identificable queda contado en su tipología, esté o no en Wikidata. Todos los tipos religiosos usan el icono de iglesia.
 
 ### 5. Marcas en la foto
 
@@ -162,6 +166,28 @@ heritage_elements(
 
 - CSV/exportación: la propiedad sale como la selección múltiple; las exportaciones que ya incluyen identificadores de autoridad incluyen el QID. Las marcas se exportan en la exportación W3C Web Annotation existente con el elemento como cuerpo (QID si lo hay).
 
+### 11. OpenStreetMap y localidad
+
+- Segundo paso tras Wikidata: los elementos sin coordenadas exactas se buscan en OpenStreetMap (Nominatim, una petición por segundo). Se descartan paradas de transporte y obras de arte; el tipo debe concordar con el del elemento y la distancia a su localidad pesa más que los nombres de provincia.
+- Último recurso: situar el elemento en el centro de su localidad, como **posición aproximada** (`coord_source = 'town'`). El mapa la dibuja con un marcador discontinuo y la ficha lo indica.
+
+### 12. Identificación en segundo plano
+
+- Los tres pasos (Wikidata, OpenStreetMap, localidad) son trabajos `heritage` de la cola de tareas, con progreso, Pausar, Reanudar y Cancelar.
+- Cada propuesta se guarda al encontrarla (`heritage_proposals`); al reanudar solo se buscan los elementos que faltan.
+- Pausa automática: un fallo de red o un servicio que no responde pausa el trabajo en el elemento donde iba (`HeritageNetworkError`); al abrir Imago, los trabajos que estaban en marcha aparecen pausados, listos para reanudar.
+- Revisión en la pestaña «Identificar y situar»: filtro por confianza, aceptar/quitar las visibles, descartar las no aceptadas y aplicar las aceptadas como un lote reversible.
+
+### 13. Sugerencias con IA y búsqueda por parecido
+
+- En el visor, «Sugerir con IA» envía la imagen entera, una o varias zonas dibujadas, o ambas, al modelo de visión elegido en Ajustes (local o de proveedor; se avisa cuando la imagen sale del equipo). Los nombres que ya existen en la propiedad se emparejan con ellos; los nuevos se buscan en Wikidata. Se añaden uno, varios o todos, y cada zona puede quedar como marca del elemento. Lo que el modelo duda no se marca de antemano.
+- «Buscar este elemento en otras fotos» usa la búsqueda por parecido local sobre la marca para proponer otras fotos donde aparece, y añadirlo a las elegidas.
+
+### 14. Estadísticas, filtros activos y cronología
+
+- Todas las estadísticas se calculan con los filtros activos de la base de datos, y el resultado muestra qué filtros se aplicaron.
+- La cronología lee cualquier forma de fecha histórica y respeta la unidad de los datos: un periodo «1939–1949» se dibuja como tal, sin redondear a décadas; las décadas solo se usan para series largas de años sueltos o si se eligen.
+
 ## Pruebas
 
 - Tests automáticos con datos sintéticos: conversión ida y vuelta sin pérdidas, ciclos en jerarquía, recuentos con `includeParts` y por nivel, fuente de mapa y respaldo, filtros nuevos, marcas punto/rectángulo, migración del esquema de `image_annotations`.
@@ -178,7 +204,7 @@ heritage_elements(
 
 ## Decisiones propuestas por Claude (corregibles)
 
-- Primera versión solo con Wikidata + alta manual; MonumentosES/OSM después.
+- Primera versión con Wikidata, OpenStreetMap (Nominatim) y alta manual; MonumentosES después.
 - Vinculación en lote con revisión obligatoria (nunca se aplica sin revisar).
 - Con fuente Patrimonio, la foto aparece en cada uno de sus elementos y, si no tiene ninguno situado, cae a su ubicación.
 - Iconos por tipo/grupo, no por elemento.
@@ -189,7 +215,12 @@ heritage_elements(
 - La red puede salir del worker de la cola (nunca del renderer).
 - El rectángulo guarda tamaño para medir importancia visual en el futuro, sin calcularla ahora.
 
-## Queda para el constructor
+## Queda para versiones posteriores
+
+- Sugerencias con IA en lote sobre muchas fotos.
+- Catálogos descargados (MonumentosES, catálogos autonómicos).
+
+## Queda para el constructor (resuelto en la implementación)
 
 - Nombres exactos de tablas, columnas, IPC y componentes; migración de esquema.
 - Lista completa de correspondencias P31 → tipo.
