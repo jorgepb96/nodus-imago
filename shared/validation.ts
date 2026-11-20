@@ -132,8 +132,11 @@ export const searchSchema = z
   .strict();
 const chart = z.enum(["bar", "column", "line", "heatmap", "table"]).optional();
 const limit = z.number().int().min(2).max(60).optional();
+/** Heritage properties: count elements, their types or their groups; parts in their wholes. */
+const heritageLevel = z.enum(["element", "type", "group"]).optional();
+const includeParts = z.boolean().optional();
 export const statSpec = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart }).strict(),
+  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart, heritageLevel, includeParts }).strict(),
   z
     .object({
       kind: z.literal("crosstab"),
@@ -142,9 +145,11 @@ export const statSpec = z.discriminatedUnion("kind", [
       limit,
       measure: z.enum(["count", "row", "residual"]).optional(),
       chart,
+      heritageLevel,
+      includeParts,
     })
     .strict(),
-  z.object({ kind: z.literal("cooccurrence"), columnId: id, limit, chart }).strict(),
+  z.object({ kind: z.literal("cooccurrence"), columnId: id, limit, chart, heritageLevel, includeParts }).strict(),
   z
     .object({
       kind: z.literal("trend"),
@@ -153,6 +158,8 @@ export const statSpec = z.discriminatedUnion("kind", [
       bucket: z.enum(["year", "decade"]).optional(),
       limit,
       chart,
+      heritageLevel,
+      includeParts,
     })
     .strict(),
   z

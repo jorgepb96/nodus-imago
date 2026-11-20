@@ -133,7 +133,14 @@ export type PropertyFilterOp =
   | "unchecked"
   | "relative_date"
   | "has_coordinates"
-  | "no_coordinates";
+  | "no_coordinates"
+  /** Heritage properties: elements of these types («grupo/tipo») or groups,
+   * parts of these elements, marked on the photo, not linked to Wikidata. */
+  | "heritage_type"
+  | "heritage_group"
+  | "part_of"
+  | "heritage_marked"
+  | "heritage_unlinked";
 export type PropertyFilterGroup = {
   id: string;
   logic: "and" | "or";

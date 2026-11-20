@@ -7,7 +7,9 @@ import { decodeCheckbox, decodeMultiSelect, type DatabaseColumn } from "./databa
 import { decodeDatabaseDate } from "./databaseProperties";
 
 export type StatChart = "bar" | "column" | "line" | "heatmap" | "table";
-export type StatSpec =
+/** Heritage properties: count elements, their types or their groups; parts in their wholes. */
+export type HeritageStatOptions = { heritageLevel?: "element" | "type" | "group"; includeParts?: boolean };
+export type StatSpec = (
   | { kind: "frequency"; columnId: string; limit?: number; chart?: StatChart }
   | {
       kind: "crosstab";
@@ -27,7 +29,9 @@ export type StatSpec =
       limit?: number;
       chart?: StatChart;
     }
-  | { kind: "numeric"; columnId: string; bins?: number; chart?: StatChart };
+  | { kind: "numeric"; columnId: string; bins?: number; chart?: StatChart }
+) &
+  HeritageStatOptions;
 export type SavedStatistic = {
   id: string;
   databaseId: string;

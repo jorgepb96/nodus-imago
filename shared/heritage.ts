@@ -289,3 +289,33 @@ export function rankCandidates(label: string, links: AuthorityLink[]): HeritageC
     })
     .sort((a, b) => b.score - a.score);
 }
+
+// ── Statistics ───────────────────────────────────────────────────────────────
+
+/**
+ * The categories a record falls in for a heritage property: its elements
+ * (and, with their parts, every whole above them), or the types or groups of
+ * its elements, each once.
+ */
+export function heritageCategories(
+  ids: string[],
+  labels: Map<string, string>,
+  byId: Record<string, HeritageElement | undefined>,
+  scheme: HeritageScheme,
+  level: "element" | "type" | "group" = "element",
+  includeParts = false,
+): string[] {
+  const out = new Set<string>();
+  for (const id of ids) {
+    if (!labels.has(id)) continue;
+    if (level === "element") {
+      out.add(labels.get(id)!);
+      if (includeParts) for (const whole of ancestors(id, byId)) if (labels.has(whole)) out.add(labels.get(whole)!);
+      continue;
+    }
+    const e = byId[id];
+    const info = typology(scheme, e?.group ?? null, e?.type ?? null);
+    out.add(level === "group" ? (info?.group ?? "Sin tipología") : (info?.type ?? (info ? `${info.group} (sin tipo)` : "Sin tipología")));
+  }
+  return [...out];
+}

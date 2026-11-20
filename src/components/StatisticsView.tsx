@@ -1,6 +1,7 @@
 // Statistics view: build a statistic over the records the view selects
 // (filters and search box), see it as a chart with its figures and test,
 // and save it with the database to come back to it.
+import { isHeritageColumn } from "../../shared/heritage";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChartColumn,
@@ -420,6 +421,36 @@ export function StatisticsView({
               )}
               {spec.kind === "numeric" &&
                 columnSelect(t("Propiedad numérica"), spec.columnId, columns.filter((c) => c.type === "number"), (id) => setSpec({ columnId: id }))}
+              {spec.kind !== "numeric" &&
+                [
+                  spec.kind === "crosstab" ? spec.rowColumnId : null,
+                  spec.kind === "crosstab" ? spec.colColumnId : null,
+                  spec.kind === "trend" ? spec.seriesColumnId : null,
+                  "columnId" in spec ? spec.columnId : null,
+                ].some((id) => id && columns.some((c) => c.id === id && isHeritageColumn(c))) && (
+                  <div className="heritage-stat-options" data-testid="heritage-stat-options">
+                    <span className="option-menu-label">{t("Patrimonio")}</span>
+                    <div className="segmented" role="group" aria-label={t("Contar por")}>
+                      {(["element", "type", "group"] as const).map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          aria-pressed={(spec.heritageLevel ?? "element") === level}
+                          className={(spec.heritageLevel ?? "element") === level ? "active" : ""}
+                          onClick={() => setSpec({ heritageLevel: level, ...(level !== "element" ? { includeParts: false } : {}) })}
+                        >
+                          {t(level === "element" ? "Elemento" : level === "type" ? "Tipo" : "Grupo")}
+                        </button>
+                      ))}
+                    </div>
+                    {(spec.heritageLevel ?? "element") === "element" && (
+                      <label className="check-label">
+                        <input type="checkbox" checked={!!spec.includeParts} onChange={(e) => setSpec({ includeParts: e.target.checked })} />
+                        {t("Incluir sus partes")}
+                      </label>
+                    )}
+                  </div>
+                )}
             </div>
           )}
         </div>

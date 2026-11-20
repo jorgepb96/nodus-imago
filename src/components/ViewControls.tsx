@@ -1,3 +1,4 @@
+import { heritageScheme, isHeritageColumn } from "../../shared/heritage";
 import {
   useEffect,
   useRef,
@@ -455,6 +456,35 @@ function Operand({
         onChange={(values) => onChange(values[0] ?? "")}
       />
     );
+  // Heritage conditions choose types, groups or elements of the property.
+  if (["heritage_type", "heritage_group", "part_of"].includes(filter.op) && isHeritageColumn(column)) {
+    const values = Array.isArray(filter.value) ? filter.value : filter.value ? [filter.value] : [];
+    const scheme = heritageScheme(column.config);
+    const needle = query.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    const items: ChoiceItem[] = (
+      filter.op === "heritage_group"
+        ? scheme.groups.map((g) => ({ value: g.key, label: t(g.label) }))
+        : filter.op === "heritage_type"
+          ? scheme.groups.flatMap((g) => g.types.map((x) => ({ value: `${g.key}/${x.key}`, label: t(x.label), description: t(g.label) })))
+          : column.options.map((o) => ({ value: o.id, label: o.label, color: o.color }))
+    ).filter((item) => item.label.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase().includes(needle));
+    return (
+      <div className="criteria-operand">
+        <ChoiceChecklist
+          items={items}
+          selected={[]}
+          values={values}
+          onChange={onChange}
+          query={query}
+          onQueryChange={setQuery}
+          loading={false}
+          more={false}
+          onMore={() => {}}
+          custom={false}
+        />
+      </div>
+    );
+  }
   if (choiceMode) {
     const values = Array.isArray(filter.value)
       ? filter.value
