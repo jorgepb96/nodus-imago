@@ -19,20 +19,11 @@ export type ColumnPrefs = {
   statistic?: string | null;
   /** The view the database opens in, chosen with «Destacar» (null: Table). */
   defaultView?: DatabaseViewId | null;
+  /** Views whose tab is hidden: built-in ids and «saved:<id>» for saved views. */
+  hiddenViews?: string[];
 };
-/** The views of a database, in tab order. */
-export const DATABASE_VIEWS = [
-  "table",
-  "gallery",
-  "map",
-  "tree",
-  "timeline",
-  "stats",
-  "variants",
-  "network",
-  "visualmap",
-] as const;
-export type DatabaseViewId = (typeof DATABASE_VIEWS)[number];
+import { DATABASE_VIEWS, type DatabaseViewId } from "../shared/savedViews";
+export { DATABASE_VIEWS, type DatabaseViewId };
 const isView = (value: unknown): value is DatabaseViewId =>
   (DATABASE_VIEWS as readonly unknown[]).includes(value);
 export const EMPTY_PREFS: ColumnPrefs = {
@@ -60,6 +51,7 @@ export function readColumnPrefs(databaseId: string): ColumnPrefs {
         timelineBucket: parsed.timelineBucket ?? "auto",
         statistic: parsed.statistic ?? null,
         defaultView: isView(parsed.defaultView) ? parsed.defaultView : null,
+        hiddenViews: Array.isArray(parsed.hiddenViews) ? parsed.hiddenViews.filter((v): v is string => typeof v === "string").slice(0, 200) : [],
       };
     }
     // Widths saved before the other preferences existed.

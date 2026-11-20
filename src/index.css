@@ -8220,3 +8220,36 @@ tr:hover .ai-cell-button,
 .heritage-propagate-results { display: flex !important; flex-direction: column; gap: 6px; }
 .heritage-propagate-results li label .detail-thumb { flex: none; width: 72px; }
 .heritage-propagate-results .detail-meta strong { white-space: normal; }
+
+/* Views: hidden tabs, saved views and the actions beside the record count. */
+.view-tabs > button[hidden] {
+  display: none;
+}
+.view-tabs > .saved-view-tab {
+  font-style: italic;
+}
+.result-meta .result-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.result-meta .result-actions .button:not(.export-button) {
+  border-color: var(--line);
+  font-size: 12px;
+}
+.result-meta .result-actions .button.primary {
+  border-color: transparent;
+}
+.saved-view-form {
+  display: grid;
+  gap: 12px;
+}
+.saved-view-form > label:not(.check-label) {
+  display: grid;
+  gap: 6px;
+}
+.saved-view-form > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
