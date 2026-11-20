@@ -490,7 +490,7 @@ export function heritageQuery(label: string): { queries: string[]; hints: string
 export const NOT_HERITAGE = new Set([
   "Q4167836", "Q4167410", "Q13406463", "Q17633526", "Q13442814", "Q47461344", "Q571", "Q7725634", "Q732577", "Q3331189",
   "Q1004", "Q11424", "Q482994", "Q134556", "Q7366", "Q5398426", "Q5", "Q15632617", "Q11446", "Q14970", "Q27686",
-  "Q4830453", "Q43229", "Q22687", "Q928830",
+  "Q4830453", "Q43229", "Q22687", "Q928830", "Q15276",
 ]);
 /** Words of a description that say a candidate is a place, a building or a work. */
 const HERITAGE_WORDS =
