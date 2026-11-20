@@ -8217,3 +8217,6 @@ tr:hover .ai-cell-button,
 .viewer-side h2 .heritage-suggest-open:hover { background: #6366f150; }
 .viewer-side h2 .heritage-suggest-open { white-space: nowrap; flex-shrink: 0; }
 .heritage-marks h2 { flex-wrap: nowrap; }
+.heritage-propagate-results { display: flex !important; flex-direction: column; gap: 6px; }
+.heritage-propagate-results li label .detail-thumb { flex: none; width: 72px; }
+.heritage-propagate-results .detail-meta strong { white-space: normal; }
