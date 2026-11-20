@@ -26,6 +26,7 @@ import {
   typeFromInstances,
   wouldCycle,
   WIKIDATA_TYPES,
+  withSuperclasses,
   type HeritageElement,
 } from "../shared/heritage";
 import { filterOperators } from "../shared/viewCriteria";
@@ -59,6 +60,19 @@ test("names become searches, candidates are ranked and Wikidata classes give a t
   assert.equal(ranked[0].confidence, "high");
   assert.equal(ranked.find((c) => c.link.id === "Q3")!.confidence, "low");
 
+  // Near the place named settles a homonym; far away rules it out.
+  const homonyms = rankCandidates(
+    "Iglesia de Santa María - Villaverde",
+    [
+      link("Q20", "Iglesia de Santa María", { description: "iglesia", instances: ["Q16970"], coordinates: { latitude: 43, longitude: -8 } }),
+      link("Q21", "Iglesia de Santa María", { description: "iglesia", instances: ["Q16970"], coordinates: { latitude: 40.01, longitude: -3.01 } }),
+    ],
+    { latitude: 40, longitude: -3 },
+  );
+  assert.deepEqual(homonyms.map((c) => [c.link.id, c.confidence]), [["Q21", "high"], ["Q20", "low"]]);
+  // An unknown class is typed by the class above it.
+  assert.deepEqual(withSuperclasses(["Q999"], { Q999: ["Q12518"] }), ["Q999", "Q12518"]);
+  assert.deepEqual(typeFromInstances(withSuperclasses(["Q999"], { Q999: ["Q12518"] })), { group: "defensive", type: "tower" });
   assert.deepEqual(typeFromInstances(["Q5", "Q2977"]), { group: "religious", type: "cathedral" });
   assert.deepEqual(typeFromInstances(["Q12280"]), { group: "public-works", type: "bridge" });
   assert.equal(typeFromInstances(["Q5"]), null);

@@ -29,6 +29,10 @@ import {
   parseIconclassItem,
   parseIconclassSearch,
   parseWikidataEntities,
+  parseWikidataFullText,
+  wikidataFullTextUrl,
+  parseSuperclasses,
+  wikidataClassesUrl,
   rankIconclass,
   parseWikidataSearch,
   wikidataEntitiesUrl,
@@ -37,7 +41,7 @@ import {
   type AuthorityLink,
   type AuthoritySource,
 } from "../shared/authority";
-import { heritageQuery, rankCandidates } from "../shared/heritage";
+import { heritageQuery, rankCandidates, WIKIDATA_TYPES, withSuperclasses } from "../shared/heritage";
 import { platesHtml } from "./export/plates";
 import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
@@ -52,6 +56,17 @@ import { promisify } from "node:util";
 /** Wikimedia asks automated clients to name themselves and a way to find them. */
 const WIKIMEDIA_USER_AGENT = "NodusImago/0.1 (https://github.com/jorgepb96/nodus-imago)";
 
+/** A Wikidata answer; an error inside a 200 answer (lag, limits) is retried. */
+async function wikidataJson(url: string) {
+  for (let attempt = 0; ; attempt++) {
+    const json = await wikimediaJson(url, "wikidata");
+    if (!json?.error || attempt >= 3) {
+      if (json?.error) throw new Error(`Wikidata: ${json.error.info ?? json.error.code ?? "error"}`);
+      return json;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+  }
+}
 /** A JSON answer from a Wikimedia or Iconclass API, waiting when asked to slow down (429). */
 async function wikimediaJson(url: string, source: AuthoritySource) {
   for (let attempt = 0; ; attempt++) {
@@ -759,21 +774,22 @@ app.whenReady().then(async () => {
         // Only the names of the elements are sent, and only when the user asks.
         const data = safe as { items: { optionId: string; label: string }[] };
         const language = await interfaceLanguage();
-        const get = (url: string) => wikimediaJson(url, "wikidata");
-        // Searches first (four elements at a time), then what Wikidata says
-        // about every candidate, fifty at a time.
+        const get = (url: string) => wikidataJson(url);
+        // Searches first (four elements at a time): by name, and by name and
+        // place in full text; then what Wikidata says about every candidate.
         const found = new Map<string, string[]>();
         const errors = new Map<string, string>();
         for (let i = 0; i < data.items.length; i += 4)
           await Promise.all(
             data.items.slice(i, i + 4).map(async (item) => {
               try {
+                const { queries, hints } = heritageQuery(item.label);
+                const name = item.label.split(/\s+[-–—]\s+/)[0];
+                const place = hints[hints.length - 1];
                 const ids: string[] = [];
-                for (const query of heritageQuery(item.label).queries.slice(0, 2)) {
-                  ids.push(...parseWikidataSearch(await get(wikidataSearchUrl(query, language, 6))));
-                  if (ids.length >= 6) break;
-                }
-                found.set(item.optionId, [...new Set(ids)].slice(0, 8));
+                if (place) ids.push(...parseWikidataFullText(await get(wikidataFullTextUrl(`${name} ${place}`))));
+                for (const query of queries.slice(0, 2)) ids.push(...parseWikidataSearch(await get(wikidataSearchUrl(query, language, 6))));
+                found.set(item.optionId, [...new Set(ids)].slice(0, 12));
               } catch (error) {
                 errors.set(item.optionId, error instanceof Error ? error.message : String(error));
               }
@@ -781,15 +797,27 @@ app.whenReady().then(async () => {
           );
         const all = [...new Set([...found.values()].flat())];
         const links = new Map<string, AuthorityLink>();
-        for (let i = 0; i < all.length; i += 50) {
-          const ids = all.slice(i, i + 50);
+        for (let i = 0; i < all.length; i += 25) {
+          const ids = all.slice(i, i + 25);
           for (const link of parseWikidataEntities(await get(wikidataEntitiesUrl(ids, language)), ids, language)) links.set(link.id, link);
         }
+        // Classes Imago does not know: one step up, to suggest a type.
+        const unknown = [...new Set([...links.values()].flatMap((l) => l.instances ?? []).filter((q) => !WIKIDATA_TYPES[q]))];
+        const above: Record<string, string[]> = {};
+        for (let i = 0; i < unknown.length; i += 50) Object.assign(above, parseSuperclasses(await get(wikidataClassesUrl(unknown.slice(i, i + 50)))));
+        for (const link of links.values()) link.instances = withSuperclasses(link.instances, above);
+        // The place named in each label, from the local gazetteer (no request).
+        const nearOf = (label: string) => {
+          const hints = heritageQuery(label).hints;
+          const place = hints.length ? places.search(hints[hints.length - 1])[0] : undefined;
+          return place ? { latitude: place.latitude, longitude: place.longitude } : null;
+        };
         return data.items.map((item) => ({
           optionId: item.optionId,
           candidates: rankCandidates(
             item.label,
             (found.get(item.optionId) ?? []).flatMap((id) => (links.has(id) ? [links.get(id)!] : [])),
+            nearOf(item.label),
           ).slice(0, 4),
           ...(errors.has(item.optionId) ? { error: errors.get(item.optionId) } : {}),
         }));

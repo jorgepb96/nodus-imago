@@ -167,6 +167,15 @@ export const WIKIDATA_TYPES: Record<string, string> = {
   Q184296: "tapestry",
 };
 
+/**
+ * What a candidate is, with the classes above the unknown ones added after
+ * them (a «bell tower» is a «tower»), so it can still be given a type.
+ */
+export function withSuperclasses(instances: string[] | undefined, above: Record<string, string[]>): string[] {
+  const own = instances ?? [];
+  return [...new Set([...own, ...own.filter((q) => !WIKIDATA_TYPES[q]).flatMap((q) => above[q] ?? [])])].slice(0, 20);
+}
+
 /** The first instance with a known type, as group and type of the default scheme. */
 export function typeFromInstances(instances: string[] | null | undefined): { group: string; type: string } | null {
   for (const q of instances ?? []) {
@@ -266,6 +275,15 @@ export function heritageQuery(label: string): { queries: string[]; hints: string
   return { queries: [...new Set(queries.map((q) => q.slice(0, 250)))], hints };
 }
 
+/** Distance in kilometres between two points (haversine). */
+export function distanceKm(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const r = Math.PI / 180,
+    dLat = (b.latitude - a.latitude) * r,
+    dLon = (b.longitude - a.longitude) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * r) * Math.cos(b.latitude * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
 export type HeritageCandidate = { link: AuthorityLink; confidence: "high" | "medium" | "low"; score: number };
 
 /**
@@ -273,7 +291,12 @@ export type HeritageCandidate = { link: AuthorityLink; confidence: "high" | "med
  * name matches and what Wikidata says about it names the element's place
  * (or there is none), and when it is a place or a work, not a person.
  */
-export function rankCandidates(label: string, links: AuthorityLink[]): HeritageCandidate[] {
+export function rankCandidates(
+  label: string,
+  links: AuthorityLink[],
+  /** Where the place named in the label is (from the gazetteer), when known. */
+  near?: { latitude: number; longitude: number } | null,
+): HeritageCandidate[] {
   const { queries, hints } = heritageQuery(label);
   const names = queries.map(foldText);
   const folded = hints.map(foldText).filter((h) => h.length > 1);
@@ -285,16 +308,25 @@ export function rankCandidates(label: string, links: AuthorityLink[]): HeritageC
       const about = foldText(`${link.label} ${link.description ?? ""}`);
       const exact = names.includes(name);
       const close = !exact && names.some((n) => name.includes(n) || n.includes(name));
-      const hinted = !folded.length || folded.some((h) => about.includes(h));
+      // Near the place named (when both positions are known) settles it; far away rules it out.
+      const km = near && link.coordinates ? distanceKm(near, link.coordinates) : null;
+      const nearby = km !== null && km <= 30;
+      const faraway = km !== null && km > 150;
+      const hinted = !faraway && (nearby || !folded.length || folded.some((h) => about.includes(h)));
       const typed = !!typeFromInstances(link.instances);
-      let score = (exact ? 4 : close ? 2 : 0) + (hinted ? 3 : 0) + (typed ? 2 : 0) + (link.coordinates ? 1 : 0);
+      let score = (exact ? 4 : close ? 2 : 0) + (hinted ? 3 : 0) + (nearby ? 3 : 0) + (typed ? 2 : 0) + (link.coordinates ? 1 : 0);
+      if (faraway) score -= 6;
       if (link.kind === "person") score -= 6;
       const confidence: HeritageCandidate["confidence"] =
-        (exact || close) && hinted && link.kind !== "person" && (typed || !!link.coordinates)
-          ? exact ? "high" : "medium"
-          : (exact || close) && link.kind !== "person"
-            ? "medium"
-            : "low";
+        link.kind === "person" || faraway
+          ? "low"
+          : (exact || close) && hinted && (typed || !!link.coordinates)
+            ? exact || nearby
+              ? "high"
+              : "medium"
+            : (exact || close || nearby) && hinted
+              ? "medium"
+              : "low";
       return { link, confidence, score };
     })
     .sort((a, b) => b.score - a.score);
