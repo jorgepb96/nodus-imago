@@ -33,6 +33,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.4.2",
+    date: "2026-11-20",
+    highlights: [
+      {
+        scope: "places",
+        category: "fix",
+        es: "En las obras de arte con la forma «Obra - Autor», el autor ya no se toma por la localidad: la obra no se sitúa en un pueblo que se llame como el pintor.",
+        en: "In works of art named «Work - Artist», the artist is no longer taken for the town: the work is not placed in a village named like the painter.",
+      },
+      {
+        scope: "authorities",
+        category: "fix",
+        es: "El autor decide si una obra es pintura o escultura: una «Virgen» o una «Piedad» de un pintor cuenta como pintura.",
+        en: "The artist decides whether a work is a painting or a sculpture: a «Virgin» or a «Pietà» by a painter counts as a painting.",
+      },
+    ],
+  },
+  {
     version: "0.4.1",
     date: "2026-11-20",
     highlights: [

@@ -16,6 +16,7 @@ import {
 } from "../../shared/authority";
 import {
   heritageQuery,
+  heritageTown,
   nominatimUrl,
   pickSettlement,
   rankCandidates,
@@ -89,7 +90,7 @@ export class HeritageFinder {
    */
   async towns(items: Item[], lookup = true): Promise<Towns> {
     const entries = items.map((item) => {
-      const town = heritageQuery(item.label).hints.slice(-1)[0] ?? null;
+      const town = heritageTown(item.label);
       return { id: item.optionId, town, found: town ? this.gazetteer().search(town, 20) : [] };
     });
     const country = townsCountry(entries);

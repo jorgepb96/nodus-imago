@@ -472,6 +472,21 @@ test("background searches pause where a service fails or Imago closes, resume th
     await queue.close();
   }));
 
+test("the artist of a work is not its town", async () => {
+  const { heritageTown } = await import("../shared/heritage");
+  assert.equal(heritageTown("Retrato de dama - Velázquez"), null);
+  assert.equal(heritageTown("Retrato de dama - Goya - Villaverde"), "Villaverde");
+  assert.equal(heritageTown("Catedral - Villaverde"), "Villaverde");
+  assert.equal(heritageTown("Mirador del Ulmo"), null);
+});
+
+test("the artist says what kind of work it is", async () => {
+  const { typeFromName } = await import("../shared/heritage");
+  assert.deepEqual(typeFromName("Virgen del Ulmo - Zurbarán"), { group: "artworks", type: "painting" });
+  assert.deepEqual(typeFromName("Virgen del Ulmo - Salzillo"), { group: "artworks", type: "sculpture" });
+  assert.deepEqual(typeFromName("Virgen del Ulmo"), { group: "artworks", type: "sculpture" });
+});
+
 test("a town looked up in OpenStreetMap is a settlement called so, not a named spot or a café", async () => {
   const { pickSettlement } = await import("../shared/heritage");
   const answer = [

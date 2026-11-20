@@ -378,17 +378,34 @@ const NAME_TYPES: [string, string, string | null][] = [
 const PAINTERS = ["greco", "goya", "velazquez", "el greco", "zurbaran", "murillo", "ribera", "tiziano", "rubens", "el bosco", "sorolla", "picasso", "dali", "miro", "jose maria sert", "sert", "morales", "valdes leal", "alonso cano", "juan de juanes", "sanchez coello", "pantoja de la cruz", "madrazo", "fortuny", "zuloaga", "romero de torres", "rusinol", "j risueno", "risueno"];
 const SCULPTORS = ["juan de mena", "montanes", "martinez montanes", "salzillo", "gregorio hernandez", "juan de juni", "juni", "berruguete", "pedro de mena", "mena", "damian forment", "benlliure", "ruiz de la iglesia", "la roldana", "roldan"];
 
+/**
+ * The town a label names: its last part after the name, unless that part is
+ * the artist of a work («Retrato de dama - Velázquez» names no town; in
+ * «Retrato de dama - Goya - Villaverde» the town is Villaverde).
+ */
+export function heritageTown(label: string): string | null {
+  const clean = (text: string) => foldText(text).replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  const hints = heritageQuery(label).hints;
+  const last = hints[hints.length - 1];
+  if (!last) return null;
+  return PAINTERS.includes(clean(last)) || SCULPTORS.includes(clean(last)) ? null : last;
+}
+
 /** The typology an element's name announces, if any. */
 export function typeFromName(label: string): { group: string; type: string | null } | null {
   const clean = (text: string) => foldText(text).replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const [first = "", ...rest] = label.split(/\s+[-–—]\s*|\s*[-–—]\s+/);
   const name = clean(first);
-  for (const [words, group, type] of NAME_TYPES)
-    if (name === words || name.startsWith(words + " ")) return { group, type };
   const parts = rest.map(clean);
-  if (parts.some((p) => SCULPTORS.includes(p))) return { group: "artworks", type: "sculpture" };
-  if (parts.some((p) => PAINTERS.includes(p))) return { group: "artworks", type: "painting" };
-  return null;
+  // The artist says what kind of work it is: a «Virgen» by a painter is a painting.
+  const byArtist = parts.some((p) => SCULPTORS.includes(p))
+    ? { group: "artworks", type: "sculpture" }
+    : parts.some((p) => PAINTERS.includes(p))
+      ? { group: "artworks", type: "painting" }
+      : null;
+  for (const [words, group, type] of NAME_TYPES)
+    if (name === words || name.startsWith(words + " ")) return group === "artworks" && byArtist ? byArtist : { group, type };
+  return byArtist;
 }
 
 // ── Hierarchy ────────────────────────────────────────────────────────────────
@@ -704,8 +721,7 @@ export function knownForRecord(options: { id: string; label: string }[], recordT
   const text = foldText(recordText);
   return options
     .filter((o) => {
-      const hints = heritageQuery(o.label).hints;
-      const place = hints[hints.length - 1];
+      const place = heritageTown(o.label);
       return !!place && foldText(place).length > 2 && text.includes(foldText(place));
     })
     .map((o) => o.label)
@@ -870,7 +886,8 @@ export function scoreOsm(
   const { hints } = heritageQuery(label);
   const first = label.split(/\s+[-–—]\s*|\s*[-–—]\s+/)[0] ?? "";
   const name = foldText(first);
-  const place = hints.length ? foldText(hints[hints.length - 1]) : null;
+  const town = heritageTown(label);
+  const place = town ? foldText(town) : null;
   const named = typeFromName(label);
   if (named?.group === "artworks") return [];
   const bare = !!place && !/\s/.test(first.trim());
