@@ -44,7 +44,7 @@ const element = (optionId: string, change: Partial<HeritageElement> = {}): Herit
 
 test("names become searches, candidates are ranked and Wikidata classes give a typology", () => {
   assert.deepEqual(heritageQuery("Catedral - Villaverde"), {
-    queries: ["Catedral de Villaverde", "Catedral Villaverde", "Catedral"],
+    queries: ["Catedral de Villaverde", "Catedral", "Catedral Villaverde"],
     hints: ["Villaverde"],
   });
   assert.deepEqual(heritageQuery("Puente de los Arcos - Villaverde").queries, ["Puente de los Arcos", "Puente de los Arcos Villaverde"]);

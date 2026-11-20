@@ -267,13 +267,29 @@ export function heritageQuery(label: string): { queries: string[]; hints: string
   const place = hints[hints.length - 1];
   // A single common noun («Catedral», «Alcázar») only means something with its place.
   const generic = !!place && !/\s/.test(name);
+  // A single word may be a common noun («Catedral») or a proper name
+  // («Generalife»): both readings are searched.
   const queries = place
     ? generic
-      ? [`${name} de ${place}`, `${name} ${place}`, name]
+      ? [`${name} de ${place}`, name, `${name} ${place}`]
       : [name, `${name} ${place}`]
     : [name];
   return { queries: [...new Set(queries.map((q) => q.slice(0, 250)))], hints };
 }
+
+/**
+ * Wikidata items that are never the element shown: pages about something
+ * (categories, lists, disambiguations), writings, media, people, vessels,
+ * businesses and organisations.
+ */
+export const NOT_HERITAGE = new Set([
+  "Q4167836", "Q4167410", "Q13406463", "Q17633526", "Q13442814", "Q47461344", "Q571", "Q7725634", "Q732577", "Q3331189",
+  "Q1004", "Q11424", "Q482994", "Q134556", "Q7366", "Q5398426", "Q5", "Q15632617", "Q11446", "Q14970", "Q27686",
+  "Q4830453", "Q43229", "Q22687",
+]);
+/** Words of a description that say a candidate is a place, a building or a work. */
+const HERITAGE_WORDS =
+  /\b(iglesia|catedral|basilica|capilla|ermita|convento|monasterio|colegiata|santuario|mezquita|sinagoga|castillo|alcazar|alcazaba|muralla|torre|puerta|arco|palacio|casa|edificio|monumento|bien de interes cultural|patrimonio|puente|acueducto|faro|puerto|plaza|calle|paseo|parque|jardin|fuente|mirador|museo|teatro|yacimiento|cuadro|pintura|escultura|retablo|estatua|tapiz|church|cathedral|castle|palace|building|monument|bridge|square|street|museum|painting|sculpture)\b/;
 
 /** Distance in kilometres between two points (haversine). */
 export function distanceKm(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
@@ -303,24 +319,29 @@ export function rankCandidates(
   const seen = new Set<string>();
   return links
     .filter((l) => l.source === "wikidata" && !seen.has(l.id) && seen.add(l.id))
+    .filter((l) => !(l.instances ?? []).some((q) => NOT_HERITAGE.has(q)))
     .map((link) => {
       const name = foldText(link.label);
       const about = foldText(`${link.label} ${link.description ?? ""}`);
       const exact = names.includes(name);
-      const close = !exact && names.some((n) => name.includes(n) || n.includes(name));
+      // Close: one name inside the other, but not a short name lost in a
+      // much longer label («Alhambra, Generalife y Albaicín» is not «Generalife»).
+      const close = !exact && names.some((n) => n.includes(name) || (name.includes(n) && name.length - n.length <= 15));
       // Near the place named (when both positions are known) settles it; far away rules it out.
       const km = near && link.coordinates ? distanceKm(near, link.coordinates) : null;
       const nearby = km !== null && km <= 30;
-      const faraway = km !== null && km > 150;
+      const faraway = km !== null && km > 60;
       const hinted = !faraway && (nearby || !folded.length || folded.some((h) => about.includes(h)));
       const typed = !!typeFromInstances(link.instances);
-      let score = (exact ? 4 : close ? 2 : 0) + (hinted ? 3 : 0) + (nearby ? 3 : 0) + (typed ? 2 : 0) + (link.coordinates ? 1 : 0);
+      // A building, monument or work: by its class, or by what its description says.
+      const heritage = typed || HERITAGE_WORDS.test(foldText(link.description ?? ""));
+      let score = (exact ? 4 : close ? 2 : 0) + (hinted ? 3 : 0) + (nearby ? 3 : 0) + (typed ? 2 : 0) + (heritage ? 1 : 0) + (link.coordinates ? 1 : 0);
       if (faraway) score -= 6;
       if (link.kind === "person") score -= 6;
       const confidence: HeritageCandidate["confidence"] =
         link.kind === "person" || faraway
           ? "low"
-          : (exact || close) && hinted && (typed || !!link.coordinates)
+          : (exact || close) && hinted && heritage && (typed || !!link.coordinates)
             ? exact || nearby
               ? "high"
               : "medium"
