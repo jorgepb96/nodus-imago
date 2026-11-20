@@ -36,7 +36,6 @@ import {
   MoreHorizontal,
   RefreshCw,
   Home as HomeIcon,
-  Monitor,
   Moon,
   Sun,
   Clock3,
@@ -1522,18 +1521,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           ) : (
             <ChevronLeft size={14} className="collapse-chevron" />
           )}
-        </button>
-        <button
-          className="interface-trigger"
-          data-tour="header-interface"
-          onClick={() => {
-            setSettingsTab("appearance");
-            setArea("settings");
-          }}
-        >
-          <Monitor size={15} />
-          <span>{t("Interfaz · Imago")}</span>
-          <ChevronRight size={12} />
         </button>
         <span className="nodus-vault-badge">
           <ImagoMark size={16} />
