@@ -414,7 +414,7 @@ export class Repository {
             ).n,
           }
         : null;
-    if (!apply) return { total, lost, heritage };
+    if (!apply) return heritage ? { total, lost, heritage } : { total, lost };
     const at = now();
     this.db.transaction(() => {
       this.db
@@ -1246,7 +1246,7 @@ export class Repository {
           });
           if (placed.length) return placed;
         }
-        return [{ ...base, location: decodeDatabaseLocation(places.get(id) ?? null), placement: null }];
+        return [{ ...base, location: decodeDatabaseLocation(places.get(id) ?? null) }];
       });
       return { records, total: ids.length };
     })();
