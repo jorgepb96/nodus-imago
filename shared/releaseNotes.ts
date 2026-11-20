@@ -33,6 +33,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.4.1",
+    date: "2026-11-20",
+    highlights: [
+      {
+        scope: "places",
+        category: "fix",
+        es: "Al situar el patrimonio en su localidad, un pueblo que no está en el nomenclátor ya no se confunde con un lugar cuyo nombre solo se le parece ni con un homónimo de otro continente: solo vale un lugar que se llame exactamente así (o con ese nombre oficial, como en los nombres dobles), y lo demás se busca en OpenStreetMap entre núcleos de población, no parajes ni comercios.",
+        en: "When heritage is placed at its town, a town missing from the gazetteer is no longer mistaken for a place whose name merely resembles it or for a namesake on another continent: only a place called exactly that (or with that official name, as in double names) counts, and the rest is looked up in OpenStreetMap among settlements, not named spots or shops.",
+      },
+    ],
+  },
+  {
     version: "0.4.0",
     date: "2026-11-20",
     highlights: [

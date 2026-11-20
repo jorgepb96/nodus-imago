@@ -17,9 +17,11 @@ import {
 import {
   heritageQuery,
   nominatimUrl,
+  pickSettlement,
   rankCandidates,
   rankOsm,
   resolveTowns,
+  townsCountry,
   WIKIDATA_TYPES,
   withSuperclasses,
   type HeritageCandidate,
@@ -42,7 +44,7 @@ export class HeritageFinder {
   private townCache = new Map<string, Point | null>();
   private classCache = new Map<string, string[]>();
   constructor(
-    private gazetteer: () => { search(query: string): GazetteerPlace[] },
+    private gazetteer: () => { search(query: string, limit?: number): GazetteerPlace[] },
     private fetcher: typeof fetch = fetch,
   ) {}
 
@@ -88,18 +90,15 @@ export class HeritageFinder {
   async towns(items: Item[], lookup = true): Promise<Towns> {
     const entries = items.map((item) => {
       const town = heritageQuery(item.label).hints.slice(-1)[0] ?? null;
-      return { id: item.optionId, town, found: town ? this.gazetteer().search(town).slice(0, 8) : [] };
+      return { id: item.optionId, town, found: town ? this.gazetteer().search(town, 20) : [] };
     });
-    const counts = new Map<string, number>();
-    for (const e of entries) if (e.found[0]) counts.set(e.found[0].countryCode, (counts.get(e.found[0].countryCode) ?? 0) + 1);
-    const country = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const country = townsCountry(entries);
     const resolved = resolveTowns(entries);
     if (lookup)
       for (const town of [...new Set(entries.filter((e) => e.town && !resolved.get(e.id)).map((e) => e.town!))]) {
         const key = `${country}|${town}`;
         if (this.townCache.has(key)) continue;
-        const first = ((await this.nominatim(nominatimUrl(town, country, true))) as { lat?: string; lon?: string }[])[0];
-        this.townCache.set(key, first && Number.isFinite(Number(first.lat)) ? { latitude: Number(first.lat), longitude: Number(first.lon) } : null);
+        this.townCache.set(key, pickSettlement(await this.nominatim(nominatimUrl(town, country, true)), town));
       }
     const townOf = new Map(entries.map((e) => [e.id, e.town]));
     return {
@@ -115,8 +114,7 @@ export class HeritageFinder {
     if (!town || towns.near(optionId)) return;
     const key = `${towns.country}|${town}`;
     if (this.townCache.has(key)) return;
-    const first = ((await this.nominatim(nominatimUrl(town, towns.country, true))) as { lat?: string; lon?: string }[])[0];
-    this.townCache.set(key, first && Number.isFinite(Number(first.lat)) ? { latitude: Number(first.lat), longitude: Number(first.lon) } : null);
+    this.townCache.set(key, pickSettlement(await this.nominatim(nominatimUrl(town, towns.country, true)), town));
   }
 
   /** Wikidata candidates for some elements, ranked. */

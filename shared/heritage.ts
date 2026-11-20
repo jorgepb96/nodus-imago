@@ -508,24 +508,6 @@ export function distanceKm(a: { latitude: number; longitude: number }, b: { lati
   return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/**
- * Where the place named in a label is, from gazetteer matches: in the
- * country most elements are in, and only when the name is not shared by
- * places far apart (a town and a district of a city with the same name).
- */
-export function placeNear(
-  name: string,
-  found: { name: string; countryCode: string; latitude: number; longitude: number }[],
-  country: string | undefined,
-): { latitude: number; longitude: number } | null {
-  const same = found.filter((p) => foldText(p.name) === foldText(name));
-  const pool = same.filter((p) => p.countryCode === country);
-  const list = pool.length ? pool : same.length ? same : found.slice(0, 1);
-  if (!list.length) return null;
-  if (list.some((p) => distanceKm(p, list[0]) > 30)) return null;
-  return { latitude: list[0].latitude, longitude: list[0].longitude };
-}
-
 type TownHit = { name: string; countryCode: string; latitude: number; longitude: number };
 
 /**
@@ -534,14 +516,41 @@ type TownHit = { name: string; countryCode: string; latitude: number; longitude:
  * of a city with the same name) is settled by dropping the places that lie inside
  * another town of the list. What stays ambiguous is null.
  */
-export function resolveTowns(entries: { id: string; town: string | null; found: TownHit[] }[]): Map<string, { latitude: number; longitude: number } | null> {
+/**
+ * Only a place called exactly that, or with that as one of its official
+ * forms («Itzaina / San Ulpio»): the gazetteer also returns names that
+ * merely contain the text («Ulmeda» for «Ulme»), which are other places.
+ */
+function calledTown(p: TownHit, town: string) {
+  const name = foldText(p.name), wanted = foldText(town);
+  return name === wanted || name.split(/\s*[/,]\s*|\s*-\s*/).includes(wanted);
+}
+
+/** The country most of these towns are in, by the places called exactly so. */
+export function townsCountry(entries: { town: string | null; found: TownHit[] }[]): string | undefined {
   const counts = new Map<string, number>();
-  for (const e of entries) if (e.found[0]) counts.set(e.found[0].countryCode, (counts.get(e.found[0].countryCode) ?? 0) + 1);
-  const country = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  for (const e of entries) {
+    const hit = e.town ? e.found.find((p) => calledTown(p, e.town!)) : undefined;
+    if (hit) counts.set(hit.countryCode, (counts.get(hit.countryCode) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+}
+
+export function resolveTowns(entries: { id: string; town: string | null; found: TownHit[] }[]): Map<string, { latitude: number; longitude: number } | null> {
+  const called = calledTown;
+  const first = (e: { town: string | null; found: TownHit[] }) => (e.town ? e.found.find((p) => called(p, e.town!)) : undefined);
+  const country = townsCountry(entries);
+  // Where the collection is: the middle of its towns in that country. A town
+  // abroad is only taken when it is within reach of it, so a namesake on
+  // another continent never stands in for a town the gazetteer lacks.
+  const home = entries.flatMap((e) => (first(e)?.countryCode === country ? [first(e)!] : []));
+  const median = (values: number[]) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
+  const centre = home.length ? { latitude: median(home.map((p) => p.latitude)), longitude: median(home.map((p) => p.longitude)) } : null;
+  const reachable = (p: TownHit) => p.countryCode === country || !centre || distanceKm(p, centre) <= 3000;
   const pool = (e: { town: string | null; found: TownHit[] }) => {
-    const same = e.found.filter((p) => e.town && foldText(p.name) === foldText(e.town));
+    const same = e.found.filter((p) => e.town && called(p, e.town));
     const inCountry = same.filter((p) => p.countryCode === country);
-    return inCountry.length ? inCountry : same.length ? same : e.found.slice(0, 1);
+    return inCountry.length ? inCountry : same.filter(reachable);
   };
   const together = (list: TownHit[]) => list.length > 0 && !list.some((p) => distanceKm(p, list[0]) > 30);
   const out = new Map<string, { latitude: number; longitude: number } | null>();
@@ -767,6 +776,24 @@ export function matchSuggestion(
 }
 
 // ── OpenStreetMap (Nominatim), for what Wikidata does not have ───────────────
+
+/** OpenStreetMap kinds of place that are a town or village (not a named spot, a café or a peak). */
+const SETTLEMENT_TYPES = new Set(["city", "town", "village", "hamlet", "municipality", "administrative", "isolated_dwelling"]);
+
+/**
+ * The town in an OpenStreetMap answer for a town's name: the first result
+ * that is a settlement and is called that name, else the first settlement.
+ */
+export function pickSettlement(
+  results: { lat?: string; lon?: string; type?: string; addresstype?: string; name?: string }[],
+  town: string,
+): { latitude: number; longitude: number } | null {
+  const settlements = results.filter(
+    (r) => (SETTLEMENT_TYPES.has(r.type ?? "") || SETTLEMENT_TYPES.has(r.addresstype ?? "")) && Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)),
+  );
+  const hit = settlements.find((r) => r.name && foldText(r.name) === foldText(town)) ?? settlements[0];
+  return hit ? { latitude: Number(hit.lat), longitude: Number(hit.lon) } : null;
+}
 
 export function nominatimUrl(query: string, countryCode?: string | null, settlement = false) {
   const params = new URLSearchParams({ q: query.slice(0, 250), format: "jsonv2", limit: "6", "accept-language": "es,en" });

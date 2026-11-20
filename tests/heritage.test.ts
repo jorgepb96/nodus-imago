@@ -385,10 +385,29 @@ test("town names are read together: a district inside another town of the list i
     { id: "a", town: "Capital", found: [capital] },
     { id: "b", town: "Villaverde", found: [district, town, abroad] },
     { id: "c", town: "Nowhere", found: [] },
+    // The Spanish town is missing from the gazetteer: its namesake on another continent is not it.
+    { id: "d", town: "San Ulpio", found: [{ name: "San Ulpio", countryCode: "GT", latitude: 14.56, longitude: -91.65 }] },
+    // A town abroad but near the collection (a trip to Italy) is still placed.
+    { id: "e", town: "Lucca", found: [{ name: "Lucca", countryCode: "IT", latitude: 43.84, longitude: 10.5 }] },
+    // A name that only contains the text is another place; an official double name is the town.
+    { id: "f", town: "Ulme", found: [{ name: "Ulmeda", countryCode: "US", latitude: 33.1, longitude: -117.1 }, { name: "Ulmesto", countryCode: "ES", latitude: 41.1, longitude: -4.9 }] },
+    {
+      id: "g",
+      town: "San Ulpio",
+      found: [
+        { name: "San Ulpio", countryCode: "GT", latitude: 14.56, longitude: -91.65 },
+        { name: "San Ulpio de los Reyes", countryCode: "ES", latitude: 40.55, longitude: -3.62 },
+        { name: "Itzaina / San Ulpio", countryCode: "ES", latitude: 43.32, longitude: -1.98 },
+      ],
+    },
   ]);
   assert.deepEqual(towns.get("a"), { latitude: 40.4, longitude: -3.7 });
   assert.deepEqual(towns.get("b"), { latitude: 40.96, longitude: -5.66 });
   assert.equal(towns.get("c"), null);
+  assert.equal(towns.get("d"), null);
+  assert.deepEqual(towns.get("e"), { latitude: 43.84, longitude: 10.5 });
+  assert.equal(towns.get("f"), null);
+  assert.deepEqual(towns.get("g"), { latitude: 43.32, longitude: -1.98 });
 });
 
 test("background searches pause where a service fails or Imago closes, resume there, and their proposals apply and revert", () =>
@@ -452,6 +471,17 @@ test("background searches pause where a service fails or Imago closes, resume th
     void option;
     await queue.close();
   }));
+
+test("a town looked up in OpenStreetMap is a settlement called so, not a named spot or a café", async () => {
+  const { pickSettlement } = await import("../shared/heritage");
+  const answer = [
+    { name: "Villafría", lat: "41.67", lon: "-3.94", type: "locality", addresstype: "locality" },
+    { name: "Villafría.", lat: "39.47", lon: "-0.38", type: "cafe", addresstype: "amenity" },
+    { name: "Villafría", lat: "42.61", lon: "-1.05", type: "hamlet", addresstype: "hamlet" },
+  ];
+  assert.deepEqual(pickSettlement(answer, "Villafría"), { latitude: 42.61, longitude: -1.05 });
+  assert.equal(pickSettlement(answer.slice(0, 2), "Villafría"), null);
+});
 
 test("the finder ranks Wikidata answers and pauses on unreachable services", async () => {
   const { HeritageFinder, HeritageNetworkError } = await import("../electron/heritage/finder");
