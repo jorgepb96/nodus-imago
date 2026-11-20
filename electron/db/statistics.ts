@@ -15,6 +15,7 @@ import {
   trend,
   yearCoverage,
   yearOf,
+  yearSpan,
   type SavedStatistic,
   type StatResult,
   type StatSpec,
@@ -185,19 +186,21 @@ export class Statistics {
         const image = row.images.find((a) => a.width > 0) ?? row.images[0];
         const historical =
           column.type === "historical_date" ? decodeHistoricalDate(row.cells[column.id] ?? null) : null;
-        const closed =
-          historical && historical.start !== null && historical.end !== null && historical.end >= historical.start;
+        // Whatever the form of the date, the years it covers.
+        const span = yearSpan(column, row.cells[column.id] ?? null, exportCellText(column, row)) ?? { start: year, end: year };
         items.push({
           id: row.id,
           title: row.title,
           year,
-          start: closed ? historical!.start! : year,
-          end: closed ? historical!.end! : year,
+          start: span.start,
+          end: span.end,
           imageId: image?.id ?? null,
           revision: image?.revision,
           ...(historical
             ? { period: periodLabel(historical), certainty: historical.certainty }
-            : {}),
+            : span.end > span.start
+              ? { period: periodLabel(span), certainty: "exact" }
+              : {}),
         });
       }
     items.sort((a, b) => a.start - b.start || a.end - b.end || a.title.localeCompare(b.title, "es", { numeric: true }));
