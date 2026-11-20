@@ -531,7 +531,9 @@ function ElementRecord({
             ? t("Coordenadas puestas a mano: Wikidata no las cambia.")
             : element.coordSource === "wikidata"
               ? t("Coordenadas de Wikidata.")
-              : element.coordSource === "osm"
+              : element.coordSource === "town"
+                ? t("Situado en el centro de su localidad: posición aproximada.")
+                : element.coordSource === "osm"
                 ? `${t("Coordenadas de OpenStreetMap")} (${element.osm ?? ""}).`
               : position?.inherited
                 ? `${t("Sin coordenadas propias: se usa la posición del conjunto")} (${labels[position.from] ?? ""}).`

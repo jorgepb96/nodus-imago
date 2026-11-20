@@ -835,6 +835,25 @@ app.whenReady().then(async () => {
           ...(errors.has(item.optionId) ? { error: errors.get(item.optionId) } : {}),
         }));
       }
+      if (command === "heritageTownPlaces") {
+        // No request: the town named in each label, from the bundled gazetteer.
+        const data = safe as { items: { optionId: string; label: string }[] };
+        const found = new Map(
+          data.items.map((item) => {
+            const hints = heritageQuery(item.label).hints;
+            return [item.optionId, hints.length ? places.search(hints[hints.length - 1]).slice(0, 8) : []] as const;
+          }),
+        );
+        const countries = new Map<string, number>();
+        for (const f of found.values()) if (f[0]) countries.set(f[0].countryCode, (countries.get(f[0].countryCode) ?? 0) + 1);
+        const country = [...countries].sort((a, b) => b[1] - a[1])[0]?.[0];
+        return data.items.flatMap((item) => {
+          const hints = heritageQuery(item.label).hints;
+          const town = hints[hints.length - 1];
+          const at = town ? placeNear(town, found.get(item.optionId) ?? [], country) : null;
+          return at ? [{ optionId: item.optionId, ...at, town }] : [];
+        });
+      }
       if (command === "heritageOsmCandidates") {
         // OpenStreetMap's search for what Wikidata does not have. Only the
         // names are sent, one request a second as Nominatim asks.

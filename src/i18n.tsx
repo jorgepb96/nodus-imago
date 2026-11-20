@@ -2427,6 +2427,12 @@ const en: Record<string, string> = {
   "Situar con OpenStreetMap {n} elementos sin coordenadas": "Place {n} elements without coordinates with OpenStreetMap",
   "{n} elementos situados con OpenStreetMap. Puedes revertirlo en «Vinculaciones anteriores».": "{n} elements placed with OpenStreetMap. You can revert it in «Earlier linkings».",
   "Tampoco está en OpenStreetMap: sitúalo a mano en su ficha.": "Not in OpenStreetMap either: place it by hand in its record.",
+  "No se ha reconocido la localidad de ninguno.": "No town was recognised for any of them.",
+  "{n} elementos situados en el centro de su localidad (aproximado). Puedes revertirlo en «Vinculaciones anteriores».": "{n} elements placed at the centre of their town (approximate). You can revert it in «Earlier linkings».",
+  "Sin red: usa el nomenclátor de la app. Las posiciones quedan marcadas como aproximadas y se sustituyen al situar el elemento con precisión.": "No network: uses the app's gazetteer. The positions are marked as approximate and are replaced when the element is placed precisely.",
+  "Situar en su localidad los {n} restantes (aproximado)": "Place the remaining {n} in their town (approximate)",
+  "Situado en el centro de su localidad: posición aproximada.": "Placed at the centre of its town: approximate position.",
+  "posición aproximada": "approximate position",
 };
 Object.assign(en, backendEn);
 const patterns = backendPatterns.map(([source, target]) => {

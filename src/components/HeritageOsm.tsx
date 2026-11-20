@@ -75,6 +75,25 @@ export function HeritageOsm({
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+  // Last resort: the centre of the element's town, marked as approximate.
+  const placeInTowns = async () => {
+    setError(null);
+    try {
+      const towns = await window.imago.call("heritageTownPlaces", { items: pending.map((o) => ({ optionId: o.id, label: o.label })) });
+      if (!towns.length) {
+        setMessage(t("No se ha reconocido la localidad de ninguno."));
+        return;
+      }
+      const batch = await window.imago.call("heritageApplyPlaces", {
+        columnId: column.id,
+        items: towns.map((p) => ({ optionId: p.optionId, latitude: p.latitude, longitude: p.longitude, town: true })),
+      });
+      setMessage(t("{n} elementos situados en el centro de su localidad (aproximado). Puedes revertirlo en «Vinculaciones anteriores».").replace("{n}", formatNumber(batch.applied, 0)));
+      await onApplied();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
   const set = (id: string, change: Partial<Proposal>) => setProposals((all) => ({ ...all, [id]: { ...all[id], ...change } }));
   const rows = Object.entries(proposals);
 
@@ -108,6 +127,16 @@ export function HeritageOsm({
             <MapPinned size={14} />
             {t("Situar con OpenStreetMap {n} elementos sin coordenadas").replace("{n}", formatNumber(pending.filter((o) => !proposals[o.id]).length, 0))}
           </Button>
+          {pending.length > 0 && (
+            <Button
+              onClick={() => void placeInTowns()}
+              data-testid="heritage-town-places"
+              data-tooltip={t("Sin red: usa el nomenclátor de la app. Las posiciones quedan marcadas como aproximadas y se sustituyen al situar el elemento con precisión.")}
+            >
+              <MapPinned size={14} />
+              {t("Situar en su localidad los {n} restantes (aproximado)").replace("{n}", formatNumber(pending.length, 0))}
+            </Button>
+          )}
           {accepted.length > 0 && (
             <Button primary onClick={() => void apply()} data-testid="heritage-osm-apply">
               <Check size={14} /> {t("Aplicar {n} aceptadas").replace("{n}", formatNumber(accepted.length, 0))}

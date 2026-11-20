@@ -45,6 +45,8 @@ export type HeritageMapElement = {
   latitude: number;
   longitude: number;
   inherited: boolean;
+  /** Placed at the centre of its town only. */
+  approximate?: boolean;
   group: string | null;
   type: string | null;
   parentId: string | null;
@@ -550,8 +552,16 @@ export type Commands = {
     input: { items: { optionId: string; label: string }[] };
     result: { optionId: string; candidates: import("./heritage").OsmCandidate[]; error?: string }[];
   };
+  /** Handled in the main process, with the local gazetteer: the centre of each element's town. */
+  heritageTownPlaces: {
+    input: { items: { optionId: string; label: string }[] };
+    result: { optionId: string; latitude: number; longitude: number; town: string }[];
+  };
   heritageApplyPlaces: {
-    input: { columnId: string; items: { optionId: string; latitude: number; longitude: number; osm: string; group?: string | null; type?: string | null }[] };
+    input: {
+      columnId: string;
+      items: { optionId: string; latitude: number; longitude: number; osm?: string | null; town?: boolean; group?: string | null; type?: string | null }[];
+    };
     result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
   };
   heritageLinkBatches: { input: { columnId: string }; result: { id: string; applied: number; createdAt: string; revertedAt: string | null }[] };

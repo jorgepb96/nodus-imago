@@ -17,7 +17,8 @@ export type HeritageElement = {
   type: string | null;
   latitude: number | null;
   longitude: number | null;
-  coordSource: "wikidata" | "osm" | "manual" | null;
+  /** Where the coordinates come from; «town»: the centre of its town, approximate. */
+  coordSource: "wikidata" | "osm" | "town" | "manual" | null;
   /** OpenStreetMap object the coordinates come from («way/123»), when they do. */
   osm?: string | null;
 };
@@ -340,11 +341,21 @@ const NAME_TYPES: [string, string, string | null][] = [
   ["ramblas", "urban", "street"],
   ["penon", "urban", "landscape"],
   ["ciudad encantada", "urban", "landscape"],
+  ["sacra capilla", "religious", "church"],
+  ["tapices", "artworks", "tapestry"],
+  ["valle de los caidos", "commemorative", "monument"],
+  ["pilares", "commemorative", "monument"],
+  ["alcaiceria", "civil", "exchange"],
+  ["manzana", "urban", null],
+  ["casilicio", "religious", null],
+  ["cerveceria", "civil", null],
+  ["venta", "civil", null],
+  ["patio", "civil", null],
 ];
 
 /** Painters and sculptors whose name in a label («Obra - Autor - Lugar») makes it a work of art. */
-const PAINTERS = ["goya", "velazquez", "el greco", "zurbaran", "murillo", "ribera", "tiziano", "rubens", "el bosco", "sorolla", "picasso", "dali", "miro", "jose maria sert", "sert", "morales", "valdes leal", "alonso cano", "juan de juanes", "sanchez coello", "pantoja de la cruz", "madrazo", "fortuny", "zuloaga", "romero de torres", "rusinol", "j risueno", "risueno"];
-const SCULPTORS = ["montanes", "martinez montanes", "salzillo", "gregorio hernandez", "juan de juni", "juni", "berruguete", "pedro de mena", "mena", "damian forment", "benlliure", "ruiz de la iglesia", "la roldana", "roldan"];
+const PAINTERS = ["greco", "goya", "velazquez", "el greco", "zurbaran", "murillo", "ribera", "tiziano", "rubens", "el bosco", "sorolla", "picasso", "dali", "miro", "jose maria sert", "sert", "morales", "valdes leal", "alonso cano", "juan de juanes", "sanchez coello", "pantoja de la cruz", "madrazo", "fortuny", "zuloaga", "romero de torres", "rusinol", "j risueno", "risueno"];
+const SCULPTORS = ["juan de mena", "montanes", "martinez montanes", "salzillo", "gregorio hernandez", "juan de juni", "juni", "berruguete", "pedro de mena", "mena", "damian forment", "benlliure", "ruiz de la iglesia", "la roldana", "roldan"];
 
 /** The typology an element's name announces, if any. */
 export function typeFromName(label: string): { group: string; type: string | null } | null {

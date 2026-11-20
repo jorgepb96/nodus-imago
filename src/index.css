@@ -8207,3 +8207,4 @@ tr:hover .ai-cell-button,
 .heritage-propagate-results li label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .heritage-propagate-results li.is-picked { outline: 2px solid var(--accent); border-radius: 8px; }
 .heritage-propagate-results li.is-done { opacity: 0.6; }
+.heritage-map-pin.is-approximate { opacity: 0.6; border-style: dashed; }

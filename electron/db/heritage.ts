@@ -30,7 +30,7 @@ type Row = {
   type_key: string | null;
   latitude: number | null;
   longitude: number | null;
-  coord_source: "wikidata" | "osm" | "manual" | null;
+  coord_source: "wikidata" | "osm" | "town" | "manual" | null;
   updated_at: string;
   osm_ref?: string | null;
 };
@@ -286,6 +286,7 @@ export class Heritage {
         latitude: p.latitude,
         longitude: p.longitude,
         inherited: false,
+        approximate: e?.coordSource === "town",
         group: e?.group ?? null,
         type: e?.type ?? null,
         parentId: e?.parentId ?? null,
@@ -418,7 +419,7 @@ export class Heritage {
    */
   applyPlaces(
     columnId: string,
-    items: { optionId: string; latitude: number; longitude: number; osm: string; group?: string | null; type?: string | null }[],
+    items: { optionId: string; latitude: number; longitude: number; osm?: string | null; town?: boolean; group?: string | null; type?: string | null }[],
   ): HeritageLinkBatch {
     const column = this.heritageColumn(columnId);
     const scheme = heritageScheme(column.config);
@@ -434,7 +435,11 @@ export class Heritage {
         const link = db.prepare("SELECT link_json FROM option_authorities WHERE option_id=?").get(item.optionId) as { link_json: string } | undefined;
         const row = db.prepare("SELECT * FROM heritage_elements WHERE option_id=?").get(item.optionId) as Row | undefined;
         snapshot.push({ optionId: item.optionId, link: link?.link_json ?? null, element: row ?? null });
-        if (e.latitude === null) Object.assign(e, { latitude: item.latitude, longitude: item.longitude, coordSource: "osm", osm: item.osm });
+        // A town's centre places an element only roughly, and only when nothing better is known.
+        if (e.latitude === null || (e.coordSource === "town" && !item.town))
+          Object.assign(e, item.town
+            ? { latitude: item.latitude, longitude: item.longitude, coordSource: "town", osm: null }
+            : { latitude: item.latitude, longitude: item.longitude, coordSource: "osm", osm: item.osm ?? null });
         const suggested = typeFromName(option.label) ?? (item.group ? { group: item.group, type: item.type ?? null } : null);
         const group = suggested && scheme.groups.find((g) => g.key === suggested.group);
         if (!e.group && group && (!suggested!.type || group.types.some((x) => x.key === suggested!.type)))

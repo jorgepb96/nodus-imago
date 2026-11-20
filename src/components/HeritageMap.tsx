@@ -105,12 +105,12 @@ export function HeritageMap({
       const info = typology(scheme, e.group, e.type, language);
       const size = Math.round(26 + 26 * Math.sqrt(e.count / max));
       const html = renderToStaticMarkup(
-        <span className={`heritage-map-pin ${selected === e.optionId ? "is-selected" : ""}`} style={{ width: size, height: size }}>
+        <span className={`heritage-map-pin ${selected === e.optionId ? "is-selected" : ""} ${e.approximate ? "is-approximate" : ""}`} style={{ width: size, height: size }}>
           <HeritageIcon name={info?.icon} size={Math.round(size * 0.45)} />
           <b>{e.count}</b>
         </span>,
       );
-      const label = `${e.label} · ${e.count} ${t("registros")}`;
+      const label = `${e.label} · ${e.count} ${t("registros")}${e.approximate ? ` · ${t("posición aproximada")}` : ""}`;
       L.marker([e.latitude, e.longitude], {
         icon: L.divIcon({ className: "heritage-map-marker", html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }),
         title: label,

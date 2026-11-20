@@ -358,6 +358,17 @@ test("typologies by name and places from OpenStreetMap are applied where missing
       { ...heritage.elements(columnId)[bridge] },
       { optionId: bridge, parentId: null, group: "public-works", type: "bridge", latitude: 41, longitude: -4, coordSource: "osm", osm: "way/12" },
     );
+    // A town's centre only fills what has no position, and a precise place replaces it.
+    const whole2 = option("Patio - Villaverde");
+    const town = heritage.applyPlaces(columnId, [
+      { optionId: whole2, latitude: 40, longitude: -3, town: true },
+      { optionId: bridge, latitude: 40, longitude: -3, town: true },
+    ]);
+    assert.equal(heritage.elements(columnId)[whole2].coordSource, "town");
+    assert.equal(heritage.elements(columnId)[bridge].coordSource, "osm");
+    heritage.applyPlaces(columnId, [{ optionId: whole2, latitude: 40.5, longitude: -3.5, osm: "node/9" }]);
+    assert.deepEqual([heritage.elements(columnId)[whole2].coordSource, heritage.elements(columnId)[whole2].latitude], ["osm", 40.5]);
+    void town;
     heritage.revertBatch(placed.id);
     assert.equal(heritage.elements(columnId)[bridge].latitude, null);
     heritage.revertBatch(named.id);
