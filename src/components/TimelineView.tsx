@@ -108,25 +108,36 @@ export function TimelineView({
     }
     return [...map.values()].sort((a, b) => a.start - b.start || a.end - b.end);
   }, [items, bucket]);
-  // The overview counts single years (decades past two centuries) whatever
-  // the grouping below, and keeps empty years so gaps in the record show.
-  const overviewStep = span > 200 ? 10 : 1;
-  const overview = useMemo(() => {
-    if (!items.length) return [];
-    const key = (y: number) => Math.floor(y / overviewStep) * overviewStep,
-      counts = new Map<number, number>();
-    for (const item of items) {
-      const seen = new Set<number>();
-      for (let y = item.start; y <= Math.min(item.end, item.start + 400); y++) seen.add(key(y));
-      for (const k of seen) counts.set(k, (counts.get(k) ?? 0) + 1);
+  // The overview speaks the data's own unit: one bar per decade when the
+  // records are dated by decades, one per period when by periods, one per
+  // year (or decade, past two centuries) when by years. Empty decades and
+  // years stay, so gaps in the record show.
+  type Bar = { id: string; label: string; count: number; group?: string };
+  const overview = useMemo((): Bar[] => {
+    if (!groups.length) return [];
+    if (bucket === "decade") {
+      const byStart = new Map(groups.map((g) => [g.start, g]));
+      const out: Bar[] = [];
+      for (let d = groups[0].start; d <= groups[groups.length - 1].start; d += 10) {
+        const g = byStart.get(d);
+        out.push({ id: String(d), label: `${d}s`, count: g?.items.length ?? 0, group: g?.key });
+      }
+      return out;
     }
-    const out: { key: number; count: number }[] = [];
-    for (let k = key(first); k <= key(last); k += overviewStep) out.push({ key: k, count: counts.get(k) ?? 0 });
+    if (groups.some((g) => g.end > g.start))
+      return groups.map((g) => ({ id: g.key, label: g.label, count: g.items.length, group: g.key }));
+    const step = span > 200 ? 10 : 1;
+    const counts = new Map<number, { count: number; group: string }>();
+    for (const g of groups) {
+      const k = Math.floor(g.start / step) * step;
+      const c = counts.get(k);
+      counts.set(k, { count: (c?.count ?? 0) + g.items.length, group: c?.group ?? g.key });
+    }
+    const out: Bar[] = [];
+    for (let k = Math.floor(first / step) * step; k <= last; k += step)
+      out.push({ id: String(k), label: step === 10 ? `${k}s` : String(k), count: counts.get(k)?.count ?? 0, group: counts.get(k)?.group });
     return out;
-  }, [items, first, last, overviewStep]);
-  /** The group a year of the overview belongs to. */
-  const groupOf = (year: number) => groups.find((g) => g.start <= year + overviewStep - 1 && g.end >= year)?.key;
-  const overviewLabel = (key: number) => (overviewStep === 10 ? `${key}s` : String(key));
+  }, [groups, bucket, span, first, last]);
   const max = Math.max(1, ...overview.map((o) => o.count));
 
   if (candidates && !candidates.length)
@@ -194,17 +205,16 @@ export function TimelineView({
         <div className="timeline-overview" role="list" aria-label={t("Registros por periodo")}>
           {overview.map((o) => (
             <button
-              key={o.key}
+              key={o.id}
               type="button"
               role="listitem"
               className="timeline-bar"
               disabled={!o.count}
-              data-tooltip={`${overviewLabel(o.key)} · ${o.count.toLocaleString(uiLocale())} ${t(o.count === 1 ? "registro" : "registros")}`}
+              data-tooltip={`${o.label} · ${o.count.toLocaleString(uiLocale())} ${t(o.count === 1 ? "registro" : "registros")}`}
               data-tooltip-instant=""
-              aria-label={`${overviewLabel(o.key)}: ${o.count} ${t("registros")}`}
+              aria-label={`${o.label}: ${o.count} ${t("registros")}`}
               onClick={() => {
-                const key = groupOf(o.key);
-                if (key) sections.current.get(key)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                if (o.group) sections.current.get(o.group)?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
             >
               <span style={{ height: `${o.count ? Math.max(4, (o.count / max) * 100) : 0}%` }} />
@@ -213,10 +223,13 @@ export function TimelineView({
         </div>
       )}
       {!!overview.length && (
-        <div className="timeline-axis-labels" aria-hidden="true">
-          <span>{overviewLabel(overview[0].key)}</span>
-          {overview.length > 2 && <span>{overviewLabel(overview[Math.floor(overview.length / 2)].key)}</span>}
-          <span>{overviewLabel(overview[overview.length - 1].key)}</span>
+        <div className={`timeline-axis-labels ${overview.length <= 16 ? "is-each" : ""}`} aria-hidden="true">
+          {(overview.length <= 16
+            ? overview
+            : [overview[0], ...(overview.length > 2 ? [overview[Math.floor(overview.length / 2)]] : []), overview[overview.length - 1]]
+          ).map((o) => (
+            <span key={o.id}>{o.label}</span>
+          ))}
         </div>
       )}
       {data && !data.items.length && !loading && (

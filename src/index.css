@@ -8177,3 +8177,5 @@ tr:hover .ai-cell-button,
 .active-filters.is-filtered { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--text); }
 .active-filters-list { font-weight: 550; }
 .active-filters-query { display: inline-flex; align-items: center; gap: 3px; }
+.timeline-axis-labels.is-each { justify-content: stretch; gap: 2px; }
+.timeline-axis-labels.is-each > span { flex: 1; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
