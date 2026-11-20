@@ -17,6 +17,7 @@ import {
 import {
   heritageQuery,
   nominatimUrl,
+  pickSettlement,
   rankCandidates,
   rankOsm,
   resolveTowns,
@@ -97,8 +98,7 @@ export class HeritageFinder {
       for (const town of [...new Set(entries.filter((e) => e.town && !resolved.get(e.id)).map((e) => e.town!))]) {
         const key = `${country}|${town}`;
         if (this.townCache.has(key)) continue;
-        const first = ((await this.nominatim(nominatimUrl(town, country, true))) as { lat?: string; lon?: string }[])[0];
-        this.townCache.set(key, first && Number.isFinite(Number(first.lat)) ? { latitude: Number(first.lat), longitude: Number(first.lon) } : null);
+        this.townCache.set(key, pickSettlement(await this.nominatim(nominatimUrl(town, country, true)), town));
       }
     const townOf = new Map(entries.map((e) => [e.id, e.town]));
     return {
@@ -114,8 +114,7 @@ export class HeritageFinder {
     if (!town || towns.near(optionId)) return;
     const key = `${towns.country}|${town}`;
     if (this.townCache.has(key)) return;
-    const first = ((await this.nominatim(nominatimUrl(town, towns.country, true))) as { lat?: string; lon?: string }[])[0];
-    this.townCache.set(key, first && Number.isFinite(Number(first.lat)) ? { latitude: Number(first.lat), longitude: Number(first.lon) } : null);
+    this.townCache.set(key, pickSettlement(await this.nominatim(nominatimUrl(town, towns.country, true)), town));
   }
 
   /** Wikidata candidates for some elements, ranked. */

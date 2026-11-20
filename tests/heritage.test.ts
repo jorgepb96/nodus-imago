@@ -472,6 +472,17 @@ test("background searches pause where a service fails or Imago closes, resume th
     await queue.close();
   }));
 
+test("a town looked up in OpenStreetMap is a settlement called so, not a named spot or a café", async () => {
+  const { pickSettlement } = await import("../shared/heritage");
+  const answer = [
+    { name: "Villafría", lat: "41.67", lon: "-3.94", type: "locality", addresstype: "locality" },
+    { name: "Villafría.", lat: "39.47", lon: "-0.38", type: "cafe", addresstype: "amenity" },
+    { name: "Villafría", lat: "42.61", lon: "-1.05", type: "hamlet", addresstype: "hamlet" },
+  ];
+  assert.deepEqual(pickSettlement(answer, "Villafría"), { latitude: 42.61, longitude: -1.05 });
+  assert.equal(pickSettlement(answer.slice(0, 2), "Villafría"), null);
+});
+
 test("the finder ranks Wikidata answers and pauses on unreachable services", async () => {
   const { HeritageFinder, HeritageNetworkError } = await import("../electron/heritage/finder");
   const places = { search: (q: string) => (q === "Villaverde" ? [{ gazetteerId: "g:1", name: "Villaverde", admin1: "", countryCode: "ES", country: "España", latitude: 40, longitude: -3, population: 1 }] : []) };

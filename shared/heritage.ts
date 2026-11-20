@@ -777,6 +777,24 @@ export function matchSuggestion(
 
 // ── OpenStreetMap (Nominatim), for what Wikidata does not have ───────────────
 
+/** OpenStreetMap kinds of place that are a town or village (not a named spot, a café or a peak). */
+const SETTLEMENT_TYPES = new Set(["city", "town", "village", "hamlet", "municipality", "administrative", "isolated_dwelling"]);
+
+/**
+ * The town in an OpenStreetMap answer for a town's name: the first result
+ * that is a settlement and is called that name, else the first settlement.
+ */
+export function pickSettlement(
+  results: { lat?: string; lon?: string; type?: string; addresstype?: string; name?: string }[],
+  town: string,
+): { latitude: number; longitude: number } | null {
+  const settlements = results.filter(
+    (r) => (SETTLEMENT_TYPES.has(r.type ?? "") || SETTLEMENT_TYPES.has(r.addresstype ?? "")) && Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lon)),
+  );
+  const hit = settlements.find((r) => r.name && foldText(r.name) === foldText(town)) ?? settlements[0];
+  return hit ? { latitude: Number(hit.lat), longitude: Number(hit.lon) } : null;
+}
+
 export function nominatimUrl(query: string, countryCode?: string | null, settlement = false) {
   const params = new URLSearchParams({ q: query.slice(0, 250), format: "jsonv2", limit: "6", "accept-language": "es,en" });
   if (settlement) params.set("featuretype", "settlement");
