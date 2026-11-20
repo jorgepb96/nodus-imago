@@ -38,6 +38,36 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     highlights: [
       {
         scope: "catalogue",
+        category: "new",
+        es: "Vistas guardadas: con unos filtros y un orden, «Guardar vista» les da un nombre y un tipo de vista (tabla, galería, mapa, cronología…). Aparecen como pestañas junto a las demás y no copian nada: siguen siendo la misma base de datos. Con clic derecho se editan, se ocultan o se eliminan.",
+        en: "Saved views: with some filters and a sort, «Save view» gives them a name and a kind of view (table, gallery, map, timeline…). They appear as tabs next to the others and copy nothing: it is still the same database. Right-click to edit, hide or delete them.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Muestra u oculta las vistas de cada base de datos con «Vistas visibles» o con clic derecho sobre su pestaña. Por defecto se ven todas.",
+        en: "Show or hide each database's views with «Visible views» or by right-clicking a tab. All are shown by default.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "«Filtrar y ordenar» y «Añadir registros» están junto a «Exportar», en la fila del número de registros.",
+        en: "«Filter and sort» and «Add records» sit beside «Export», on the row with the number of records.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "El menú de una propiedad (clic derecho en la cabecera) se abre siempre junto a ella, en lugar de irse a la parte de arriba de la ventana.",
+        en: "A property's menu (right-click on its header) always opens next to it instead of jumping to the top of the window.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Instalar una actualización ya no muestra un mensaje de error mientras Imago se cierra para reiniciarse.",
+        en: "Installing an update no longer shows an error message while Imago closes to restart.",
+      },
+      {
+        scope: "catalogue",
         category: "fix",
         es: "El número de registros ya no se sustituye por el icono de carga cada dos segundos mientras hay una tarea en marcha: solo se muestra al cambiar la búsqueda, los filtros o la página.",
         en: "The record count is no longer replaced by the loading icon every two seconds while a task is running: it only shows when the search, filters or page change.",

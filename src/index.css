@@ -8233,7 +8233,7 @@ tr:hover .ai-cell-button,
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.result-meta .result-actions .button:not(.export-button) {
+.result-meta .result-actions .button {
   border-color: var(--line);
   font-size: 12px;
 }
