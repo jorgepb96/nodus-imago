@@ -79,7 +79,8 @@ export function HeritageOsm({
   const placeInTowns = async () => {
     setError(null);
     try {
-      const towns = await window.imago.call("heritageTownPlaces", { items: pending.map((o) => ({ optionId: o.id, label: o.label })) });
+      const answer = await window.imago.call("heritageTownPlaces", { items: pending.map((o) => ({ optionId: o.id, label: o.label })), lookup: true });
+      const towns = answer.places;
       if (!towns.length) {
         setMessage(t("No se ha reconocido la localidad de ninguno."));
         return;
@@ -131,7 +132,7 @@ export function HeritageOsm({
             <Button
               onClick={() => void placeInTowns()}
               data-testid="heritage-town-places"
-              data-tooltip={t("Sin red: usa el nomenclátor de la app. Las posiciones quedan marcadas como aproximadas y se sustituyen al situar el elemento con precisión.")}
+              data-tooltip={t("Usa el nomenclátor de la app y, para los pueblos que no conoce, OpenStreetMap (solo el nombre del pueblo). Las posiciones quedan marcadas como aproximadas y se sustituyen al situar el elemento con precisión.")}
             >
               <MapPinned size={14} />
               {t("Situar en su localidad los {n} restantes (aproximado)").replace("{n}", formatNumber(pending.length, 0))}

@@ -248,13 +248,14 @@ export function ImageViewer({
       cropDrag.current = { grip: grip ?? "new", start: cropping, from };
       return;
     }
-    if ((event.target as HTMLElement).closest(".viewer-region, .viewer-mark")) return;
+    // Zones for the AI may be drawn over existing marks.
     if (drawingZone) {
       const p = point(event);
       event.currentTarget.setPointerCapture(event.pointerId);
       setDrawing({ x0: p.x, y0: p.y, x: p.x, y: p.y });
       return;
     }
+    if ((event.target as HTMLElement).closest(".viewer-region, .viewer-mark")) return;
     if (marking === "point") {
       const p = point(event);
       setMarkDraft({ kind: "point", x: p.x, y: p.y, w: 0, h: 0 });

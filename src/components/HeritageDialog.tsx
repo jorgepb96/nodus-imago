@@ -404,7 +404,7 @@ function ElementRecord({
         {search === null ? (
           <Button
             onClick={() => {
-              const text = label.split(/\s+[-–—]\s+/).slice(0, 2).join(" ");
+              const text = label.split(/\s+[-–—]\s*|\s*[-–—]\s+/).slice(0, 2).join(" ");
               setSearch(text);
               void runSearch(text);
             }}
