@@ -69,7 +69,7 @@ export function ModelPicker({
       {Object.entries(settings.apiProfiles).map(([provider, profile]) => (
         <optgroup
           key={provider}
-          label={PROVIDERS[provider as keyof typeof PROVIDERS].label}
+          label={t(PROVIDERS[provider as keyof typeof PROVIDERS].label)}
         >
           {profile?.models.map((model) => (
             <option value={provider + "|" + model} key={model}>

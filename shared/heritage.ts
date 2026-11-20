@@ -690,7 +690,10 @@ export function heritageCategories(
   scheme: HeritageScheme,
   level: "element" | "type" | "group" = "element",
   includeParts = false,
+  /** The interface language: typologies are named in it. */
+  language = "es",
 ): string[] {
+  const none = language === "en" ? "No typology" : "Sin tipología";
   const out = new Set<string>();
   for (const id of ids) {
     if (!labels.has(id)) continue;
@@ -700,8 +703,8 @@ export function heritageCategories(
       continue;
     }
     const e = byId[id];
-    const info = typology(scheme, e?.group ?? null, e?.type ?? null);
-    out.add(level === "group" ? (info?.group ?? "Sin tipología") : (info?.type ?? (info ? `${info.group} (sin tipo)` : "Sin tipología")));
+    const info = typology(scheme, e?.group ?? null, e?.type ?? null, language);
+    out.add(level === "group" ? (info?.group ?? none) : (info?.type ?? (info ? `${info.group} (${language === "en" ? "no type" : "sin tipo"})` : none)));
   }
   return [...out];
 }

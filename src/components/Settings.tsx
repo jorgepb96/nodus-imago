@@ -345,7 +345,7 @@ export function Settings({
               <strong>{t("Búsqueda multimodal")}</strong>
               <span>
                 {s.embeddingModel === "api-embedding"
-                  ? `${PROVIDERS[(s.embeddingApi ?? DEFAULT_EMBEDDING_API).provider].label} · ${(s.embeddingApi ?? DEFAULT_EMBEDDING_API).model}`
+                  ? `${t(PROVIDERS[(s.embeddingApi ?? DEFAULT_EMBEDDING_API).provider].label)} · ${(s.embeddingApi ?? DEFAULT_EMBEDDING_API).model}`
                   : s.embeddingModel === "harrier-oss-v1-0.6b-q8_0"
                     ? "Harrier OSS v1 · local"
                     : t("EmbeddingGemma 2 · local")}

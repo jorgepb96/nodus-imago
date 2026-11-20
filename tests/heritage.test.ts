@@ -103,6 +103,8 @@ test("parts hang from wholes without loops and take the whole's position when th
   byId.detail.type = "fountain";
   assert.deepEqual(heritageCategories(["detail"], labels, byId, DEFAULT_HERITAGE_SCHEME, "element", true).sort(), ["Conjunto", "Fuente del patio", "Patio"]);
   assert.deepEqual(heritageCategories(["detail", "whole"], labels, byId, DEFAULT_HERITAGE_SCHEME, "group"), ["Monumentos conmemorativos", "Arquitectura civil"]);
+  // In the language of the interface.
+  assert.deepEqual(heritageCategories(["detail", "whole"], labels, byId, DEFAULT_HERITAGE_SCHEME, "group", false, "en"), ["Commemorative monuments", "Civil architecture"]);
   assert.deepEqual(heritageCategories(["alone", "part"], labels, byId, DEFAULT_HERITAGE_SCHEME, "type"), ["Sin tipología"]);
 });
 
