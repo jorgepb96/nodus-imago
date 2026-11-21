@@ -289,6 +289,8 @@ export interface CsvImportPlanData {
 }
 
 /** Build an import plan from parsed CSV rows (rows[0] = header). */
+const TITLE_HEADER_RE = /^(t[ií]tulo|title|nombre|name|titre|titel)$/i;
+
 export function buildCsvImportPlan(parsed: string[][]): CsvImportPlan {
   const headers = (parsed[0] ?? []).map((h, i) => h.trim() || `Columna ${i + 1}`);
   // Undo the formula-injection guard that CSV exports (ours and spreadsheets') add: a
@@ -298,6 +300,17 @@ export function buildCsvImportPlan(parsed: string[][]): CsvImportPlan {
     .filter((r) => r.some((c) => c && c.trim() !== ''))
     .map((r) => r.map((c) => (/^'[=+\-@\t\r]/.test(c) ? c.slice(1) : c)));
   const suggestions = headers.map((h, col) => suggestColumn(h, rows.map((r) => r[col] ?? ''), col));
+  // A column called «Título» (Title, Nombre…) names the rows better than the
+  // first one, which is often an id: it becomes the title, and the first
+  // column gets a type of its own.
+  const named = headers.findIndex(
+    (h, col) => col > 0 && TITLE_HEADER_RE.test(h.trim()) && rows.filter((r) => (r[col] ?? '').trim()).length >= rows.length * 0.9,
+  );
+  if (named > 0) {
+    const first = suggestColumn(headers[0], rows.map((r) => r[0] ?? ''), 1);
+    suggestions[0] = first;
+    suggestions[named] = { ...suggestions[named], type: 'title', reason: 'Se llama como un título: da nombre a cada fila' };
+  }
   return { headers, rows, suggestedTypes: suggestions.map((s) => s.type), suggestions };
 }
 

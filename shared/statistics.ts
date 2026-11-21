@@ -129,6 +129,14 @@ export function categoryValues(
       .map((id) => column.options.find((o) => o.id === id)?.label)
       .filter((l): l is string => !!l);
   if (column.type === "checkbox") return [decodeCheckbox(raw) ? "sí" : "no"];
+  // Relations arrive as the titles of the records they link to.
+  if (column.type === "relation")
+    try {
+      const titles = JSON.parse(raw);
+      return Array.isArray(titles) ? titles.filter((x): x is string => typeof x === "string" && !!x.trim()) : [];
+    } catch {
+      return [];
+    }
   const text = display.trim();
   return text && !NULLISH.test(text) ? [text] : [];
 }

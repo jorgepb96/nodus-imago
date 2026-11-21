@@ -133,6 +133,10 @@ test("fingerprints group copies and the same file, in date order", () =>
       [["A", 1930, "identical"], ["B", 1952, "near"], ["D", 1960, "identical"]],
     );
     assert.equal(family.firstYear, 1930);
+    // Only the records of the view on screen (its data source and filters).
+    const view = await variants.families({ sensitivity: "balanced", rowIds: [ids[0], ids[1]] });
+    assert.deepEqual(view.map((f) => f.members.map((m) => m.title)), [["A", "B"]]);
+    assert.deepEqual(await variants.families({ sensitivity: "balanced", rowIds: [ids[2]] }), []);
     assert.ok(!family.members.some((m) => m.rowId === ids[2]));
     assert.equal((await variants.of(assets[1]))?.members.length, 3);
     assert.equal(await variants.of(assets[2]), null);

@@ -153,6 +153,7 @@ try {
         .getByRole("dialog")
         .getByLabel("Nombre", { exact: true })
         .fill("Auditoría Codex");
+      await page.getByRole("dialog").getByTestId("database-kinds").getByText("Personalizada", { exact: true }).click();
       await page
         .getByRole("dialog")
         .getByRole("button", { name: "Crear", exact: true })

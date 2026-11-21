@@ -14,7 +14,7 @@ import type {
   DatabaseColumnType,
   DatabaseDetail,
 } from "../../shared/databases";
-import { COLUMN_TYPES } from "../../shared/databases";
+import { COLUMN_TYPES, type DatabaseKind } from "../../shared/databases";
 import type { ImagePlan } from "../../shared/imago";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
@@ -34,7 +34,9 @@ export function CsvImport({
     [headers, setHeaders] = useState(plan.headers),
     [types, setTypes] = useState(plan.suggestedTypes),
     markers = plan.suggestions.reduce((n, s) => n + (s.nullMarkers ?? 0), 0),
-    [markersEmpty, setMarkersEmpty] = useState(markers > 0);
+    [markersEmpty, setMarkersEmpty] = useState(markers > 0),
+    // What the database is for; it adds no property.
+    [kind, setKind] = useState<DatabaseKind>("images");
   const titleCount = types.filter((type) => type === "title").length;
   const columnHint = (i: number) => {
     const s = plan.suggestions[i];
@@ -95,20 +97,31 @@ export function CsvImport({
               headers,
               types,
               nullMarkersAsEmpty: markersEmpty,
+              kind,
             });
             onDone(d.database.id);
           });
         }}
       >
         <div className="modal-body">
-          <label>
-            {t("Nombre")}
-            <input
-              value={name}
-              required
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
+          <div className="csv-import-head">
+            <label>
+              {t("Nombre")}
+              <input
+                value={name}
+                required
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            <label>
+              {t("Tipo de base de datos")}
+              <select value={kind} data-testid="csv-kind" onChange={(e) => setKind(e.target.value as DatabaseKind)}>
+                <option value="images">{t("Imágenes")}</option>
+                <option value="sources">{t("Fuentes")}</option>
+                <option value="custom">{t("Personalizada")}</option>
+              </select>
+            </label>
+          </div>
           <p className="muted">
             {plan.fileName} · {plan.rowCount.toLocaleString()} {t("registros")}
           </p>

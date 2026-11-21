@@ -131,7 +131,7 @@ export async function importNodus(repo: Repository, file: string) {
     repo.db.transaction(() => {
       for (const d of databases)
         repo.db
-          .prepare("INSERT INTO db_databases VALUES(?,?,?,?,?,?,?)")
+          .prepare("INSERT INTO db_databases(id,short_id,name,icon,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?)")
           .run(
             d.id,
             d.short_id,

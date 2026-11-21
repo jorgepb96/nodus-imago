@@ -38,8 +38,9 @@ const KINDS: { id: Kind; label: string; hint: string; icon: typeof Sigma }[] = [
   { id: "trend", label: "Evolución", hint: "Registros por año o década, opcionalmente por categoría", icon: ChartLine },
   { id: "numeric", label: "Numérica", hint: "Distribución de una propiedad numérica", icon: Hash },
 ];
+// Relations count the titles of the records they link to.
 const NOT_CATEGORICAL = new Set([
-  "title", "rich_text", "attachment", "files", "button", "ai_image", "relation", "unique_id",
+  "title", "rich_text", "attachment", "files", "button", "ai_image", "unique_id",
 ]);
 const categorical = (c: DatabaseColumn) => !NOT_CATEGORICAL.has(c.type);
 

@@ -72,11 +72,48 @@ export class Statistics {
   /** Raw and shown values of some properties for these records, in order. */
   private values(ids: string[], columns: DatabaseColumn[]): Values[] {
     const out: Values[] = columns.map(() => []);
-    for (let i = 0; i < ids.length; i += 500)
-      for (const row of this.repo.hydrate(ids.slice(i, i + 500)))
-        columns.forEach((column, c) =>
-          out[c].push({ raw: row.cells[column.id] ?? null, display: exportCellText(column, row) }),
+    const rows = [];
+    for (let i = 0; i < ids.length; i += 500) rows.push(...this.repo.hydrate(ids.slice(i, i + 500)));
+    // A relation counts the titles of the records it links to.
+    const linked = (raw: string | null | undefined): string[] => {
+      try {
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : [];
+      } catch {
+        return [];
+      }
+    };
+    const targets = [
+      ...new Set(columns.some((c) => c.type === "relation") ? rows.flatMap((row) => columns.filter((c) => c.type === "relation").flatMap((c) => linked(row.cells[c.id]))) : []),
+    ];
+    const titles = new Map<string, string>();
+    const hydrated: ReturnType<typeof this.repo.hydrate> = [];
+    for (let i = 0; i < targets.length; i += 500) hydrated.push(...this.repo.hydrate(targets.slice(i, i + 500)));
+    // Two records with the same title (two editions of a book) stay apart:
+    // their identifier, or else their position, is added to the label.
+    const sameTitle = new Map<string, number>();
+    for (const target of hydrated) sameTitle.set(target.title, (sameTitle.get(target.title) ?? 0) + 1);
+    const idColumns = new Map<string, DatabaseColumn | null>();
+    const identifier = (target: (typeof hydrated)[number]) => {
+      if (!idColumns.has(target.databaseId))
+        idColumns.set(
+          target.databaseId,
+          this.repo
+            .detail(target.databaseId)
+            .columns.find((c) => c.type !== "title" && /^(id|identificador|identifier|c[oó]digo|code|signatura|isbn|ref(erencia)?)$/i.test(c.name.trim())) ?? null,
         );
+      const column = idColumns.get(target.databaseId);
+      return (column ? exportCellText(column, target).trim() : "") || `#${target.position + 1}`;
+    };
+    for (const target of hydrated)
+      titles.set(target.id, (sameTitle.get(target.title) ?? 0) > 1 ? `${target.title} (${identifier(target)})` : target.title);
+    for (const row of rows)
+      columns.forEach((column, c) => {
+        if (column.type === "relation") {
+          const names = linked(row.cells[column.id]).flatMap((id) => (titles.has(id) ? [titles.get(id)!] : []));
+          out[c].push({ raw: names.length ? JSON.stringify(names) : null, display: names.join("; ") });
+        } else out[c].push({ raw: row.cells[column.id] ?? null, display: exportCellText(column, row) });
+      });
     return out;
   }
 

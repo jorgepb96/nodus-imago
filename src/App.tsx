@@ -7,9 +7,12 @@ import {
   useState,
 } from "react";
 import {
+  BookOpen,
   Database,
+  Image as ImageIcon,
   Search,
   Settings as SettingsIcon,
+  Settings2,
   Plus,
   Upload,
   ShieldCheck,
@@ -64,6 +67,7 @@ import type {
   DatabaseColumn,
   DatabaseColumnType,
   DatabaseDetail,
+  DatabaseKind,
   DatabaseSummary,
 } from "../shared/databases";
 import { decodeMultiSelect, isAiColumn } from "../shared/databases";
@@ -100,8 +104,11 @@ import { CriteriaPopover, CriteriaSelect } from "./components/CriteriaSelect";
 import { askIndexQuality, IndexQualityDialog } from "./components/IndexQualityDialog";
 import { ChatView } from "./components/chat/ChatView";
 import { CompareView } from "./components/CompareView";
-import { SavedViewDialog, ViewVisibility, VIEW_INFO } from "./components/SavedViews";
-import { DATABASE_VIEWS, savedViewKey, type SavedView } from "../shared/savedViews";
+import { useDragEdgeScroll } from "./edgeScroll";
+import { ConvertRelationDialog, LookupDialog } from "./components/RelationTools";
+import type { RecordStripItem } from "./components/RecordPanel";
+import { DataSourcePicker, SavedViewDialog, ViewColorPicker, ViewVisibility, VIEW_INFO } from "./components/SavedViews";
+import { DATABASE_VIEWS, combineCriteria, moveViewKey, orderViewKeys, savedIdOf, savedViewKey, type SavedView, type ViewColor } from "../shared/savedViews";
 import { VariantsView } from "./components/VariantsView";
 import { RestorationsView } from "./components/RestorationsView";
 import { SuggestDialog } from "./components/SuggestDialog";
@@ -241,6 +248,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "cleanup"
       | "authorities"
       | "heritage"
+      | "convertRelation"
+      | "lookup"
       | "deleteRows"
       | "deleteDatabase"
       | "saveSearch"
@@ -251,6 +260,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | null
     >(null),
     [name, setName] = useState(""),
+    // What a new database is for: it chooses its starting properties.
+    [newKind, setNewKind] = useState<DatabaseKind>("images"),
     [toolColumn, setToolColumn] = useState<string | null>(null),
     [bulkCount, setBulkCount] = useState(5),
     [csv, setCsv] = useState<CsvImportPlanData | null>(null),
@@ -263,7 +274,26 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [analysisLanguage, setAnalysisLanguage] = useState("Español"),
     [detailed, setDetailed] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(),
-    sequence = useRef(0);
+    sequence = useRef(0),
+    pendingFeatured = useRef<{ databaseId: string; viewId: string } | null>(null);
+  // Records opened together (a point of the map), shown as a strip in the
+  // record panel, and whether the panel fills the window (kept on this device).
+  const [recordStrip, setRecordStrip] = useState<{ label: string; items: RecordStripItem[] } | null>(null),
+    [recordFullscreen, setRecordFullscreen] = useState(() => {
+      try {
+        return localStorage.getItem("imago.recordPanel.fullscreen") === "1";
+      } catch {
+        return false;
+      }
+    });
+  const fillRecordPanel = (on: boolean) => {
+    setRecordFullscreen(on);
+    try {
+      localStorage.setItem("imago.recordPanel.fullscreen", on ? "1" : "0");
+    } catch {
+      /* Local interface preference. */
+    }
+  };
   const refresh = useCallback(() => setTick((n) => n + 1), []);
   // The database's own search box (literal, semantic or both).
   const [dbSearch, setDbSearch] = useState<DatabaseSearchState>(EMPTY_DATABASE_SEARCH);
@@ -485,16 +515,32 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setSelected(new Set());
     setOffset(0);
   }, [area, databaseId]);
-  // What a database view shows: its filters plus its search box. The table,
-  // gallery, timeline, statistics and column calculations all use it.
+  // Saved views of the open database (and the database they were listed for),
+  // and the open database's view preferences on this device.
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]),
+    [savedViewsFor, setSavedViewsFor] = useState<string | null>(null);
+  const [prefs, updatePrefs] = useColumnPrefs(detail?.database.id ?? null);
+  // Where the built-in views take their records from: the whole database, or
+  // the records a saved view keeps. A saved view on screen uses its own.
+  const sourceView =
+    area === "databases" && !activeSaved
+      ? (savedViews.find((v) => savedViewKey(v.id) === prefs.dataSource) ?? null)
+      : null;
+  const effectiveCriteria = useMemo(
+    () => combineCriteria(sourceView?.criteria, { filters, filterLogic: logic, filterGroups }),
+    [sourceView, filters, logic, filterGroups],
+  );
+  // What a database view shows: its filters (on top of its data source) plus
+  // its search box. The table, gallery, timeline, statistics, network, visual
+  // map, variants and column calculations all use it.
   const viewSearch = useMemo<SearchInput>(() => {
     const query = dbSearch.query.trim(),
       semantic = query && dbSearch.mode !== "literal" && !!status?.semanticReady;
     return {
       databaseIds: [databaseId],
-      filters,
-      filterLogic: logic,
-      filterGroups,
+      filters: effectiveCriteria.filters,
+      filterLogic: effectiveCriteria.filterLogic,
+      filterGroups: effectiveCriteria.filterGroups,
       ...(query
         ? semantic
           ? {
@@ -507,7 +553,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           : { query, match: "words" as const }
         : {}),
     };
-  }, [databaseId, filters, logic, filterGroups, dbSearch, status?.semanticReady]);
+  }, [databaseId, effectiveCriteria, dbSearch, status?.semanticReady]);
   const viewSearchKey = JSON.stringify(viewSearch);
   // The last pages seen, by query: coming back to a database (from the
   // comparison table, say) shows its rows at once while they are refreshed,
@@ -729,8 +775,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const navigate = (id: string) => {
     setArea("databases");
     setDatabaseId(id);
-    // A database opens in Table, or in the view the researcher featured.
-    setView(readColumnPrefs(id).defaultView ?? "table");
+    // A database opens in Table, or in the view the researcher featured: a
+    // featured saved view opens once its database's saved views are listed.
+    const featured = readColumnPrefs(id).defaultView ?? null,
+      featuredSaved = savedIdOf(featured);
+    pendingFeatured.current = featuredSaved ? { databaseId: id, viewId: featuredSaved } : null;
+    setView(featuredSaved ? "table" : ((featured as DatabaseViewId | null) ?? "table"));
     setExecuted({});
     setQuery("");
     setFilters([]);
@@ -875,8 +925,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [columnMenu, setColumnMenu] = useState<string | null>(null),
     [menuView, setMenuView] = useState<"main" | "calc">("main"),
     [viewMenuAt, setViewMenuAt] = useState<{ id: string; saved?: boolean; tab: HTMLElement } | null>(null),
-    // Saved views of the open database, the one on screen, and naming/editing one.
-    [savedViews, setSavedViews] = useState<SavedView[]>([]),
+    // Naming or editing a saved view.
     [viewDialog, setViewDialog] = useState<SavedView | "new" | null>(null),
     [editColumn, setEditColumn] = useState<string | null>(null),
     [createType, setCreateType] = useState<DatabaseColumnType | null>(null),
@@ -888,8 +937,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [sortRequest, setSortRequest] = useState(0),
     [summaries, setSummaries] = useState<Record<string, string>>({}),
     [stickyLeft, setStickyLeft] = useState<Record<string, number>>({});
-  const [prefs, updatePrefs] = useColumnPrefs(detail?.database.id ?? null),
-    columnWidths = prefs.widths,
+  const columnWidths = prefs.widths,
     menuAnchor = useRef<HTMLElement | null>(null),
     addPropertyAnchor = useRef<HTMLElement | null>(null),
     aiMenuAnchor = useRef<HTMLElement | null>(null),
@@ -901,6 +949,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     frozenAt = shownColumns.findIndex((c) => c.id === prefs.freezeThrough),
     frozenIds = frozenAt < 0 ? [] : shownColumns.slice(0, frozenAt + 1).map((c) => c.id),
     frozenKey = frozenIds.join("|");
+  // Dragging a column towards an edge scrolls the table gently.
+  useDragEdgeScroll(tableScrollRef, !!dragColumn);
   const saveWidths = (next: Record<string, number>) =>
     updatePrefs((p) => ({ ...p, widths: next }));
   // AI properties write into their cells live; the saved value replaces it.
@@ -1153,11 +1203,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     if (!api || !savedDatabaseId) return;
     void api
       .call("savedViewsList", { databaseId: savedDatabaseId })
-      .then(setSavedViews)
+      .then((list) => {
+        setSavedViews(list);
+        setSavedViewsFor(savedDatabaseId);
+      })
       .catch(() => {});
   }, [api, savedDatabaseId]);
   useEffect(() => {
     setSavedViews([]);
+    setSavedViewsFor(null);
     setActiveSaved(null);
     baseCriteria.current = null;
     loadSavedViews();
@@ -1185,6 +1239,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setView(v.view);
     setActiveSaved(v.id);
   };
+  // A featured saved view opens once its database's views are listed and its
+  // own criteria restored.
+  useEffect(() => {
+    const pending = pendingFeatured.current;
+    if (!pending || savedViewsFor !== pending.databaseId || criteriaKey !== `database:${pending.databaseId}` || criteriaContext !== criteriaKey) return;
+    pendingFeatured.current = null;
+    const featured = savedViews.find((v) => v.id === pending.viewId);
+    if (featured) enterSaved(featured);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedViews, savedViewsFor, criteriaKey, criteriaContext]);
   const leaveSaved = () => {
     if (!activeSaved) return;
     applyCriteria(baseCriteria.current ?? { filters: [], groups: [], logic: "and", sorts: [] });
@@ -1212,48 +1276,51 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       setView(saved.view);
     } else if (activeSaved === saved.id) enterSaved(saved);
   };
-  /** The built-in views this database offers, in tab order. */
+  /** The built-in views on offer: all in a database, Table and Gallery in search. */
   const offeredViews = (): DatabaseViewId[] =>
-    DATABASE_VIEWS.filter((id) => id !== "tree" || !!hierarchyColumn);
-  const visibleViewCount = () =>
-    offeredViews().filter((id) => shownView(id)).length + savedViews.filter((v) => shownView(savedViewKey(v.id))).length;
-  /** After hiding the view on screen: the first view still shown. */
+    area === "databases"
+      ? DATABASE_VIEWS.filter((id) => id !== "tree" || !!hierarchyColumn)
+      : ["table", "gallery"];
+  const inDatabase = area === "databases" && !!detail;
+  /** Every tab, built-in and saved, in the order the researcher dragged them. */
+  // A function: the tree tab depends on the hierarchy property, found later.
+  const tabKeys = () =>
+    inDatabase
+      ? orderViewKeys(prefs.viewOrder, [...offeredViews(), ...savedViews.map((v) => savedViewKey(v.id))])
+      : offeredViews();
+  const visibleViewCount = () => tabKeys().filter((key) => shownView(key)).length;
+  /** After hiding the view on screen: the first tab still shown. */
   const leaveToFirstShown = (hiddenKey: string) => {
     const keys = [...hiddenViews, hiddenKey];
-    const next = offeredViews().find((id) => !keys.includes(id));
-    if (next) pickView(next);
-    else {
-      const saved = savedViews.find((v) => !keys.includes(savedViewKey(v.id)));
-      if (saved) enterSaved(saved);
-    }
+    const next = tabKeys().find((key) => !keys.includes(key));
+    if (!next) return;
+    const saved = savedViews.find((v) => savedViewKey(v.id) === next);
+    if (saved) enterSaved(saved);
+    else pickView(next as DatabaseViewId);
   };
   const hideView = (key: string) => updatePrefs((current) => ({ ...current, hiddenViews: [...(current.hiddenViews ?? []), key] }));
-  /** The view a database opens in; right-clicking a tab features another. */
-  const featuredView = area === "databases" && detail ? (prefs.defaultView ?? null) : null;
+  /** The view a database opens in («saved:<id>» for a saved view); right-clicking a tab features another. */
+  const featuredView = inDatabase ? (prefs.defaultView ?? null) : null;
   const viewMenu = viewMenuAt?.id ?? null,
     viewMenuSaved = viewMenuAt?.saved ? (savedViews.find((v) => v.id === viewMenuAt.id) ?? null) : null,
+    viewMenuKey = viewMenuSaved ? savedViewKey(viewMenuSaved.id) : viewMenu,
     // A stable anchor: the popover repositions whenever its anchor changes.
     viewMenuAnchor = useMemo(() => ({ current: viewMenuAt?.tab ?? null }), [viewMenuAt]);
   const openViewMenu = (id: string, tab: HTMLElement, saved = false) => setViewMenuAt({ id, tab, saved });
-  const viewTab = (id: DatabaseViewId) =>
-    area === "databases" && detail
-      ? {
-          "data-tour": `view-${id}`,
-          "aria-haspopup": "menu" as const,
-          onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => {
-            event.preventDefault();
-            openViewMenu(id, event.currentTarget);
-          },
-          onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
-            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-              event.preventDefault();
-              openViewMenu(id, event.currentTarget);
-            }
-          },
-        }
-      : {};
-  const featuredMark = (id: DatabaseViewId) =>
-    featuredView === id ? (
+  // Tabs move like table columns: drag one, or Alt+←/→ from the keyboard.
+  const [dragTab, setDragTab] = useState<string | null>(null),
+    [dropTab, setDropTab] = useState<{ key: string; side: "before" | "after" } | null>(null);
+  const moveTab = (key: string, target: string, side: "before" | "after") =>
+    updatePrefs((current) => ({ ...current, viewOrder: moveViewKey(current.viewOrder, tabKeys(), key, target, side) }));
+  const setViewColor = (key: string, color: ViewColor | null) =>
+    updatePrefs((current) => {
+      const viewColors = { ...(current.viewColors ?? {}) };
+      if (color) viewColors[key] = color;
+      else delete viewColors[key];
+      return { ...current, viewColors };
+    });
+  const featuredMark = (key: string) =>
+    featuredView === key ? (
       <Star
         size={11}
         className="view-featured"
@@ -1262,6 +1329,102 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         data-tooltip={t("Vista destacada: la base de datos se abre en ella")}
       />
     ) : null;
+  const TAB_TOOLTIPS: Partial<Record<DatabaseViewId, string>> = {
+    variants: "La misma imagen en varios registros: copias, reproducciones y recortes",
+    network: "Qué fotógrafos, lugares y temas aparecen juntos en los mismos registros",
+    visualmap: "Las imágenes colocadas por parecido: las que se parecen aparecen juntas",
+  };
+  /** One view tab: a built-in view or a saved one, with its colour and mark. */
+  const tabButton = (key: string) => {
+    const saved = savedViews.find((v) => savedViewKey(v.id) === key) ?? null;
+    if (!saved && !(DATABASE_VIEWS as readonly string[]).includes(key)) return null;
+    const id = (saved?.view ?? key) as DatabaseViewId,
+      { label, Icon } = VIEW_INFO[id],
+      active = saved ? activeSaved === saved.id : !activeSaved && effectiveView === id,
+      color = inDatabase ? prefs.viewColors?.[key] : undefined,
+      [tone, hue] = color?.split(":") ?? [],
+      tooltip = saved ? "Vista guardada: sus filtros y su orden sobre esta misma base de datos" : TAB_TOOLTIPS[id],
+      menu = (tab: HTMLElement) => openViewMenu(saved ? saved.id : id, tab, !!saved);
+    return (
+      <button
+        key={key}
+        className={[
+          active && "active",
+          saved && "saved-view-tab",
+          color && `has-color tone-${tone}`,
+          dragTab === key && "dragging",
+          dropTab?.key === key && `drop-${dropTab.side}`,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={hue ? ({ "--view-hue": `var(--view-${hue})` } as React.CSSProperties) : undefined}
+        hidden={!shownView(key)}
+        data-view-key={key}
+        data-tour={inDatabase && !saved ? `view-${id}` : undefined}
+        data-testid={saved ? "saved-view-tab" : undefined}
+        data-tooltip={tooltip ? t(tooltip) : undefined}
+        aria-haspopup={inDatabase ? "menu" : undefined}
+        draggable={inDatabase}
+        onClick={() => {
+          if (saved) return enterSaved(saved);
+          pickView(id);
+          if (!["table", "gallery", "tree"].includes(id)) setSelected(new Set());
+        }}
+        onContextMenu={
+          inDatabase
+            ? (event) => {
+                event.preventDefault();
+                menu(event.currentTarget);
+              }
+            : undefined
+        }
+        onKeyDown={
+          inDatabase
+            ? (event) => {
+                if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                  event.preventDefault();
+                  menu(event.currentTarget);
+                  return;
+                }
+                if (!event.altKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+                event.preventDefault();
+                const left = event.key === "ArrowLeft",
+                  shown = tabKeys().filter((k) => shownView(k)),
+                  neighbour = shown[shown.indexOf(key) + (left ? -1 : 1)];
+                if (neighbour) moveTab(key, neighbour, left ? "before" : "after");
+              }
+            : undefined
+        }
+        onDragStart={(event) => {
+          setDragTab(key);
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", saved?.name ?? t(label));
+        }}
+        onDragEnd={() => {
+          setDragTab(null);
+          setDropTab(null);
+        }}
+        onDragOver={(event) => {
+          if (!dragTab || dragTab === key) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          const box = event.currentTarget.getBoundingClientRect(),
+            side = event.clientX < box.left + box.width / 2 ? "before" : "after";
+          if (dropTab?.key !== key || dropTab.side !== side) setDropTab({ key, side });
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          if (dragTab && dropTab) moveTab(dragTab, dropTab.key, dropTab.side);
+          setDragTab(null);
+          setDropTab(null);
+        }}
+      >
+        <Icon size={15} />
+        {saved ? saved.name : t(label)}
+        {featuredMark(key)}
+      </button>
+    );
+  };
   const openColumnMenu = (columnId: string, header: HTMLElement) => {
     menuAnchor.current = header;
     if (!header.matches("button")) setMenuView("main");
@@ -2397,6 +2560,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               <button
                                 onClick={() => {
                                   setName(detail.database.name);
+                                  setNewKind(detail.database.kind ?? "custom");
                                   setModal("rename");
                                 }}
                               >
@@ -2426,159 +2590,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   )}
                   <div className="data-toolbar">
                     <div className="view-tabs" data-tour="db-views">
-                      <button
-                        className={effectiveView === "table" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("table")}
-                        {...viewTab("table")}
-                        onClick={() => pickView("table")}
-                      >
-                        <Table2 size={15} />
-                        {t("Tabla")}
-                        {featuredMark("table")}
-                      </button>
-                      <button
-                        className={effectiveView === "gallery" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("gallery")}
-                        {...viewTab("gallery")}
-                        onClick={() => pickView("gallery")}
-                      >
-                        <LayoutGrid size={15} />
-                        {t("Galería")}
-                        {featuredMark("gallery")}
-                      </button>
-                      {area === "databases" && (
-                        <button
-                          className={effectiveView === "map" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("map")}
-                          {...viewTab("map")}
-                          onClick={() => {
-                            pickView("map");
-                            setSelected(new Set());
-                          }}
-                        >
-                          <MapIcon size={15} />
-                          {t("Mapa")}
-                          {featuredMark("map")}
-                        </button>
-                      )}
-                      {area === "databases" && hierarchyColumn && (
-                        <button
-                          className={effectiveView === "tree" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("tree")}
-                          {...viewTab("tree")}
-                          onClick={() => pickView("tree")}
-                        >
-                          <ListTree size={15} />
-                          {t("Árbol")}
-                          {featuredMark("tree")}
-                        </button>
-                      )}
-                      {area === "databases" && (
-                        <button
-                          className={effectiveView === "timeline" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("timeline")}
-                          {...viewTab("timeline")}
-                          onClick={() => {
-                            pickView("timeline");
-                            setSelected(new Set());
-                          }}
-                        >
-                          <CalendarRange size={15} />
-                          {t("Cronología")}
-                          {featuredMark("timeline")}
-                        </button>
-                      )}
-                      {area === "databases" && (
-                        <button
-                          className={effectiveView === "stats" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("stats")}
-                          {...viewTab("stats")}
-                          onClick={() => {
-                            pickView("stats");
-                            setSelected(new Set());
-                          }}
-                        >
-                          <ChartColumn size={15} />
-                          {t("Estadísticas")}
-                          {featuredMark("stats")}
-                        </button>
-                      )}
-                      {area === "databases" && (
-                        <button
-                          className={effectiveView === "variants" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("variants")}
-                          {...viewTab("variants")}
-                          data-tooltip={t("La misma imagen en varios registros: copias, reproducciones y recortes")}
-                          onClick={() => {
-                            pickView("variants");
-                            setSelected(new Set());
-                          }}
-                        >
-                          <Copy size={15} />
-                          {t("Variantes")}
-                          {featuredMark("variants")}
-                        </button>
-                      )}
-                      {area === "databases" && (
-                        <button
-                          className={effectiveView === "network" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("network")}
-                          {...viewTab("network")}
-                          data-tooltip={t("Qué fotógrafos, lugares y temas aparecen juntos en los mismos registros")}
-                          onClick={() => {
-                            pickView("network");
-                            setSelected(new Set());
-                          }}
-                        >
-                          <Share2 size={15} />
-                          {t("Red")}
-                          {featuredMark("network")}
-                        </button>
-                      )}
-                      {area === "databases" && (
-                        <button
-                          className={effectiveView === "visualmap" && !activeSaved ? "active" : ""}
-                        hidden={!shownView("visualmap")}
-                          {...viewTab("visualmap")}
-                          data-tooltip={t("Las imágenes colocadas por parecido: las que se parecen aparecen juntas")}
-                          onClick={() => {
-                            pickView("visualmap");
-                            setSelected(new Set());
-                          }}
-                        >
-                          <ChartScatter size={15} />
-                          {t("Mapa visual")}
-                          {featuredMark("visualmap")}
-                        </button>
-                      )}
-                    {area === "databases" &&
-                        savedViews.map((v) => {
-                          const Icon = VIEW_INFO[v.view].Icon;
-                          return (
-                            <button
-                              key={v.id}
-                              className={"saved-view-tab" + (activeSaved === v.id ? " active" : "")}
-                              hidden={!shownView(savedViewKey(v.id))}
-                              data-testid="saved-view-tab"
-                              aria-haspopup="menu"
-                              data-tooltip={t("Vista guardada: sus filtros y su orden sobre esta misma base de datos")}
-                              onClick={() => enterSaved(v)}
-                              onContextMenu={(event) => {
-                                event.preventDefault();
-                                openViewMenu(v.id, event.currentTarget, true);
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-                                  event.preventDefault();
-                                  openViewMenu(v.id, event.currentTarget, true);
-                                }
-                              }}
-                            >
-                              <Icon size={15} />
-                              {v.name}
-                            </button>
-                          );
-                        })}
+                      {tabKeys().map((key) => tabButton(key))}
                     </div>
                     <div
                       className="row toolbar-actions"
@@ -2622,6 +2634,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             onPrefs={updatePrefs}
                           />
                         )}
+                      {area === "databases" && detail && (
+                        <DataSourcePicker
+                          saved={savedViews}
+                          source={prefs.dataSource ?? null}
+                          disabled={!!activeSaved}
+                          onSource={(key) => {
+                            updatePrefs((current) => ({ ...current, dataSource: key }));
+                            setOffset(0);
+                            setSelected(new Set());
+                          }}
+                        />
+                      )}
                       {area === "databases" && detail && (
                         <ViewVisibility
                           views={offeredViews()}
@@ -2918,6 +2942,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     <VariantsView
                       key={detail.database.id}
                       databaseId={detail.database.id}
+                      search={viewSearch}
                       jobs={status?.jobs ?? []}
                       onOpenRecord={(id) => void perform(async () => open(await api.call("getRow", { id })))}
                       onCompare={(assets) => {
@@ -2945,16 +2970,19 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         setCompareSeed(assets);
                         setArea("compare");
                       }}
-                      filters={filters}
-                      groups={filterGroups}
+                      filters={effectiveCriteria.filters}
+                      groups={effectiveCriteria.filterGroups}
                       sorts={sorts}
-                      logic={logic}
+                      logic={effectiveCriteria.filterLogic}
                       revision={tick}
-                      onOpen={(id) =>
-                        void perform(async () =>
-                          open(await api.call("getRow", { id })),
-                        )
-                      }
+                      onOpen={(id, group) => {
+                        setRecordStrip(
+                          group && group.length > 1
+                            ? { label: t("{n} registros en este punto").replace("{n}", group.length.toLocaleString()), items: group.slice(0, 500) }
+                            : null,
+                        );
+                        void perform(async () => open(await api.call("getRow", { id })));
+                      }}
                       onProperties={() => setModal("properties")}
                     />
                   ) : !page.rows.length && !loading ? (
@@ -3626,7 +3654,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         <Modal icon={Database}
           title={t(
             modal === "rename"
-              ? "Renombrar base de datos"
+              ? "Nombre y tipo de la base de datos"
               : "Nueva base de datos",
           )}
           onClose={() => setModal(null)}
@@ -3637,8 +3665,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               void perform(async () => {
                 if (modal === "rename") {
                   await api.call("renameDatabase", { id: databaseId, name });
+                  // The kind only says what the database is for: no property changes.
+                  if ((detail?.database.kind ?? "custom") !== newKind)
+                    await api.call("setDatabaseKind", { id: databaseId, kind: newKind });
+                  void reloadDetail(databaseId);
                 } else {
-                  const d = await api.call("createDatabase", { name });
+                  const d = await api.call("createDatabase", { name, kind: newKind });
                   navigate(d.database.id);
                 }
                 refresh();
@@ -3657,12 +3689,31 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   onChange={(e) => setName(e.target.value)}
                 />
               </label>
-              {modal === "create" && (
-                <p className="hint">
-                  {t(
-                    "Define tus propias propiedades y clasificaciones. Puedes importar o añadir imágenes en cualquier momento.",
-                  )}
-                </p>
+              {(modal === "create" || modal === "rename") && (
+                <fieldset className="database-kinds" data-testid="database-kinds">
+                  <legend>{t("Tipo de base de datos")}</legend>
+                  {([
+                    ["images", ImageIcon, "Imágenes", "Fotografías, grabados o dibujos: título, imágenes, autor, fecha, ubicación, categorías y archivo."],
+                    ["sources", BookOpen, "Fuentes", "Libros, revistas, álbumes y documentos: título, tipo, autor, editorial, lugar, año, identificador y cubierta."],
+                    ["custom", Settings2, "Personalizada", "Título e imágenes: define tú el resto de las propiedades."],
+                  ] as const).map(([kind, Icon, label, hint]) => (
+                    <label key={kind} className={"database-kind" + (newKind === kind ? " is-chosen" : "")}>
+                      <input type="radio" name="database-kind" value={kind} checked={newKind === kind} onChange={() => setNewKind(kind)} />
+                      <Icon size={18} />
+                      <span>
+                        <strong>{t(label)}</strong>
+                        <small>{t(hint)}</small>
+                      </span>
+                    </label>
+                  ))}
+                  <p className="hint">
+                    {t(
+                      modal === "rename"
+                        ? "Cambiar el tipo no añade ni quita propiedades: indica para qué sirve la base (las Fuentes muestran primero sus registros enlazados)."
+                        : "Todas las propiedades se pueden cambiar después. Cualquier base se puede relacionar con otra.",
+                    )}
+                  </p>
+                </fieldset>
               )}
             </div>
             <footer>
@@ -3784,12 +3835,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         <CriteriaPopover
           anchor={viewMenuAnchor as React.RefObject<HTMLElement>}
           onClose={() => setViewMenuAt(null)}
-          width={250}
+          width={270}
           label={t("Opciones de la vista")}
           className="column-menu view-menu"
         >
           <div role="menu" className="column-menu-group">
-            {viewMenuSaved ? (
+            {viewMenuSaved && (
               <button
                 type="button"
                 role="menuitem"
@@ -3804,23 +3855,22 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 <Pencil size={15} />
                 <span>{t("Editar vista")}</span>
               </button>
-            ) : (
-              <button
-                type="button"
-                role="menuitem"
-                className="column-menu-item"
-                autoFocus
-                data-testid="view-feature"
-                onClick={() => {
-                  const next = featuredView === viewMenu ? null : (viewMenu as DatabaseViewId);
-                  updatePrefs((current) => ({ ...current, defaultView: next }));
-                  setViewMenuAt(null);
-                }}
-              >
-                {featuredView === viewMenu ? <StarOff size={15} /> : <Star size={15} />}
-                <span>{t(featuredView === viewMenu ? "Quitar destacado" : "Destacar")}</span>
-              </button>
             )}
+            <button
+              type="button"
+              role="menuitem"
+              className="column-menu-item"
+              autoFocus={!viewMenuSaved}
+              data-testid="view-feature"
+              onClick={() => {
+                const next = featuredView === viewMenuKey ? null : (viewMenuKey as DatabaseViewId | `saved:${string}`);
+                updatePrefs((current) => ({ ...current, defaultView: next }));
+                setViewMenuAt(null);
+              }}
+            >
+              {featuredView === viewMenuKey ? <StarOff size={15} /> : <Star size={15} />}
+              <span>{t(featuredView === viewMenuKey ? "Quitar destacado" : "Destacar")}</span>
+            </button>
             <button
               type="button"
               role="menuitem"
@@ -3828,7 +3878,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               data-testid="view-hide"
               disabled={visibleViewCount() <= 1}
               onClick={() => {
-                const key = viewMenuSaved ? savedViewKey(viewMenuSaved.id) : viewMenu;
+                const key = viewMenuKey!;
                 hideView(key);
                 if (viewMenuSaved ? activeSaved === viewMenuSaved.id : !activeSaved && effectiveView === viewMenu) leaveToFirstShown(key);
                 setViewMenuAt(null);
@@ -3837,20 +3887,39 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <EyeOff size={15} />
               <span>{t("Ocultar vista")}</span>
             </button>
-            {viewMenuSaved && (
+          </div>
+          <ViewColorPicker
+            value={prefs.viewColors?.[viewMenuKey!] ?? null}
+            onChange={(color) => setViewColor(viewMenuKey!, color)}
+          />
+          {viewMenuSaved && (
+            <div role="menu" className="column-menu-group">
               <button
                 type="button"
                 role="menuitem"
                 className="column-menu-item danger"
                 data-testid="view-delete"
                 onClick={() => {
-                  const doomed = viewMenuSaved;
+                  const doomed = viewMenuSaved,
+                    key = savedViewKey(doomed.id);
                   setViewMenuAt(null);
                   if (!window.confirm(t("¿Eliminar la vista «{name}»? Los registros no se tocan.").replace("{name}", doomed.name))) return;
                   void perform(async () => {
                     await api!.call("savedViewDelete", { id: doomed.id });
                     if (activeSaved === doomed.id) leaveSaved();
-                    updatePrefs((current) => ({ ...current, hiddenViews: (current.hiddenViews ?? []).filter((h) => h !== savedViewKey(doomed.id)) }));
+                    // Nothing keeps pointing at a view that is gone.
+                    updatePrefs((current) => {
+                      const viewColors = { ...(current.viewColors ?? {}) };
+                      delete viewColors[key];
+                      return {
+                        ...current,
+                        hiddenViews: (current.hiddenViews ?? []).filter((h) => h !== key),
+                        viewOrder: (current.viewOrder ?? []).filter((h) => h !== key),
+                        viewColors,
+                        defaultView: current.defaultView === key ? null : current.defaultView,
+                        dataSource: current.dataSource === key ? null : current.dataSource,
+                      };
+                    });
                     loadSavedViews();
                   });
                 }}
@@ -3858,13 +3927,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 <Trash2 size={15} />
                 <span>{t("Eliminar vista")}</span>
               </button>
-            )}
-          </div>
-          {!viewMenuSaved && (
-            <p className="view-menu-note">
-              {t("La vista destacada es la que se abre al entrar en esta base de datos. Sin ninguna, se abre la tabla.")}
-            </p>
+            </div>
           )}
+          <p className="view-menu-note">
+            {t("La vista destacada es la que se abre al entrar en esta base de datos. Sin ninguna, se abre la tabla. Arrastra las pestañas para cambiar su orden.")}
+          </p>
         </CriteriaPopover>
       )}
       {viewDialog && detail && area === "databases" && (
@@ -3919,6 +3986,14 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             onHeritage={() => {
               setToolColumn(columnMenu);
               setModal("heritage");
+            }}
+            onConvertToRelation={() => {
+              setToolColumn(columnMenu);
+              setModal("convertRelation");
+            }}
+            onLookup={() => {
+              setToolColumn(columnMenu);
+              setModal("lookup");
             }}
             onInserted={(id) =>
               // Wait for the new header to render, then name it from its menu.
@@ -4029,6 +4104,25 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           }}
         />
       )}
+      {modal === "convertRelation" && detail && toolColumn && detail.columns.some((c) => c.id === toolColumn) && (
+        <ConvertRelationDialog
+          column={detail.columns.find((c) => c.id === toolColumn)!}
+          detail={detail}
+          details={allDetails}
+          perform={perform}
+          onDone={() => void reloadDetail(detail.database.id)}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal === "lookup" && detail && toolColumn && detail.columns.some((c) => c.id === toolColumn) && (
+        <LookupDialog
+          relation={detail.columns.find((c) => c.id === toolColumn)!}
+          details={allDetails}
+          perform={perform}
+          onDone={() => void reloadDetail(detail.database.id)}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal === "heritage" && detail && toolColumn && detail.columns.some((c) => c.id === toolColumn) && (
         <HeritageDialog
           column={detail.columns.find((c) => c.id === toolColumn)!}
@@ -4078,9 +4172,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         <AgreementWorkbench
           key={detail.database.id}
           detail={detail}
-          filters={filters}
-          groups={filterGroups}
-          logic={logic}
+          filters={effectiveCriteria.filters}
+          groups={effectiveCriteria.filterGroups}
+          logic={effectiveCriteria.filterLogic}
           perform={perform}
           onClose={() => setModal(null)}
           onOpen={async (id) => {
@@ -4349,9 +4443,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               ? prefs.hidden
               : readColumnPrefs(recordDetail.database.id).hidden
           }
-          onClose={() => setOpenRow(null)}
+          onClose={() => {
+            setOpenRow(null);
+            setRecordStrip(null);
+          }}
           onChanged={refresh}
           onSimilar={similar}
+          strip={recordStrip}
+          fullscreen={recordFullscreen}
+          onFullscreen={fillRecordPanel}
           citation={
             status?.settings.citationTemplates?.[recordDetail.database.id] ??
             citationTemplate(recordDetail.columns, "chicago", [openRow])

@@ -36,6 +36,7 @@ import { ChatStore } from "./chat/store";
 import { Annotations } from "./db/annotations";
 import { CompareBoards } from "./db/compare";
 import { Variants } from "./db/variants";
+import { Appearances } from "./db/appearances";
 import { VisualMaps } from "./db/visualMap";
 import { ValueCleanup } from "./db/cleanup";
 import { Authorities } from "./db/authorities";
@@ -99,6 +100,7 @@ export class Service {
   annotations: Annotations;
   boards: CompareBoards;
   variants: Variants;
+  appearances: Appearances;
   visualMaps: VisualMaps;
   cleanup: ValueCleanup;
   authorities: Authorities;
@@ -191,6 +193,7 @@ export class Service {
       }
     });
     this.queue.fingerprint = (payload, index) => this.variants.fingerprintOne(payload, index);
+    this.appearances = new Appearances(this.repo, this.variants);
     this.details = new DetailSearch(this.repo, this.engine);
     this.suggestions = new NeighbourSuggestions(this.repo, () => {
       try {
@@ -384,7 +387,20 @@ export class Service {
       case "listDatabases":
         return this.repo.list();
       case "createDatabase":
-        return this.repo.create(input.name);
+        return this.repo.create(input.name, true, undefined, input.kind ?? null);
+      case "convertToRelation": {
+        const result = this.repo.convertToRelation(input.id, input);
+        if (input.apply) this.changed();
+        return result;
+      }
+      case "pairRelation":
+        return this.repo.pairRelation(input.columnId, input.name);
+      case "unpairRelation":
+        return this.repo.unpairRelation(input.columnId);
+      case "linkedRecords":
+        return this.repo.linkedRecords(input.rowId);
+      case "setDatabaseKind":
+        return this.repo.setKind(input.id, input.kind);
       case "renameDatabase":
         this.repo.detail(input.id);
         return this.repo.db
@@ -533,6 +549,11 @@ export class Service {
           { nullMarkersAsEmpty: input.nullMarkersAsEmpty === true },
         );
         this.csvPlans.delete(input.token);
+        // The kind only says what the database is for: no property is added.
+        if (input.kind) {
+          this.repo.setKind(d.database.id, input.kind);
+          return this.repo.detail(d.database.id);
+        }
         return d;
       }
       case "imagePreview":
@@ -1141,9 +1162,30 @@ export class Service {
         return id;
       }
       case "variantFamilies":
-        return this.variants.families(input);
+        return this.variants.families({
+          databaseIds: input.databaseIds,
+          sensitivity: input.sensitivity,
+          rowIds: input.search ? await this.selected(input.search) : undefined,
+        });
       case "variantsOf":
         return this.variants.of(input.assetId, input.sensitivity);
+      case "imageVariants":
+        return this.variants.ofImage(input.assetId, input.sensitivity);
+      case "variantVerdict":
+        this.variants.setVerdict(input.assetId, input.otherAssetId, input.verdict, input.kind ?? null);
+        this.changed();
+        return true;
+      case "imageAppearances":
+        return this.appearances.list(input.assetId, input.sensitivity, input.fields);
+      case "appearanceSave": {
+        const saved = this.appearances.save(input);
+        this.changed();
+        return saved;
+      }
+      case "appearanceDelete":
+        this.appearances.delete(input.id);
+        this.changed();
+        return true;
       case "boardsList":
         return this.boards.list();
       case "boardGet":

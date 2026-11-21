@@ -8,18 +8,21 @@ import {
   CalendarRange,
   ChartColumn,
   ChartScatter,
+  Check,
   Copy,
+  Database,
   Eye,
   EyeOff,
   LayoutGrid,
   ListTree,
   Map as MapIcon,
+  Palette,
   Pencil,
   Share2,
   Table2,
 } from "lucide-react";
-import type { DatabaseViewId, SavedView } from "../../shared/savedViews";
-import { savedViewKey } from "../../shared/savedViews";
+import type { DatabaseViewId, SavedView, ViewColor, ViewColorHue } from "../../shared/savedViews";
+import { savedViewKey, VIEW_COLOR_HUES, VIEW_COLOR_TONES } from "../../shared/savedViews";
 import { useT } from "../i18n";
 import { CriteriaPopover } from "./CriteriaSelect";
 import { Button, Modal } from "./ui";
@@ -211,5 +214,153 @@ export function SavedViewDialog({
         </footer>
       </form>
     </Modal>
+  );
+}
+
+const HUE_LABEL: Record<ViewColorHue, string> = {
+  gray: "Gris",
+  brown: "Marrón",
+  red: "Rojo",
+  orange: "Naranja",
+  yellow: "Amarillo",
+  green: "Verde",
+  blue: "Azul",
+  purple: "Morado",
+  pink: "Rosa",
+};
+
+/** The colour of a view tab: none by default, or a hue in a pastel or a normal tone. */
+export function ViewColorPicker({ value, onChange }: { value: ViewColor | null; onChange: (color: ViewColor | null) => void }) {
+  const t = useT();
+  return (
+    <div className="view-color-picker" role="group" aria-label={t("Color de la vista")}>
+      <div className="view-color-head">
+        <Palette size={13} />
+        {t("Color")}
+      </div>
+      {VIEW_COLOR_TONES.map((tone) => (
+        <div key={tone} className="view-color-row">
+          <span>{t(tone === "pastel" ? "Pastel" : "Normal")}</span>
+          <div>
+            {VIEW_COLOR_HUES.map((hue) => {
+              const color = `${tone}:${hue}` as ViewColor,
+                name = `${t(HUE_LABEL[hue])} · ${t(tone === "pastel" ? "Pastel" : "Normal")}`;
+              return (
+                <button
+                  key={hue}
+                  type="button"
+                  className={`view-color-swatch tone-${tone}` + (value === color ? " selected" : "")}
+                  style={{ "--view-hue": `var(--view-${hue})` } as React.CSSProperties}
+                  aria-pressed={value === color}
+                  aria-label={name}
+                  data-tooltip={name}
+                  data-testid={`view-color-${tone}-${hue}`}
+                  onClick={() => onChange(value === color ? null : color)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <button type="button" className="view-color-none" disabled={!value} data-testid="view-color-none" onClick={() => onChange(null)}>
+        {t("Sin color")}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Where the built-in views take their records from: the whole database or
+ * the records a saved view keeps. Filters set on top narrow them further.
+ */
+export function DataSourcePicker({
+  saved,
+  source,
+  disabled,
+  onSource,
+}: {
+  saved: SavedView[];
+  /** «saved:<id>», or null for the whole database. */
+  source: string | null;
+  /** A saved view on screen uses its own filters. */
+  disabled: boolean;
+  onSource: (key: string | null) => void;
+}) {
+  const t = useT(),
+    anchor = useRef<HTMLButtonElement>(null),
+    [open, setOpen] = useState(false);
+  const current = saved.find((v) => savedViewKey(v.id) === source) ?? null;
+  const pick = (key: string | null) => {
+    onSource(key);
+    setOpen(false);
+  };
+  return (
+    <div className="view-controls">
+      <button
+        ref={anchor}
+        className={`button data-source-button ${current && !disabled ? "selected" : ""}`}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        data-testid="data-source"
+        disabled={disabled}
+        data-tooltip={t(
+          disabled
+            ? "Una vista guardada usa sus propios filtros"
+            : "De dónde toman sus registros las vistas: toda la base de datos o los que guarda una vista",
+        )}
+        onClick={() => setOpen(!open)}
+      >
+        <Database size={14} />
+        <span className="data-source-label">
+          {t("Datos")}: {current && !disabled ? current.name : t("Base completa")}
+        </span>
+      </button>
+      {open && (
+        <CriteriaPopover
+          anchor={anchor}
+          onClose={() => setOpen(false)}
+          width={320}
+          closeOnFocusOutside={false}
+          label={t("Origen de los datos")}
+          className="column-visibility data-source-menu"
+        >
+          <header>
+            <strong>{t("Origen de los datos")}</strong>
+          </header>
+          <p className="hint">
+            {t("Todas las vistas (tabla, galería, mapa, cronología, estadísticas, variantes, red y mapa visual) se calculan sobre estos registros. Los filtros que añadas se aplican encima.")}
+          </p>
+          <ul role="radiogroup" aria-label={t("Origen de los datos")}>
+            <li>
+              <button type="button" role="radio" aria-checked={!current} data-testid="data-source-all" onClick={() => pick(null)}>
+                <Database size={13} />
+                <span>{t("Base de datos completa")}</span>
+                {!current && <Check size={14} />}
+              </button>
+            </li>
+            {saved.map((v) => {
+              const Icon = VIEW_INFO[v.view].Icon,
+                chosen = current?.id === v.id;
+              return (
+                <li key={v.id}>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={chosen}
+                    data-testid="data-source-option"
+                    onClick={() => pick(savedViewKey(v.id))}
+                  >
+                    <Icon size={13} />
+                    <span title={v.name}>{v.name}</span>
+                    {chosen && <Check size={14} />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {!saved.length && <p className="hint">{t("Guarda una vista con filtros para usarla como origen de los datos.")}</p>}
+        </CriteriaPopover>
+      )}
+    </div>
   );
 }
