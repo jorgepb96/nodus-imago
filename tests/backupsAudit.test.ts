@@ -218,7 +218,8 @@ test("complete encrypted backup restores originals, rich blocks, preferences, vi
     );
     assert.equal(b.repo.getSettings().language, "en");
     assert.equal(b.repo.getSettings().accent, "#112233");
-    assert.equal(b.repo.getSettings().remoteEnabled, false);
+    // Settings come back 1:1, remote APIs included.
+    assert.equal(b.repo.getSettings().remoteEnabled, true);
     assert.deepEqual(b.client(), a.client());
     const asset = b.repo.getRow(row.id).images[0];
     assert.equal(asset.fileName, "fotografía original.png");

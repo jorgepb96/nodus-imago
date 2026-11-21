@@ -128,6 +128,37 @@ try {
       }),
     ),
   );
+  // Everything else a researcher makes, which a restore must bring back 1:1.
+  const db = seed.database.id;
+  const heritage = await a.call("addColumn", { databaseId: db, name: "Patrimonio", type: "multi_select", config: { heritage: true } });
+  await a.call("saveOptions", { columnId: heritage.id, options: [{ label: "Catedral - Villaverde", color: null }] });
+  const option = (await a.call("detail", { id: db })).columns.find((c) => c.id === heritage.id).options[0].id;
+  await a.call("setCell", { rowId: seed.rows[0], columnId: heritage.id, value: JSON.stringify([option]) });
+  await a.call("authoritySet", {
+    columnId: heritage.id,
+    items: [{ optionId: option, link: { source: "wikidata", id: "Q1", label: "Catedral de Villaverde", description: null, uri: "https://www.wikidata.org/wiki/Q1", kind: "place" } }],
+  });
+  await a.call("heritageSave", {
+    columnId: heritage.id,
+    items: [{ optionId: option, parentId: null, group: "religious", type: "cathedral", latitude: 40.1, longitude: -3.2, coordSource: "manual", osm: null }],
+  });
+  const asset = (await a.call("getRow", { id: seed.rows[0] })).images[0].id;
+  const note = await a.call("annotationSave", { assetId: asset, x: 0.1, y: 0.1, w: 0.3, h: 0.3, note: "Portada", tags: ["detalle"], optionId: option });
+  const statistic = await a.call("statisticSave", { databaseId: db, name: "Por patrimonio", spec: { kind: "frequency", columnId: heritage.id, heritageLevel: "group", chart: "bar", limit: 20 } });
+  const view = await a.call("savedViewSave", { databaseId: db, name: "Catedrales", view: "map", criteria: { filters: [], filterLogic: "and", filterGroups: [], sorts: [] } });
+  const board = await a.call("boardSave", { name: "Mesa de prueba", assetIds: [asset] });
+  const chatFolder = await a.call("chatFolderSave", { name: "Proyecto" });
+  const chat = await a.call("chatCreate", { title: "Preguntas", databaseIds: [db], folderId: chatFolder.id });
+  await a.page.evaluate((db) => localStorage.setItem(`imago.tableView.${db}`, JSON.stringify({ widths: {}, hidden: [], freezeThrough: null, wrap: [], calc: {}, hiddenViews: ["variants"] })), db);
+  const made = {
+    heritage: await a.call("heritageElements", { columnId: heritage.id }),
+    links: await a.call("authorityLinks", { columnId: heritage.id }),
+    notes: await a.call("annotationsList", { assetId: asset }),
+    statistics: await a.call("statisticsList", { databaseId: db }),
+    views: await a.call("savedViewsList", { databaseId: db }),
+    boards: await a.call("boardsList"),
+    chats: await a.call("chatList", {}),
+  };
   const before = await a.call("getRow", { id: seed.rows[0] });
   const hashes = await originals(a, seed.rows);
   assert.equal(hashes.length, 2);
@@ -198,6 +229,16 @@ try {
     columnId: title.id,
     value: "Edited after snapshot",
   });
+  // After the copy everything else is lost too; the restore must bring it back.
+  await a.call("savedViewDelete", { id: view.id });
+  await a.call("statisticDelete", { id: statistic.id });
+  await a.call("annotationDelete", { id: note.id });
+  await a.call("boardDelete", { id: board.id });
+  await a.call("chatDelete", { ids: [chat.id] });
+  await a.call("chatFolderDelete", { id: chatFolder.id });
+  await a.call("authoritySet", { columnId: heritage.id, items: [{ optionId: option, link: null }] });
+  await a.call("heritageSave", { columnId: heritage.id, items: [{ optionId: option, parentId: null, group: null, type: null, latitude: null, longitude: null, coordSource: null, osm: null }] });
+  await a.page.evaluate((db) => localStorage.removeItem(`imago.tableView.${db}`), db);
   const chosen = await pick(a, copy);
   await assert.rejects(
     a.call("backupInspect", {
@@ -290,6 +331,26 @@ try {
   );
   assert.equal((await reopened.call("status")).settings.remoteEnabled, false);
   assert.equal((await reopened.call("status")).settings.mode, "dark");
+  // 1:1: heritage records and links, notes and marks, saved statistics and
+  // views, comparison boards, chats and the interface preferences.
+  const back = {
+    heritage: await reopened.call("heritageElements", { columnId: heritage.id }),
+    links: await reopened.call("authorityLinks", { columnId: heritage.id }),
+    notes: await reopened.call("annotationsList", { assetId: asset }),
+    statistics: await reopened.call("statisticsList", { databaseId: db }),
+    views: await reopened.call("savedViewsList", { databaseId: db }),
+    boards: await reopened.call("boardsList"),
+    chats: await reopened.call("chatList", {}),
+  };
+  for (const key of Object.keys(made)) assert.deepEqual(back[key], made[key], key);
+  assert.equal(made.views.length, 1);
+  assert.equal(made.notes.length, 1);
+  assert.equal(made.heritage[option].group, "religious");
+  assert.deepEqual(
+    JSON.parse(await reopened.page.evaluate((db) => localStorage.getItem(`imago.tableView.${db}`), db)).hiddenViews,
+    ["variants"],
+  );
+  checks.push("Heritage, links, marks, saved statistics and views, boards, chats and interface preferences come back 1:1");
   checks.push(
     "Close and reopen retains IDs, rich content, view settings and all image hashes",
   );
