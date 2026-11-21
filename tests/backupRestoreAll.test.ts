@@ -28,6 +28,10 @@ const TABLES = [
   "restorations",
   "image_fingerprints",
   "image_miniatures",
+  "embeddings",
+  "record_embeddings",
+  "tile_embeddings",
+  "image_captions",
 ];
 const count = (repo: Repository, table: string) => (repo.db.prepare(`SELECT count(*) n FROM ${table}`).get() as { n: number }).n;
 
@@ -83,6 +87,12 @@ test("restoring a backup brings back heritage, links, marks, saved statistics an
     const hash = (source.db.prepare("SELECT content_hash h FROM image_assets").get() as { h: string }).h;
     source.db.prepare("INSERT INTO image_fingerprints(content_hash,hash) VALUES(?,?)").run(hash, "abcd");
     source.db.prepare("INSERT INTO image_miniatures(content_hash,width,height,pixels) VALUES(?,?,?,?)").run(hash, 2, 2, Buffer.from([1, 2, 3, 4]));
+    // Computed AI results: visual search, semantic search and captions.
+    const vector = Buffer.from(new Float32Array([0.25, -0.5, 1]).buffer);
+    source.db.prepare("INSERT INTO embeddings(content_hash,contract,vector) VALUES(?,?,?)").run(hash, "c1", vector);
+    source.db.prepare("INSERT INTO record_embeddings(row_id,contract,text_hash,vector) VALUES(?,?,?,?)").run(row.id, "c1", "t1", vector);
+    source.db.prepare("INSERT INTO tile_embeddings(content_hash,contract,tile,vector) VALUES(?,?,?,?)").run(hash, "c1", 0, vector);
+    source.db.prepare("INSERT INTO image_captions(content_hash,contract,text) VALUES(?,?,?)").run(hash, "c1", "Fachada");
     const before = Object.fromEntries(TABLES.map((t) => [t, count(source, t)]));
     for (const t of TABLES) assert.ok(before[t] > 0, `${t} has data before the backup`);
 
@@ -95,6 +105,8 @@ test("restoring a backup brings back heritage, links, marks, saved statistics an
     assert.equal(restored.group, "religious");
     assert.equal(restored.latitude, 40);
     assert.deepEqual(new SavedViews(target).list(db).map((v) => v.name), ["Catedrales"]);
+    for (const t of ["embeddings", "record_embeddings", "tile_embeddings"])
+      assert.deepEqual((target.db.prepare(`SELECT vector FROM ${t}`).get() as { vector: Buffer }).vector, vector, `${t} vector identical`);
     assert.equal((target.db.prepare("PRAGMA foreign_key_check").all() as unknown[]).length, 0);
     // The restored version's file is back in its folder, identical.
     const file = (target.db.prepare("SELECT file FROM restorations WHERE id='r1'").get() as { file: string }).file;
