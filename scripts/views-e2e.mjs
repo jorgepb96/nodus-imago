@@ -170,8 +170,18 @@ try {
 
   // A point of the map: its records in a strip in the record panel.
   await tab("Mapa").click();
-  await page.getByRole("button", { name: "5 registros · Granada", exact: true }).click();
-  await map.getByText("5 registros en este grupo", { exact: true }).waitFor();
+  // The map fits its bounds and redraws its markers after opening (slower on
+  // Linux runners): a click on a marker that is being replaced is lost, so the
+  // point is clicked again until its group shows.
+  const point = page.getByRole("button", { name: "5 registros · Granada", exact: true });
+  const group = map.getByText("5 registros en este grupo", { exact: true });
+  await point.waitFor();
+  await poll(async () => {
+    if (await group.isVisible()) return true;
+    await point.click({ timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(300);
+    return group.isVisible();
+  }, "the map point's group opens");
   await map.getByRole("button", { name: "Abrir registro R2", exact: true }).click();
   const strip = page.getByTestId("record-strip");
   await strip.waitFor();
