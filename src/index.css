@@ -538,7 +538,7 @@
   max-width: 220px;
   padding: 2px 4px 2px 8px;
   border-radius: 999px;
-  background: var(--a-50);
+  background: var(--accent-soft);
   color: var(--accent-ink);
   font-size: 11px;
 }
@@ -556,7 +556,7 @@
   color: inherit;
 }
 .choice-chip > button:hover {
-  background: var(--a-100);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .choice-list {
   max-height: 210px;
@@ -577,7 +577,7 @@
   background: var(--hover);
 }
 .choice-item.checked {
-  background: color-mix(in srgb, var(--a-50) 70%, transparent);
+  background: var(--accent-soft);
 }
 .choice-item > input {
   margin: 0;
@@ -661,9 +661,9 @@
   display: inline-flex;
   align-items: center;
   max-width: 320px;
-  border: 1px solid var(--a-200);
+  border: 1px solid var(--accent-line);
   border-radius: 999px;
-  background: var(--a-50);
+  background: var(--accent-soft);
   color: var(--accent-ink);
   font-size: 11px;
 }
@@ -782,6 +782,8 @@
   --accent: var(--a-600);
   --accent-soft: var(--a-50);
   --accent-ink: var(--a-700);
+  /* A border in the accent colour, light or dark. */
+  --accent-line: var(--a-200);
   --shadow: 0 12px 40px #00000012;
 }
 /* A colour theme in light mode tints white panels with its palest shade, as
@@ -801,6 +803,7 @@
   --accent: var(--a-600);
   --accent-soft: color-mix(in srgb, var(--a-500) 14%, var(--n-950));
   --accent-ink: var(--a-300);
+  --accent-line: color-mix(in srgb, var(--a-400) 40%, transparent);
   --shadow: 0 12px 40px #0006;
 }
 * {
@@ -1672,7 +1675,7 @@ dialog,
   gap: 9px;
   background: var(--accent-soft);
   padding: 8px 12px;
-  border: 1px solid var(--a-200);
+  border: 1px solid var(--accent-line);
   border-radius: 7px;
   color: var(--accent-ink);
   font-size: 11px;
@@ -2736,7 +2739,7 @@ thead th:last-child {
 .badge.running {
   background: var(--accent-soft);
   color: var(--accent-ink);
-  border-color: var(--a-200);
+  border-color: var(--accent-line);
 }
 .badge.failed {
   color: #ce4c4c;
@@ -3734,7 +3737,7 @@ thead th:last-child {
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--a-200);
+  border: 1px solid var(--accent-line);
   border-radius: 20px;
   padding: 2px 12px;
   font-size: 10px;

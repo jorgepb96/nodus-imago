@@ -36,6 +36,33 @@ export const BACKUP_TABLES = [
   "saved_searches",
   "agreement_experiments",
 ] as const;
+/**
+ * What the researcher made beyond records and images, restored after them in
+ * this order (parents first), so a restore is a 1:1 copy of the collection.
+ * A backup from an older version may lack a table or some columns: only what
+ * both sides have is copied. Restored versions of images travel as files with
+ * the originals; the computed caches come too, so nothing is recalculated.
+ */
+export const RESTORE_EXTRA_TABLES = [
+  "option_authorities",
+  "option_restores",
+  "heritage_elements",
+  "heritage_link_batches",
+  "heritage_proposals",
+  "image_annotations",
+  "db_statistics",
+  "db_views",
+  "visual_maps",
+  "compare_boards",
+  "chat_folders",
+  "chat_conversations",
+  "restorations",
+  "tile_embeddings",
+  "image_fingerprints",
+  "image_pair_checks",
+  "image_miniatures",
+  "automation_control",
+] as const;
 const manifestSchema = z
   .object({
     format: z.literal("nodus.imago/1"),
@@ -106,6 +133,13 @@ export async function writeBackup(
         )
           sources.add(payload.files[i].path);
     }
+    // Restored versions of images: their files travel with the originals.
+    const hasRestorations = backupDb
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='restorations'")
+      .get();
+    if (hasRestorations)
+      for (const r of backupDb.prepare("SELECT file FROM restorations").all() as { file: string }[])
+        if (fs.existsSync(r.file)) sources.add(r.file);
     backupDb.close();
     backupDb=undefined;
     const files = [];
@@ -217,6 +251,8 @@ export async function restoreBackup(
   await fsp.mkdir(staging);
   let snapshot: Database.Database | undefined;
   const promoted: string[] = [];
+  // Restoration files that came through the originals folder.
+  const carried = new Set<string>();
   let committed = false;
   try {
     await archive.preflight(staging);
@@ -361,6 +397,34 @@ export async function restoreBackup(
           insert.run(...expected.map((c) => r[c]));
         }
       }
+      // Relations among these are checked when the restore commits.
+      repo.db.pragma("defer_foreign_keys = ON");
+      const columnsOf = (db: Database.Database, table: string) =>
+        (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+      for (const table of RESTORE_EXTRA_TABLES) {
+        repo.db.prepare(`DELETE FROM ${table}`).run();
+        if (!snapshot!.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)) continue;
+        const old = new Set(columnsOf(snapshot!, table));
+        const shared = columnsOf(repo.db, table).filter((c) => old.has(c));
+        if (!shared.length) continue;
+        const insert = repo.db.prepare(
+          `INSERT INTO ${table}(${shared.join(",")}) VALUES(${shared.map(() => "?").join(",")})`,
+        );
+        for (const r of snapshot!.prepare(`SELECT ${shared.join(",")} FROM ${table}`).all() as Record<string, unknown>[]) {
+          if (table === "restorations") {
+            // The restored version's file came with the originals: it goes
+            // back to the restorations folder under its own name.
+            const moved = relocated.get(r.file as string);
+            if (!moved) continue;
+            const target = path.join(repo.root, "restorations", path.basename(r.file as string));
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.copyFileSync(moved, target);
+            carried.add(moved);
+            r.file = target;
+          }
+          insert.run(...shared.map((c) => r[c]));
+        }
+      }
       const saved = snapshot!
         .prepare("SELECT value FROM settings WHERE key='preferences'")
         .get() as { value: string } | undefined;
@@ -377,9 +441,9 @@ export async function restoreBackup(
             ...repo.getSettings(),
             ...preferences,
             embeddingModel,
+            // Tied to this computer: the Python found here and the processor.
             python: repo.getSettings().python,
             device: "cpu",
-            remoteEnabled: false,
           }),
         );
       }
@@ -388,6 +452,9 @@ export async function restoreBackup(
         throw new Error("Relaciones de la copia incoherentes.");
     })();
     committed = true;
+    for (const file of carried)
+      if (!repo.db.prepare("SELECT 1 FROM image_assets WHERE original_path=? LIMIT 1").get(file))
+        await fsp.rm(file, { force: true });
     return repo.stats().databases;
   } finally {
     snapshot?.close();

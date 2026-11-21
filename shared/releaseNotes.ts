@@ -33,6 +33,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.4.5",
+    date: "2026-11-21",
+    highlights: [
+      {
+        scope: "general",
+        category: "fix",
+        es: "Restaurar una copia de seguridad devuelve ahora todo tal como estaba: elementos patrimoniales y sus enlaces, marcas en las imágenes, estadísticas, vistas guardadas, mesas de comparación, chats, versiones restauradas, búsqueda visual y ajustes. Antes parte de esto se perdía al restaurar.",
+        en: "Restoring a backup now brings everything back as it was: heritage elements and their links, image marks, statistics, saved views, comparison boards, chats, restored versions, visual search and settings. Before, part of this was lost on restore.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "En el modo oscuro, los filtros activos y las opciones seleccionadas se leen bien: usan el color de acento del tema en lugar de un fondo claro.",
+        en: "In dark mode, active filters and selected options are easy to read: they use the theme's accent colour instead of a light background.",
+      },
+    ],
+  },
+  {
     version: "0.4.4",
     date: "2026-11-21",
     highlights: [
