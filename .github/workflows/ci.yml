@@ -1,10 +1,22 @@
-name: Desktop validation
-on: [push, pull_request, workflow_dispatch]
+name: CI
+# As in Nodus Research: CI runs on pull requests and by hand, never on a push.
+# A merge into main is not validated again, and a release runs this same
+# workflow as its quality gate (release-draft.yml), so no separate validation
+# run appears beside a release.
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit or tag to validate
+        type: string
+        required: true
 permissions:
   contents: read
 concurrency:
-  group: desktop-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ inputs.ref || github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   desktop:
     timeout-minutes: 90
@@ -24,8 +36,9 @@ jobs:
       ONNXRUNTIME_NODE_INSTALL: skip
       ONNXRUNTIME_NODE_INSTALL_CUDA: skip
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
       - if: runner.os == 'Linux'
         run: |
@@ -54,7 +67,7 @@ jobs:
       - name: Install and exercise current packages
         run: node scripts/packaged-e2e.mjs
       - run: node scripts/artifact-manifest.mjs release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: unsigned-test-${{ matrix.target }}-${{ matrix.arch }}-${{ github.sha }}
@@ -99,8 +112,9 @@ jobs:
       IMAGO_DISABLE_UPDATES: "1"
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
       - if: runner.os == 'Linux'
         run: |
@@ -121,7 +135,7 @@ jobs:
         run: node scripts/native-ai-ci.mjs
         env:
           IMAGO_TEST_PACKAGED_AI: 1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: real-cpu-evidence-${{ matrix.os }}-${{ github.sha }}
@@ -142,8 +156,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - name: Repository automation tests
         run: node --test scripts/test-cla.mjs scripts/test-cla-reminder.mjs scripts/test-pr-checks.mjs

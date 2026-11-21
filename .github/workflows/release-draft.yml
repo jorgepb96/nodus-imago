@@ -1,7 +1,8 @@
-name: Signed release
+name: Stable release
 # Pushing a v-prefixed tag that matches package.json builds, signs and
 # publishes the release; it can also be started by hand for an existing tag.
-# Nothing is published unless every package builds and passes its checks.
+# Nothing is published unless the quality gate (the pull-request CI, run on
+# the tagged commit) passes and every package builds and passes its checks.
 on:
   push:
     tags:
@@ -18,6 +19,13 @@ concurrency:
   group: imago-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 jobs:
+  # As in Nodus Research (release-build.yml «quality-gate»): the same CI as
+  # pull requests, on the tagged commit. It runs beside the packages, and
+  # publication waits for both.
+  quality-gate:
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.tag || github.ref_name }}
   packages:
     environment: release-signing
     timeout-minutes: 90
@@ -40,14 +48,14 @@ jobs:
       ONNXRUNTIME_NODE_INSTALL: skip
       ONNXRUNTIME_NODE_INSTALL_CUDA: skip
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref_name }}
       # The application comes from the tag. The stapling retry comes from this
       # workflow's commit and stays out of the bundle, so a tooling fix can
       # also rebuild a tag published before it.
       - name: Checkout this workflow's macOS build tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
           path: .release-tools
@@ -60,7 +68,7 @@ jobs:
         run: |
           cp .release-tools/scripts/macos-stapler-retry.cjs scripts/
           rm -rf .release-tools
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
       - name: Validate immutable release tag
         shell: bash
@@ -79,8 +87,8 @@ jobs:
           echo "CC=clang-15" >> "$GITHUB_ENV"
           echo "CXX=clang++-15" >> "$GITHUB_ENV"
       - run: npm ci
-      - run: npm run verify
-      - run: npm run test:desktop:all
+      # Typecheck, lint, unit and desktop tests run in the quality gate.
+      - run: npm run build
       # Same secrets, names and method as Nodus Research (release-build.yml):
       # Developer ID .p12 imported into an isolated keychain, notarization with
       # an App Store Connect API key. Windows builds unsigned unless a
@@ -152,7 +160,7 @@ jobs:
         run: node --require "$GITHUB_WORKSPACE/scripts/macos-stapler-retry.cjs" node_modules/electron-builder/cli.js --${{ matrix.target }} --${{ matrix.arch }} --config build/electron-builder.release.cjs --publish never
       - name: Validate installed packages
         run: node scripts/packaged-e2e.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: signed-${{ matrix.target }}-${{ matrix.arch }}
           if-no-files-found: error
@@ -167,7 +175,7 @@ jobs:
             release/latest*.yml
             release/beta*.yml
   publish:
-    needs: packages
+    needs: [quality-gate, packages]
     runs-on: ubuntu-22.04
     environment: release-signing
     permissions:
@@ -176,12 +184,12 @@ jobs:
       IMAGO_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: "${{ inputs.tag || github.ref_name }}" }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 24 }
       - run: npm ci --ignore-scripts
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { pattern: "signed-*", path: artifacts }
       - name: Verify all bytes and merge architecture feeds
         run: node scripts/assemble-update-feeds.mjs artifacts feeds "${IMAGO_RELEASE_TAG#v}" --without-mac-intel

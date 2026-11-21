@@ -9,7 +9,6 @@
 </p>
 <p align="center">
   <a href="https://github.com/jorgepb96/nodus-imago/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/jorgepb96/nodus-imago?label=release&amp;color=4f46e5"></a>
-  <a href="https://github.com/jorgepb96/nodus-imago/actions/workflows/ci.yml"><img src="https://github.com/jorgepb96/nodus-imago/actions/workflows/ci.yml/badge.svg" alt="Desktop validation"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0--only-6d28d9" alt="License: AGPL-3.0-only"></a>
 </p>
 
