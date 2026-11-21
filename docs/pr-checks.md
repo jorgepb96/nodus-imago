@@ -36,7 +36,7 @@ too.
 ## Retries on PR activity
 
 Editing a PR, reopening it, or marking it ready for review automatically retries
-its latest failed **Desktop validation** run once per revision. Activity must come from the PR
+its latest failed **CI** run once per revision. Activity must come from the PR
 author or a maintainer with write permission. This also supports fork authors
 without giving them the maintainer-only manual command.
 
@@ -52,7 +52,7 @@ CI completion do not trigger retries.
 On an open, non-draft PR, a maintainer with **write**, **maintain**, or **admin**
 repository permission can post exactly `retry`, `/retry`, or
 `@github-actions retry` (case-insensitive). This restarts only the failed jobs
-and their dependents in the latest **Desktop validation** pull-request run for the current
+and their dependents in the latest **CI** pull-request run for the current
 revision, then refreshes linked-issue verification and notifications. The bot's
 failure comment includes these instructions. Ordinary comments and bot comments
 are ignored. Permission is checked against GitHub at execution time.

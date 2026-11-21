@@ -74,11 +74,12 @@ a graphical session:
 npm run test:desktop:all
 ```
 
-The **Desktop validation** workflow builds, tests and packages the app on
-macOS (Apple silicon and Intel), Windows, and Linux (x64 and ARM64), and runs
-real CPU inference on each. Its final `test` job is the single required check:
-it passes only when every platform passed and the repository automation tests
-(CLA and PR checks) pass.
+The **CI** workflow runs on every pull request, as in Nodus Research. It builds,
+tests and packages the app on macOS (Apple silicon and Intel), Windows, and
+Linux (x64 and ARM64), and runs real CPU inference on each. Its final `test`
+job is the single required check: it passes only when every platform passed
+and the repository automation tests (CLA and PR checks) pass. A merge into
+`main` does not run CI again; a release runs it as its quality gate.
 
 ## Publishing releases
 
@@ -93,10 +94,12 @@ To publish a version:
 
 1. Update the version in `package.json` and `package-lock.json` and add its
    notes, through a pull request.
-2. After it merges, tag the merged commit (`vX.Y.Z`) and push the tag. The
-   **Signed release** workflow builds, signs, notarizes and checks every
-   installer, and publishes the release once all of them pass; if any fails,
-   nothing is published. It can also be started by hand for an existing tag.
+2. After it merges, **Release on version bump** tags the merged commit
+   (`vX.Y.Z`) and starts the **Stable release** workflow. It runs the CI on
+   the tagged commit as its quality gate and, beside it, builds, signs,
+   notarizes and checks every installer. The release is published only once
+   both pass; if anything fails, nothing is published. It can also be started
+   by hand for an existing tag.
 3. Once the release is published, the macOS Intel build starts on its own and
    adds its DMG and ZIP to the published release. The download counters
    update automatically.

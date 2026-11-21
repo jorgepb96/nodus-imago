@@ -4,7 +4,7 @@ on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft, closed]
   workflow_run:
-    workflows: [Desktop validation, Contributor License Agreement]
+    workflows: [CI, Contributor License Agreement]
     types: [completed]
   check_run:
     types: [completed]

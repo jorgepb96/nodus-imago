@@ -1,10 +1,22 @@
-name: Desktop validation
-on: [push, pull_request, workflow_dispatch]
+name: CI
+# As in Nodus Research: CI runs on pull requests and by hand, never on a push.
+# A merge into main is not validated again, and a release runs this same
+# workflow as its quality gate (release-draft.yml), so no separate validation
+# run appears beside a release.
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit or tag to validate
+        type: string
+        required: true
 permissions:
   contents: read
 concurrency:
-  group: desktop-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ inputs.ref || github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   desktop:
     timeout-minutes: 90
@@ -25,6 +37,7 @@ jobs:
       ONNXRUNTIME_NODE_INSTALL_CUDA: skip
     steps:
       - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref }}" }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: npm }
       - if: runner.os == 'Linux'
@@ -100,6 +113,7 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref }}" }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: npm }
       - if: runner.os == 'Linux'
@@ -143,6 +157,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref }}" }
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
       - name: Repository automation tests
