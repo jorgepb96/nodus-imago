@@ -33,6 +33,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.4.4",
+    date: "2026-11-21",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "En la tabla, una fecha histórica cuyo texto solo repite el periodo («1950-1959») muestra únicamente el rango, sin el texto cortado delante. Al pulsar en la celda vuelve el texto para editarlo; al pulsar el rango, se ajusta el periodo.",
+        en: "In the table, a historical date whose text only repeats its period («1950-1959») shows the range alone, without the cut-off text in front. Clicking the cell brings the text back to edit; clicking the range adjusts the period.",
+      },
+    ],
+  },
+  {
     version: "0.4.3",
     date: "2026-11-21",
     highlights: [
