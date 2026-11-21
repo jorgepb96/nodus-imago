@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DATABASE_VIEWS } from "./savedViews";
 import { backupPreferencesSchema } from "./backups";
 import { updatePreferencesSchema } from "./updates";
 import { isDatabaseColumnType } from "./databases";
@@ -455,6 +456,24 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({ id: id.optional(), databaseId: id, name, spec: statSpec })
     .strict(),
   statisticDelete: z.object({ id }).strict(),
+  savedViewsList: z.object({ databaseId: id }).strict(),
+  savedViewSave: z
+    .object({
+      id: id.optional(),
+      databaseId: id,
+      name,
+      view: z.enum(DATABASE_VIEWS),
+      criteria: z
+        .object({
+          filters: z.array(filter).max(100),
+          filterLogic: z.enum(["and", "or"]),
+          filterGroups: groups,
+          sorts: z.array(sort).max(8),
+        })
+        .strict(),
+    })
+    .strict(),
+  savedViewDelete: z.object({ id }).strict(),
   statisticCompute: z.object({ search: searchSchema, spec: statSpec }).strict(),
   detailSearch: z
     .object({

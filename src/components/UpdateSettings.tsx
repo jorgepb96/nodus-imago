@@ -4,7 +4,7 @@ import type { UpdateStatus, UpdatePreferences } from "../../shared/updates";
 import type { Perform } from "./Properties";
 import { Button } from "./ui";
 import { useT } from "../i18n";
-import { updateStatusMessage } from "./UpdateBanner";
+import { installUpdate, updateStatusMessage } from "./UpdateBanner";
 export function UpdateSettings({ perform, onWhatsNew }: { perform: Perform; onWhatsNew?: () => void }) {
   const t = useT(),
     [state, setState] = useState<UpdateStatus | null>(null);
@@ -129,10 +129,7 @@ export function UpdateSettings({ perform, onWhatsNew }: { perform: Perform; onWh
               }
               onClick={() =>
                 action(() =>
-                  window.imago.call(
-                    "updateInstall",
-                    password ? { password } : undefined,
-                  ),
+                  installUpdate(password ? { password } : undefined),
                 )
               }
             >

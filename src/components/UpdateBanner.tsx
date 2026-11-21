@@ -18,6 +18,18 @@ function firstCheckThisSession() {
 }
 
 /** The sentence for a state, in the interface language (main sends Spanish). */
+/**
+ * Installing closes Imago before it can answer the window that asked for it:
+ * Electron then reports «reply was never sent». That is the restart starting,
+ * not a failure (real failures arrive as the update's error status).
+ */
+export function installUpdate(input?: { password: string }) {
+  return window.imago.call("updateInstall", input).catch((error: unknown) => {
+    if (/reply was never sent/i.test(error instanceof Error ? error.message : String(error))) return;
+    throw error;
+  });
+}
+
 export function updateStatusMessage(
   update: UpdateStatus,
   t: (s: string) => string,
@@ -145,7 +157,7 @@ export function UpdateBanner({
     if (working) return;
     setRequesting(true);
     try {
-      await window.imago.call("updateInstall");
+      await installUpdate();
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {

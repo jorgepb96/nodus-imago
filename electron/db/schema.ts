@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,state TEX
 CREATE TABLE IF NOT EXISTS job_errors(id INTEGER PRIMARY KEY,job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,item INTEGER NOT NULL,message TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS db_statistics(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,name TEXT NOT NULL,spec_json TEXT NOT NULL,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS statistics_database ON db_statistics(database_id,position);
+CREATE TABLE IF NOT EXISTS db_views(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,name TEXT NOT NULL,view TEXT NOT NULL,criteria_json TEXT NOT NULL,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS views_database ON db_views(database_id,position);
 CREATE TABLE IF NOT EXISTS image_annotations(id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES image_assets(id) ON DELETE CASCADE,row_id TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,x REAL NOT NULL,y REAL NOT NULL,w REAL NOT NULL,h REAL NOT NULL,note TEXT NOT NULL DEFAULT '',tags_json TEXT NOT NULL DEFAULT '[]',color TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS annotations_asset ON image_annotations(asset_id);
 CREATE INDEX IF NOT EXISTS annotations_row ON image_annotations(row_id);

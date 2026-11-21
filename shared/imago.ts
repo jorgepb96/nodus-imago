@@ -461,6 +461,12 @@ export type Commands = {
     result: import("./statistics").SavedStatistic;
   };
   statisticDelete: { input: { id: string }; result: void };
+  savedViewsList: { input: { databaseId: string }; result: import("./savedViews").SavedView[] };
+  savedViewSave: {
+    input: { id?: string; databaseId: string; name: string; view: import("./savedViews").DatabaseViewId; criteria: import("./savedViews").SavedViewCriteria };
+    result: import("./savedViews").SavedView;
+  };
+  savedViewDelete: { input: { id: string }; result: void };
   statisticCompute: {
     input: { search: SearchInput; spec: import("./statistics").StatSpec };
     result: import("./statistics").StatResult;

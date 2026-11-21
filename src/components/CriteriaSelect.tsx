@@ -45,16 +45,18 @@ export function CriteriaPopover({
       const available = window.innerWidth - 24,
         size = Math.min(width, available);
       node.style.width = `${size}px`;
-      node.style.maxHeight = `${Math.min(620, window.innerHeight - 24)}px`;
-      const height = Math.min(
-        node.scrollHeight || 320,
-        620,
-        window.innerHeight - 24,
-      );
-      const top =
-        rect.bottom + height + 8 <= window.innerHeight - 12
-          ? rect.bottom + 6
-          : Math.max(12, rect.top - height - 6);
+      // Next to the control it opens from: below if it fits, else above if it
+      // fits, else on the roomier side, as tall as that side allows (it then
+      // scrolls inside) — never stuck to the top of the window, away from it.
+      const natural = Math.min(node.scrollHeight || 320, 620);
+      const below = window.innerHeight - rect.bottom - 18,
+        above = rect.top - 18;
+      const down = natural <= below || (natural > above && below >= above);
+      const room = Math.max(160, Math.min(620, down ? below : above));
+      // The whole room on that side: content still rendering can grow into it
+      // (the size observer then places it again).
+      node.style.maxHeight = `${room}px`;
+      const top = down ? rect.bottom + 6 : Math.max(12, rect.top - Math.min(natural, room) - 6);
       node.style.top = `${top}px`;
       node.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - size - 12))}px`;
     };

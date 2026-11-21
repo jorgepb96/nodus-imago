@@ -31,6 +31,7 @@ import { embeddingApiMultimodal } from "../shared/embeddingApi";
 import { assetView, viewKey } from "../shared/imageRotation";
 import { AutoIndexer } from "./autoIndex";
 import { Statistics } from "./db/statistics";
+import { SavedViews } from "./db/savedViews";
 import { ChatStore } from "./chat/store";
 import { Annotations } from "./db/annotations";
 import { CompareBoards } from "./db/compare";
@@ -93,6 +94,7 @@ export class Service {
   research: AgreementResearch;
   repo: Repository;
   statistics: Statistics;
+  savedViews: SavedViews;
   chats: ChatStore;
   annotations: Annotations;
   boards: CompareBoards;
@@ -145,6 +147,7 @@ export class Service {
   ) {
     this.repo = new Repository(root);
     this.statistics = new Statistics(this.repo);
+    this.savedViews = new SavedViews(this.repo);
     this.chats = new ChatStore(this.repo.db);
     this.annotations = new Annotations(this.repo);
     this.boards = new CompareBoards(this.repo);
@@ -441,6 +444,12 @@ export class Service {
         return this.statistics.save(input);
       case "statisticDelete":
         return this.statistics.delete(input.id);
+      case "savedViewsList":
+        return this.savedViews.list(input.databaseId);
+      case "savedViewSave":
+        return this.savedViews.save(input);
+      case "savedViewDelete":
+        return this.savedViews.delete(input.id);
       case "statisticCompute": {
         const databaseId = singleDatabase(input.search);
         return this.statistics.compute(databaseId, await this.selected(input.search), input.spec);

@@ -56,6 +56,9 @@ import {
   Share2,
   Star,
   StarOff,
+  BookmarkPlus,
+  EyeOff,
+  Pencil,
 } from "lucide-react";
 import type {
   DatabaseColumn,
@@ -97,6 +100,8 @@ import { CriteriaPopover, CriteriaSelect } from "./components/CriteriaSelect";
 import { askIndexQuality, IndexQualityDialog } from "./components/IndexQualityDialog";
 import { ChatView } from "./components/chat/ChatView";
 import { CompareView } from "./components/CompareView";
+import { SavedViewDialog, ViewVisibility, VIEW_INFO } from "./components/SavedViews";
+import { DATABASE_VIEWS, savedViewKey, type SavedView } from "../shared/savedViews";
 import { VariantsView } from "./components/VariantsView";
 import { RestorationsView } from "./components/RestorationsView";
 import { SuggestDialog } from "./components/SuggestDialog";
@@ -198,6 +203,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [loading, setLoading] = useState(false),
     // Search starts in the gallery; a database sets its own view on opening.
     [view, setView] = useState<DatabaseViewId>("gallery"),
+    // The saved view on screen, if any (its filters replace the database's own).
+    [activeSaved, setActiveSaved] = useState<string | null>(null),
     [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(""),
     // Search starts as Hybrid (words and meaning together); it is Literal
@@ -306,7 +313,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     status,
   ]);
   useEffect(() => {
-    if (!criteriaKey || criteriaContext !== criteriaKey) return;
+    // A saved view keeps its own criteria: the database's are those it had before.
+    if (!criteriaKey || criteriaContext !== criteriaKey || activeSaved) return;
     try {
       localStorage.setItem(
         `imago.criteria.${criteriaKey}`,
@@ -315,7 +323,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     } catch {
       /* Local interface preference. */
     }
-  }, [criteriaKey, criteriaContext, filters, filterGroups, logic, sorts]);
+  }, [criteriaKey, criteriaContext, filters, filterGroups, logic, sorts, activeSaved]);
   useEffect(() => {
     if (
       !criteriaKey ||
@@ -866,7 +874,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     } | null>(null),
     [columnMenu, setColumnMenu] = useState<string | null>(null),
     [menuView, setMenuView] = useState<"main" | "calc">("main"),
-    [viewMenuAt, setViewMenuAt] = useState<{ id: DatabaseViewId; tab: HTMLElement } | null>(null),
+    [viewMenuAt, setViewMenuAt] = useState<{ id: string; saved?: boolean; tab: HTMLElement } | null>(null),
+    // Saved views of the open database, the one on screen, and naming/editing one.
+    [savedViews, setSavedViews] = useState<SavedView[]>([]),
+    [viewDialog, setViewDialog] = useState<SavedView | "new" | null>(null),
     [editColumn, setEditColumn] = useState<string | null>(null),
     [createType, setCreateType] = useState<DatabaseColumnType | null>(null),
     [addPropertyOpen, setAddPropertyOpen] = useState(false),
@@ -1133,12 +1144,97 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       ? number.toLocaleString(uiLocale())
       : value;
   };
+  // ── Views shown and saved views ────────────────────────────────────────
+  // The filters and sort the database had before a saved view was opened:
+  // they come back when another tab is chosen.
+  const baseCriteria = useRef<{ filters: PropertyFilter[]; groups: PropertyFilterGroup[]; logic: "and" | "or"; sorts: ViewSort[] } | null>(null);
+  const savedDatabaseId = area === "databases" ? (detail?.database.id ?? null) : null;
+  const loadSavedViews = useCallback(() => {
+    if (!api || !savedDatabaseId) return;
+    void api
+      .call("savedViewsList", { databaseId: savedDatabaseId })
+      .then(setSavedViews)
+      .catch(() => {});
+  }, [api, savedDatabaseId]);
+  useEffect(() => {
+    setSavedViews([]);
+    setActiveSaved(null);
+    baseCriteria.current = null;
+    loadSavedViews();
+  }, [loadSavedViews]);
+  const hiddenViews = prefs.hiddenViews ?? [],
+    shownView = (key: string) => !hiddenViews.includes(key);
+  /** The criteria on screen, in the shape a saved view keeps. */
+  const currentCriteria = () => ({ filters, filterLogic: logic, filterGroups, sorts });
+  const hasCriteria = filters.length + filterGroups.length + sorts.length > 0;
+  const activeSavedView = savedViews.find((v) => v.id === activeSaved) ?? null;
+  const savedChanged =
+    !!activeSavedView && JSON.stringify(activeSavedView.criteria) !== JSON.stringify(currentCriteria());
+  const applyCriteria = (c: { filters: PropertyFilter[]; groups: PropertyFilterGroup[]; logic: "and" | "or"; sorts: ViewSort[] }) => {
+    const pruned = pruneViewCriteria(c, new Set(columnSignature.split("|")));
+    setFilters(pruned.filters);
+    setFilterGroups(pruned.groups);
+    setLogic(pruned.logic);
+    setSorts(pruned.sorts);
+    setOffset(0);
+    setSelected(new Set());
+  };
+  const enterSaved = (v: SavedView) => {
+    if (!activeSaved) baseCriteria.current = { filters, groups: filterGroups, logic, sorts };
+    applyCriteria({ filters: v.criteria.filters, groups: v.criteria.filterGroups, logic: v.criteria.filterLogic, sorts: v.criteria.sorts });
+    setView(v.view);
+    setActiveSaved(v.id);
+  };
+  const leaveSaved = () => {
+    if (!activeSaved) return;
+    applyCriteria(baseCriteria.current ?? { filters: [], groups: [], logic: "and", sorts: [] });
+    baseCriteria.current = null;
+    setActiveSaved(null);
+  };
+  /** A built-in tab: leaves a saved view, if one is open. */
+  const pickView = (id: DatabaseViewId) => {
+    leaveSaved();
+    setView(id);
+  };
+  const saveView = async (input: { name: string; view: DatabaseViewId; useCurrent: boolean }, editing: SavedView | null) => {
+    const saved = await api!.call("savedViewSave", {
+      ...(editing ? { id: editing.id } : {}),
+      databaseId: savedDatabaseId!,
+      name: input.name,
+      view: input.view,
+      criteria: editing && !input.useCurrent ? editing.criteria : currentCriteria(),
+    });
+    loadSavedViews();
+    if (!editing) {
+      // A new view opens; the database itself goes back to no filters.
+      baseCriteria.current = { filters: [], groups: [], logic: "and", sorts: [] };
+      setActiveSaved(saved.id);
+      setView(saved.view);
+    } else if (activeSaved === saved.id) enterSaved(saved);
+  };
+  /** The built-in views this database offers, in tab order. */
+  const offeredViews = (): DatabaseViewId[] =>
+    DATABASE_VIEWS.filter((id) => id !== "tree" || !!hierarchyColumn);
+  const visibleViewCount = () =>
+    offeredViews().filter((id) => shownView(id)).length + savedViews.filter((v) => shownView(savedViewKey(v.id))).length;
+  /** After hiding the view on screen: the first view still shown. */
+  const leaveToFirstShown = (hiddenKey: string) => {
+    const keys = [...hiddenViews, hiddenKey];
+    const next = offeredViews().find((id) => !keys.includes(id));
+    if (next) pickView(next);
+    else {
+      const saved = savedViews.find((v) => !keys.includes(savedViewKey(v.id)));
+      if (saved) enterSaved(saved);
+    }
+  };
+  const hideView = (key: string) => updatePrefs((current) => ({ ...current, hiddenViews: [...(current.hiddenViews ?? []), key] }));
   /** The view a database opens in; right-clicking a tab features another. */
   const featuredView = area === "databases" && detail ? (prefs.defaultView ?? null) : null;
   const viewMenu = viewMenuAt?.id ?? null,
+    viewMenuSaved = viewMenuAt?.saved ? (savedViews.find((v) => v.id === viewMenuAt.id) ?? null) : null,
     // A stable anchor: the popover repositions whenever its anchor changes.
     viewMenuAnchor = useMemo(() => ({ current: viewMenuAt?.tab ?? null }), [viewMenuAt]);
-  const openViewMenu = (id: DatabaseViewId, tab: HTMLElement) => setViewMenuAt({ id, tab });
+  const openViewMenu = (id: string, tab: HTMLElement, saved = false) => setViewMenuAt({ id, tab, saved });
   const viewTab = (id: DatabaseViewId) =>
     area === "databases" && detail
       ? {
@@ -1424,13 +1520,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       (["map", "timeline", "stats", "variants", "network", "visualmap"].includes(view) && area !== "databases")
         ? "table"
         : view,
-    hierarchy = useMemo(
-      () =>
-        hierarchyColumn && effectiveView === "tree"
-          ? buildHierarchy(page.rows, hierarchyColumn.id)
-          : [],
-      [hierarchyColumn, page.rows, effectiveView],
-    ),
+    // At most one page of rows: cheap, and the React compiler keeps it.
+    hierarchy =
+      hierarchyColumn && effectiveView === "tree"
+        ? buildHierarchy(page.rows, hierarchyColumn.id)
+        : [],
     activeJobs =
       status?.jobs.filter((job) =>
         ["running", "queued", "paused", "failed"].includes(job.state),
@@ -2333,18 +2427,20 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   <div className="data-toolbar">
                     <div className="view-tabs" data-tour="db-views">
                       <button
-                        className={effectiveView === "table" ? "active" : ""}
+                        className={effectiveView === "table" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("table")}
                         {...viewTab("table")}
-                        onClick={() => setView("table")}
+                        onClick={() => pickView("table")}
                       >
                         <Table2 size={15} />
                         {t("Tabla")}
                         {featuredMark("table")}
                       </button>
                       <button
-                        className={effectiveView === "gallery" ? "active" : ""}
+                        className={effectiveView === "gallery" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("gallery")}
                         {...viewTab("gallery")}
-                        onClick={() => setView("gallery")}
+                        onClick={() => pickView("gallery")}
                       >
                         <LayoutGrid size={15} />
                         {t("Galería")}
@@ -2352,10 +2448,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       </button>
                       {area === "databases" && (
                         <button
-                          className={effectiveView === "map" ? "active" : ""}
+                          className={effectiveView === "map" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("map")}
                           {...viewTab("map")}
                           onClick={() => {
-                            setView("map");
+                            pickView("map");
                             setSelected(new Set());
                           }}
                         >
@@ -2366,9 +2463,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                       {area === "databases" && hierarchyColumn && (
                         <button
-                          className={effectiveView === "tree" ? "active" : ""}
+                          className={effectiveView === "tree" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("tree")}
                           {...viewTab("tree")}
-                          onClick={() => setView("tree")}
+                          onClick={() => pickView("tree")}
                         >
                           <ListTree size={15} />
                           {t("Árbol")}
@@ -2377,10 +2475,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                       {area === "databases" && (
                         <button
-                          className={effectiveView === "timeline" ? "active" : ""}
+                          className={effectiveView === "timeline" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("timeline")}
                           {...viewTab("timeline")}
                           onClick={() => {
-                            setView("timeline");
+                            pickView("timeline");
                             setSelected(new Set());
                           }}
                         >
@@ -2391,10 +2490,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                       {area === "databases" && (
                         <button
-                          className={effectiveView === "stats" ? "active" : ""}
+                          className={effectiveView === "stats" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("stats")}
                           {...viewTab("stats")}
                           onClick={() => {
-                            setView("stats");
+                            pickView("stats");
                             setSelected(new Set());
                           }}
                         >
@@ -2405,11 +2505,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                       {area === "databases" && (
                         <button
-                          className={effectiveView === "variants" ? "active" : ""}
+                          className={effectiveView === "variants" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("variants")}
                           {...viewTab("variants")}
                           data-tooltip={t("La misma imagen en varios registros: copias, reproducciones y recortes")}
                           onClick={() => {
-                            setView("variants");
+                            pickView("variants");
                             setSelected(new Set());
                           }}
                         >
@@ -2420,11 +2521,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                       {area === "databases" && (
                         <button
-                          className={effectiveView === "network" ? "active" : ""}
+                          className={effectiveView === "network" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("network")}
                           {...viewTab("network")}
                           data-tooltip={t("Qué fotógrafos, lugares y temas aparecen juntos en los mismos registros")}
                           onClick={() => {
-                            setView("network");
+                            pickView("network");
                             setSelected(new Set());
                           }}
                         >
@@ -2435,11 +2537,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                       {area === "databases" && (
                         <button
-                          className={effectiveView === "visualmap" ? "active" : ""}
+                          className={effectiveView === "visualmap" && !activeSaved ? "active" : ""}
+                        hidden={!shownView("visualmap")}
                           {...viewTab("visualmap")}
                           data-tooltip={t("Las imágenes colocadas por parecido: las que se parecen aparecen juntas")}
                           onClick={() => {
-                            setView("visualmap");
+                            pickView("visualmap");
                             setSelected(new Set());
                           }}
                         >
@@ -2448,6 +2551,34 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           {featuredMark("visualmap")}
                         </button>
                       )}
+                    {area === "databases" &&
+                        savedViews.map((v) => {
+                          const Icon = VIEW_INFO[v.view].Icon;
+                          return (
+                            <button
+                              key={v.id}
+                              className={"saved-view-tab" + (activeSaved === v.id ? " active" : "")}
+                              hidden={!shownView(savedViewKey(v.id))}
+                              data-testid="saved-view-tab"
+                              aria-haspopup="menu"
+                              data-tooltip={t("Vista guardada: sus filtros y su orden sobre esta misma base de datos")}
+                              onClick={() => enterSaved(v)}
+                              onContextMenu={(event) => {
+                                event.preventDefault();
+                                openViewMenu(v.id, event.currentTarget, true);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                                  event.preventDefault();
+                                  openViewMenu(v.id, event.currentTarget, true);
+                                }
+                              }}
+                            >
+                              <Icon size={15} />
+                              {v.name}
+                            </button>
+                          );
+                        })}
                     </div>
                     <div
                       className="row toolbar-actions"
@@ -2491,19 +2622,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             onPrefs={updatePrefs}
                           />
                         )}
-                      <ViewControls
-                        openRequest={filterRequest}
-                        sortRequest={sortRequest}
-                        deferred={area === "search"}
-                        details={visibleDetails}
-                        filters={filters}
-                        groups={filterGroups}
-                        logic={logic}
-                        sorts={sorts}
-                        equivalences={status?.settings.fieldEquivalences ?? []}
-                        onChange={changeCriteria}
-                        onSorts={changeSorts}
-                      />
+                      {area === "databases" && detail && (
+                        <ViewVisibility
+                          views={offeredViews()}
+                          saved={savedViews}
+                          hidden={hiddenViews}
+                          onHidden={(next) => {
+                            const offTab = activeSaved ? next.includes(savedViewKey(activeSaved)) : next.includes(effectiveView);
+                            updatePrefs((current) => ({ ...current, hiddenViews: next }));
+                            if (offTab) leaveToFirstShown(activeSaved ? savedViewKey(activeSaved) : effectiveView);
+                          }}
+                        />
+                      )}
                       {area === "search" ? (
                         <CriteriaSelect
                           label={t("Tipo de coincidencia")}
@@ -2554,16 +2684,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               </button>
                             </div>
                           </details>
-                          <Button
-                            primary
-                            onClick={() => {
-                              setBulkCount(5);
-                              setModal("bulkAdd");
-                            }}
-                          >
-                            <Plus size={15} />
-                            {t("Añadir registros")}
-                          </Button>
                         </>
                       )}
                     </div>
@@ -2614,7 +2734,40 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         </small>
                       )}
                     </span>
-                    <div className="row">
+                    <div className="row result-actions">
+                      <ViewControls
+                        openRequest={filterRequest}
+                        sortRequest={sortRequest}
+                        deferred={area === "search"}
+                        details={visibleDetails}
+                        filters={filters}
+                        groups={filterGroups}
+                        logic={logic}
+                        sorts={sorts}
+                        equivalences={status?.settings.fieldEquivalences ?? []}
+                        onChange={changeCriteria}
+                        onSorts={changeSorts}
+                      />
+                      {area === "databases" && detail && savedChanged && activeSavedView && (
+                        <Button
+                          data-testid="saved-view-update"
+                          data-tooltip={t("Guarda en la vista los filtros y el orden que hay ahora")}
+                          onClick={() =>
+                            void perform(() =>
+                              saveView({ name: activeSavedView.name, view: activeSavedView.view, useCurrent: true }, activeSavedView),
+                            )
+                          }
+                        >
+                          <BookmarkPlus size={14} />
+                          {t("Actualizar vista")}
+                        </Button>
+                      )}
+                      {area === "databases" && detail && hasCriteria && !activeSaved && (
+                        <Button data-testid="saved-view-new" onClick={() => setViewDialog("new")}>
+                          <BookmarkPlus size={14} />
+                          {t("Guardar vista")}
+                        </Button>
+                      )}
                       {(area === "databases" || selected.size > 0) && (
                         <details className="actions-menu" data-tour="db-export">
                           <summary className="button export-button">
@@ -2629,6 +2782,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                             ))}
                           </div>
                         </details>
+                      )}
+                      {area === "databases" && detail && (
+                        <Button
+                          primary
+                          onClick={() => {
+                            setBulkCount(5);
+                            setModal("bulkAdd");
+                          }}
+                        >
+                          <Plus size={15} />
+                          {t("Añadir registros")}
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -3624,26 +3789,93 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           className="column-menu view-menu"
         >
           <div role="menu" className="column-menu-group">
+            {viewMenuSaved ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="column-menu-item"
+                autoFocus
+                data-testid="view-edit"
+                onClick={() => {
+                  setViewDialog(viewMenuSaved);
+                  setViewMenuAt(null);
+                }}
+              >
+                <Pencil size={15} />
+                <span>{t("Editar vista")}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                className="column-menu-item"
+                autoFocus
+                data-testid="view-feature"
+                onClick={() => {
+                  const next = featuredView === viewMenu ? null : (viewMenu as DatabaseViewId);
+                  updatePrefs((current) => ({ ...current, defaultView: next }));
+                  setViewMenuAt(null);
+                }}
+              >
+                {featuredView === viewMenu ? <StarOff size={15} /> : <Star size={15} />}
+                <span>{t(featuredView === viewMenu ? "Quitar destacado" : "Destacar")}</span>
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"
               className="column-menu-item"
-              autoFocus
-              data-testid="view-feature"
+              data-testid="view-hide"
+              disabled={visibleViewCount() <= 1}
               onClick={() => {
-                const next = featuredView === viewMenu ? null : viewMenu;
-                updatePrefs((current) => ({ ...current, defaultView: next }));
+                const key = viewMenuSaved ? savedViewKey(viewMenuSaved.id) : viewMenu;
+                hideView(key);
+                if (viewMenuSaved ? activeSaved === viewMenuSaved.id : !activeSaved && effectiveView === viewMenu) leaveToFirstShown(key);
                 setViewMenuAt(null);
               }}
             >
-              {featuredView === viewMenu ? <StarOff size={15} /> : <Star size={15} />}
-              <span>{t(featuredView === viewMenu ? "Quitar destacado" : "Destacar")}</span>
+              <EyeOff size={15} />
+              <span>{t("Ocultar vista")}</span>
             </button>
+            {viewMenuSaved && (
+              <button
+                type="button"
+                role="menuitem"
+                className="column-menu-item danger"
+                data-testid="view-delete"
+                onClick={() => {
+                  const doomed = viewMenuSaved;
+                  setViewMenuAt(null);
+                  if (!window.confirm(t("¿Eliminar la vista «{name}»? Los registros no se tocan.").replace("{name}", doomed.name))) return;
+                  void perform(async () => {
+                    await api!.call("savedViewDelete", { id: doomed.id });
+                    if (activeSaved === doomed.id) leaveSaved();
+                    updatePrefs((current) => ({ ...current, hiddenViews: (current.hiddenViews ?? []).filter((h) => h !== savedViewKey(doomed.id)) }));
+                    loadSavedViews();
+                  });
+                }}
+              >
+                <Trash2 size={15} />
+                <span>{t("Eliminar vista")}</span>
+              </button>
+            )}
           </div>
-          <p className="view-menu-note">
-            {t("La vista destacada es la que se abre al entrar en esta base de datos. Sin ninguna, se abre la tabla.")}
-          </p>
+          {!viewMenuSaved && (
+            <p className="view-menu-note">
+              {t("La vista destacada es la que se abre al entrar en esta base de datos. Sin ninguna, se abre la tabla.")}
+            </p>
+          )}
         </CriteriaPopover>
+      )}
+      {viewDialog && detail && area === "databases" && (
+        <SavedViewDialog
+          view={viewDialog === "new" ? null : viewDialog}
+          current={effectiveView}
+          views={offeredViews()}
+          hasCriteria={hasCriteria}
+          onSave={(input) => saveView(input, viewDialog === "new" ? null : viewDialog)}
+          onClose={() => setViewDialog(null)}
+        />
       )}
       {columnMenu &&
         detail &&

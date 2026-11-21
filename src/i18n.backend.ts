@@ -42,6 +42,8 @@ export const backendEn: Record<string, string> = {
   "Esta propiedad no se puede duplicar.": "This property cannot be duplicated.",
   "Elige una sola base de datos.": "Choose a single database.",
   "Estadística no encontrada.": "Statistic not found.",
+  "Vista no encontrada.": "View not found.",
+  "Ya hay una vista con ese nombre.": "There is already a view with that name.",
   "La propiedad no pertenece a esta base de datos.": "The property does not belong to this database.",
   "La configuración del modelo ha cambiado. Crea una nueva tarea de indexación.": "The model configuration has changed. Create a new indexing task.",
   "El original ha cambiado. Vuelve a importarlo antes de indexar.": "The original has changed. Import it again before indexing.",
