@@ -7289,6 +7289,10 @@ body:has(.tour-layer.is-tutorial) .record-image-tools {
 /* Historical dates: the text as written and the period read from it. */
 .historical-date-cell { display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%; }
 .historical-date-cell .cell-input { flex: 1; min-width: 0; }
+.historical-date-cell { position: relative; }
+/* The text repeats the period: only the range shows; clicking the cell edits the text. */
+.historical-date-cell .cell-input.is-same:not(:focus) { position: absolute; inset: 0; opacity: 0; }
+.historical-date-cell .cell-input.is-same:not(:focus) + .historical-date-period { position: relative; z-index: 1; }
 .historical-date-period { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 999px; font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--accent-ink); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
 .historical-date-period:hover:not(:disabled) { border-color: var(--accent); }
 .historical-date-period.certainty-approx { border-style: dashed; }

@@ -36,6 +36,10 @@ export function HistoricalDateCell({
   // While typing, the period shown is the one the new text would give.
   const preview = draft !== (stored?.text ?? "") ? parseHistoricalDate(draft) : stored;
   const label = periodLabel(preview, document.documentElement.lang === "en" ? "en" : "es");
+  // In the table, a text that only says the period («1950-1959») would repeat
+  // it, cut short: the range alone is shown, and the text comes back to edit.
+  const plain = (text: string) => text.replace(/[\s\u2010-\u2015-]+/g, "").toLowerCase();
+  const same = compact && !!label && plain(draft) === plain(label);
   const save = async (raw: string | null) => {
     setBusy(true);
     try {
@@ -47,7 +51,7 @@ export function HistoricalDateCell({
   return (
     <span className={`historical-date-cell ${compact ? "compact" : ""}`}>
       <input
-        className="cell-input"
+        className={`cell-input ${same ? "is-same" : ""}`}
         aria-label={name}
         value={draft}
         disabled={busy}
