@@ -13,8 +13,8 @@ jobs:
   places:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
       - run: sudo apt-get update && sudo apt-get install -y rpm cpio xvfb libnspr4 libnss3 libgtk-3-0 libgbm1 libasound2 libxss1 libxtst6 libatspi2.0-0 libx11-xcb1 libxdamage1 libxrandr2
       - run: npm ci --ignore-scripts
@@ -27,7 +27,7 @@ jobs:
           gh run download "$ARTIFACT_RUN" --name "$artifact" --dir test-results/installed-regression
       - name: Exercise existing AppImage, DEB and RPM without rebuilding
         run: IMAGO_PACKAGE_DIR="$PWD/test-results/installed-regression/release" node scripts/packaged-e2e.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: installed-regression-evidence
