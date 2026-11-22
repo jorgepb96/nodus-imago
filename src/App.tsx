@@ -2762,9 +2762,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                     </div>
                   </div>
+                  {/* Keys carry a prefix: the search box and the view below are
+                      siblings, and two siblings with the same key left a second
+                      search box on screen after some changes of view. */}
                   {area === "databases" && detail && effectiveView !== "map" && (
                     <DatabaseSearch
-                      key={detail.database.id}
+                      key={`search:${detail.database.id}`}
                       value={dbSearch}
                       onChange={(next) => {
                         setDbSearch(next);
@@ -2954,7 +2957,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   {!["map", "timeline", "stats", "variants", "network", "visualmap"].includes(effectiveView) && pager(true)}
                   {effectiveView === "timeline" && detail && criteriaContext === criteriaKey ? (
                     <TimelineView
-                      key={detail.database.id}
+                      key={`timeline:${detail.database.id}`}
                       detail={detail}
                       search={viewSearch}
                       prefs={prefs}
@@ -2965,7 +2968,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     />
                   ) : effectiveView === "visualmap" && detail && criteriaContext === criteriaKey ? (
                     <VisualMapView
-                      key={detail.database.id}
+                      key={`visualmap:${detail.database.id}`}
                       detail={detail}
                       search={viewSearch}
                       revision={tick}
@@ -2974,7 +2977,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     />
                   ) : effectiveView === "network" && detail && criteriaContext === criteriaKey ? (
                     <NetworkView
-                      key={detail.database.id}
+                      key={`network:${detail.database.id}`}
                       detail={detail}
                       search={viewSearch}
                       revision={tick}
@@ -2990,7 +2993,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     />
                   ) : effectiveView === "variants" && detail ? (
                     <VariantsView
-                      key={detail.database.id}
+                      key={`variants:${detail.database.id}`}
                       databaseId={detail.database.id}
                       search={viewSearch}
                       jobs={status?.jobs ?? []}
@@ -3002,7 +3005,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     />
                   ) : effectiveView === "stats" && detail && criteriaContext === criteriaKey ? (
                     <StatisticsView
-                      key={detail.database.id}
+                      key={`stats:${detail.database.id}`}
                       detail={detail}
                       search={viewSearch}
                       prefs={prefs}
@@ -3014,7 +3017,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   detail &&
                   criteriaContext === criteriaKey ? (
                     <DatabaseMap
-                      key={detail.database.id}
+                      key={`map:${detail.database.id}`}
                       detail={detail}
                       onCompare={(assets) => {
                         setCompareSeed(assets);
@@ -4208,7 +4211,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       )}
       {modal === "suggest" && detail && (
         <SuggestDialog
-          key={detail.database.id}
+          key={`suggest:${detail.database.id}`}
           detail={detail}
           onClose={() => setModal(null)}
           onApplied={(count) => {
@@ -4220,7 +4223,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       )}
       {modal === "automations" && detail && (
         <Automations
-          key={detail.database.id}
+          key={`automations:${detail.database.id}`}
           detail={detail}
           perform={perform}
           onClose={() => setModal(null)}
@@ -4228,7 +4231,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       )}
       {modal === "agreement" && detail && (
         <AgreementWorkbench
-          key={detail.database.id}
+          key={`agreement:${detail.database.id}`}
           detail={detail}
           filters={effectiveCriteria.filters}
           groups={effectiveCriteria.filterGroups}
