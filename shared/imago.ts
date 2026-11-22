@@ -984,7 +984,8 @@ export interface ImagoApi {
     command: K,
     ...args: Commands[K]["input"] extends void ? [] : [Commands[K]["input"]]
   ): Promise<Commands[K]["result"]>;
-  onChange(listener: () => void): () => void;
+  /** «jobs»: only the queue moved; «data»: records the views show may differ. */
+  onChange(listener: (scope: "jobs" | "data") => void): () => void;
   /** Runs one chat turn in the main process; deltas arrive through onChatDelta. */
   chatSend(request: import("./chat").ChatTurnRequest): Promise<import("./chat").ChatTurnResult>;
   chatCancel(conversationId: string): Promise<void>;

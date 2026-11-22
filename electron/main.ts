@@ -231,7 +231,8 @@ app.whenReady().then(async () => {
     },
   });
   let notified = 0,
-    trailing: ReturnType<typeof setTimeout> | undefined;
+    trailing: ReturnType<typeof setTimeout> | undefined,
+    pendingScope: "jobs" | "data" = "jobs";
   worker.on("message", (message) => {
     if (message.event === "complete") {
       const abort = new AbortController();
@@ -283,10 +284,14 @@ app.whenReady().then(async () => {
     if (message.event === "changed") {
       // At most one refresh every 250 ms, but never drop the last one: a job
       // finishing right after another change must still reach the interface.
+      // Coalesced notifications keep the widest scope: data over jobs.
+      if (message.scope !== "jobs") pendingScope = "data";
       const send = () => {
         notified = Date.now();
         trailing = undefined;
-        window?.webContents.send("imago:changed");
+        const scope = pendingScope;
+        pendingScope = "jobs";
+        window?.webContents.send("imago:changed", scope);
       };
       const wait = 250 - (Date.now() - notified);
       if (wait <= 0) send();
@@ -340,7 +345,7 @@ app.whenReady().then(async () => {
     platform: process.platform,
     arch: process.arch,
     packageType,
-    changed: () => window?.webContents.send("imago:changed"),
+    changed: () => window?.webContents.send("imago:changed", "jobs"),
     canInstall: async () => {
       if (!app.isPackaged)
         throw Error("Instala la versión empaquetada para actualizar.");

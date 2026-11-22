@@ -196,6 +196,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [qualityDismissed, setQualityDismissed] = useState(false),
     [qualityAsked, setQualityAsked] = useState(false),
     [tick, setTick] = useState(0),
+    // The queue and status alone: job progress, without reloading the views.
+    [statusTick, setStatusTick] = useState(0),
     [busy, setBusy] = useState(0),
     [toast, setToast] = useState<{ message: string; error: boolean } | null>(
       null,
@@ -297,6 +299,23 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     }
   };
   const refresh = useCallback(() => setTick((n) => n + 1), []);
+  const refreshStatus = useCallback(() => setStatusTick((n) => n + 1), []);
+  // Data changes announced from the background (an import, a filled column)
+  // reload the views at most once every 1.5 s: a statistic or a network that
+  // takes longer than the interval between notifications would otherwise be
+  // cancelled before it answers and never appear.
+  const dataRefreshAt = useRef(0),
+    dataRefreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const refreshFromBackground = useCallback(() => {
+    if (dataRefreshTimer.current) return;
+    const wait = Math.max(0, 1500 - (Date.now() - dataRefreshAt.current));
+    dataRefreshTimer.current = setTimeout(() => {
+      dataRefreshTimer.current = undefined;
+      dataRefreshAt.current = Date.now();
+      refresh();
+    }, wait);
+  }, [refresh]);
+  useEffect(() => () => clearTimeout(dataRefreshTimer.current), []);
   // The database's own search box (literal, semantic or both).
   const [dbSearch, setDbSearch] = useState<DatabaseSearchState>(EMPTY_DATABASE_SEARCH);
   useEffect(() => {
@@ -420,8 +439,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   );
   useEffect(() => {
     if (!api) return;
-    return api.onChange(() => refresh());
-  }, [api, refresh]);
+    return api.onChange((scope) => (scope === "jobs" ? refreshStatus() : refreshFromBackground()));
+  }, [api, refreshStatus, refreshFromBackground]);
   useEffect(() => {
     if (!api) return;
     return api.onDrop((result) => {
@@ -456,19 +475,24 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       }
     });
   }, [api, notify, perform, refresh, t]);
+  // Job progress (statusTick) asks for the status alone; a data change (tick)
+  // also lists the databases and saved searches again (and so their details).
+  const listedAt = useRef(-1);
   useEffect(() => {
     if (!api) return;
     let cancelled = false;
+    const withLists = listedAt.current !== tick;
     void Promise.all([
       api.call("status"),
-      api.call("listDatabases"),
-      api.call("savedSearches"),
+      withLists ? api.call("listDatabases") : null,
+      withLists ? api.call("savedSearches") : null,
     ])
       .then(([s, ds, ss]) => {
         if (cancelled) return;
+        listedAt.current = tick;
         setStatus(s);
-        setDatabases(ds);
-        setSaved(ss);
+        if (ds) setDatabases(ds);
+        if (ss) setSaved(ss);
         onLanguage(s.settings.language);
         applyTheme(s.settings);
         void applyAppIcon(
@@ -479,13 +503,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     return () => {
       cancelled = true;
     };
-  }, [api, tick, notify, onLanguage]);
+  }, [api, tick, statusTick, notify, onLanguage]);
+  // While jobs run, their progress is polled; the views reload only when the
+  // data change (a notification of scope «data» or a job finishing).
+  const jobsActive = !!status?.jobs.some((j) => ["queued", "running"].includes(j.state));
   useEffect(() => {
-    if (!status?.jobs.some((j) => ["queued", "running"].includes(j.state)))
-      return;
-    const timer = setInterval(refresh, 2000);
+    if (!jobsActive) return;
+    const timer = setInterval(refreshStatus, 2000);
     return () => clearInterval(timer);
-  }, [status?.jobs, refresh]);
+  }, [jobsActive, refreshStatus]);
   useEffect(() => {
     if (!status) return;
     const media = matchMedia("(prefers-color-scheme: dark)"),

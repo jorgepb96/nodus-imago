@@ -14,7 +14,7 @@ import {
 import { Models } from "./ai/models";
 import { InferenceHost } from "./ai/host";
 import { Engine } from "./ai/engine";
-import { JobQueue } from "./jobs";
+import { JobQueue, type ChangeScope } from "./jobs";
 import { buildCsvImportPlan } from "../shared/databaseCsv";
 import { parseCsv } from "../shared/csvParser";
 import {
@@ -140,7 +140,7 @@ export class Service {
   constructor(
     root: string,
     script: string,
-    public changed: () => void,
+    public changed: (scope?: ChangeScope) => void,
     remote?: (
       input: CompletionRequest | EmbeddingRequest,
       signal: AbortSignal,
