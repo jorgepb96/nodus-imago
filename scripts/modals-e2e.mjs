@@ -160,7 +160,7 @@ try {
   await close();
   const menu = page.locator(".page-heading .actions-menu");
   await menu.locator("summary").click();
-  await menu.getByRole("button", { name: "Nombre", exact: true }).click();
+  await menu.getByRole("button", { name: "Nombre, icono y tipo", exact: true }).click();
   await inspect("02b-rename");
   await close();
   if ((await menu.getAttribute("open")) !== null)

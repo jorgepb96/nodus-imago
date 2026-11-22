@@ -152,6 +152,7 @@ import {
 import { decodeDatabaseDate } from "../shared/databaseProperties";
 import { ROLLUP_FUNCTIONS } from "../shared/databases";
 import { RecordPanel } from "./components/RecordPanel";
+import { DatabaseIcon, DatabaseIconPicker } from "./components/DatabaseIcon";
 import { Settings, Jobs } from "./components/Settings";
 import { Home } from "./components/Home";
 import { ImagoMark } from "./components/ImagoMark";
@@ -262,6 +263,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [name, setName] = useState(""),
     // What a new database is for: it chooses its starting properties.
     [newKind, setNewKind] = useState<DatabaseKind>("images"),
+    [newIcon, setNewIcon] = useState<string | null>(null),
     [toolColumn, setToolColumn] = useState<string | null>(null),
     [bulkCount, setBulkCount] = useState(5),
     [csv, setCsv] = useState<CsvImportPlanData | null>(null),
@@ -1949,6 +1951,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 aria-label={t("Nueva base de datos")}
                 onClick={() => {
                   setName("");
+                  setNewIcon(null);
                   setModal("create");
                 }}
               >
@@ -1964,7 +1967,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 }
                 onClick={() => navigate(d.id)}
               >
-                <span className="database-dot" />
+                <DatabaseIcon icon={d.icon} kind={d.kind} size={15} />
                 <span className="nav-title">{d.name}</span>
                 <small>{d.rowCount.toLocaleString()}</small>
               </button>
@@ -2030,6 +2033,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               databases={databases}
               onCreate={() => {
                 setName("");
+                setNewIcon(null);
                 setModal("create");
               }}
               onImport={startCsv}
@@ -2122,6 +2126,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       primary
                       onClick={() => {
                         setName("");
+                        setNewIcon(null);
                         setModal("create");
                       }}
                     >
@@ -2147,7 +2152,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       {databases.map((d) => (
                         <button key={d.id} onClick={() => navigate(d.id)}>
                           <span className="database-card-icon">
-                            <Database size={23} />
+                            <DatabaseIcon icon={d.icon} kind={d.kind} size={23} />
                           </span>
                           <h3>{d.name}</h3>
                           <p>
@@ -2182,6 +2187,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         <Button
                           onClick={() => {
                             setName("");
+                            setNewIcon(null);
                             setModal("create");
                           }}
                         >
@@ -2524,7 +2530,24 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           <span className="eyebrow">
                             {detail.database.shortId}
                           </span>
-                          <h1>{detail.database.name}</h1>
+                          <div className="database-title">
+                            <button
+                              type="button"
+                              className="database-title-icon"
+                              aria-label={t("Cambiar el icono")}
+                              data-tooltip={t("Cambiar el icono")}
+                              data-testid="database-title-icon"
+                              onClick={() => {
+                                setName(detail.database.name);
+                                setNewKind(detail.database.kind ?? "custom");
+                                setNewIcon(detail.database.icon);
+                                setModal("rename");
+                              }}
+                            >
+                              <DatabaseIcon icon={detail.database.icon} kind={detail.database.kind} size={26} />
+                            </button>
+                            <h1>{detail.database.name}</h1>
+                          </div>
                           <p>
                             {detail.database.rowCount.toLocaleString()}{" "}
                             {t("registros")} · {t("Colección local")}
@@ -2561,10 +2584,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                 onClick={() => {
                                   setName(detail.database.name);
                                   setNewKind(detail.database.kind ?? "custom");
+                                  setNewIcon(detail.database.icon);
                                   setModal("rename");
                                 }}
                               >
-                                {t("Nombre")}
+                                {t("Nombre, icono y tipo")}
                               </button>
                               <button
                                 onClick={() =>
@@ -2978,7 +3002,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       onOpen={(id, group) => {
                         setRecordStrip(
                           group && group.length > 1
-                            ? { label: t("{n} registros en este punto").replace("{n}", group.length.toLocaleString()), items: group.slice(0, 500) }
+                            ? { label: t("{n} registros en este punto").replace("{n}", group.length.toLocaleString()), items: group }
                             : null,
                         );
                         void perform(async () => open(await api.call("getRow", { id })));
@@ -3654,7 +3678,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         <Modal icon={Database}
           title={t(
             modal === "rename"
-              ? "Nombre y tipo de la base de datos"
+              ? "Nombre, icono y tipo de la base de datos"
               : "Nueva base de datos",
           )}
           onClose={() => setModal(null)}
@@ -3665,12 +3689,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               void perform(async () => {
                 if (modal === "rename") {
                   await api.call("renameDatabase", { id: databaseId, name });
+                  if ((detail?.database.icon ?? null) !== newIcon)
+                    await api.call("setDatabaseIcon", { id: databaseId, icon: newIcon });
                   // The kind only says what the database is for: no property changes.
                   if ((detail?.database.kind ?? "custom") !== newKind)
                     await api.call("setDatabaseKind", { id: databaseId, kind: newKind });
                   void reloadDetail(databaseId);
                 } else {
                   const d = await api.call("createDatabase", { name, kind: newKind });
+                  if (newIcon) await api.call("setDatabaseIcon", { id: d.database.id, icon: newIcon });
                   navigate(d.database.id);
                 }
                 refresh();
@@ -3689,6 +3716,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   onChange={(e) => setName(e.target.value)}
                 />
               </label>
+              <div className="database-icon-field">
+                <span className="field-label">{t("Icono")}</span>
+                <DatabaseIconPicker value={newIcon} kind={newKind} onChange={setNewIcon} />
+              </div>
               {(modal === "create" || modal === "rename") && (
                 <fieldset className="database-kinds" data-testid="database-kinds">
                   <legend>{t("Tipo de base de datos")}</legend>
@@ -3835,7 +3866,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         <CriteriaPopover
           anchor={viewMenuAnchor as React.RefObject<HTMLElement>}
           onClose={() => setViewMenuAt(null)}
-          width={270}
+          // Wide enough for the nine colours of each tone on one line.
+          width={314}
           label={t("Opciones de la vista")}
           className="column-menu view-menu"
         >

@@ -142,7 +142,29 @@ try {
   assert.deepEqual(await tabOrder(), order);
   assert.ok((await tab("Mapa").getAttribute("class")).includes("tone-pastel"));
   checks.push("Saved views featured, tabs coloured (pastel/normal, 3 px line) and moved by keyboard and dragging, kept after reopening");
-  await (await menuFor("Mapa")).getByTestId("view-color-none").click();
+  // The palette: nine swatches per tone on one line, «Sin color» lined up with them.
+  const menu = await menuFor("Mapa");
+  for (const tone of ["pastel", "normal"]) {
+    const tops = await menu.locator(`.view-color-swatch.tone-${tone}`).evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    assert.equal(tops.length, 9);
+    assert.equal(new Set(tops).size, 1, `${tone} swatches on one line: ${tops}`);
+  }
+  const firstSwatch = await menu.getByTestId("view-color-pastel-gray").boundingBox(),
+    noneIcon = await menu.getByTestId("view-color-none").locator("svg").boundingBox();
+  assert.ok(Math.abs(noneIcon.x - firstSwatch.x) <= 3, `«Sin color» lined up: ${noneIcon.x} / ${firstSwatch.x}`);
+  // Nothing cut off: the menu needs no horizontal scrolling.
+  // Nothing cut off and nothing to scroll, across or down.
+  const overflow = await menu.evaluate((el) =>
+    [el, ...el.querySelectorAll("*")]
+      .filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1)
+      .map((e) => e.className || e.tagName),
+  );
+  assert.deepEqual(overflow, [], "the menu shows everything without scrolling");
+  const lastSwatch = await menu.getByTestId("view-color-normal-pink").boundingBox(),
+    menuBox = await menu.boundingBox();
+  assert.ok(lastSwatch.x + lastSwatch.width <= menuBox.x + menuBox.width - 8, "the last colour is inside the menu");
+  await page.screenshot({ path: "test-results/views-color-picker.png" });
+  await menu.getByTestId("view-color-none").click();
   await poll(async () => !(await tab("Mapa").getAttribute("class"))?.includes("has-color"), "no colour");
 
   // Gentle scrolling while a column is dragged to the right edge.
@@ -170,18 +192,8 @@ try {
 
   // A point of the map: its records in a strip in the record panel.
   await tab("Mapa").click();
-  // The map fits its bounds and redraws its markers after opening (slower on
-  // Linux runners): a click on a marker that is being replaced is lost, so the
-  // point is clicked again until its group shows.
-  const point = page.getByRole("button", { name: "5 registros · Granada", exact: true });
-  const group = map.getByText("5 registros en este grupo", { exact: true });
-  await point.waitFor();
-  await poll(async () => {
-    if (await group.isVisible()) return true;
-    await point.click({ timeout: 2000 }).catch(() => {});
-    await page.waitForTimeout(300);
-    return group.isVisible();
-  }, "the map point's group opens");
+  await page.getByRole("button", { name: "5 registros · Granada", exact: true }).click();
+  await map.getByText("5 registros en este grupo", { exact: true }).waitFor();
   await map.getByRole("button", { name: "Abrir registro R2", exact: true }).click();
   const strip = page.getByTestId("record-strip");
   await strip.waitFor();

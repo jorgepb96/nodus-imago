@@ -213,6 +213,9 @@ export type Job = {
   message: string | null;
   createdAt: string;
   updatedAt: string;
+  /** An indexing pass: how many records (their text) and images it holds. */
+  indexRows?: number | null;
+  indexAssets?: number | null;
 };
 export type Proposal = {
   id: string;
@@ -460,6 +463,8 @@ export type Commands = {
     }[];
   };
   setDatabaseKind: { input: { id: string; kind: import("./databases").DatabaseKind | null }; result: void };
+  /** A drawn icon and its colour («Name» or «Name:colour»), or null for the kind's icon. */
+  setDatabaseIcon: { input: { id: string; icon: string | null }; result: void };
   renameDatabase: { input: { id: string; name: string }; result: void };
   deleteDatabase: { input: { id: string }; result: void };
   detail: { input: { id: string }; result: DatabaseDetail };

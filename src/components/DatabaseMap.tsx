@@ -90,6 +90,11 @@ function RecordMapCanvas({
   }, []);
   useEffect(() => {
     const container = element.current!;
+    // Leaflet focuses the map on every press (for its keyboard controls) and
+    // only puts the window's scroll back, not the workspace's: a map taller
+    // than the visible area then jumped, and the press missed its marker.
+    const focus = container.focus.bind(container);
+    container.focus = (options?: FocusOptions) => focus({ ...options, preventScroll: true });
     // Once the user pans or zooms, the map stays where they left it.
     const touched = () => {
       moved.current = true;
@@ -485,6 +490,11 @@ export function DatabaseMap({
     logic,
   ]);
   const answered = useRef("");
+  // The question asked, by its content: the parent may hand over equal but new
+  // filter lists on any redraw, which must not reload the map or drop the
+  // point the user just opened.
+  const criteriaKey = JSON.stringify([filters, groups, logic]),
+    sortsKey = JSON.stringify(sorts);
   useEffect(() => {
     if (!columnId) {
       setData([]);
@@ -535,12 +545,13 @@ export function DatabaseMap({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [detail.database.id, columnId, fallbackColumnId, filters, groups, sorts, logic, revision, viewKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- by content (criteriaKey, sortsKey)
+  }, [detail.database.id, columnId, fallbackColumnId, criteriaKey, sortsKey, revision, viewKey]);
   useEffect(() => {
     setSelectedIds(null);
     setUnlocated(false);
     setLimit(50);
-  }, [columnId, filters, groups, logic]);
+  }, [columnId, criteriaKey]);
   useEffect(() => {
     setData([]);
     answered.current = "";

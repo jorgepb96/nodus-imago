@@ -401,6 +401,8 @@ export class Service {
         return this.repo.linkedRecords(input.rowId);
       case "setDatabaseKind":
         return this.repo.setKind(input.id, input.kind);
+      case "setDatabaseIcon":
+        return this.repo.setIcon(input.id, input.icon);
       case "renameDatabase":
         this.repo.detail(input.id);
         return this.repo.db

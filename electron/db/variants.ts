@@ -183,6 +183,65 @@ export class Variants {
     return "imported";
   }
 
+  /** Whether two files are the same photograph by their pixels; each pair is
+   * checked once and kept in the collection (two files never change). */
+  private pixelsMatch(a: string, b: string): boolean {
+    const key = a < b ? a + b : b + a;
+    let ok = this.checked.get(key);
+    if (ok !== undefined) return ok;
+    const row = this.repo.db.prepare("SELECT same FROM image_pair_checks WHERE pair=?").get(key) as { same: number } | undefined;
+    if (row) ok = !!row.same;
+    else {
+      const one = this.repo.db.prepare("SELECT width,height,pixels FROM image_miniatures WHERE content_hash=?");
+      const ra = one.get(a) as { width: number; height: number; pixels: Buffer } | undefined,
+        rb = one.get(b) as { width: number; height: number; pixels: Buffer } | undefined;
+      if (!ra || !rb) return false;
+      const mini = (r: { width: number; height: number; pixels: Buffer }) => ({ width: r.width, height: r.height, pixels: new Uint8Array(r.pixels) });
+      ok = cropMatch(mini(ra), mini(rb)) >= SAME_PHOTOGRAPH;
+      this.repo.db.prepare("INSERT OR REPLACE INTO image_pair_checks VALUES(?,?)").run(key, ok ? 1 : 0);
+    }
+    this.checked.set(key, ok);
+    return ok;
+  }
+
+  /** The files that match ONE file, with how closely: its fingerprint and its
+   * vector against every other one. Opening a record needs only this, not the
+   * pairs of the whole collection (which took seconds on thousands of images). */
+  private async matchesOf(home: string, hashes: string[], sensitivity: Sensitivity) {
+    const limits = SENSITIVITY[sensitivity];
+    const pairs: { a: string; b: string; bits: number | null; cosine: number | null }[] = [];
+    const fingerprints = this.fingerprints(),
+      mine = fingerprints.get(home);
+    const found = new Set<string>();
+    if (mine && informative(mine))
+      for (const h of hashes) {
+        const f = fingerprints.get(h);
+        if (h === home || !f || !informative(f)) continue;
+        const bits = hamming(mine, f);
+        if (bits <= limits.bits) {
+          pairs.push({ a: home, b: h, bits, cosine: null });
+          found.add(h);
+        }
+      }
+    if (limits.cosine !== null) {
+      const vectors = this.vectors(new Set(hashes)),
+        v = vectors.get(home);
+      if (v) {
+        let work = 0;
+        for (const [h, w] of vectors) {
+          if (h === home || found.has(h)) continue;
+          let dot = 0;
+          for (let d = 0; d < v.length; d++) dot += v[d] * w[d];
+          if (dot < limits.cosine) continue;
+          if (this.pixelsMatch(home, h)) pairs.push({ a: home, b: h, bits: null, cosine: dot });
+          // Long first checks give way to other requests now and then.
+          if (++work % 20 === 0) await new Promise((resolve) => setImmediate(resolve));
+        }
+      }
+    }
+    return pairs;
+  }
+
   /** Pairs of files that match, with how closely. */
   private async matches(hashes: string[], sensitivity: Sensitivity) {
     const limits = SENSITIVITY[sensitivity];
@@ -377,8 +436,7 @@ export class Variants {
     const verdicts = this.verdicts(),
       verdictOf = (x: string, y: string) => verdicts.get(pairKey(x, y)) ?? null;
     const near = new Map<string, Close>();
-    for (const pair of await this.matches([...byHash.keys()], sensitivity))
-      if (pair.a === home || pair.b === home) near.set(pair.a === home ? pair.b : pair.a, pair);
+    for (const pair of await this.matchesOf(home, [...byHash.keys()], sensitivity)) near.set(pair.b, pair);
     const rejected = new Set([...near.keys()].filter((h) => verdictOf(home, h)?.verdict === "different"));
     // Confirmed links chain: everything reachable through "same" verdicts.
     const sameOf = new Map<string, string[]>();

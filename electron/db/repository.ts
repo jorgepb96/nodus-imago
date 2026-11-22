@@ -279,6 +279,11 @@ export class Repository {
     })();
   }
   /** Changes what a database is for; its properties stay as they are. */
+  /** The database's drawn icon («Name» or «Name:colour»), or null for its kind's. */
+  setIcon(id: string, icon: string | null) {
+    this.detail(id);
+    this.db.prepare("UPDATE db_databases SET icon=?,updated_at=? WHERE id=?").run(icon, now(), id);
+  }
   setKind(id: string, kind: DatabaseKind | null) {
     this.detail(id);
     this.db.prepare("UPDATE db_databases SET kind=?,updated_at=? WHERE id=?").run(kind, now(), id);
@@ -1753,7 +1758,7 @@ export class Repository {
       .prepare(
         // A failed job stays listed until the same work (same kind and
         // payload) completes later; then the old failure is no longer news.
-        "SELECT id,kind,CASE WHEN json_valid(payload_json) THEN coalesce(json_extract(payload_json,'$.label'),'') ELSE '' END label,state,done,total,failed,skipped,message,created_at createdAt,updated_at updatedAt FROM jobs j WHERE (state IN ('queued','running','paused') OR (state='failed' AND NOT EXISTS(SELECT 1 FROM jobs later WHERE later.kind=j.kind AND later.payload_json=j.payload_json AND later.state='completed' AND later.created_at>j.created_at))) OR id IN(SELECT id FROM jobs WHERE state IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 50) ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,created_at DESC",
+        "SELECT id,kind,CASE WHEN json_valid(payload_json) THEN coalesce(json_extract(payload_json,'$.label'),'') ELSE '' END label,CASE WHEN kind='index' AND json_valid(payload_json) THEN coalesce(json_array_length(payload_json,'$.rows'),0) END indexRows,CASE WHEN kind='index' AND json_valid(payload_json) THEN coalesce(json_array_length(payload_json,'$.assets'),0) END indexAssets,state,done,total,failed,skipped,message,created_at createdAt,updated_at updatedAt FROM jobs j WHERE (state IN ('queued','running','paused') OR (state='failed' AND NOT EXISTS(SELECT 1 FROM jobs later WHERE later.kind=j.kind AND later.payload_json=j.payload_json AND later.state='completed' AND later.created_at>j.created_at))) OR id IN(SELECT id FROM jobs WHERE state IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 50) ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,created_at DESC",
       )
       .all() as Job[];
   }

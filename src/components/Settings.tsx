@@ -38,6 +38,7 @@ import { PROVIDERS } from "../../shared/aiConfig";
 import { ApiSettings } from "./ApiSettings";
 import { ModelPicker } from "./ModelPicker";
 import { askIndexQuality } from "./IndexQualityDialog";
+import { jobTitle } from "../../shared/jobTitles";
 export function Jobs({
   jobs,
   perform,
@@ -48,14 +49,6 @@ export function Jobs({
   onChanged: () => void;
 }) {
   const t = useT(),
-    labels: Record<string, string> = {
-      images: "Importar imágenes",
-      index: "Indexar imágenes",
-      analyze: "Analizar",
-      download: "Descargar",
-      prepare: "Preparar modelos",
-      fingerprints: "Calcular huellas visuales",
-    },
     states: Record<string, string> = {
       queued: "En espera",
       running: "En curso",
@@ -118,7 +111,7 @@ export function Jobs({
         <div className="job" key={j.id}>
           <div className="row">
             <strong>
-              {t(labels[j.kind] ?? j.kind)}
+              {t(jobTitle(j))}
               {j.label && <small className="job-label">{t(j.label)}</small>}
             </strong>
             <span className={"badge " + j.state}>{t(states[j.state])}</span>
