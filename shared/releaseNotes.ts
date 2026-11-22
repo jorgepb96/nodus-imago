@@ -33,6 +33,42 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.2",
+    date: "2026-11-22",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Las bases de datos de la barra lateral se ordenan arrastrándolas (o con Alt+↑/↓), se renombran con doble clic o F2 y cambian de icono desde su menú (clic derecho o «⋯»).",
+        en: "Databases in the sidebar are put in order by dragging them (or with Alt+↑/↓), renamed with a double click or F2, and given a new icon from their menu (right click or «⋯»).",
+      },
+      {
+        scope: "analysis",
+        category: "enhancement",
+        es: "La galería, el mapa, la cronología, las estadísticas, las variantes, la red y el mapa visual muestran su fuente junto al número de registros: la tabla principal o cualquiera de tus vistas guardadas. La tabla muestra siempre la base completa.",
+        en: "The gallery, map, timeline, statistics, variants, network and visual map show their source next to the count of records: the main table or any of your saved views. The table always shows the whole database.",
+      },
+      {
+        scope: "analysis",
+        category: "fix",
+        es: "Mientras se indexa en segundo plano, las estadísticas y la red ya no se quedan cargando ni parpadean: el avance de una tarea solo actualiza la cola, no recarga las vistas.",
+        en: "While indexing runs in the background, statistics and the network no longer keep loading or flickering: a task's progress only updates the queue, it no longer reloads the views.",
+      },
+      {
+        scope: "visual",
+        category: "fix",
+        es: "Las variantes de una colección grande se calculan mucho más deprisa, recuerdan el resultado y ya no bloquean las demás vistas mientras tanto.",
+        en: "Variants of a large collection are found much faster, the result is remembered, and they no longer hold up the other views meanwhile.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Al cambiar de vista ya no aparece a veces un segundo buscador.",
+        en: "Changing views no longer sometimes shows a second search box.",
+      },
+    ],
+  },
+  {
     version: "0.5.1",
     date: "2026-11-22",
     highlights: [
