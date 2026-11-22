@@ -1,13 +1,13 @@
 {
-  "updatedAt": "2026-11-21T18:27:00.701Z",
-  "total": 213,
+  "updatedAt": "2026-11-22T06:33:06.467Z",
+  "total": 225,
   "installers": {
-    "macosArm64": 54,
-    "macosIntel": 33,
-    "windows": 24,
-    "linuxDeb": 34,
-    "linuxRpm": 34,
-    "linuxAppImage": 34
+    "macosArm64": 57,
+    "macosIntel": 35,
+    "windows": 25,
+    "linuxDeb": 36,
+    "linuxRpm": 36,
+    "linuxAppImage": 36
   },
   "latest": {
     "total": 10,
@@ -19,6 +19,6 @@
       "linuxRpm": 2,
       "linuxAppImage": 2
     },
-    "version": "v0.4.5"
+    "version": "v0.5.0"
   }
 }
