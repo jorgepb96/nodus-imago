@@ -8535,8 +8535,59 @@ tr:hover .ai-cell-button,
   opacity: 0.45;
   cursor: default;
 }
+/* The source of a view other than the table, next to its count of records. */
+.result-meta > span {
+  order: 0;
+}
+.result-meta > .data-source {
+  order: 1;
+  margin: 0 auto 0 14px;
+}
+.result-meta > .result-actions {
+  order: 2;
+}
+.data-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.data-source-caption {
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.data-source-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  max-width: 340px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel, transparent);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.data-source-button:hover,
+.data-source-button[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent, #4f46e5) 45%, var(--line));
+}
+.data-source-button.selected {
+  border-color: color-mix(in srgb, var(--accent, #4f46e5) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent, #4f46e5) 8%, transparent);
+  color: var(--accent-ink, var(--text));
+}
+.data-source-button > svg:last-child {
+  color: var(--muted);
+}
 .data-source-button .data-source-label {
-  max-width: 220px;
+  min-width: 0;
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

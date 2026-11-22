@@ -548,12 +548,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const [savedViews, setSavedViews] = useState<SavedView[]>([]),
     [savedViewsFor, setSavedViewsFor] = useState<string | null>(null);
   const [prefs, updatePrefs] = useColumnPrefs(detail?.database.id ?? null);
-  // Where the built-in views take their records from: the whole database, or
-  // the records a saved view keeps. A saved view on screen uses its own.
-  const sourceView =
-    area === "databases" && !activeSaved
-      ? (savedViews.find((v) => savedViewKey(v.id) === prefs.dataSource) ?? null)
-      : null;
+  // Where the views other than the table take their records from: the main
+  // table (the whole database), or the records a saved view keeps. The table
+  // always shows the whole database; a saved view on screen uses its own.
+  const sourceOffered = area === "databases" && !activeSaved && view !== "table";
+  const sourceView = sourceOffered
+    ? (savedViews.find((v) => savedViewKey(v.id) === prefs.dataSource) ?? null)
+    : null;
   const effectiveCriteria = useMemo(
     () => combineCriteria(sourceView?.criteria, { filters, filterLogic: logic, filterGroups }),
     [sourceView, filters, logic, filterGroups],
@@ -2685,18 +2686,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           />
                         )}
                       {area === "databases" && detail && (
-                        <DataSourcePicker
-                          saved={savedViews}
-                          source={prefs.dataSource ?? null}
-                          disabled={!!activeSaved}
-                          onSource={(key) => {
-                            updatePrefs((current) => ({ ...current, dataSource: key }));
-                            setOffset(0);
-                            setSelected(new Set());
-                          }}
-                        />
-                      )}
-                      {area === "databases" && detail && (
                         <ViewVisibility
                           views={offeredViews()}
                           saved={savedViews}
@@ -2789,6 +2778,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     onOpenSorts={() => setSortRequest((n) => n + 1)}
                   />
                   <div className="result-meta">
+                    {sourceOffered && detail && (
+                      <DataSourcePicker
+                        saved={savedViews}
+                        source={sourceView ? prefs.dataSource ?? null : null}
+                        onSource={(key) => {
+                          updatePrefs((current) => ({ ...current, dataSource: key }));
+                          setOffset(0);
+                          setSelected(new Set());
+                        }}
+                      />
+                    )}
                     <span>
                       {loading && pageKey !== requestKey ? (
                         <Spinner />
