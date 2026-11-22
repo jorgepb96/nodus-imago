@@ -864,7 +864,7 @@ try {
       await page.locator(".database-heading .actions-menu summary").click();
       await page
         .locator(".database-heading")
-        .getByRole("button", { name: "Nombre", exact: true })
+        .getByRole("button", { name: "Nombre, icono y tipo", exact: true })
         .click();
       await page
         .getByRole("dialog")

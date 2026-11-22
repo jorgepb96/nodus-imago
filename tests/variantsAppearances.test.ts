@@ -159,3 +159,30 @@ test("verdicts and appearances are validated", () => {
   assert.ok(!schemas.appearanceSave.safeParse({ assetId: "a", work: "  " }).success);
   assert.ok(schemas.imageAppearances.safeParse({ assetId: "a", fields: { d1: { work: null, page: "c1" } } }).success);
 });
+
+test("an image's versions come from its own fingerprint and vector, not from every pair of the collection", () =>
+  withFamily(async ({ repo, assets }) => {
+    // B is found only by its vector (its fingerprint is gone) and confirmed by
+    // its pixels; C's vector points elsewhere.
+    repo.db.prepare("DELETE FROM image_fingerprints WHERE content_hash='hash-1'").run();
+    const vector = (values: number[]) => {
+      const v = new Float32Array(8);
+      values.forEach((x, i) => (v[i] = x));
+      const norm = Math.hypot(...v);
+      return Buffer.from(v.map((x) => x / norm).buffer);
+    };
+    const put = repo.db.prepare("INSERT INTO embeddings VALUES(?,?,?)");
+    put.run("hash-0", "c", vector([1, 0.1]));
+    put.run("hash-1", "c", vector([1, 0.2]));
+    put.run("hash-2", "c", vector([0, 1]));
+    const variants = new Variants(repo, new CompareBoards(repo), () => "c");
+    // Opening a record must not compute the whole collection's pairs.
+    (variants as unknown as { matches: () => never }).matches = () => {
+      throw new Error("whole-collection pairs computed for one image");
+    };
+    const family = await variants.ofImage(assets[0]);
+    assert.deepEqual(
+      family.members.map((m) => [m.title, m.match]),
+      [["B", "similar"], ["D", "identical"]],
+    );
+  }));

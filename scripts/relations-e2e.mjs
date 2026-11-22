@@ -45,11 +45,39 @@ try {
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Nombre", { exact: true }).fill("Obras");
   await dialog.getByTestId("database-kinds").getByText("Fuentes", { exact: true }).click();
+  // An icon found by searching, in a colour.
+  const picker = dialog.getByTestId("database-icon-picker");
+  assert.equal(await picker.locator(".database-icon-preview .database-icon").getAttribute("data-icon"), "BookOpen");
+  await picker.getByRole("searchbox").fill("castillo");
+  assert.deepEqual(await picker.locator(".database-icon-option").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label"))), ["Castle"]);
+  await picker.getByTestId("database-icon-Castle").click();
+  await picker.getByTestId("database-icon-color-green").click();
   await page.waitForTimeout(150);
   await page.screenshot({ path: "test-results/relations-new-database.png" });
   await dialog.getByRole("button", { name: "Crear", exact: true }).click();
   await page.getByRole("heading", { name: "Obras", exact: true }).waitFor();
   const books = (await call("listDatabases")).find((d) => d.name === "Obras");
+  assert.equal(books.icon, "Castle:green");
+  const sideIcon = page.locator(".sidebar-databases>button").filter({ hasText: "Obras" }).locator(".database-icon");
+  assert.equal(await sideIcon.getAttribute("data-icon"), "Castle");
+  assert.equal(await sideIcon.getAttribute("data-color"), "green");
+  // Changed from the heading's icon, then back to the kind's icon.
+  await page.getByTestId("database-title-icon").click();
+  // It opens on the group of the current icon; another group is a tab away.
+  assert.equal(await page.getByRole("dialog").getByRole("tab", { selected: true }).innerText(), "Lugares y viajes");
+  await page.getByRole("dialog").getByRole("tab", { name: "Colecciones", exact: true }).click();
+  await page.getByRole("dialog").getByTestId("database-icon-Library").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Guardar", exact: true }).click();
+  await poll(async () => (await call("listDatabases")).find((d) => d.name === "Obras").icon === "Library:green", "icon changed");
+  await page.getByTestId("database-title-icon").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Restablecer", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Guardar", exact: true }).click();
+  await poll(async () => (await call("listDatabases")).find((d) => d.name === "Obras").icon === null, "icon reset");
+  await poll(
+    async () => (await page.locator(".sidebar-databases>button").filter({ hasText: "Obras" }).locator(".database-icon").getAttribute("data-icon")) === "BookOpen",
+    "the sidebar shows the kind's icon again",
+  );
+  checks.push("A database icon chosen by search, coloured, changed from its heading and reset to its kind's icon");
   assert.equal(books.kind, "sources");
   const booksDetail = await call("detail", { id: books.id });
   assert.deepEqual(

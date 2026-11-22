@@ -181,10 +181,14 @@ try {
   checks.push(
     "All 235 records, 233 located beyond grid pagination, image thumbnails and coincident clusters",
   );
+  // A press on a point never scrolls the workspace (the click would miss it).
+  const workspaceTop = () => page.evaluate(() => document.querySelector(".workspace")?.scrollTop ?? 0);
+  const topBefore = await workspaceTop();
   await page
     .getByRole("button", { name: "232 registros · Granada", exact: true })
     .click();
   await map.getByText("232 registros en este grupo", { exact: true }).waitFor();
+  assert.equal(await workspaceTop(), topBefore, "the press on the point did not scroll the workspace");
   await map
     .getByLabel("Buscar en los registros del mapa", { exact: true })
     .fill("MAP001");

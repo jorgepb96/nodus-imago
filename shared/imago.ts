@@ -460,6 +460,8 @@ export type Commands = {
     }[];
   };
   setDatabaseKind: { input: { id: string; kind: import("./databases").DatabaseKind | null }; result: void };
+  /** A drawn icon and its colour («Name» or «Name:colour»), or null for the kind's icon. */
+  setDatabaseIcon: { input: { id: string; icon: string | null }; result: void };
   renameDatabase: { input: { id: string; name: string }; result: void };
   deleteDatabase: { input: { id: string }; result: void };
   detail: { input: { id: string }; result: DatabaseDetail };

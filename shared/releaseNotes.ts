@@ -33,6 +33,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.1",
+    date: "2026-11-22",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Iconos para cada base de datos: elige entre casi doscientos iconos dibujados (no emojis), por grupos o buscándolos por su nombre, y dales color. Se ven en la barra lateral, en las tarjetas y junto al título; sin icono elegido, cada base muestra el de su tipo.",
+        en: "Icons for each database: choose from almost two hundred drawn icons (not emoji), by group or by searching their name, and give them a colour. They show in the sidebar, on the cards and beside the title; without one, each database shows its kind's icon.",
+      },
+      {
+        scope: "places",
+        category: "fix",
+        es: "El carrusel de un punto del mapa responde al momento: pasar de una ficha a otra tardaba varios segundos en colecciones grandes. Ahora recorre todos los registros del punto, no solo los 500 primeros, y pulsar un punto cerca del borde del mapa ya no falla.",
+        en: "A map point's carousel now responds at once: moving between records took several seconds in large collections. It now goes through every record of the point, not only the first 500, and clicking a point near the edge of the map no longer misses.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "El selector de color de las vistas muestra los nueve colores de cada tono en una fila, con «Sin color» alineado debajo.",
+        en: "The view colour picker shows the nine colours of each tone on one row, with «No colour» lined up below.",
+      },
+    ],
+  },
+  {
     version: "0.5.0",
     date: "2026-11-22",
     highlights: [

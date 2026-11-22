@@ -3,6 +3,7 @@ import { DATABASE_VIEWS } from "./savedViews";
 import { backupPreferencesSchema } from "./backups";
 import { updatePreferencesSchema } from "./updates";
 import { isDatabaseColumnType } from "./databases";
+import { isDatabaseIconValue } from "./databaseIcons";
 import { FILTER_LABELS } from "./viewCriteria";
 import { externalHttpsUrl } from "./externalLinks";
 import type { PropertyFilterGroup, PropertyFilterOp } from "./imago";
@@ -420,6 +421,9 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   unpairRelation: z.object({ columnId: id }).strict(),
   linkedRecords: z.object({ rowId: id }).strict(),
   setDatabaseKind: z.object({ id, kind: z.enum(["images", "sources", "custom"]).nullable() }).strict(),
+  setDatabaseIcon: z
+    .object({ id, icon: z.string().max(40).refine(isDatabaseIconValue, "Icono desconocido.").nullable() })
+    .strict(),
   renameDatabase: z.object({ id, name }).strict(),
   deleteDatabase: z.object({ id }).strict(),
   detail: z.object({ id }).strict(),

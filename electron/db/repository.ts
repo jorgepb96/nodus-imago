@@ -279,6 +279,11 @@ export class Repository {
     })();
   }
   /** Changes what a database is for; its properties stay as they are. */
+  /** The database's drawn icon («Name» or «Name:colour»), or null for its kind's. */
+  setIcon(id: string, icon: string | null) {
+    this.detail(id);
+    this.db.prepare("UPDATE db_databases SET icon=?,updated_at=? WHERE id=?").run(icon, now(), id);
+  }
   setKind(id: string, kind: DatabaseKind | null) {
     this.detail(id);
     this.db.prepare("UPDATE db_databases SET kind=?,updated_at=? WHERE id=?").run(kind, now(), id);

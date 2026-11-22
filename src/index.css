@@ -1171,12 +1171,147 @@ dialog,
 .sidebar-databases > button.active {
   background: var(--hover);
 }
-.database-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--a-400);
-  border-radius: 50%;
+/* A database's drawn icon, in its colour (sidebar, cards, heading). */
+.database-icon {
+  display: inline-grid;
+  place-items: center;
   flex-shrink: 0;
+  color: var(--database-icon, var(--a-500));
+  line-height: 0;
+}
+.database-heading .database-title {
+  margin: 2px 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.database-title-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-left: -6px;
+  border-radius: 9px;
+}
+.database-title-icon:hover,
+.database-title-icon:focus-visible {
+  background: var(--hover);
+}
+.database-icon-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+.database-icon-field .field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.database-icon-picker {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.database-icon-picker-head {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.database-icon-preview {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--database-icon, var(--a-500)) 8%, var(--panel));
+}
+.database-icon-picker-head input {
+  min-width: 0;
+}
+.database-icon-reset {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.database-icon-reset:not(:disabled):hover {
+  color: var(--text);
+}
+.database-icon-reset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.database-icon-colors {
+  display: flex;
+  gap: 8px;
+}
+.database-icon-color {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--panel);
+  background: var(--database-icon);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--database-icon) 60%, transparent);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.database-icon-color:hover,
+.database-icon-color:focus-visible {
+  transform: scale(1.12);
+}
+.database-icon-color.selected {
+  box-shadow: 0 0 0 2px var(--text);
+}
+.database-icon-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.database-icon-group {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.database-icon-group:hover {
+  color: var(--text);
+}
+.database-icon-group.is-active {
+  border-color: color-mix(in srgb, var(--a-500) 45%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.database-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 34px);
+  justify-content: space-between;
+  gap: 4px;
+}
+.database-icon-option {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--text);
+}
+.database-icon-option:hover,
+.database-icon-option:focus-visible {
+  background: var(--hover);
+  color: var(--database-icon);
+}
+.database-icon-option.selected {
+  background: color-mix(in srgb, var(--database-icon) 14%, var(--panel));
+  color: var(--database-icon);
+  box-shadow: inset 0 0 0 1.5px var(--database-icon);
 }
 .sidebar-hint {
   padding: 3px 12px;
@@ -8321,7 +8456,10 @@ tr:hover .ai-cell-button,
   right: -11px;
 }
 .view-color-picker {
-  padding: 8px 10px 10px;
+  /* As wide as the nine swatches need: they never wrap to a second line. */
+  width: max-content;
+  min-width: 100%;
+  padding: 10px 12px 10px;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -8329,35 +8467,36 @@ tr:hover .ai-cell-button,
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
 }
 .view-color-row {
   display: grid;
-  grid-template-columns: 48px 1fr;
+  grid-template-columns: 52px max-content;
   align-items: center;
-  gap: 6px;
-  margin: 4px 0;
+  column-gap: 8px;
+  margin: 0 0 6px;
 }
 .view-color-row > span {
   font-size: 11px;
   color: var(--muted);
 }
-.view-color-row > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+.view-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(9, 18px);
+  gap: 6px;
 }
 .view-color-swatch {
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border-radius: 5px;
   border: 1px solid color-mix(in srgb, var(--view-hue) 55%, transparent);
   border-bottom: 3px solid var(--view-hue);
   cursor: pointer;
+  transition: transform 0.12s ease;
 }
 .view-color-swatch.tone-pastel {
   background: color-mix(in srgb, var(--view-hue) 18%, var(--panel));
@@ -8373,13 +8512,28 @@ tr:hover .ai-cell-button,
   outline: 2px solid var(--text);
   outline-offset: 1px;
 }
+/* «Sin color» sits in the swatch column, like a third row. */
+.view-color-row.view-color-clear {
+  margin: 2px 0 0;
+}
 .view-color-none {
-  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px 0 4px;
+  margin-left: -4px;
+  border-radius: 6px;
   font-size: 11px;
   color: var(--muted);
 }
 .view-color-none:not(:disabled):hover {
   color: var(--text);
+  background: var(--hover, color-mix(in srgb, var(--text) 6%, transparent));
+}
+.view-color-none:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .data-source-button .data-source-label {
   max-width: 220px;

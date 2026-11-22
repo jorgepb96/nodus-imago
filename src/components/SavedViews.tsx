@@ -4,6 +4,7 @@
 import { useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  Ban,
   BookmarkPlus,
   CalendarRange,
   ChartColumn,
@@ -241,7 +242,7 @@ export function ViewColorPicker({ value, onChange }: { value: ViewColor | null; 
       {VIEW_COLOR_TONES.map((tone) => (
         <div key={tone} className="view-color-row">
           <span>{t(tone === "pastel" ? "Pastel" : "Normal")}</span>
-          <div>
+          <div className="view-color-swatches">
             {VIEW_COLOR_HUES.map((hue) => {
               const color = `${tone}:${hue}` as ViewColor,
                 name = `${t(HUE_LABEL[hue])} · ${t(tone === "pastel" ? "Pastel" : "Normal")}`;
@@ -262,9 +263,13 @@ export function ViewColorPicker({ value, onChange }: { value: ViewColor | null; 
           </div>
         </div>
       ))}
-      <button type="button" className="view-color-none" disabled={!value} data-testid="view-color-none" onClick={() => onChange(null)}>
-        {t("Sin color")}
-      </button>
+      <div className="view-color-row view-color-clear">
+        <span />
+        <button type="button" className="view-color-none" disabled={!value} data-testid="view-color-none" onClick={() => onChange(null)}>
+          <Ban size={13} />
+          {t("Sin color")}
+        </button>
+      </div>
     </div>
   );
 }
