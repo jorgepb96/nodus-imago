@@ -54,6 +54,12 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         es: "El selector de color de las vistas muestra los nueve colores de cada tono en una fila, con «Sin color» alineado debajo.",
         en: "The view colour picker shows the nine colours of each tone on one row, with «No colour» lined up below.",
       },
+      {
+        scope: "general",
+        category: "fix",
+        es: "La cola de tareas llama a cada indexado por lo que contiene: «Indexar fichas» (el texto de los registros), «Indexar imágenes» o las dos cosas. Antes todo aparecía como «Indexar imágenes».",
+        en: "The task queue names each indexing pass by what it holds: «Index records» (the records' text), «Index images» or both. Before, everything showed as «Index images».",
+      },
     ],
   },
   {

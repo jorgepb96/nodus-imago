@@ -183,10 +183,11 @@ try {
   );
   // A press on a point never scrolls the workspace (the click would miss it).
   const workspaceTop = () => page.evaluate(() => document.querySelector(".workspace")?.scrollTop ?? 0);
+  const granada = page.getByRole("button", { name: "232 registros · Granada", exact: true });
+  // In view first (the test driver scrolls to reach it): only the press is measured.
+  await granada.scrollIntoViewIfNeeded();
   const topBefore = await workspaceTop();
-  await page
-    .getByRole("button", { name: "232 registros · Granada", exact: true })
-    .click();
+  await granada.click();
   await map.getByText("232 registros en este grupo", { exact: true }).waitFor();
   assert.equal(await workspaceTop(), topBefore, "the press on the point did not scroll the workspace");
   await map

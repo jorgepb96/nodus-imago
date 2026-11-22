@@ -855,6 +855,8 @@ const en: Record<string, string> = {
   "No instalado": "Not installed",
   "Archivos verificados": "Files verified",
   "Indexar imágenes": "Index images",
+  "Indexar fichas": "Index records",
+  "Indexar fichas e imágenes": "Index records and images",
   "Reconstruir índice literal": "Rebuild text index",
   "Crear copia completa": "Create full backup",
   "Restaurar copia": "Restore backup",

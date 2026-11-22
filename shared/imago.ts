@@ -213,6 +213,9 @@ export type Job = {
   message: string | null;
   createdAt: string;
   updatedAt: string;
+  /** An indexing pass: how many records (their text) and images it holds. */
+  indexRows?: number | null;
+  indexAssets?: number | null;
 };
 export type Proposal = {
   id: string;
