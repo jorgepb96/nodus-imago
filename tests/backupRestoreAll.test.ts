@@ -32,6 +32,8 @@ const TABLES = [
   "record_embeddings",
   "tile_embeddings",
   "image_captions",
+  "variant_verdicts",
+  "image_appearances",
 ];
 const count = (repo: Repository, table: string) => (repo.db.prepare(`SELECT count(*) n FROM ${table}`).get() as { n: number }).n;
 
@@ -93,6 +95,9 @@ test("restoring a backup brings back heritage, links, marks, saved statistics an
     source.db.prepare("INSERT INTO record_embeddings(row_id,contract,text_hash,vector) VALUES(?,?,?,?)").run(row.id, "c1", "t1", vector);
     source.db.prepare("INSERT INTO tile_embeddings(content_hash,contract,tile,vector) VALUES(?,?,?,?)").run(hash, "c1", 0, vector);
     source.db.prepare("INSERT INTO image_captions(content_hash,contract,text) VALUES(?,?,?)").run(hash, "c1", "Fachada");
+    // The researcher's decisions on variants and appearances added by hand.
+    source.db.prepare("INSERT INTO variant_verdicts VALUES(?,?,?,?,?,?,?)").run(`${hash}|zz`, hash, "zz", "same", "crop", "2026-01-01", "2026-01-01");
+    source.db.prepare("INSERT INTO image_appearances VALUES(?,?,?,?,?,?,?,?,?,?)").run("ap1", hash, "Revista", "Autor", 1950, "7", "Pie", null, "2026-01-01", "2026-01-01");
     const before = Object.fromEntries(TABLES.map((t) => [t, count(source, t)]));
     for (const t of TABLES) assert.ok(before[t] > 0, `${t} has data before the backup`);
 

@@ -404,7 +404,22 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   openMapAttribution: z.undefined(),
   status: z.undefined(),
   listDatabases: z.undefined(),
-  createDatabase: z.object({ name }).strict(),
+  createDatabase: z.object({ name, kind: z.enum(["images", "sources", "custom"]).optional() }).strict(),
+  convertToRelation: z
+    .object({
+      id,
+      targetDatabaseId: id,
+      matchColumnId: id.nullable().optional(),
+      keepCopy: z.boolean().optional(),
+      createMissing: z.boolean().optional(),
+      inverseName: z.string().trim().max(200).nullable().optional(),
+      apply: z.boolean(),
+    })
+    .strict(),
+  pairRelation: z.object({ columnId: id, name: z.string().trim().max(200) }).strict(),
+  unpairRelation: z.object({ columnId: id }).strict(),
+  linkedRecords: z.object({ rowId: id }).strict(),
+  setDatabaseKind: z.object({ id, kind: z.enum(["images", "sources", "custom"]).nullable() }).strict(),
   renameDatabase: z.object({ id, name }).strict(),
   deleteDatabase: z.object({ id }).strict(),
   detail: z.object({ id }).strict(),
@@ -644,9 +659,47 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   variantsStatus: z.object({ databaseIds: z.array(id).max(50).optional() }).strict(),
   variantsPrepare: z.object({ databaseIds: z.array(id).max(50).optional() }).strict(),
   variantFamilies: z
-    .object({ databaseIds: z.array(id).max(50).optional(), sensitivity: z.enum(["strict", "balanced", "broad"]) })
+    .object({
+      databaseIds: z.array(id).max(50).optional(),
+      sensitivity: z.enum(["strict", "balanced", "broad"]),
+      // The records of the view on screen (data source and filters): only
+      // their images are grouped. Without it, every image in databaseIds.
+      search: searchSchema.optional(),
+    })
     .strict(),
   variantsOf: z.object({ assetId: id, sensitivity: z.enum(["strict", "balanced", "broad"]).optional() }).strict(),
+  imageVariants: z.object({ assetId: id, sensitivity: z.enum(["strict", "balanced", "broad"]).optional() }).strict(),
+  variantVerdict: z
+    .object({
+      assetId: id,
+      otherAssetId: id,
+      verdict: z.enum(["same", "different"]).nullable(),
+      kind: z.enum(["copy", "crop", "retouch", "reproduction", "other_take"]).nullable().optional(),
+    })
+    .strict(),
+  imageAppearances: z
+    .object({
+      assetId: id,
+      sensitivity: z.enum(["strict", "balanced", "broad"]).optional(),
+      fields: z
+        .record(id, z.object({ work: id.nullable().optional(), page: id.nullable().optional(), caption: id.nullable().optional() }).strict())
+        .refine((value) => Object.keys(value).length <= 50, "Demasiadas bases de datos.")
+        .optional(),
+    })
+    .strict(),
+  appearanceSave: z
+    .object({
+      id: id.optional(),
+      assetId: id,
+      work: z.string().trim().min(1).max(500),
+      author: z.string().max(500).nullable().optional(),
+      year: z.number().int().min(0).max(3000).nullable().optional(),
+      page: z.string().max(100).nullable().optional(),
+      caption: z.string().max(4000).nullable().optional(),
+      note: z.string().max(4000).nullable().optional(),
+    })
+    .strict(),
+  appearanceDelete: z.object({ id }).strict(),
   boardsList: z.undefined(),
   boardGet: z.object({ id }).strict(),
   boardSave: z
@@ -761,6 +814,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       types: z.array(type).max(500),
       headers: z.array(name).max(500),
       nullMarkersAsEmpty: z.boolean().optional(),
+      kind: z.enum(["images", "sources", "custom"]).optional(),
     })
     .strict(),
   imagePreview: z

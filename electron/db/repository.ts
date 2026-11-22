@@ -21,9 +21,11 @@ import type {
   DatabaseColumnConfig,
   DatabaseColumnType,
   DatabaseDetail,
+  DatabaseKind,
   DatabaseRow,
   DatabaseSummary,
 } from "../../shared/databases";
+import { DATABASE_TEMPLATES } from "../../shared/databases";
 import { databaseCellStorage } from "../../shared/databaseCellStorage";
 import { exportCellText } from "../../shared/databaseExport";
 import {
@@ -37,6 +39,8 @@ import type { CsvImportOptions } from "../../shared/databaseCsv";
 import { recordEmbeddingText } from "../../shared/recordEmbedding";
 import { computeFormulas } from "../../shared/databaseFormulaEval";
 import type {
+  PropertyFilter,
+  PropertyFilterGroup,
   ImageAnnotation,
   ImageAsset,
   Job,
@@ -138,6 +142,9 @@ export class Repository {
     if (!annotationColumns.has("option_id"))
       this.db.exec("ALTER TABLE image_annotations ADD COLUMN option_id TEXT");
     this.db.exec("CREATE INDEX IF NOT EXISTS annotations_option ON image_annotations(option_id) WHERE option_id IS NOT NULL");
+    // Databases have a kind (images, sources, custom); older ones have none.
+    if (!(this.db.prepare("PRAGMA table_info(db_databases)").all() as { name: string }[]).some((c) => c.name === "kind"))
+      this.db.exec("ALTER TABLE db_databases ADD COLUMN kind TEXT");
     // Heritage elements placed from OpenStreetMap keep the object they come from.
     if (!(this.db.prepare("PRAGMA table_info(heritage_elements)").all() as { name: string }[]).some((c) => c.name === "osm_ref"))
       this.db.exec("ALTER TABLE heritage_elements ADD COLUMN osm_ref TEXT");
@@ -194,7 +201,7 @@ export class Repository {
   list(): DatabaseSummary[] {
     return this.db
       .prepare(
-        `SELECT d.id,d.short_id shortId,d.name,d.icon,d.position,d.created_at createdAt,d.updated_at updatedAt,
+        `SELECT d.id,d.short_id shortId,d.name,d.icon,d.kind,d.position,d.created_at createdAt,d.updated_at updatedAt,
       (SELECT count(*) FROM db_rows r WHERE r.database_id=d.id) rowCount FROM db_databases d ORDER BY d.position,d.id`,
       )
       .all() as DatabaseSummary[];
@@ -202,7 +209,7 @@ export class Repository {
   detail(id: string): DatabaseDetail {
     const database = this.db
       .prepare(
-        `SELECT d.id,d.short_id shortId,d.name,d.icon,d.position,d.created_at createdAt,d.updated_at updatedAt,
+        `SELECT d.id,d.short_id shortId,d.name,d.icon,d.kind,d.position,d.created_at createdAt,d.updated_at updatedAt,
       (SELECT count(*) FROM db_rows r WHERE r.database_id=d.id) rowCount FROM db_databases d WHERE d.id=?`,
       )
       .get(id) as DatabaseSummary | undefined;
@@ -237,27 +244,44 @@ export class Repository {
     name: string,
     defaults = true,
     identity?: { id: string; shortId: string },
+    kind: DatabaseKind | null = null,
   ): DatabaseDetail {
     return this.db.transaction(() => {
       const id = identity?.id ?? uuid(),
         at = now();
       this.db
-        .prepare("INSERT INTO db_databases VALUES(?,?,?,?,?,?,?)")
+        .prepare("INSERT INTO db_databases(id,short_id,name,icon,kind,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)")
         .run(
           id,
           identity?.shortId ?? newDatabaseShortId(),
           name,
           null,
+          kind,
           this.list().length,
           at,
           at,
         );
-      if (defaults) {
+      if (kind)
+        // The kind's starting properties; every one can be renamed or removed.
+        for (const p of DATABASE_TEMPLATES[kind]) {
+          const c = this.addColumn(id, p.name, p.type);
+          if (p.options)
+            this.saveOptions(
+              c.id,
+              p.options.map((label, i) => ({ label, color: importedOptionColor(i) })),
+            );
+        }
+      else if (defaults) {
         this.addColumn(id, "Título", "title");
         this.addColumn(id, "Imágenes", "attachment");
       }
       return this.detail(id);
     })();
+  }
+  /** Changes what a database is for; its properties stay as they are. */
+  setKind(id: string, kind: DatabaseKind | null) {
+    this.detail(id);
+    this.db.prepare("UPDATE db_databases SET kind=?,updated_at=? WHERE id=?").run(kind, now(), id);
   }
   addColumn(
     databaseId: string,
@@ -270,6 +294,14 @@ export class Repository {
     if (type === "rollup") validateRollup(this, databaseId, config);
     if (type === "title" && detail.columns.some((c) => c.type === "title"))
       throw new Error("La base ya tiene una propiedad de título.");
+    // «Also show in the other database as …»: an instruction, not stored.
+    const inverseName =
+      type === "relation" && typeof config.relationInverseName === "string" ? config.relationInverseName.trim() : "";
+    if (type === "relation") {
+      config = { ...config };
+      delete config.relationInverseName;
+      delete config.relationInverseColumnId;
+    }
     const id = uuid(),
       at = now();
     this.db.transaction(() => {
@@ -290,8 +322,157 @@ export class Repository {
         this.recompute(databaseId);
         this.rebuildText(databaseId);
       }
+      if (inverseName) this.pairRelation(id, inverseName);
     })();
     return this.column(id);
+  }
+  /** The records a relation cell links to, in order. */
+  private relationIds(rowId: string, columnId: string): string[] {
+    const value = (
+      this.db.prepare("SELECT value_text v FROM db_cells WHERE row_id=? AND column_id=?").get(rowId, columnId) as
+        | { v: string | null }
+        | undefined
+    )?.v;
+    try {
+      const ids = value ? JSON.parse(value) : [];
+      return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+  /**
+   * Makes a relation two-way: a twin property on the target database (or the
+   * same one) that lists, for each record there, the records linking to it.
+   * Existing links are copied to the twin.
+   */
+  pairRelation(columnId: string, inverseName: string): DatabaseColumn {
+    const c = this.column(columnId);
+    if (c.type !== "relation" || (c.config.relationTargetKind && c.config.relationTargetKind !== "db_row"))
+      throw new Error("Solo una relación entre registros puede verse en las dos bases.");
+    const target = c.config.relationTargetDatabaseId;
+    if (!target) throw new Error("Elige primero la base de datos relacionada.");
+    if (c.config.relationInverseColumnId) {
+      try {
+        return this.column(c.config.relationInverseColumnId as string);
+      } catch {
+        /* The twin is gone: a new one is made. */
+      }
+    }
+    const name = inverseName.trim() || this.detail(c.databaseId).database.name;
+    return this.db.transaction(() => {
+      const inverse = this.addColumn(target, name, "relation", {
+        relationTargetKind: "db_row",
+        relationTargetDatabaseId: c.databaseId,
+      });
+      this.db
+        .prepare("UPDATE db_columns SET config_json=?,updated_at=? WHERE id=?")
+        .run(JSON.stringify({ ...inverse.config, relationInverseColumnId: columnId }), now(), inverse.id);
+      this.db
+        .prepare("UPDATE db_columns SET config_json=?,updated_at=? WHERE id=?")
+        .run(JSON.stringify({ ...c.config, relationInverseColumnId: inverse.id }), now(), columnId);
+      // The links that exist already, seen from the other side.
+      const back = new Map<string, string[]>();
+      for (const link of this.db
+        .prepare(
+          "SELECT r.row_id,r.target_id FROM db_relations r JOIN db_rows w ON w.id=r.row_id WHERE r.column_id=? AND r.target_kind='db_row' ORDER BY w.position,w.id,r.position",
+        )
+        .all(columnId) as { row_id: string; target_id: string }[])
+        if (this.db.prepare("SELECT 1 FROM db_rows WHERE id=?").get(link.target_id))
+          (back.get(link.target_id) ?? back.set(link.target_id, []).get(link.target_id)!).push(link.row_id);
+      const titles = new Map(
+        this.hydrate([...new Set([...back.values()].flat())]).map((r) => [r.id, r.title]),
+      );
+      const insert = this.db.prepare("INSERT INTO db_relations VALUES(?,?,?,?,?,?,?,?,?,?)");
+      for (const [rowId, sources] of back) {
+        sources.forEach((source, i) =>
+          insert.run(uuid(), target, rowId, inverse.id, "db_row", source, null, titles.get(source) ?? "", i, now()),
+        );
+        this.rawCell(rowId, inverse.id, JSON.stringify(sources), "relation");
+      }
+      this.recompute(target);
+      this.rebuildText(target);
+      return this.column(inverse.id);
+    })();
+  }
+  /**
+   * The records linked with one record, by property: those its relations
+   * point at, and those that point at it from other properties (a book's
+   * photographs when only the photographs hold the relation). The twin of a
+   * two-way relation is not listed twice.
+   */
+  linkedRecords(rowId: string, limit = 200) {
+    const row = this.getRow(rowId),
+      columns = this.detail(row.databaseId).columns.filter((c) => c.type === "relation");
+    const groups: { columnId: string; name: string; databaseName: string; direction: "out" | "in"; total: number; rows: RecordRow[] }[] = [];
+    const ownTwins = new Set(columns.map((c) => c.config.relationInverseColumnId).filter(Boolean));
+    for (const c of columns) {
+      const ids = this.relationIds(rowId, c.id).filter((id) => this.db.prepare("SELECT 1 FROM db_rows WHERE id=?").get(id));
+      if (!ids.length) continue;
+      const target = c.config.relationTargetDatabaseId as string | undefined;
+      groups.push({
+        columnId: c.id,
+        name: c.name,
+        databaseName: target ? this.detail(target).database.name : "",
+        direction: "out",
+        total: ids.length,
+        rows: this.hydrate(ids.slice(0, limit)),
+      });
+    }
+    const incoming = this.db
+      .prepare(
+        "SELECT r.column_id,r.row_id FROM db_relations r WHERE r.target_kind='db_row' AND r.target_id=? ORDER BY r.column_id,r.created_at",
+      )
+      .all(rowId) as { column_id: string; row_id: string }[];
+    const byColumn = new Map<string, string[]>();
+    for (const link of incoming)
+      if (!ownTwins.has(link.column_id)) (byColumn.get(link.column_id) ?? byColumn.set(link.column_id, []).get(link.column_id)!).push(link.row_id);
+    for (const [columnId, ids] of byColumn) {
+      const c = this.column(columnId);
+      groups.push({
+        columnId,
+        name: c.name,
+        databaseName: this.detail(c.databaseId).database.name,
+        direction: "in",
+        total: ids.length,
+        rows: this.hydrate([...new Set(ids)].slice(0, limit)),
+      });
+    }
+    return groups;
+  }
+  /** Makes a two-way relation one-way again; both properties and their links stay. */
+  unpairRelation(columnId: string) {
+    const c = this.column(columnId),
+      twin = c.config.relationInverseColumnId as string | undefined;
+    this.db.transaction(() => {
+      for (const id of [columnId, twin])
+        if (id && this.db.prepare("SELECT 1 FROM db_columns WHERE id=?").get(id)) {
+          const config = { ...this.column(id).config };
+          delete config.relationInverseColumnId;
+          this.db.prepare("UPDATE db_columns SET config_json=?,updated_at=? WHERE id=?").run(JSON.stringify(config), now(), id);
+        }
+    })();
+  }
+  /** Keeps the twin of a two-way relation in step with a change on one side. */
+  private mirrorRelation(rowId: string, column: DatabaseColumn, before: string[], after: string[]) {
+    const twinId = column.config.relationInverseColumnId as string | undefined;
+    if (!twinId) return;
+    let twin: DatabaseColumn;
+    try {
+      twin = this.column(twinId);
+    } catch {
+      return;
+    }
+    if (twin.type !== "relation" || twin.config.relationInverseColumnId !== column.id) return;
+    for (const t of before.filter((x) => !after.includes(x))) {
+      if (!this.db.prepare("SELECT 1 FROM db_rows WHERE id=?").get(t)) continue;
+      const ids = this.relationIds(t, twin.id);
+      if (ids.includes(rowId)) this.setCell(t, twin.id, JSON.stringify(ids.filter((x) => x !== rowId)), false);
+    }
+    for (const t of after.filter((x) => !before.includes(x))) {
+      const ids = this.relationIds(t, twin.id);
+      if (!ids.includes(rowId))
+        this.setCell(t, twin.id, JSON.stringify(twin.config.relationCardinality === "one" ? [rowId] : [...ids, rowId]), false);
+    }
   }
   updateColumn(id: string, name?: string, config?: DatabaseColumnConfig) {
     const c = this.column(id);
@@ -328,6 +509,8 @@ export class Repository {
     if (c.type === "title")
       throw new Error("La propiedad de título es obligatoria.");
     this.db.transaction(() => {
+      // The twin of a two-way relation stays, as a one-way relation.
+      if (c.type === "relation" && c.config.relationInverseColumnId) this.unpairRelation(id);
       this.db.prepare("DELETE FROM history WHERE column_id=?").run(id);
       this.db.prepare("DELETE FROM db_columns WHERE id=?").run(id);
       this.pruneEquivalences([id]);
@@ -454,6 +637,164 @@ export class Repository {
       this.rebuildText(column.databaseId);
     })();
     return { total, lost };
+  }
+  /**
+   * Turns a property that names records of another database (a book id, a
+   * title…) into a relation to those records, as Notion's "Convert to
+   * relation": each value is matched against a property of the target (its
+   * title by default), ignoring case, accents of width and extra spaces. With
+   * `apply` false nothing changes and the result says what would be linked
+   * and which values find no record. Saved views that filtered by the
+   * property are rewritten to filter by the linked records.
+   */
+  convertToRelation(
+    id: string,
+    options: {
+      targetDatabaseId: string;
+      /** The target property that holds the same values; null: its title. */
+      matchColumnId?: string | null;
+      /** Keep the original values in a copy of the property. */
+      keepCopy?: boolean;
+      /** Create, in the target database, a record for each value with none. */
+      createMissing?: boolean;
+      /** Also show the relation in the target database, under this name. */
+      inverseName?: string | null;
+      apply: boolean;
+    },
+  ) {
+    const column = this.column(id);
+    if (!["text", "select", "multi_select", "status", "number", "url"].includes(column.type))
+      throw new Error("Solo se puede convertir en relación una propiedad de texto, número o selección.");
+    if (isHeritageColumn(column)) throw new Error("Una propiedad de patrimonio no se puede convertir en relación.");
+    const target = this.detail(options.targetDatabaseId);
+    const match = options.matchColumnId
+      ? target.columns.find((c) => c.id === options.matchColumnId)
+      : target.columns.find((c) => c.type === "title");
+    if (!match || ["attachment", "files", "relation", "ai_image"].includes(match.type))
+      throw new Error("Elige una propiedad de la base relacionada con los mismos valores.");
+    const key = (value: string) => optionKey(value);
+    // The target's records by their value of the matching property.
+    const index = new Map<string, string[]>();
+    const targetIds = (
+      this.db.prepare("SELECT id FROM db_rows WHERE database_id=? ORDER BY position").all(target.database.id) as { id: string }[]
+    ).map((r) => r.id);
+    for (let i = 0; i < targetIds.length; i += 500)
+      for (const row of this.hydrate(targetIds.slice(i, i + 500))) {
+        const text = (match.type === "title" ? row.title : exportCellText(match, row)).trim();
+        if (text) (index.get(key(text)) ?? index.set(key(text), []).get(key(text))!).push(row.id);
+      }
+    const sourceIds = (
+      this.db.prepare("SELECT id FROM db_rows WHERE database_id=? ORDER BY position").all(column.databaseId) as { id: string }[]
+    ).map((r) => r.id);
+    const links = new Map<string, string[]>(),
+      missing = new Map<string, { value: string; rows: number }>();
+    let total = 0,
+      linked = 0,
+      ambiguous = 0;
+    for (let i = 0; i < sourceIds.length; i += 500)
+      for (const row of this.hydrate(sourceIds.slice(i, i + 500))) {
+        const parts =
+          column.type === "multi_select"
+            ? decodeMultiSelect(row.cells[column.id] ?? null).flatMap((o) => column.options.find((x) => x.id === o)?.label ?? [])
+            : [exportCellText(column, row).trim()].filter(Boolean);
+        if (!parts.length) continue;
+        total++;
+        const ids: string[] = [];
+        for (const part of parts) {
+          const hits = index.get(key(part));
+          if (hits?.length) {
+            if (hits.length > 1) ambiguous++;
+            if (!ids.includes(hits[0])) ids.push(hits[0]);
+          } else {
+            const m = missing.get(key(part)) ?? { value: part, rows: 0 };
+            m.rows++;
+            missing.set(key(part), m);
+            ids.push(`missing:${key(part)}`);
+          }
+        }
+        if (ids.some((x) => !x.startsWith("missing:"))) linked++;
+        links.set(row.id, ids);
+      }
+    const preview = {
+      total,
+      linked,
+      ambiguous,
+      unmatchedRows: [...links.values()].filter((ids) => ids.every((x) => x.startsWith("missing:"))).length,
+      unmatched: [...missing.values()].sort((a, b) => b.rows - a.rows || a.value.localeCompare(b.value, "es", { numeric: true })),
+      matchColumnId: match.id,
+    };
+    if (!options.apply) return { ...preview, unmatched: preview.unmatched.slice(0, 50) };
+    const at = now();
+    this.db.transaction(() => {
+      if (options.keepCopy !== false) this.duplicateColumn(id, "texto original");
+      // Records for the values that have none, when asked.
+      const created = new Map<string, string>();
+      if (options.createMissing)
+        for (const [k, m] of missing) {
+          const row = this.createRow(target.database.id, false);
+          this.setCell(row.id, match.id, m.value, false);
+          created.set(k, row.id);
+        }
+      const resolve = (ids: string[]) =>
+        ids.flatMap((x) => (x.startsWith("missing:") ? (created.has(x.slice(8)) ? [created.get(x.slice(8))!] : []) : [x]));
+      // Saved views that filtered by the property now filter by the records.
+      const optionTargets = new Map(column.options.map((o) => [o.id, index.get(key(o.label))?.[0] ?? created.get(key(o.label)) ?? null]));
+      const remap = (filter: PropertyFilter): PropertyFilter | null => {
+        if (filter.columnId !== id) return filter;
+        if (filter.op === "empty" || filter.op === "not_empty") return filter;
+        const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+        const targets = values.flatMap((v) => {
+          const viaOption = optionTargets.get(v);
+          if (viaOption) return [viaOption];
+          const hit = index.get(key(String(v)))?.[0] ?? created.get(key(String(v)));
+          return hit ? [hit] : [];
+        });
+        if (!targets.length) return null;
+        const op = filter.op === "none" || filter.op === "not_equals" || filter.op === "not_contains" ? "none" : filter.op === "all" ? "all" : "any";
+        return { ...filter, op, value: [...new Set(targets)] };
+      };
+      const remapGroup = (group: PropertyFilterGroup): PropertyFilterGroup => ({
+        ...group,
+        filters: group.filters.map(remap).filter((f): f is PropertyFilter => !!f),
+        groups: (group.groups ?? []).map(remapGroup),
+      });
+      for (const view of this.db.prepare("SELECT id,criteria_json FROM db_views WHERE database_id=?").all(column.databaseId) as {
+        id: string;
+        criteria_json: string;
+      }[]) {
+        if (!view.criteria_json.includes(id)) continue;
+        const criteria = JSON.parse(view.criteria_json);
+        criteria.filters = (criteria.filters ?? []).map(remap).filter(Boolean);
+        criteria.filterGroups = (criteria.filterGroups ?? []).map(remapGroup);
+        criteria.sorts = (criteria.sorts ?? []).filter((s: { columnId: string }) => s.columnId !== id);
+        this.db.prepare("UPDATE db_views SET criteria_json=?,updated_at=? WHERE id=?").run(JSON.stringify(criteria), at, view.id);
+      }
+      this.db
+        .prepare("UPDATE db_columns SET type='relation',config_json=?,updated_at=? WHERE id=?")
+        .run(JSON.stringify({ relationTargetKind: "db_row", relationTargetDatabaseId: target.database.id }), at, id);
+      this.db.prepare("DELETE FROM db_select_options WHERE column_id=?").run(id);
+      // Old undo steps hold values of the old type.
+      this.db.prepare("DELETE FROM history WHERE column_id=?").run(id);
+      this.db.prepare("DELETE FROM db_relations WHERE column_id=?").run(id);
+      const titles = new Map<string, string>();
+      const allTargets = [...new Set([...links.values()].flatMap(resolve))];
+      for (let i = 0; i < allTargets.length; i += 500)
+        for (const r of this.hydrate(allTargets.slice(i, i + 500))) titles.set(r.id, r.title);
+      const insert = this.db.prepare("INSERT INTO db_relations VALUES(?,?,?,?,?,?,?,?,?,?)");
+      for (const rowId of sourceIds) {
+        const ids = resolve(links.get(rowId) ?? []);
+        ids.forEach((t, i) => insert.run(uuid(), column.databaseId, rowId, id, "db_row", t, null, titles.get(t) ?? "", i, at));
+        this.rawCell(rowId, id, ids.length ? JSON.stringify(ids) : null, "relation");
+      }
+      this.recompute(column.databaseId);
+      this.rebuildText(column.databaseId);
+      if (options.createMissing && created.size) {
+        this.recompute(target.database.id);
+        this.rebuildText(target.database.id);
+      }
+      if (options.inverseName?.trim()) this.pairRelation(id, options.inverseName);
+    })();
+    return { ...preview, unmatched: preview.unmatched.slice(0, 50), applied: true };
   }
   /** Copy a property, its options and its values, right after the original. */
   /** `copy` is the word for "copy" in the interface language. */
@@ -787,6 +1128,7 @@ export class Repository {
             ),
         );
       }
+      const linkedBefore = c.type === "relation" ? this.relationIds(rowId, columnId) : [];
       if (history && (row.cells[columnId] ?? null) !== value)
         this.db
           .prepare(
@@ -809,6 +1151,9 @@ export class Repository {
         .run(now(), row.databaseId);
       this.recompute(row.databaseId);
       this.indexRow(rowId);
+      // A two-way relation: the records on the other side follow. Undo and
+      // redo come through here too, so both sides go back together.
+      if (c.type === "relation") this.mirrorRelation(rowId, c, linkedBefore, this.relationIds(rowId, columnId));
     })();
   }
   pageDocument(rowId: string, columnId: string): PageDocument {
@@ -1025,6 +1370,21 @@ export class Repository {
       ).map((row) => row.database_id),
     );
     this.db.transaction(() => {
+      // Records that link to the deleted ones lose those links.
+      const gone = new Set(ids);
+      const linking = this.db
+        .prepare(
+          `SELECT DISTINCT r.row_id,r.column_id,w.database_id FROM db_relations r JOIN db_rows w ON w.id=r.row_id WHERE r.target_kind='db_row' AND r.target_id IN (${marks(ids)}) AND r.row_id NOT IN (${marks(ids)})`,
+        )
+        .all(...ids, ...ids) as { row_id: string; column_id: string; database_id: string }[];
+      for (const link of linking) {
+        const kept = this.relationIds(link.row_id, link.column_id).filter((x) => !gone.has(x));
+        this.db
+          .prepare(`DELETE FROM db_relations WHERE row_id=? AND column_id=? AND target_id IN (${marks(ids)})`)
+          .run(link.row_id, link.column_id, ...ids);
+        this.rawCell(link.row_id, link.column_id, kept.length ? JSON.stringify(kept) : null, "relation");
+        databases.add(link.database_id);
+      }
       for (const id of ids) {
         this.db.prepare("DELETE FROM history WHERE row_id=?").run(id);
         this.db.prepare("DELETE FROM db_rows WHERE id=?").run(id);

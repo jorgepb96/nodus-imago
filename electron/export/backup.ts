@@ -60,6 +60,8 @@ export const RESTORE_EXTRA_TABLES = [
   "tile_embeddings",
   "image_fingerprints",
   "image_pair_checks",
+  "variant_verdicts",
+  "image_appearances",
   "image_miniatures",
   "automation_control",
 ] as const;
@@ -362,9 +364,16 @@ export async function restoreBackup(
             .get(table)
         )
           continue;
+        // The columns both sides have: a backup made before a column was
+        // added (or after one was dropped) still restores.
+        const before = new Set(
+          (snapshot!.prepare(`PRAGMA table_info(${table})`).all() as any[]).map((c) => c.name),
+        );
         const expected = (
           repo.db.prepare(`PRAGMA table_info(${table})`).all() as any[]
-        ).map((c) => c.name);
+        )
+          .map((c) => c.name)
+          .filter((name: string) => before.has(name));
         const records = snapshot!
           .prepare(`SELECT ${expected.join(",")} FROM ${table}`)
           .all() as any[];

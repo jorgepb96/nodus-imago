@@ -17,15 +17,27 @@ export type ColumnPrefs = {
   timelineBucket?: "auto" | "year" | "decade";
   /** Statistics: the saved statistic last open. */
   statistic?: string | null;
-  /** The view the database opens in, chosen with «Destacar» (null: Table). */
-  defaultView?: DatabaseViewId | null;
+  /** The view the database opens in, chosen with «Destacar» (null: Table):
+   * a built-in id or «saved:<id>» for a saved view. */
+  defaultView?: DatabaseViewId | `saved:${string}` | null;
   /** Views whose tab is hidden: built-in ids and «saved:<id>» for saved views. */
   hiddenViews?: string[];
+  /** The tabs in the order the researcher dragged them (same keys). */
+  viewOrder?: string[];
+  /** A colour per tab (same keys); none by default. */
+  viewColors?: Record<string, ViewColor>;
+  /** Where the built-in views take their records from: a saved view
+   * («saved:<id>»), or the whole database (null). */
+  dataSource?: string | null;
 };
-import { DATABASE_VIEWS, type DatabaseViewId } from "../shared/savedViews";
+import { DATABASE_VIEWS, isViewColor, type DatabaseViewId, type ViewColor } from "../shared/savedViews";
 export { DATABASE_VIEWS, type DatabaseViewId };
 const isView = (value: unknown): value is DatabaseViewId =>
   (DATABASE_VIEWS as readonly unknown[]).includes(value);
+const isSavedKey = (value: unknown): value is `saved:${string}` =>
+  typeof value === "string" && /^saved:[\w-]{1,200}$/.test(value);
+const keyList = (value: unknown) =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v.length <= 210).slice(0, 200) : [];
 export const EMPTY_PREFS: ColumnPrefs = {
   widths: {},
   hidden: [],
@@ -50,8 +62,15 @@ export function readColumnPrefs(databaseId: string): ColumnPrefs {
         timelineColumn: parsed.timelineColumn ?? null,
         timelineBucket: parsed.timelineBucket ?? "auto",
         statistic: parsed.statistic ?? null,
-        defaultView: isView(parsed.defaultView) ? parsed.defaultView : null,
-        hiddenViews: Array.isArray(parsed.hiddenViews) ? parsed.hiddenViews.filter((v): v is string => typeof v === "string").slice(0, 200) : [],
+        defaultView: isView(parsed.defaultView) || isSavedKey(parsed.defaultView) ? parsed.defaultView : null,
+        hiddenViews: keyList(parsed.hiddenViews),
+        viewOrder: keyList(parsed.viewOrder),
+        viewColors: Object.fromEntries(
+          Object.entries(parsed.viewColors && typeof parsed.viewColors === "object" ? parsed.viewColors : {})
+            .filter(([key, color]) => key.length <= 210 && isViewColor(color))
+            .slice(0, 200),
+        ) as Record<string, ViewColor>,
+        dataSource: isSavedKey(parsed.dataSource) ? parsed.dataSource : null,
       };
     }
     // Widths saved before the other preferences existed.

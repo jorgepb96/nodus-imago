@@ -425,7 +425,41 @@ export type Commands = {
   openMapAttribution: { input: void; result: void };
   status: { input: void; result: Status };
   listDatabases: { input: void; result: DatabaseSummary[] };
-  createDatabase: { input: { name: string }; result: DatabaseDetail };
+  createDatabase: { input: { name: string; kind?: import("./databases").DatabaseKind }; result: DatabaseDetail };
+  convertToRelation: {
+    input: {
+      id: string;
+      targetDatabaseId: string;
+      matchColumnId?: string | null;
+      keepCopy?: boolean;
+      createMissing?: boolean;
+      inverseName?: string | null;
+      apply: boolean;
+    };
+    result: {
+      total: number;
+      linked: number;
+      ambiguous: number;
+      unmatchedRows: number;
+      unmatched: { value: string; rows: number }[];
+      matchColumnId: string;
+      applied?: boolean;
+    };
+  };
+  pairRelation: { input: { columnId: string; name: string }; result: import("./databases").DatabaseColumn };
+  unpairRelation: { input: { columnId: string }; result: void };
+  linkedRecords: {
+    input: { rowId: string };
+    result: {
+      columnId: string;
+      name: string;
+      databaseName: string;
+      direction: "out" | "in";
+      total: number;
+      rows: RecordRow[];
+    }[];
+  };
+  setDatabaseKind: { input: { id: string; kind: import("./databases").DatabaseKind | null }; result: void };
   renameDatabase: { input: { id: string; name: string }; result: void };
   deleteDatabase: { input: { id: string }; result: void };
   detail: { input: { id: string }; result: DatabaseDetail };
@@ -594,13 +628,48 @@ export type Commands = {
   variantsStatus: { input: { databaseIds?: string[] }; result: import("./variants").VariantStatus };
   variantsPrepare: { input: { databaseIds?: string[] }; result: string | null };
   variantFamilies: {
-    input: { databaseIds?: string[]; sensitivity: import("./variants").Sensitivity };
+    input: { databaseIds?: string[]; sensitivity: import("./variants").Sensitivity; search?: SearchInput };
     result: import("./variants").VariantFamily[];
   };
   variantsOf: {
     input: { assetId: string; sensitivity?: import("./variants").Sensitivity };
     result: import("./variants").VariantFamily | null;
   };
+  imageVariants: {
+    input: { assetId: string; sensitivity?: import("./variants").Sensitivity };
+    result: import("./variants").ImageVariants;
+  };
+  variantVerdict: {
+    input: {
+      assetId: string;
+      otherAssetId: string;
+      verdict: import("./variants").VariantVerdict | null;
+      kind?: import("./variants").VariantKind | null;
+    };
+    result: boolean;
+  };
+  imageAppearances: {
+    input: {
+      assetId: string;
+      sensitivity?: import("./variants").Sensitivity;
+      fields?: Record<string, import("./variants").AppearanceFields>;
+    };
+    result: import("./variants").ImageAppearance[];
+  };
+  appearanceSave: {
+    input: {
+      id?: string;
+      assetId: string;
+      work: string;
+      author?: string | null;
+      year?: number | null;
+      page?: string | null;
+      caption?: string | null;
+      note?: string | null;
+    };
+    result: import("./variants").ManualAppearance;
+  };
+  appearanceDelete: { input: { id: string }; result: boolean };
   boardsList: { input: void; result: import("./compare").CompareBoard[] };
   boardGet: {
     input: { id: string };
@@ -738,6 +807,7 @@ export type Commands = {
   csvPreview: { input: void; result: CsvImportPlanData | null };
   csvImport: {
     input: {
+      kind?: import("./databases").DatabaseKind;
       token: string;
       name: string;
       types: DatabaseColumnType[];

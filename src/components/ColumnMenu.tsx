@@ -85,6 +85,8 @@ export function ColumnMenu({
   onCleanup,
   onAuthorities,
   onHeritage,
+  onConvertToRelation,
+  onLookup,
   initialView = "main",
 }: {
   initialView?: "main" | "calc";
@@ -109,6 +111,10 @@ export function ColumnMenu({
   onAuthorities?: () => void;
   /** A heritage property: its element records, typology and Wikidata linking. */
   onHeritage?: () => void;
+  /** A property that names records of another database becomes a relation to them. */
+  onConvertToRelation?: () => void;
+  /** A relation: bring a property of the related records into this database. */
+  onLookup?: () => void;
 }) {
   const t = useT(),
     api = window.imago,
@@ -399,6 +405,13 @@ export function ColumnMenu({
                 () => setView("type"),
                 { submenu: true, disabled: !convertible },
               )}
+              {column.type === "relation" &&
+                onLookup &&
+                item(<ArrowLeftRight size={15} />, t("Traer una propiedad de la base relacionada"), () => {
+                  void perform(commitName);
+                  onClose();
+                  onLookup();
+                })}
             </div>
             <div className="column-menu-group">
               {item(<Filter size={15} />, t("Filtrar"), () =>
@@ -537,6 +550,24 @@ export function ColumnMenu({
                 </button>
               ))}
             </div>
+            {onConvertToRelation && ["text", "select", "multi_select", "status", "number", "url"].includes(column.type) && !isHeritageColumn(column) && (
+              <div className="column-menu-group">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="column-menu-item"
+                  data-testid="convert-to-relation"
+                  onClick={() => {
+                    void perform(commitName);
+                    onClose();
+                    onConvertToRelation();
+                  }}
+                >
+                  <Link2 size={15} />
+                  <span>{t("Relación con otra base de datos…")}</span>
+                </button>
+              </div>
+            )}
           </>
         )}
         {view === "calc" && (

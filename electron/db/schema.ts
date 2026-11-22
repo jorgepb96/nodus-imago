@@ -37,6 +37,9 @@ CREATE INDEX IF NOT EXISTS restorations_asset ON restorations(asset_id,created_a
 CREATE TABLE IF NOT EXISTS tile_embeddings(content_hash TEXT NOT NULL,contract TEXT NOT NULL,tile INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(content_hash,contract,tile));
 CREATE TABLE IF NOT EXISTS image_fingerprints(content_hash TEXT PRIMARY KEY,hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS image_pair_checks(pair TEXT PRIMARY KEY,same INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS variant_verdicts(pair TEXT PRIMARY KEY,a TEXT NOT NULL,b TEXT NOT NULL,verdict TEXT NOT NULL CHECK(verdict IN ('same','different')),kind TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS image_appearances(id TEXT PRIMARY KEY,content_hash TEXT NOT NULL,work TEXT NOT NULL,author TEXT,year INTEGER,page TEXT,caption TEXT,note TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS image_appearances_hash ON image_appearances(content_hash);
 CREATE TABLE IF NOT EXISTS image_miniatures(content_hash TEXT PRIMARY KEY,width INTEGER NOT NULL,height INTEGER NOT NULL,pixels BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS option_authorities(option_id TEXT PRIMARY KEY,column_id TEXT NOT NULL,link_json TEXT NOT NULL,linked_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS heritage_elements(option_id TEXT PRIMARY KEY,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,parent_option_id TEXT,group_key TEXT,type_key TEXT,latitude REAL,longitude REAL,coord_source TEXT,updated_at TEXT NOT NULL,osm_ref TEXT);

@@ -1,3 +1,4 @@
+import { RelationPairing } from "./RelationTools";
 import { Fragment, useEffect, useState } from "react";
 import { Plus, Trash2, ArrowUp, ArrowDown, Pencil, SlidersHorizontal, Sparkles, Info, Landmark } from "lucide-react";
 import type {
@@ -99,6 +100,9 @@ export function Properties({
       }[]
     >([]),
     [relationDb, setRelationDb] = useState(""),
+    // A new relation can also show in the other database, under this name.
+    [relationBoth, setRelationBoth] = useState(true),
+    [relationInverse, setRelationInverse] = useState(detail.database.name),
     [databases, setDatabases] = useState<{ id: string; name: string }[]>([]);
   const [operand, setOperand] = useState(""),
     [operation, setOperation] = useState("add"),
@@ -432,6 +436,7 @@ export function Properties({
                       ? {
                           relationTargetDatabaseId: relationDb,
                           relationTargetKind: "db_row" as const,
+                          ...(relationBoth && relationInverse.trim() ? { relationInverseName: relationInverse.trim() } : {}),
                         }
                       : type === "formula"
                         ? { formula: formulaConfig() }
@@ -530,21 +535,40 @@ export function Properties({
                 </select>
               </label>
               {type === "relation" && !selected && (
-                <label>
-                  {t("Bases de datos")}
-                  <select
-                    required
-                    value={relationDb}
-                    onChange={(e) => setRelationDb(e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {databases.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <>
+                  <label>
+                    {t("Bases de datos")}
+                    <select
+                      required
+                      value={relationDb}
+                      data-testid="relation-target"
+                      onChange={(e) => setRelationDb(e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {databases.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {relationDb && (
+                    <label className="check-label relation-both">
+                      <input type="checkbox" checked={relationBoth} data-testid="relation-both" onChange={(e) => setRelationBoth(e.target.checked)} />
+                      {t("Mostrar también en «{db}» como").replace("{db}", databases.find((d) => d.id === relationDb)?.name ?? "")}
+                      <input
+                        className="relation-inline-name"
+                        value={relationInverse}
+                        disabled={!relationBoth}
+                        aria-label={t("Nombre de la propiedad en la otra base")}
+                        onChange={(e) => setRelationInverse(e.target.value)}
+                      />
+                    </label>
+                  )}
+                </>
+              )}
+              {type === "relation" && selected && (
+                <RelationPairing column={selected} databaseName={detail.database.name} perform={perform} onChanged={onChanged} />
               )}
               {type === "rollup" && (
                 <RollupSettings

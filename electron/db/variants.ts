@@ -13,7 +13,16 @@ import path from "node:path";
 import type { Repository } from "./repository";
 import type { CompareBoards } from "./compare";
 import type { CompareItem } from "../../shared/compare";
-import type { Sensitivity, VariantFamily, VariantMember, VariantStatus } from "../../shared/variants";
+import type {
+  ImageVariantMember,
+  ImageVariants,
+  Sensitivity,
+  VariantFamily,
+  VariantKind,
+  VariantMember,
+  VariantStatus,
+  VariantVerdict,
+} from "../../shared/variants";
 import { SENSITIVITY } from "../../shared/variants";
 import { imagePipeline } from "../import/images";
 import { cropMatch, MINIATURE, SAME_PHOTOGRAPH, type Miniature } from "./cropMatch";
@@ -59,6 +68,9 @@ export function informative(hex: string): boolean {
 }
 
 type Asset = { id: string; row_id: string; content_hash: string; database_id: string };
+type Close = { bits: number | null; cosine: number | null };
+/** The key of a pair of files, whichever comes first. */
+export const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 export class Variants {
   /** Pixel checks already made, by pair of files (they never change). */
@@ -264,8 +276,9 @@ export class Variants {
     return pairs;
   }
 
-  async families(input: { databaseIds?: string[]; sensitivity: Sensitivity }): Promise<VariantFamily[]> {
-    const assets = this.assets(input.databaseIds);
+  async families(input: { databaseIds?: string[]; sensitivity: Sensitivity; rowIds?: string[] }): Promise<VariantFamily[]> {
+    const keep = input.rowIds ? new Set(input.rowIds) : null;
+    const assets = this.assets(input.databaseIds).filter((a) => !keep || keep.has(a.row_id));
     const byHash = new Map<string, Asset[]>();
     for (const a of assets) (byHash.get(a.content_hash) ?? byHash.set(a.content_hash, []).get(a.content_hash)!).push(a);
     type Close = { bits: number | null; cosine: number | null };
@@ -275,10 +288,19 @@ export class Variants {
       if (current && (current.bits ?? 999) <= (close.bits ?? 999) && (current.cosine ?? -1) >= (close.cosine ?? -1)) return;
       (adjacency.get(a) ?? adjacency.set(a, new Map()).get(a)!).set(b, { bits: close.bits ?? current?.bits ?? null, cosine: close.cosine ?? current?.cosine ?? null });
     };
+    // The researcher's verdicts win: a rejected pair is no link, a confirmed
+    // one is, whatever detection found.
+    const verdicts = this.verdicts();
     for (const pair of await this.matches([...byHash.keys()], input.sensitivity)) {
+      if (verdicts.get(pairKey(pair.a, pair.b))?.verdict === "different") continue;
       link(pair.a, pair.b, pair);
       link(pair.b, pair.a, pair);
     }
+    for (const v of verdicts.values())
+      if (v.verdict === "same" && byHash.has(v.a) && byHash.has(v.b)) {
+        link(v.a, v.b, { bits: null, cosine: null });
+        link(v.b, v.a, { bits: null, cosine: null });
+      }
     // Star groups, never chains: each group is a central image and the images
     // that match it directly. A≈B and B≈C does not put A with C.
     const families: VariantFamily[] = [];
@@ -305,6 +327,108 @@ export class Variants {
     for (const [hash, rows] of byHash)
       if (!adjacency.has(hash) && new Set(rows.map((r) => r.row_id)).size >= 2) families.push(this.family(rows.slice(0, 40), new Map(), byHash));
     return families.sort((a, b) => b.members.length - a.members.length || (a.firstYear ?? 9999) - (b.firstYear ?? 9999));
+  }
+
+  /** Every verdict, by pair of files. */
+  private verdicts() {
+    return new Map(
+      (
+        this.repo.db.prepare("SELECT pair,a,b,verdict,kind FROM variant_verdicts").all() as {
+          pair: string;
+          a: string;
+          b: string;
+          verdict: VariantVerdict;
+          kind: VariantKind | null;
+        }[]
+      ).map((v) => [v.pair, v]),
+    );
+  }
+
+  /** Records (or clears, with null) what the researcher decided about two images. */
+  setVerdict(assetId: string, otherAssetId: string, verdict: VariantVerdict | null, kind: VariantKind | null = null) {
+    const a = (this.repo.asset(assetId) as Asset).content_hash,
+      b = (this.repo.asset(otherAssetId) as Asset).content_hash;
+    if (a === b) throw new Error("Las dos imágenes son el mismo archivo.");
+    const key = pairKey(a, b);
+    if (!verdict) {
+      this.repo.db.prepare("DELETE FROM variant_verdicts WHERE pair=?").run(key);
+      return;
+    }
+    const at = new Date().toISOString(),
+      [first, second] = a < b ? [a, b] : [b, a];
+    this.repo.db
+      .prepare(
+        "INSERT INTO variant_verdicts VALUES(?,?,?,?,?,?,?) ON CONFLICT(pair) DO UPDATE SET verdict=excluded.verdict,kind=excluded.kind,updated_at=excluded.updated_at",
+      )
+      .run(key, first, second, verdict, verdict === "same" ? kind : null, at, at);
+  }
+
+  /**
+   * The versions of one image, for its record: the images detection matches
+   * with it directly (less those rejected), the same file in other records,
+   * and everything linked to them by confirmed verdicts (which chain).
+   */
+  async ofImage(assetId: string, sensitivity: Sensitivity = "balanced"): Promise<ImageVariants> {
+    const anchor = this.repo.asset(assetId) as Asset,
+      home = anchor.content_hash;
+    const assets = this.assets();
+    const byHash = new Map<string, Asset[]>();
+    for (const a of assets) (byHash.get(a.content_hash) ?? byHash.set(a.content_hash, []).get(a.content_hash)!).push(a);
+    const verdicts = this.verdicts(),
+      verdictOf = (x: string, y: string) => verdicts.get(pairKey(x, y)) ?? null;
+    const near = new Map<string, Close>();
+    for (const pair of await this.matches([...byHash.keys()], sensitivity))
+      if (pair.a === home || pair.b === home) near.set(pair.a === home ? pair.b : pair.a, pair);
+    const rejected = new Set([...near.keys()].filter((h) => verdictOf(home, h)?.verdict === "different"));
+    // Confirmed links chain: everything reachable through "same" verdicts.
+    const sameOf = new Map<string, string[]>();
+    for (const v of verdicts.values())
+      if (v.verdict === "same") {
+        (sameOf.get(v.a) ?? sameOf.set(v.a, []).get(v.a)!).push(v.b);
+        (sameOf.get(v.b) ?? sameOf.set(v.b, []).get(v.b)!).push(v.a);
+      }
+    const confirmed = new Set<string>(),
+      queue = [home, ...[...near.keys()].filter((h) => !rejected.has(h))];
+    while (queue.length) {
+      const h = queue.shift()!;
+      for (const next of sameOf.get(h) ?? [])
+        if (next !== home && !confirmed.has(next)) {
+          confirmed.add(next);
+          queue.push(next);
+        }
+    }
+    for (const h of [...rejected]) if (confirmed.has(h)) rejected.delete(h);
+    const kept = new Set([...[...near.keys()].filter((h) => !rejected.has(h)), ...confirmed, home]);
+    const pick = (hashes: Iterable<string>) =>
+      [...hashes].flatMap((h) => (byHash.get(h) ?? []).filter((a) => a.id !== anchor.id && a.row_id !== anchor.row_id)).slice(0, 200);
+    const describe = (list: Asset[]): ImageVariantMember[] => {
+      const items = new Map(this.boards.items(list.map((a) => a.id)).map((i) => [i.assetId, i]));
+      const out = list.flatMap((a): ImageVariantMember[] => {
+        const item = items.get(a.id) as CompareItem | undefined;
+        if (!item) return [];
+        const close = near.get(a.content_hash),
+          verdict = verdictOf(home, a.content_hash);
+        const match: VariantMember["match"] =
+          a.content_hash === home ? "identical" : close?.bits != null ? "near" : close ? "similar" : "confirmed";
+        return [
+          {
+            ...item,
+            contentHash: a.content_hash,
+            match,
+            origin: a.content_hash === home || close ? "auto" : "confirmed",
+            verdict: verdict?.verdict ?? (confirmed.has(a.content_hash) && !close ? "same" : null),
+            kind: verdict?.verdict === "same" ? verdict.kind : null,
+          },
+        ];
+      });
+      return out.sort((x, y) => (x.year ?? 9999) - (y.year ?? 9999) || x.title.localeCompare(y.title, "es", { numeric: true }));
+    };
+    return { assetId, contentHash: home, members: describe(pick(kept)), rejected: describe(pick(rejected)) };
+  }
+
+  /** One image as a comparison item (record, date, year), or null. */
+  describeOne(assetId: string): CompareItem | null {
+    return this.boards.items([assetId])[0] ?? null;
   }
 
   /** Images that match one image, for the record panel. */

@@ -358,11 +358,47 @@ export interface DatabaseColumn {
   options: DatabaseSelectOption[];
 }
 
+/** What a database is for: it chooses its starting properties (all editable). */
+export const DATABASE_KINDS = ['images', 'sources', 'custom'] as const;
+export type DatabaseKind = (typeof DATABASE_KINDS)[number];
+/** The starting properties of each kind (the title always comes first). */
+export const DATABASE_TEMPLATES: Record<
+  DatabaseKind,
+  { name: string; type: DatabaseColumnType; options?: string[] }[]
+> = {
+  images: [
+    { name: 'Título', type: 'title' },
+    { name: 'Imágenes', type: 'attachment' },
+    { name: 'Autor', type: 'text' },
+    { name: 'Fecha', type: 'historical_date' },
+    { name: 'Ubicación', type: 'location' },
+    { name: 'Categorías', type: 'multi_select' },
+    { name: 'Archivo', type: 'select' },
+  ],
+  sources: [
+    { name: 'Título', type: 'title' },
+    { name: 'Tipo', type: 'select', options: ['Libro', 'Revista', 'Álbum', 'Folleto', 'Documento'] },
+    { name: 'Autor', type: 'text' },
+    { name: 'Editorial', type: 'text' },
+    { name: 'Lugar de edición', type: 'text' },
+    { name: 'Año', type: 'number' },
+    { name: 'Identificador', type: 'text' },
+    { name: 'Cubierta', type: 'attachment' },
+  ],
+  // The classic Imago database: a title and images, the rest is up to you.
+  custom: [
+    { name: 'Título', type: 'title' },
+    { name: 'Imágenes', type: 'attachment' },
+  ],
+};
+
 export interface DatabaseSummary {
   id: string;
   shortId: string;
   name: string;
   icon: string | null;
+  /** Older databases have none. */
+  kind?: DatabaseKind | null;
   position: number;
   rowCount: number;
   createdAt: string;

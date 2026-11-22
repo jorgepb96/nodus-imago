@@ -1,3 +1,4 @@
+import type { RecordStripItem } from "./RecordPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -411,7 +412,9 @@ export function DatabaseMap({
   sorts: ViewSort[];
   logic: "and" | "or";
   revision: number;
-  onOpen: (id: string) => void;
+  /** Opens a record; from a group of the map, with the group's records,
+   * which the record panel shows as a strip to move between them. */
+  onOpen: (id: string, group?: RecordStripItem[]) => void;
   onProperties: () => void;
   /** Opens images on a comparison table. */
   onCompare?: (assetIds: string[]) => void;
@@ -777,7 +780,7 @@ export function DatabaseMap({
                 <div key={group[0].id} className="map-view-group">
                   <div className="map-view-thumbs">
                     {group.slice(0, 4).map((r) => (
-                      <button key={r.id} type="button" onClick={() => onOpen(r.id)} aria-label={`${t("Abrir registro")} ${r.title}`}>
+                      <button key={r.id} type="button" onClick={() => onOpen(r.id, group)} aria-label={`${t("Abrir registro")} ${r.title}`}>
                         <Thumbnail id={r.image?.id} revision={r.image?.revision} alt={r.title} />
                       </button>
                     ))}
@@ -867,7 +870,7 @@ export function DatabaseMap({
                 <div className="map-record-item" key={record.id}>
                   <button
                     className="map-record-card"
-                    onClick={() => onOpen(record.id)}
+                    onClick={() => onOpen(record.id, selection && !unlocated ? visible : undefined)}
                     aria-label={`${t("Abrir registro")} ${record.title}`}
                   >
                     <Thumbnail

@@ -10,6 +10,8 @@ import {
   MoveRight,
   Trash2,
   Maximize2,
+  Expand,
+  Shrink,
   SquareDashedMousePointer,
   Wand2,
   Quote,
@@ -23,6 +25,8 @@ import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
 import type { Provenance, RecordRow } from "../../shared/imago";
 import { Button, Thumbnail } from "./ui";
 import { Cell } from "./Cell";
+import { RecordVariants } from "./RecordVariants";
+import { LinkedRecords } from "./RelationTools";
 import { BlockOutline } from "./BlockOutline";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
@@ -144,6 +148,9 @@ export function RecordPanel({
   citation,
   perform,
   hidden = [],
+  strip,
+  fullscreen = false,
+  onFullscreen,
 }: {
   row: RecordRow;
   detail: DatabaseDetail;
@@ -159,6 +166,12 @@ export function RecordPanel({
   perform: Perform;
   /** Properties hidden in the table: listed apart, folded, after the rest. */
   hidden?: string[];
+  /** The records opened together (a point of the map): a strip of their
+   * images to move from one to another. */
+  strip?: { label: string; items: RecordStripItem[] } | null;
+  /** The panel over the whole window instead of at the side. */
+  fullscreen?: boolean;
+  onFullscreen?: (on: boolean) => void;
 }) {
   const t = useT(),
     [imageIndex, setImageIndex] = useState(0),
@@ -168,7 +181,10 @@ export function RecordPanel({
     [moving, setMoving] = useState(false),
     [bulkMove, setBulkMove] = useState(false),
     [query, setQuery] = useState(""),
-    [targets, setTargets] = useState<RecordRow[]>([]);
+    [targets, setTargets] = useState<RecordRow[]>([]),
+    // «Ficha» or «Variantes y apariciones»; it stays while moving between records.
+    [tab, setTab] = useState<"record" | "variants">("record"),
+    [variantCount, setVariantCount] = useState<number | null>(null);
   const dialog = useRef<HTMLDialogElement>(null),
     closeRef = useRef(onClose);
   useEffect(() => {
@@ -203,6 +219,20 @@ export function RecordPanel({
     };
   }, []);
   const image = row.images[Math.min(imageIndex, row.images.length - 1)];
+  // How many versions the image has, for the tab's label.
+  const imageId = image?.id;
+  useEffect(() => {
+    setVariantCount(null);
+    if (!imageId) return;
+    let cancelled = false;
+    void window.imago
+      .call("imageVariants", { assetId: imageId })
+      .then((v) => !cancelled && setVariantCount(v.members.length))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [imageId]);
   const regions = image ? (row.annotations ?? []).filter((a) => a.assetId === image.id).length : 0;
   /** A quarter turn kept with the image; its annotations turn with it. */
   const rotate = (id: string, direction: "left" | "right") =>
@@ -262,7 +292,12 @@ export function RecordPanel({
         onClick={onClose}
         aria-label={t("Cerrar")}
       />
-      <aside aria-label={row.title} className="record-panel" data-tour="record-panel">
+      <aside
+        aria-label={row.title}
+        className={"record-panel" + (fullscreen ? " fullscreen" : "")}
+        data-tour="record-panel"
+        data-testid="record-panel"
+      >
         <header>
           <span>
             <span className="muted">{row.databaseName}</span>
@@ -284,11 +319,49 @@ export function RecordPanel({
               {t(copied ? "Cita copiada" : "Copiar cita")}
             </Button>
           )}
-          <Button icon aria-label={t("Cerrar")} onClick={onClose}>
-            <X size={19} />
-          </Button>
+          <span className="record-head-actions">
+            {onFullscreen && (
+              <Button
+                icon
+                data-testid="record-fullscreen"
+                aria-pressed={fullscreen}
+                aria-label={t(fullscreen ? "Salir de la pantalla completa" : "Pantalla completa")}
+                data-tooltip={t(fullscreen ? "Salir de la pantalla completa" : "Pantalla completa")}
+                onClick={() => onFullscreen(!fullscreen)}
+              >
+                {fullscreen ? <Shrink size={17} /> : <Expand size={17} />}
+              </Button>
+            )}
+            <Button icon aria-label={t("Cerrar")} onClick={onClose}>
+              <X size={19} />
+            </Button>
+          </span>
         </header>
-        <div className="record-body">
+        {strip && strip.items.length > 1 && strip.items.some((item) => item.id === row.id) && (
+          <RecordStrip strip={strip} current={row.id} onOpen={(id) => onOpenRecord?.(id)} />
+        )}
+        <div className="record-tabs" role="tablist" aria-label={t("Secciones de la ficha")}>
+          <button type="button" role="tab" aria-selected={tab === "record"} data-testid="record-tab-record" onClick={() => setTab("record")}>
+            {t("Ficha")}
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "variants"} data-testid="record-tab-variants" onClick={() => setTab("variants")}>
+            {t("Variantes y apariciones")}
+            {variantCount !== null && <span className="record-tab-count">{variantCount}</span>}
+          </button>
+        </div>
+        {tab === "variants" && (
+          <div className="record-body">
+            <RecordVariants
+              row={row}
+              image={image}
+              perform={perform}
+              onOpenRecord={onOpenRecord}
+              onCompare={onCompare}
+              onCount={setVariantCount}
+            />
+          </div>
+        )}
+        <div className="record-body" hidden={tab !== "record"}>
           <div className="record-image">
             <button
               type="button"
@@ -558,6 +631,8 @@ export function RecordPanel({
               )}
             </>
           )}
+          {/* A source's records (a book's photographs) come first. */}
+          {detail.database.kind === "sources" && <LinkedRecords row={row} onOpenRecord={onOpenRecord} />}
           <h2>{t("Propiedades")}</h2>
           <div className="record-properties" data-tour="record-properties">
             {shownProperties.map(property)}
@@ -574,6 +649,7 @@ export function RecordPanel({
               </div>
             </details>
           )}
+          {detail.database.kind !== "sources" && <LinkedRecords row={row} onOpenRecord={onOpenRecord} />}
           {!!provenance.length && (
             <details className="metadata provenance">
               <summary>{t("Procedencia de las propuestas")}</summary>
@@ -646,5 +722,72 @@ export function RecordPanel({
         </div>
       </aside>
     </dialog>
+  );
+}
+
+/** A record opened with others (a point of the map). */
+export type RecordStripItem = { id: string; title: string; image: { id: string; revision?: string } | null };
+
+/** The images of the records opened together, in a row: the open one is
+ * marked and kept in view; ← and → move to the previous or next one. */
+function RecordStrip({
+  strip,
+  current,
+  onOpen,
+}: {
+  strip: { label: string; items: RecordStripItem[] };
+  current: string;
+  onOpen: (id: string) => void;
+}) {
+  const t = useT(),
+    list = useRef<HTMLDivElement>(null),
+    at = strip.items.findIndex((item) => item.id === current);
+  useEffect(() => {
+    list.current?.querySelector<HTMLElement>(".is-current")?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [current]);
+  const go = (step: number) => {
+    const next = strip.items[at + step];
+    if (next) onOpen(next.id);
+  };
+  return (
+    <nav className="record-strip" aria-label={strip.label} data-testid="record-strip">
+      <div className="record-strip-head">
+        <span>{strip.label}</span>
+        <span className="record-strip-count">
+          {at + 1} / {strip.items.length}
+        </span>
+        <Button icon aria-label={t("Registro anterior")} disabled={at <= 0} onClick={() => go(-1)}>
+          <ChevronLeft size={15} />
+        </Button>
+        <Button icon aria-label={t("Registro siguiente")} disabled={at >= strip.items.length - 1} onClick={() => go(1)}>
+          <ChevronRight size={15} />
+        </Button>
+      </div>
+      <div
+        className="record-strip-items"
+        ref={list}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            event.preventDefault();
+            go(event.key === "ArrowLeft" ? -1 : 1);
+          }
+        }}
+      >
+        {strip.items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={"record-strip-item" + (item.id === current ? " is-current" : "")}
+            aria-current={item.id === current ? "true" : undefined}
+            aria-label={item.title}
+            data-tooltip={item.title}
+            onClick={() => item.id !== current && onOpen(item.id)}
+          >
+            <Thumbnail id={item.image?.id} revision={item.image?.revision} alt={item.title} />
+            <small>{item.title}</small>
+          </button>
+        ))}
+      </div>
+    </nav>
   );
 }

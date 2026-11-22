@@ -21,7 +21,7 @@ const anchors = new Set([
 ]);
 const settingsTabs = [...fs.readFileSync("src/components/Settings.tsx", "utf8").matchAll(/\{\s*id:\s*"([^"]+)",\s*label:/g)].map((m) => m[1]);
 const families: [string, string[], RegExp][] = [
-  ["view-", [...DATABASE_VIEWS], /"data-tour": `view-\$\{id\}`/],
+  ["view-", [...DATABASE_VIEWS], /(?:"data-tour": |data-tour=\{[^`{}]*)`view-\$\{id\}`/],
   ["settings-tab-", settingsTabs, /data-tour=\{`settings-tab-\$\{id\}`\}/],
   ["record-prop-", ["location", "rich_text", "text", "multi_select", "select", "date"], /data-tour=\{`record-prop-\$\{c\.type\}`\}/],
 ];

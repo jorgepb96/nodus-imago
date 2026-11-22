@@ -33,6 +33,54 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.0",
+    date: "2026-11-22",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Tipos de base de datos: Imágenes, Fuentes o Personalizada. Cada tipo empieza con sus propiedades (una base de Fuentes trae Tipo, Autor, Editorial, Lugar de edición, Año…), y todas se pueden cambiar después.",
+        en: "Database kinds: Images, Sources or Custom. Each kind starts with its own properties (a Sources database comes with Type, Author, Publisher, Place of publication, Year…), and all of them can be changed later.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Relaciones de ida y vuelta: al enlazar una foto con un libro, el libro muestra también la foto, y deshacer deshace los dos lados. La ficha de una fuente enseña las imágenes que la citan.",
+        en: "Two-way relations: link a photograph to a book and the book shows the photograph too; undo undoes both sides. A source's record shows the images that cite it.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Convertir en relación, como en Notion: una propiedad con códigos o nombres (por ejemplo, el identificador de un libro) se convierte en una relación con otra base. Imago busca por sí mismo la propiedad que casa, enseña cuántos registros enlazan y cuáles no tienen pareja, y las vistas guardadas siguen funcionando.",
+        en: "Convert to relation, as in Notion: a property holding codes or names (a book's identifier, for example) becomes a relation to another database. Imago finds the matching property by itself, shows how many records link and which have no match, and saved views keep working.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Traer una propiedad de la base relacionada (por ejemplo, la editorial o el año del libro), que se puede filtrar y ordenar. Las estadísticas cuentan también por relación.",
+        en: "Bring in a property from the related database (the book's publisher or year, for example), which can be filtered and sorted. Statistics also count by relation.",
+      },
+      {
+        scope: "visual",
+        category: "new",
+        es: "Pestaña «Variantes y apariciones» en la ficha: todas las versiones de una fotografía (copias, recortes, retoques) y las obras en las que aparece, por orden de fecha. Puedes confirmar o descartar cada variante, añadir las que la detección no ve y apuntar apariciones a mano.",
+        en: "A «Variants and appearances» tab in the record: every version of a photograph (copies, crops, retouches) and the works it appears in, by date. You can confirm or reject each variant, add those detection misses, and note appearances by hand.",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "Las vistas se pueden destacar, colorear (en pastel o en normal) y reordenar arrastrándolas, con desplazamiento suave al llegar al borde. Cada base puede elegir su origen de datos.",
+        en: "Views can be featured, coloured (pastel or normal) and reordered by dragging, with smooth scrolling at the edge. Each database can choose its data source.",
+      },
+      {
+        scope: "places",
+        category: "enhancement",
+        es: "Al pulsar un punto del mapa con varias imágenes, se recorren en un carrusel horizontal. La ficha de un registro se puede abrir a pantalla completa.",
+        en: "Clicking a map point with several images lets you browse them in a horizontal carousel. A record can be opened full screen.",
+      },
+    ],
+  },
+  {
     version: "0.4.5",
     date: "2026-11-21",
     highlights: [

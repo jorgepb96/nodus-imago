@@ -3,7 +3,7 @@
 // dated appearance and later reuses can be read.
 import { useCallback, useEffect, useState } from "react";
 import { Columns2, Copy, Fingerprint, RefreshCw } from "lucide-react";
-import type { Job } from "../../shared/imago";
+import type { Job, SearchInput } from "../../shared/imago";
 import type { Sensitivity, VariantFamily, VariantStatus } from "../../shared/variants";
 import { useT, formatNumber } from "../i18n";
 import { Button, Thumbnail } from "./ui";
@@ -12,15 +12,20 @@ const MATCH: Record<string, string> = {
   identical: "Mismo archivo",
   near: "Copia o reproducción",
   similar: "Recorte o versión",
+  confirmed: "Confirmada por ti",
 };
 
 export function VariantsView({
   databaseId,
+  search,
   jobs,
   onOpenRecord,
   onCompare,
 }: {
   databaseId: string;
+  /** The records of the view on screen (data source and filters); every
+   * database is searched in full when «everywhere» is ticked. */
+  search?: SearchInput;
   jobs: Job[];
   onOpenRecord: (rowId: string) => void;
   onCompare: (assetIds: string[]) => void;
@@ -35,7 +40,9 @@ export function VariantsView({
   const scope = everywhere ? undefined : [databaseId];
   const running = jobs.some((j) => j.kind === "fingerprints" && ["queued", "running"].includes(j.state));
   const progress = jobs.find((j) => j.kind === "fingerprints" && ["queued", "running"].includes(j.state));
-  const scopeKey = JSON.stringify(scope);
+  const scopeKey = JSON.stringify(scope),
+    // Only the conditions: the variants of the records the view keeps.
+    filterKey = everywhere || !search ? "" : JSON.stringify({ databaseIds: search.databaseIds, filters: search.filters, filterLogic: search.filterLogic, filterGroups: search.filterGroups });
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -43,7 +50,7 @@ export function VariantsView({
       const ids = JSON.parse(scopeKey) as string[] | undefined;
       const [s, f] = await Promise.all([
         window.imago.call("variantsStatus", { databaseIds: ids }),
-        window.imago.call("variantFamilies", { databaseIds: ids, sensitivity }),
+        window.imago.call("variantFamilies", { databaseIds: ids, sensitivity, ...(filterKey ? { search: JSON.parse(filterKey) as SearchInput } : {}) }),
       ]);
       setStatus(s);
       setFamilies(f);
@@ -52,7 +59,7 @@ export function VariantsView({
     } finally {
       setLoading(false);
     }
-  }, [scopeKey, sensitivity]);
+  }, [scopeKey, filterKey, sensitivity]);
   useEffect(() => {
     void load();
   }, [load, running]);
