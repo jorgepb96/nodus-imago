@@ -466,6 +466,8 @@ export type Commands = {
   /** A drawn icon and its colour («Name» or «Name:colour»), or null for the kind's icon. */
   setDatabaseIcon: { input: { id: string; icon: string | null }; result: void };
   renameDatabase: { input: { id: string; name: string }; result: void };
+  /** The databases in the order the researcher dragged them in the sidebar. */
+  reorderDatabases: { input: { ids: string[] }; result: void };
   deleteDatabase: { input: { id: string }; result: void };
   detail: { input: { id: string }; result: DatabaseDetail };
   addColumn: {

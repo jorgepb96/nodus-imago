@@ -284,6 +284,17 @@ export class Repository {
     this.detail(id);
     this.db.prepare("UPDATE db_databases SET icon=?,updated_at=? WHERE id=?").run(icon, now(), id);
   }
+  /** Puts the databases in this order; any left out keep their order after them. */
+  reorderDatabases(ids: string[]) {
+    if (new Set(ids).size !== ids.length) throw new Error("El nuevo orden repite una base de datos.");
+    const current = this.list().map((d) => d.id),
+      known = new Set(current);
+    if (ids.some((id) => !known.has(id))) throw new Error("Base de datos no encontrada.");
+    const placed = new Set(ids),
+      order = [...ids, ...current.filter((id) => !placed.has(id))];
+    const update = this.db.prepare("UPDATE db_databases SET position=? WHERE id=?");
+    this.db.transaction(() => order.forEach((id, position) => update.run(position, id)))();
+  }
   setKind(id: string, kind: DatabaseKind | null) {
     this.detail(id);
     this.db.prepare("UPDATE db_databases SET kind=?,updated_at=? WHERE id=?").run(kind, now(), id);

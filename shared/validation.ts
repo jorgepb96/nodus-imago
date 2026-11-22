@@ -425,6 +425,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({ id, icon: z.string().max(40).refine(isDatabaseIconValue, "Icono desconocido.").nullable() })
     .strict(),
   renameDatabase: z.object({ id, name }).strict(),
+  reorderDatabases: z.object({ ids: z.array(id).min(1).max(10000) }).strict(),
   deleteDatabase: z.object({ id }).strict(),
   detail: z.object({ id }).strict(),
   pageDocument: z.object({ rowId: id, columnId: id }).strict(),

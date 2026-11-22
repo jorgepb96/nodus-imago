@@ -107,6 +107,7 @@ import { CompareView } from "./components/CompareView";
 import { useDragEdgeScroll } from "./edgeScroll";
 import { ConvertRelationDialog, LookupDialog } from "./components/RelationTools";
 import type { RecordStripItem } from "./components/RecordPanel";
+import { SidebarDatabases } from "./components/SidebarDatabases";
 import { DataSourcePicker, SavedViewDialog, ViewColorPicker, ViewVisibility, VIEW_INFO } from "./components/SavedViews";
 import { DATABASE_VIEWS, combineCriteria, moveViewKey, orderViewKeys, savedIdOf, savedViewKey, type SavedView, type ViewColor } from "../shared/savedViews";
 import { VariantsView } from "./components/VariantsView";
@@ -1985,20 +1986,43 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 <Plus size={14} />
               </Button>
             </div>
-            {databases.map((d) => (
-              <button
-                key={d.id}
-                title={d.name}
-                className={
-                  area === "databases" && databaseId === d.id ? "active" : ""
+            <SidebarDatabases
+              databases={databases}
+              activeId={area === "databases" ? databaseId : null}
+              onOpen={navigate}
+              onRename={(id, newName) =>
+                perform(async () => {
+                  await api.call("renameDatabase", { id, name: newName });
+                  if (allDetails.some((d) => d.database.id === id)) await reloadDetail(id);
+                  else refresh();
+                })
+              }
+              onIcon={(id, icon) =>
+                perform(async () => {
+                  await api.call("setDatabaseIcon", { id, icon });
+                  if (allDetails.some((d) => d.database.id === id)) await reloadDetail(id);
+                  else refresh();
+                })
+              }
+              onReorder={async (ids) => {
+                try {
+                  await api.call("reorderDatabases", { ids });
+                  refresh();
+                } catch (error) {
+                  notify(error instanceof Error ? error.message : String(error), true);
+                  throw error;
                 }
-                onClick={() => navigate(d.id)}
-              >
-                <DatabaseIcon icon={d.icon} kind={d.kind} size={15} />
-                <span className="nav-title">{d.name}</span>
-                <small>{d.rowCount.toLocaleString()}</small>
-              </button>
-            ))}
+              }}
+              onEdit={(id) => {
+                const d = databases.find((x) => x.id === id);
+                if (!d) return;
+                if (area !== "databases" || databaseId !== id) navigate(id);
+                setName(d.name);
+                setNewKind(d.kind ?? "custom");
+                setNewIcon(d.icon);
+                setModal("rename");
+              }}
+            />
           </div>
           <div className="sidebar-bottom">
             <button

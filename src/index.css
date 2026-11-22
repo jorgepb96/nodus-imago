@@ -1168,8 +1168,124 @@ dialog,
   font-size: 9px;
 }
 .sidebar-databases > button:hover,
-.sidebar-databases > button.active {
+.sidebar-databases > button.active,
+.sidebar-databases > button.menu-open {
   background: var(--hover);
+}
+/* Rename in place, the «⋯» of the menu on hover, and dragging to reorder. */
+.sidebar-databases > button {
+  position: relative;
+}
+.sidebar-db-more {
+  display: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -3px -6px -3px 0;
+  border-radius: 5px;
+  color: var(--muted);
+}
+.sidebar-db-more:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.sidebar-databases > button:hover .sidebar-db-more,
+.sidebar-databases > button:focus-visible .sidebar-db-more,
+.sidebar-databases > button.menu-open .sidebar-db-more {
+  display: inline-grid;
+}
+.sidebar-databases > button:hover small,
+.sidebar-databases > button:focus-visible small,
+.sidebar-databases > button.menu-open small {
+  display: none;
+}
+.sidebar-databases > button.dragging {
+  opacity: 0.45;
+}
+.sidebar-databases > button.drop-before::before,
+.sidebar-databases > button.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.sidebar-databases > button.drop-before::before {
+  top: -1px;
+}
+.sidebar-databases > button.drop-after::after {
+  bottom: -1px;
+}
+.sidebar-db-rename {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 8px 4px 12px;
+}
+.sidebar-db-rename input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 7px;
+  font-size: 11px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.sidebar-db-menu {
+  padding: 6px;
+}
+.sidebar-db-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text);
+}
+.sidebar-db-menu > button > span {
+  flex: 1;
+}
+.sidebar-db-menu > button:hover:not(:disabled),
+.sidebar-db-menu > button:focus-visible {
+  background: var(--hover);
+}
+.sidebar-db-menu > button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.sidebar-db-menu kbd {
+  font: inherit;
+  font-size: 10px;
+  color: var(--muted);
+}
+.sidebar-db-menu hr {
+  margin: 5px 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.sidebar-db-menu .hint {
+  margin: 6px 9px 3px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.sidebar-db-icon-popover > header {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.sidebar-db-icon-popover .database-icon-picker {
+  padding: 10px 12px 12px;
 }
 /* A database's drawn icon, in its colour (sidebar, cards, heading). */
 .database-icon {
