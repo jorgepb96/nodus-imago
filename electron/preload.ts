@@ -15,7 +15,7 @@ const api: ImagoApi = {
       throw plain(error);
     }),
   onChange: (listener) => {
-    const handler = () => listener();
+    const handler = (_event: Electron.IpcRendererEvent, scope?: "jobs" | "data") => listener(scope === "jobs" ? "jobs" : "data");
     ipcRenderer.on("imago:changed", handler);
     return () => ipcRenderer.removeListener("imago:changed", handler);
   },

@@ -466,6 +466,8 @@ export type Commands = {
   /** A drawn icon and its colour («Name» or «Name:colour»), or null for the kind's icon. */
   setDatabaseIcon: { input: { id: string; icon: string | null }; result: void };
   renameDatabase: { input: { id: string; name: string }; result: void };
+  /** The databases in the order the researcher dragged them in the sidebar. */
+  reorderDatabases: { input: { ids: string[] }; result: void };
   deleteDatabase: { input: { id: string }; result: void };
   detail: { input: { id: string }; result: DatabaseDetail };
   addColumn: {
@@ -984,7 +986,8 @@ export interface ImagoApi {
     command: K,
     ...args: Commands[K]["input"] extends void ? [] : [Commands[K]["input"]]
   ): Promise<Commands[K]["result"]>;
-  onChange(listener: () => void): () => void;
+  /** «jobs»: only the queue moved; «data»: records the views show may differ. */
+  onChange(listener: (scope: "jobs" | "data") => void): () => void;
   /** Runs one chat turn in the main process; deltas arrive through onChatDelta. */
   chatSend(request: import("./chat").ChatTurnRequest): Promise<import("./chat").ChatTurnResult>;
   chatCancel(conversationId: string): Promise<void>;

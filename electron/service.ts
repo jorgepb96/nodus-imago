@@ -14,7 +14,7 @@ import {
 import { Models } from "./ai/models";
 import { InferenceHost } from "./ai/host";
 import { Engine } from "./ai/engine";
-import { JobQueue } from "./jobs";
+import { JobQueue, type ChangeScope } from "./jobs";
 import { buildCsvImportPlan } from "../shared/databaseCsv";
 import { parseCsv } from "../shared/csvParser";
 import {
@@ -140,7 +140,7 @@ export class Service {
   constructor(
     root: string,
     script: string,
-    public changed: () => void,
+    public changed: (scope?: ChangeScope) => void,
     remote?: (
       input: CompletionRequest | EmbeddingRequest,
       signal: AbortSignal,
@@ -403,6 +403,8 @@ export class Service {
         return this.repo.setKind(input.id, input.kind);
       case "setDatabaseIcon":
         return this.repo.setIcon(input.id, input.icon);
+      case "reorderDatabases":
+        return this.repo.reorderDatabases(input.ids);
       case "renameDatabase":
         this.repo.detail(input.id);
         return this.repo.db

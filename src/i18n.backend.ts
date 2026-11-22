@@ -97,6 +97,7 @@ export const backendEn: Record<string, string> = {
   "Regla de otra base de datos.": "Rule from another database.",
   "Activa la regla antes de ejecutarla.": "Enable the rule before running it.",
   "Base de datos no encontrada.": "Database not found.",
+  "El nuevo orden repite una base de datos.": "The new order repeats a database.",
   "Propiedad no encontrada.": "Property not found.",
   "La base ya tiene una propiedad de título.": "The database already has a title property.",
   "La propiedad de título es obligatoria.": "The title property is required.",

@@ -107,6 +107,7 @@ import { CompareView } from "./components/CompareView";
 import { useDragEdgeScroll } from "./edgeScroll";
 import { ConvertRelationDialog, LookupDialog } from "./components/RelationTools";
 import type { RecordStripItem } from "./components/RecordPanel";
+import { SidebarDatabases } from "./components/SidebarDatabases";
 import { DataSourcePicker, SavedViewDialog, ViewColorPicker, ViewVisibility, VIEW_INFO } from "./components/SavedViews";
 import { DATABASE_VIEWS, combineCriteria, moveViewKey, orderViewKeys, savedIdOf, savedViewKey, type SavedView, type ViewColor } from "../shared/savedViews";
 import { VariantsView } from "./components/VariantsView";
@@ -196,6 +197,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [qualityDismissed, setQualityDismissed] = useState(false),
     [qualityAsked, setQualityAsked] = useState(false),
     [tick, setTick] = useState(0),
+    // The queue and status alone: job progress, without reloading the views.
+    [statusTick, setStatusTick] = useState(0),
     [busy, setBusy] = useState(0),
     [toast, setToast] = useState<{ message: string; error: boolean } | null>(
       null,
@@ -297,6 +300,23 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     }
   };
   const refresh = useCallback(() => setTick((n) => n + 1), []);
+  const refreshStatus = useCallback(() => setStatusTick((n) => n + 1), []);
+  // Data changes announced from the background (an import, a filled column)
+  // reload the views at most once every 1.5 s: a statistic or a network that
+  // takes longer than the interval between notifications would otherwise be
+  // cancelled before it answers and never appear.
+  const dataRefreshAt = useRef(0),
+    dataRefreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const refreshFromBackground = useCallback(() => {
+    if (dataRefreshTimer.current) return;
+    const wait = Math.max(0, 1500 - (Date.now() - dataRefreshAt.current));
+    dataRefreshTimer.current = setTimeout(() => {
+      dataRefreshTimer.current = undefined;
+      dataRefreshAt.current = Date.now();
+      refresh();
+    }, wait);
+  }, [refresh]);
+  useEffect(() => () => clearTimeout(dataRefreshTimer.current), []);
   // The database's own search box (literal, semantic or both).
   const [dbSearch, setDbSearch] = useState<DatabaseSearchState>(EMPTY_DATABASE_SEARCH);
   useEffect(() => {
@@ -420,8 +440,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   );
   useEffect(() => {
     if (!api) return;
-    return api.onChange(() => refresh());
-  }, [api, refresh]);
+    return api.onChange((scope) => (scope === "jobs" ? refreshStatus() : refreshFromBackground()));
+  }, [api, refreshStatus, refreshFromBackground]);
   useEffect(() => {
     if (!api) return;
     return api.onDrop((result) => {
@@ -456,19 +476,24 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       }
     });
   }, [api, notify, perform, refresh, t]);
+  // Job progress (statusTick) asks for the status alone; a data change (tick)
+  // also lists the databases and saved searches again (and so their details).
+  const listedAt = useRef(-1);
   useEffect(() => {
     if (!api) return;
     let cancelled = false;
+    const withLists = listedAt.current !== tick;
     void Promise.all([
       api.call("status"),
-      api.call("listDatabases"),
-      api.call("savedSearches"),
+      withLists ? api.call("listDatabases") : null,
+      withLists ? api.call("savedSearches") : null,
     ])
       .then(([s, ds, ss]) => {
         if (cancelled) return;
+        listedAt.current = tick;
         setStatus(s);
-        setDatabases(ds);
-        setSaved(ss);
+        if (ds) setDatabases(ds);
+        if (ss) setSaved(ss);
         onLanguage(s.settings.language);
         applyTheme(s.settings);
         void applyAppIcon(
@@ -479,13 +504,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     return () => {
       cancelled = true;
     };
-  }, [api, tick, notify, onLanguage]);
+  }, [api, tick, statusTick, notify, onLanguage]);
+  // While jobs run, their progress is polled; the views reload only when the
+  // data change (a notification of scope «data» or a job finishing).
+  const jobsActive = !!status?.jobs.some((j) => ["queued", "running"].includes(j.state));
   useEffect(() => {
-    if (!status?.jobs.some((j) => ["queued", "running"].includes(j.state)))
-      return;
-    const timer = setInterval(refresh, 2000);
+    if (!jobsActive) return;
+    const timer = setInterval(refreshStatus, 2000);
     return () => clearInterval(timer);
-  }, [status?.jobs, refresh]);
+  }, [jobsActive, refreshStatus]);
   useEffect(() => {
     if (!status) return;
     const media = matchMedia("(prefers-color-scheme: dark)"),
@@ -522,12 +549,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const [savedViews, setSavedViews] = useState<SavedView[]>([]),
     [savedViewsFor, setSavedViewsFor] = useState<string | null>(null);
   const [prefs, updatePrefs] = useColumnPrefs(detail?.database.id ?? null);
-  // Where the built-in views take their records from: the whole database, or
-  // the records a saved view keeps. A saved view on screen uses its own.
-  const sourceView =
-    area === "databases" && !activeSaved
-      ? (savedViews.find((v) => savedViewKey(v.id) === prefs.dataSource) ?? null)
-      : null;
+  // Where the views other than the table take their records from: the main
+  // table (the whole database), or the records a saved view keeps. The table
+  // always shows the whole database; a saved view on screen uses its own.
+  const sourceOffered = area === "databases" && !activeSaved && view !== "table";
+  const sourceView = sourceOffered
+    ? (savedViews.find((v) => savedViewKey(v.id) === prefs.dataSource) ?? null)
+    : null;
   const effectiveCriteria = useMemo(
     () => combineCriteria(sourceView?.criteria, { filters, filterLogic: logic, filterGroups }),
     [sourceView, filters, logic, filterGroups],
@@ -1958,20 +1986,43 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                 <Plus size={14} />
               </Button>
             </div>
-            {databases.map((d) => (
-              <button
-                key={d.id}
-                title={d.name}
-                className={
-                  area === "databases" && databaseId === d.id ? "active" : ""
+            <SidebarDatabases
+              databases={databases}
+              activeId={area === "databases" ? databaseId : null}
+              onOpen={navigate}
+              onRename={(id, newName) =>
+                perform(async () => {
+                  await api.call("renameDatabase", { id, name: newName });
+                  if (allDetails.some((d) => d.database.id === id)) await reloadDetail(id);
+                  else refresh();
+                })
+              }
+              onIcon={(id, icon) =>
+                perform(async () => {
+                  await api.call("setDatabaseIcon", { id, icon });
+                  if (allDetails.some((d) => d.database.id === id)) await reloadDetail(id);
+                  else refresh();
+                })
+              }
+              onReorder={async (ids) => {
+                try {
+                  await api.call("reorderDatabases", { ids });
+                  refresh();
+                } catch (error) {
+                  notify(error instanceof Error ? error.message : String(error), true);
+                  throw error;
                 }
-                onClick={() => navigate(d.id)}
-              >
-                <DatabaseIcon icon={d.icon} kind={d.kind} size={15} />
-                <span className="nav-title">{d.name}</span>
-                <small>{d.rowCount.toLocaleString()}</small>
-              </button>
-            ))}
+              }}
+              onEdit={(id) => {
+                const d = databases.find((x) => x.id === id);
+                if (!d) return;
+                if (area !== "databases" || databaseId !== id) navigate(id);
+                setName(d.name);
+                setNewKind(d.kind ?? "custom");
+                setNewIcon(d.icon);
+                setModal("rename");
+              }}
+            />
           </div>
           <div className="sidebar-bottom">
             <button
@@ -2659,18 +2710,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           />
                         )}
                       {area === "databases" && detail && (
-                        <DataSourcePicker
-                          saved={savedViews}
-                          source={prefs.dataSource ?? null}
-                          disabled={!!activeSaved}
-                          onSource={(key) => {
-                            updatePrefs((current) => ({ ...current, dataSource: key }));
-                            setOffset(0);
-                            setSelected(new Set());
-                          }}
-                        />
-                      )}
-                      {area === "databases" && detail && (
                         <ViewVisibility
                           views={offeredViews()}
                           saved={savedViews}
@@ -2736,9 +2775,12 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       )}
                     </div>
                   </div>
+                  {/* Keys carry a prefix: the search box and the view below are
+                      siblings, and two siblings with the same key left a second
+                      search box on screen after some changes of view. */}
                   {area === "databases" && detail && effectiveView !== "map" && (
                     <DatabaseSearch
-                      key={detail.database.id}
+                      key={`search:${detail.database.id}`}
                       value={dbSearch}
                       onChange={(next) => {
                         setDbSearch(next);
@@ -2760,6 +2802,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     onOpenSorts={() => setSortRequest((n) => n + 1)}
                   />
                   <div className="result-meta">
+                    {sourceOffered && detail && (
+                      <DataSourcePicker
+                        saved={savedViews}
+                        source={sourceView ? prefs.dataSource ?? null : null}
+                        onSource={(key) => {
+                          updatePrefs((current) => ({ ...current, dataSource: key }));
+                          setOffset(0);
+                          setSelected(new Set());
+                        }}
+                      />
+                    )}
                     <span>
                       {loading && pageKey !== requestKey ? (
                         <Spinner />
@@ -2928,7 +2981,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   {!["map", "timeline", "stats", "variants", "network", "visualmap"].includes(effectiveView) && pager(true)}
                   {effectiveView === "timeline" && detail && criteriaContext === criteriaKey ? (
                     <TimelineView
-                      key={detail.database.id}
+                      key={`timeline:${detail.database.id}`}
                       detail={detail}
                       search={viewSearch}
                       prefs={prefs}
@@ -2939,7 +2992,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     />
                   ) : effectiveView === "visualmap" && detail && criteriaContext === criteriaKey ? (
                     <VisualMapView
-                      key={detail.database.id}
+                      key={`visualmap:${detail.database.id}`}
                       detail={detail}
                       search={viewSearch}
                       revision={tick}
@@ -2948,7 +3001,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     />
                   ) : effectiveView === "network" && detail && criteriaContext === criteriaKey ? (
                     <NetworkView
-                      key={detail.database.id}
+                      key={`network:${detail.database.id}`}
                       detail={detail}
                       search={viewSearch}
                       revision={tick}
@@ -2964,7 +3017,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     />
                   ) : effectiveView === "variants" && detail ? (
                     <VariantsView
-                      key={detail.database.id}
+                      key={`variants:${detail.database.id}`}
                       databaseId={detail.database.id}
                       search={viewSearch}
                       jobs={status?.jobs ?? []}
@@ -2976,7 +3029,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     />
                   ) : effectiveView === "stats" && detail && criteriaContext === criteriaKey ? (
                     <StatisticsView
-                      key={detail.database.id}
+                      key={`stats:${detail.database.id}`}
                       detail={detail}
                       search={viewSearch}
                       prefs={prefs}
@@ -2988,7 +3041,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   detail &&
                   criteriaContext === criteriaKey ? (
                     <DatabaseMap
-                      key={detail.database.id}
+                      key={`map:${detail.database.id}`}
                       detail={detail}
                       onCompare={(assets) => {
                         setCompareSeed(assets);
@@ -4182,7 +4235,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       )}
       {modal === "suggest" && detail && (
         <SuggestDialog
-          key={detail.database.id}
+          key={`suggest:${detail.database.id}`}
           detail={detail}
           onClose={() => setModal(null)}
           onApplied={(count) => {
@@ -4194,7 +4247,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       )}
       {modal === "automations" && detail && (
         <Automations
-          key={detail.database.id}
+          key={`automations:${detail.database.id}`}
           detail={detail}
           perform={perform}
           onClose={() => setModal(null)}
@@ -4202,7 +4255,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       )}
       {modal === "agreement" && detail && (
         <AgreementWorkbench
-          key={detail.database.id}
+          key={`agreement:${detail.database.id}`}
           detail={detail}
           filters={effectiveCriteria.filters}
           groups={effectiveCriteria.filterGroups}

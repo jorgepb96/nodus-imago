@@ -10,6 +10,16 @@ type RunningJob = {
   task: Promise<void>;
   resources: Set<string>;
 };
+/**
+ * What a notification announces: «jobs» when only the queue moved (progress,
+ * a job started or paused), «data» when records the views show may differ.
+ * The interface refreshes the queue for the first and every view for the
+ * second, so a long indexing pass does not keep reloading the statistics.
+ */
+export type ChangeScope = "jobs" | "data";
+/** Jobs whose items write records or cells the views show as they go. */
+const WRITES_RECORDS = new Set(["images", "analyze", "heritage", "fingerprints"]);
+const scopeOf = (kind: string): ChangeScope => (WRITES_RECORDS.has(kind) ? "data" : "jobs");
 export class JobQueue {
   running = new Map<string, RunningJob>();
   closed = false;
@@ -18,7 +28,7 @@ export class JobQueue {
     public images: Images,
     public models: Models,
     public engine: Engine,
-    public changed: () => void,
+    public changed: (scope?: ChangeScope) => void,
   ) {}
   get active() {
     return this.running.keys().next().value ?? null;
@@ -96,7 +106,7 @@ export class JobQueue {
         id,
       );
     this.running.get(id)?.controller.abort();
-    this.changed();
+    this.changed("jobs");
     if (pump) this.pump();
   }
   pauseAll() {
@@ -252,7 +262,7 @@ export class JobQueue {
             now(),
             job.id,
           );
-        this.changed();
+        this.changed("jobs");
         continue;
       }
       const occupied = new Set(
@@ -272,7 +282,7 @@ export class JobQueue {
       this.running.set(job.id, slot);
       slot.task = this.run(job, controller.signal).finally(() => {
         this.running.delete(job.id);
-        this.changed();
+        this.changed("data");
         if (!this.closed) setTimeout(() => this.pump(), 10);
       });
     }
@@ -281,7 +291,7 @@ export class JobQueue {
     this.repo.db
       .prepare("UPDATE jobs SET state='running',updated_at=? WHERE id=?")
       .run(now(), job.id);
-    this.changed();
+    this.changed("jobs");
     const payload = JSON.parse(job.payload_json);
     const retryItems: Set<number> | null = payload.retryItems
       ? new Set(payload.retryItems)
@@ -325,7 +335,7 @@ export class JobQueue {
             } else if (outcome.value === "skipped") skipped++;
             done++;
           }
-          this.progress(job.id, done, failed, skipped);
+          this.progress(job.id, done, failed, skipped, job.kind);
           if (fatal) throw fatal;
           continue;
         }
@@ -365,7 +375,7 @@ export class JobQueue {
                         now(),
                         job.id,
                       );
-                    this.changed();
+                    this.changed("jobs");
                   }
                 },
               );
@@ -386,7 +396,7 @@ export class JobQueue {
                 now(),
                 job.id,
               );
-            this.changed();
+            this.changed(scopeOf(job.kind));
             return;
           }
           if (
@@ -398,7 +408,7 @@ export class JobQueue {
           this.itemFailed(job.id, done, error);
         }
         done++;
-        this.progress(job.id, done, failed, skipped);
+        this.progress(job.id, done, failed, skipped, job.kind);
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
       if (done === job.total && !signal.aborted && !this.closed) {
@@ -443,11 +453,11 @@ export class JobQueue {
       .run(jobId, item, message);
     this.repo.db.prepare("UPDATE jobs SET message=? WHERE id=?").run(message, jobId);
   }
-  private progress(jobId: string, done: number, failed: number, skipped: number) {
+  private progress(jobId: string, done: number, failed: number, skipped: number, kind: string) {
     this.repo.db
       .prepare("UPDATE jobs SET done=?,failed=?,skipped=?,updated_at=? WHERE id=?")
       .run(done, failed, skipped, now(), jobId);
-    this.changed();
+    this.changed(scopeOf(kind));
   }
   /** A task reached its end (completed or with failed items). */
   onFinished?: (kind: string) => void;
@@ -499,7 +509,7 @@ export class JobQueue {
           }
         results.delete(counts.done);
         counts.done++;
-        this.progress(job.id, counts.done, counts.failed, counts.skipped);
+        this.progress(job.id, counts.done, counts.failed, counts.skipped, "images");
       }
     };
     try {

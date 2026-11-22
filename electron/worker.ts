@@ -12,7 +12,7 @@ const completions = new Map<
 const service = new Service(
   workerData.root,
   workerData.script,
-  () => parentPort!.postMessage({ event: "changed" }),
+  (scope) => parentPort!.postMessage({ event: "changed", scope: scope ?? "data" }),
   (input, signal, onDelta) =>
     new Promise((resolve, reject) => {
       if (signal.aborted) { reject(new Error("Solicitud cancelada.")); return; }

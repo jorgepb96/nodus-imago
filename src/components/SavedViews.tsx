@@ -10,6 +10,7 @@ import {
   ChartColumn,
   ChartScatter,
   Check,
+  ChevronDown,
   Copy,
   Database,
   Eye,
@@ -275,50 +276,46 @@ export function ViewColorPicker({ value, onChange }: { value: ViewColor | null; 
 }
 
 /**
- * Where the built-in views take their records from: the whole database or
- * the records a saved view keeps. Filters set on top narrow them further.
+ * Where a view other than the table takes its records from: the main table
+ * (the whole database) or the records a saved view keeps. Filters set on top
+ * narrow them further. The table itself always shows the whole database.
  */
 export function DataSourcePicker({
   saved,
   source,
-  disabled,
   onSource,
 }: {
   saved: SavedView[];
-  /** «saved:<id>», or null for the whole database. */
+  /** «saved:<id>», or null for the main table. */
   source: string | null;
-  /** A saved view on screen uses its own filters. */
-  disabled: boolean;
   onSource: (key: string | null) => void;
 }) {
   const t = useT(),
     anchor = useRef<HTMLButtonElement>(null),
     [open, setOpen] = useState(false);
   const current = saved.find((v) => savedViewKey(v.id) === source) ?? null;
+  const CurrentIcon = current ? VIEW_INFO[current.view].Icon : Table2;
   const pick = (key: string | null) => {
     onSource(key);
     setOpen(false);
   };
   return (
-    <div className="view-controls">
+    <div className="data-source">
+      <span className="data-source-caption">{t("Fuente")}</span>
       <button
         ref={anchor}
-        className={`button data-source-button ${current && !disabled ? "selected" : ""}`}
+        type="button"
+        className={`data-source-button ${current ? "selected" : ""}`}
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={`${t("Fuente de los datos")}: ${current ? current.name : t("Tabla principal")}`}
         data-testid="data-source"
-        disabled={disabled}
-        data-tooltip={t(
-          disabled
-            ? "Una vista guardada usa sus propios filtros"
-            : "De dónde toman sus registros las vistas: toda la base de datos o los que guarda una vista",
-        )}
+        data-tooltip={t("De dónde toma sus registros esta vista: la tabla principal o una vista guardada")}
         onClick={() => setOpen(!open)}
       >
-        <Database size={14} />
-        <span className="data-source-label">
-          {t("Datos")}: {current && !disabled ? current.name : t("Base completa")}
-        </span>
+        <CurrentIcon size={13} />
+        <span className="data-source-label">{current ? current.name : t("Tabla principal")}</span>
+        <ChevronDown size={13} />
       </button>
       {open && (
         <CriteriaPopover
@@ -326,20 +323,20 @@ export function DataSourcePicker({
           onClose={() => setOpen(false)}
           width={320}
           closeOnFocusOutside={false}
-          label={t("Origen de los datos")}
+          label={t("Fuente de los datos")}
           className="column-visibility data-source-menu"
         >
           <header>
-            <strong>{t("Origen de los datos")}</strong>
+            <strong>{t("Fuente de los datos")}</strong>
           </header>
           <p className="hint">
-            {t("Todas las vistas (tabla, galería, mapa, cronología, estadísticas, variantes, red y mapa visual) se calculan sobre estos registros. Los filtros que añadas se aplican encima.")}
+            {t("La galería, el mapa, la cronología, las estadísticas, las variantes, la red y el mapa visual se calculan sobre estos registros. Los filtros que añadas se aplican encima.")}
           </p>
-          <ul role="radiogroup" aria-label={t("Origen de los datos")}>
+          <ul role="radiogroup" aria-label={t("Fuente de los datos")}>
             <li>
               <button type="button" role="radio" aria-checked={!current} data-testid="data-source-all" onClick={() => pick(null)}>
                 <Database size={13} />
-                <span>{t("Base de datos completa")}</span>
+                <span>{t("Tabla principal")}</span>
                 {!current && <Check size={14} />}
               </button>
             </li>
@@ -363,7 +360,7 @@ export function DataSourcePicker({
               );
             })}
           </ul>
-          {!saved.length && <p className="hint">{t("Guarda una vista con filtros para usarla como origen de los datos.")}</p>}
+          {!saved.length && <p className="hint">{t("Guarda una vista con filtros para usarla como fuente de los datos.")}</p>}
         </CriteriaPopover>
       )}
     </div>

@@ -8,6 +8,7 @@
 //    tiny greyscale copy of each image (cropMatch).
 // Families group images that match either signal, in date order, so the
 // first dated appearance and later reuses can be read as a circulation.
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Repository } from "./repository";
@@ -69,12 +70,19 @@ export function informative(hex: string): boolean {
 
 type Asset = { id: string; row_id: string; content_hash: string; database_id: string };
 type Close = { bits: number | null; cosine: number | null };
+type Pair = { a: string; b: string; bits: number | null; cosine: number | null };
 /** The key of a pair of files, whichever comes first. */
 export const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 export class Variants {
   /** Pixel checks already made, by pair of files (they never change). */
   private checked = new Map<string, boolean>();
+  /**
+   * Pairs already found, by files, sensitivity and the state of their inputs
+   * (fingerprints, miniatures, vectors): coming back to the view, or a refresh
+   * of the interface, does not compare thousands of images again.
+   */
+  private pairCache = new Map<string, Pair[]>();
   constructor(
     private repo: Repository,
     private boards: CompareBoards,
@@ -242,11 +250,35 @@ export class Variants {
     return pairs;
   }
 
-  /** Pairs of files that match, with how closely. */
-  private async matches(hashes: string[], sensitivity: Sensitivity) {
+  /** What the pairs depend on besides the files: changes when any input is added or replaced. */
+  private inputsSignature(contract: string | null) {
+    const part = (table: string, where = "") =>
+      Object.values(this.repo.db.prepare(`SELECT count(*) n,ifnull(max(rowid),0) m FROM ${table} ${where}`).get(...(where ? [contract] : [])) as object).join(":");
+    return [part("image_fingerprints"), part("image_miniatures"), contract ? part("embeddings", "WHERE contract=?") : "-"].join("|");
+  }
+
+  /** Pairs of files that match, with how closely (kept while their inputs do not change). */
+  private async matches(hashes: string[], sensitivity: Sensitivity): Promise<Pair[]> {
+    const contract = this.contract();
+    const key = [
+      sensitivity,
+      contract ?? "",
+      this.inputsSignature(contract),
+      createHash("sha1").update(hashes.join(",")).digest("hex"),
+    ].join("#");
+    const cached = this.pairCache.get(key);
+    if (cached) return cached;
+    const pairs = await this.findMatches(hashes, sensitivity);
+    this.pairCache.delete(key);
+    this.pairCache.set(key, pairs);
+    if (this.pairCache.size > 6) this.pairCache.delete(this.pairCache.keys().next().value!);
+    return pairs;
+  }
+
+  private async findMatches(hashes: string[], sensitivity: Sensitivity): Promise<Pair[]> {
     const limits = SENSITIVITY[sensitivity];
     const fingerprints = this.fingerprints();
-    const pairs: { a: string; b: string; bits: number | null; cosine: number | null }[] = [];
+    const pairs: Pair[] = [];
     const known = hashes.filter((h) => fingerprints.has(h) && informative(fingerprints.get(h)!));
     // 128-bit comparisons are cheap: every pair.
     const words = known.map((h) => {
@@ -301,13 +333,29 @@ export class Variants {
       };
       const list = [...vectors];
       if (list.length > 1) {
-        const dims = list[0][1].length;
-        let seed = 7;
+        // A candidate is confirmed on the miniatures of both files, or by a
+        // check already made; any other pair can never count, so its vectors
+        // are not compared. Every vector is still hashed, so the buckets (and
+        // the order of the pairs) stay those of the whole list.
+        const proven = new Set<string>();
+        const prove = (pair: string) => {
+          const half = pair.length / 2;
+          proven.add(pair.slice(0, half)).add(pair.slice(half));
+        };
+        for (const [pair, ok] of this.checked) if (ok) prove(pair);
+        for (const { pair } of this.repo.db.prepare("SELECT pair FROM image_pair_checks WHERE same=1").all() as { pair: string }[])
+          prove(pair);
+        const small = Uint8Array.from(list, ([h]) => (miniatures.has(h) ? 1 : 0)),
+          known = Uint8Array.from(list, ([h]) => (proven.has(h) ? 1 : 0));
+        const dims = list[0][1].length,
+          keys: Int32Array[] = [];
+        let seed = 7,
+          compared = 0;
         const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
-        const seen = new Set<string>();
         for (let table = 0; table < 10; table++) {
           const planes = Array.from({ length: 10 }, () => Float32Array.from({ length: dims }, random));
-          const buckets = new Map<number, number[]>();
+          const buckets = new Map<number, number[]>(),
+            tableKeys = new Int32Array(list.length);
           list.forEach(([, v], index) => {
             let key = 0;
             for (const plane of planes) {
@@ -315,20 +363,28 @@ export class Variants {
               for (let d = 0; d < dims; d++) dot += plane[d] * v[d];
               key = (key << 1) | (dot > 0 ? 1 : 0);
             }
+            tableKeys[index] = key;
             (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(index);
           });
           for (const members of buckets.values())
             for (let i = 0; i < members.length; i++)
               for (let j = i + 1; j < members.length; j++) {
-                const [ha, va] = list[members[i]],
-                  [hb, vb] = list[members[j]];
-                const key = ha < hb ? ha + hb : hb + ha;
-                if (seen.has(key)) continue;
-                seen.add(key);
+                const x = members[i],
+                  y = members[j];
+                if (!((small[x] && small[y]) || (known[x] && known[y]))) continue;
+                // Compared already: the two shared a bucket in an earlier table.
+                let seen = false;
+                for (let t = 0; t < table && !seen; t++) seen = keys[t][x] === keys[t][y];
+                if (seen) continue;
+                const [ha, va] = list[x],
+                  [hb, vb] = list[y];
                 let dot = 0;
                 for (let d = 0; d < dims; d++) dot += va[d] * vb[d];
                 if (dot >= limits.cosine && (await confirmed(ha, hb))) pairs.push({ a: ha, b: hb, bits: null, cosine: dot });
+                // Long runs give way to other requests now and then.
+                if (++compared % 100000 === 0) await new Promise((resolve) => setImmediate(resolve));
               }
+          keys.push(tableKeys);
         }
       }
     }

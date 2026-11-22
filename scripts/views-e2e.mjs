@@ -96,27 +96,34 @@ try {
   await page.locator(".sidebar-databases>button").filter({ hasText: db.database.name }).click();
   await poll(async () => (await total()) === 6, "six records");
 
-  // Data source: the built-in views take the saved view's records.
+  // Data source: the views other than the table take the saved view's
+  // records; the table is always the main table, without a source picker.
+  await tab("Tabla").click();
+  assert.equal(await page.getByTestId("data-source").count(), 0);
+  await tab("Galería").click();
+  await page.getByTestId("data-source").filter({ hasText: "Tabla principal" }).waitFor();
   await page.getByTestId("data-source").click();
   await page.getByTestId("data-source-option").filter({ hasText: "Solo fotos" }).click();
-  await poll(async () => (await total()) === 5, "data source in the table");
+  await poll(async () => (await total()) === 5, "data source in the gallery");
   await page.getByTestId("data-source").filter({ hasText: "Solo fotos" }).waitFor();
   await tab("Mapa").click();
   const map = page.getByRole("region", { name: "Vista de mapa", exact: true });
   await poll(async () => (await map.locator(".map-record-count").innerText()).includes("5"), "data source on the map");
   await tab("Tabla").click();
-  // The researcher's filters narrow the source further.
+  await poll(async () => (await total()) === 6, "the table keeps the whole database");
+  assert.equal(await page.getByTestId("data-source").count(), 0);
   const sources = await page.evaluate(() => localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith("imago.tableView."))));
   assert.match(sources, /"dataSource":"saved:/);
-  // A saved view on screen uses its own filters; the picker says so.
+  // A saved view on screen uses its own filters: no source to pick.
   await tab("Granada").click();
   await poll(async () => (await total()) === 5, "saved view's own filters");
-  assert.equal(await page.getByTestId("data-source").isDisabled(), true);
-  await tab("Tabla").click();
+  assert.equal(await page.getByTestId("data-source").count(), 0);
+  await tab("Galería").click();
+  await poll(async () => (await total()) === 5, "the gallery keeps its source");
   await page.getByTestId("data-source").click();
   await page.getByTestId("data-source-all").click();
-  await poll(async () => (await total()) === 6, "whole database again");
-  checks.push("Data source: the table and the map take a saved view's records, saved views keep their own, back to the whole database");
+  await poll(async () => (await total()) === 6, "main table again");
+  checks.push("Data source: the gallery and the map take a saved view's records, the table and saved views keep their own, back to the main table");
 
   // Featuring a saved view: the database opens in it.
   await (await menuFor("Granada")).getByTestId("view-feature").click();
