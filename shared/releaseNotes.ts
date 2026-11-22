@@ -33,6 +33,36 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.3",
+    date: "2026-11-23",
+    highlights: [
+      {
+        scope: "search",
+        category: "fix",
+        es: "Renombrar una propiedad, o convertirla en relación, ya no obliga a indexar de nuevo todas las fichas: solo se vuelven a indexar cuando cambian sus valores.",
+        en: "Renaming a property, or converting it to a relation, no longer makes every record be indexed again: records are indexed again only when their values change.",
+      },
+      {
+        scope: "search",
+        category: "enhancement",
+        es: "El índice de texto de las fichas se calcula más deprisa en el perfil equilibrado: usa la mitad de los núcleos del ordenador (de dos a cuatro). Ajustes muestra los que usa cada perfil.",
+        en: "The text index of records is built faster in the balanced profile: it uses half the computer's cores (two to four). Settings show how many each profile uses.",
+      },
+      {
+        scope: "analysis",
+        category: "fix",
+        es: "Los filtros de una relación se leen por el título de las fichas enlazadas, no por su identificador, y las listas largas se acortan con «Ver todos».",
+        en: "Filters on a relation read with the linked records' titles, not their identifiers, and long lists are shortened with «Show all».",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "Las pestañas de las vistas quedan en una sola fila que se desplaza de lado (también con la rueda del ratón) en lugar de partirse en dos.",
+        en: "View tabs stay on one row that scrolls sideways (with the mouse wheel too) instead of wrapping onto two.",
+      },
+    ],
+  },
+  {
     version: "0.5.2",
     date: "2026-11-22",
     highlights: [
