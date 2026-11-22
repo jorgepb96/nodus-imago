@@ -30,6 +30,7 @@ import {
 import type { Status, Settings as SettingsType, Job } from "../../shared/imago";
 import type { DatabaseDetail } from "../../shared/databases";
 import { Button, Modal } from "./ui";
+import { embeddingThreads } from "../../shared/embeddingBackends";
 import type { Perform } from "./Properties";
 import { THEMES } from "../theme/themes.mjs";
 import { useT } from "../i18n";
@@ -768,9 +769,9 @@ export function Settings({
                   update({ profile: e.target.value as SettingsType["profile"] })
                 }
               >
-                <option value="light">{t("Ligero")} · 1 CPU</option>
-                <option value="balanced">{t("Equilibrado")} · 2 CPU</option>
-                <option value="advanced">{t("Avanzado")} · 4 CPU</option>
+                <option value="light">{t("Ligero")} · {embeddingThreads("light", status.cpus)} CPU</option>
+                <option value="balanced">{t("Equilibrado")} · {embeddingThreads("balanced", status.cpus)} CPU</option>
+                <option value="advanced">{t("Avanzado")} · {embeddingThreads("advanced", status.cpus)} CPU</option>
               </select>
             </label>
             <label className="setting-row">
