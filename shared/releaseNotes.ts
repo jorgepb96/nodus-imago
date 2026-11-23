@@ -33,6 +33,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.4",
+    date: "2026-11-23",
+    highlights: [
+      {
+        scope: "search",
+        category: "fix",
+        es: "Las fichas indexadas con versiones anteriores tampoco se vuelven a indexar al renombrar o convertir una propiedad: al abrir la colección aprenden sus valores una sola vez.",
+        en: "Records indexed with earlier versions are not indexed again either when a property is renamed or converted: on opening the collection they learn their values once.",
+      },
+      {
+        scope: "search",
+        category: "fix",
+        es: "Si el motor ONNX se detiene durante la indexación, el error dice por qué (falta de memoria, fallo del motor o más de diez minutos con una ficha) y la ficha se reintenta una vez antes de contarse como error.",
+        en: "If the ONNX engine stops during indexing, the error says why (lack of memory, an engine failure or more than ten minutes on one record), and the record is retried once before it counts as an error.",
+      },
+    ],
+  },
+  {
     version: "0.5.3",
     date: "2026-11-23",
     highlights: [

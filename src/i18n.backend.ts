@@ -89,6 +89,10 @@ export const backendEn: Record<string, string> = {
   "Motor de visión ausente. Verifica su integridad.": "Vision engine missing. Verify its integrity.",
   "EmbeddingGemma ONNX no está disponible en Mac Intel. Selecciona Harrier.": "EmbeddingGemma ONNX is not available on Intel Macs. Choose Harrier.",
   "Indexación cancelada.": "Indexing cancelled.",
+  "Motor ONNX cerrado.": "ONNX engine closed.",
+  "El motor ONNX se reinició mientras procesaba esta ficha.": "The ONNX engine restarted while processing this record.",
+  "El motor ONNX tardó más de 10 minutos con esta ficha y se reinició.": "The ONNX engine took more than 10 minutes on this record and was restarted.",
+  "El sistema detuvo el motor ONNX (SIGKILL), normalmente por falta de memoria.": "The system stopped the ONNX engine (SIGKILL), usually for lack of memory.",
   "La inferencia local no puede acceder a la red.": "Local inference cannot access the network.",
   "Falta configuración del proceso ONNX.": "ONNX process configuration missing.",
   "La entrada supera los 8192 tokens; reduce su longitud.": "The input exceeds 8,192 tokens; shorten it.",
@@ -424,5 +428,11 @@ export const backendPatterns: [string, string][] = [
   ["Wikimedia Commons: HTTP {0}", "Wikimedia Commons: HTTP {0}"],
   ["Wikidata: HTTP {0}", "Wikidata: HTTP {0}"],
   ["Iconclass: HTTP {0}", "Iconclass: HTTP {0}"],
+  ["El sistema detuvo el motor ONNX (SIGKILL), normalmente por falta de memoria. Último mensaje: {0}", "The system stopped the ONNX engine (SIGKILL), usually for lack of memory. Last message: {0}"],
+  ["El motor ONNX se detuvo con la señal {0}. Último mensaje: {1}", "The ONNX engine stopped with signal {0}. Last message: {1}"],
+  ["El motor ONNX se detuvo con la señal {0}.", "The ONNX engine stopped with signal {0}."],
+  ["El motor ONNX se detuvo con el código {0}. Último mensaje: {1}", "The ONNX engine stopped with exit code {0}. Last message: {1}"],
+  ["El motor ONNX se detuvo con el código {0}.", "The ONNX engine stopped with exit code {0}."],
+  ["No se pudo comunicar con el motor ONNX: {0}", "Could not communicate with the ONNX engine: {0}"],
   ["Ya existe otra opción llamada «{0}». Inclúyela en el grupo para unirla.", "Another option is already called “{0}”. Include it in the group to merge it."]
 ];
