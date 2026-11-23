@@ -318,12 +318,12 @@ export const TUTORIALS: Tutorial[] = [
       {
         target: "record-restore",
         title: "Pulsa Restaurar con IA",
-        body: "Abre el taller de restauración con esta imagen.",
+        body: "Abre Restauración IA con esta imagen.",
         missing: OPEN_RECORD,
       },
       {
         target: "nav-restorations",
-        title: "El taller de restauración",
+        title: "Restauración IA",
         body: "Elige la tarea (restaurar, reparar daños, mejorar la nitidez, colorear o una instrucción propia) y el modelo. Puedes tratar la imagen entera o solo una zona anotada. Arrastra sobre el resultado para compararlo con el original y descárgalo, con una marca de agua si quieres. Cada versión se guarda aparte.",
       },
     ],

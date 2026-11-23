@@ -68,7 +68,7 @@ Frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence, trends
 
 ![Statistics: the photographs counted by heritage group](docs/screenshots/readme-statistics.png)
 
-### 6. Restore and colourise copies
+### 6. AI restoration
 
 Repair stains, cracks, folds and missing corners, recover faded contrast or colourise a black-and-white photograph with an image model from Google Gemini, OpenAI or OpenRouter. Work on the whole image or on a zone you draw; the zone is pasted back in place and the rest of the image does not change. Each result is saved as a new version, the original file is never modified, and downloads carry an “AI modified” watermark.
 

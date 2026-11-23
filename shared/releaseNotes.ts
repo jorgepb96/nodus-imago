@@ -48,6 +48,12 @@ export const RELEASE_NOTES: ReleaseNote[] = [
         es: "«Sugerir con IA» en Patrimonio ya no falla con «reading 'latitude'» cuando ningún municipio del lote está en el nomenclátor, y el lugar que propone el modelo se queda solo en el municipio.",
         en: "Suggest with AI in Heritage no longer fails with “reading 'latitude'” when no town in the batch is in the gazetteer, and the place the model suggests keeps only the town.",
       },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "La sección «Restauraciones» pasa a llamarse «Restauración IA», para no confundirla con restaurar una copia de seguridad.",
+        en: "The Restorations section is now called AI restoration, so it is not confused with restoring a backup.",
+      },
     ],
   },
   {
