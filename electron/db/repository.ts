@@ -153,6 +153,9 @@ export class Repository {
     // Databases have a kind (images, sources, custom); older ones have none.
     if (!(this.db.prepare("PRAGMA table_info(db_databases)").all() as { name: string }[]).some((c) => c.name === "kind"))
       this.db.exec("ALTER TABLE db_databases ADD COLUMN kind TEXT");
+    // A restored version can start from an earlier one (restore, then colourise).
+    if (!(this.db.prepare("PRAGMA table_info(restorations)").all() as { name: string }[]).some((c) => c.name === "base_id"))
+      this.db.exec("ALTER TABLE restorations ADD COLUMN base_id TEXT");
     // Heritage elements placed from OpenStreetMap keep the object they come from.
     if (!(this.db.prepare("PRAGMA table_info(heritage_elements)").all() as { name: string }[]).some((c) => c.name === "osm_ref"))
       this.db.exec("ALTER TABLE heritage_elements ADD COLUMN osm_ref TEXT");

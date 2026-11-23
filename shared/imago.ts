@@ -536,10 +536,20 @@ export type Commands = {
       model: string;
       task: import("./restoration").RestorationTask;
       prompt: string;
+      /** What is known about the photograph (the researcher's note and record fields), sent after the instructions. */
+      context?: string;
+      /** Start from an earlier version of the same image instead of the original. */
+      baseId?: string | null;
+      /** Colourising: keep the light and detail of the source, take only the colour. */
+      keepDetail?: boolean;
     };
     result: import("./restoration").Restoration;
   };
   restorationCancel: { input: void; result: void };
+  /** The fields of the record an image belongs to, to tell the model. */
+  restorationContext: { input: { assetId: string }; result: { label: string; value: string }[] };
+  /** How closely a version keeps the original's light and shapes. */
+  restorationCheck: { input: { id: string }; result: import("./restoration").RestorationCheck };
   /** Handled in the main process: W3C Web Annotations of a database, saved as JSON-LD. */
   annotationsExport: { input: { databaseId: string }; result: { file: string; total: number } | null };
   /** Handled in the main process: a Tropy JSON-LD export, chosen in a dialog. */

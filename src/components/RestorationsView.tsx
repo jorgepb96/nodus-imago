@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Brush,
+  CornerDownRight,
   Download,
   ImageIcon,
   Palette,
@@ -12,11 +13,14 @@ import {
   Plus,
   ScanLine,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Square,
+  SquareDashed,
   Star,
   Trash2,
   Wand2,
+  X,
 } from "lucide-react";
 import type { DatabaseSummary } from "../../shared/databases";
 import type { ImageAnnotation, Settings } from "../../shared/imago";
@@ -29,8 +33,11 @@ import {
   TASK_LABELS,
   decodeImageModel,
   encodeImageModel,
+  restorationContext,
   restorationPrompt,
+  restorationRequest,
   type Restoration,
+  type RestorationCheck,
   type RestorationTask,
   type Watermark,
   type WatermarkPosition,
@@ -48,6 +55,38 @@ const TASK_ICONS: Record<RestorationTask, React.ReactNode> = {
 };
 const preview = (id: string, revision?: string) =>
   `imago://asset/${id}/preview${revision ? "?v=" + encodeURIComponent(revision) : ""}`;
+type Region = { x: number; y: number; w: number; h: number };
+/** The run button: [whole image, region]. */
+const RUN_LABELS: Record<RestorationTask, [string, string]> = {
+  restore: ["Restaurar la imagen", "Restaurar la zona"],
+  repair: ["Reparar la imagen", "Reparar la zona"],
+  sharpen: ["Mejorar la imagen", "Mejorar la zona"],
+  colorize: ["Colorear la imagen", "Colorear la zona"],
+  custom: ["Procesar la imagen", "Procesar la zona"],
+};
+const readBool = (key: string, fallback: boolean) => {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === "1";
+  } catch {
+    return fallback;
+  }
+};
+const saveBool = (key: string, value: boolean) => {
+  try {
+    localStorage.setItem(key, value ? "1" : "0");
+  } catch {
+    /* Only a convenience. */
+  }
+};
+const CHECK_TEXT: Record<RestorationCheck["level"], { label: string; help: string }> = {
+  faithful: { label: "Fiel", help: "El modelo ha respetado la forma y la posición de todo lo que se ve." },
+  changed: { label: "Con retoques visibles", help: "Revisa en «Cambios» las zonas marcadas en rojo antes de usar esta versión." },
+  different: {
+    label: "Muy retocada",
+    help: "El modelo ha reconstruido zonas grandes: caras, rasgos o detalles pueden no ser los reales. Revisa «Cambios» y úsala con cautela.",
+  },
+};
 
 export function RestorationsView({
   settings,
@@ -70,6 +109,16 @@ export function RestorationsView({
   const [source, setSource] = useState<CompareItem | null>(null);
   const [regions, setRegions] = useState<ImageAnnotation[]>([]);
   const [regionId, setRegionId] = useState<string>("");
+  const [drawn, setDrawn] = useState<Region | null>(null);
+  const [drawing, setDrawing] = useState(false);
+  const [baseId, setBaseId] = useState<string>("");
+  const [note, setNote] = useState("");
+  const [fields, setFields] = useState<{ label: string; value: string }[]>([]);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [useRecord, setUseRecord] = useState(() => readBool("imago.restoration.record", true));
+  const [keepDetail, setKeepDetail] = useState(() => readBool("imago.restoration.keepDetail", true));
+  const [check, setCheck] = useState<RestorationCheck | null>(null);
+  const [changes, setChanges] = useState(false);
   const [task, setTask] = useState<RestorationTask>("restore");
   const [prompt, setPrompt] = useState(() => restorationPrompt("restore", language, false));
   const [edited, setEdited] = useState(false);
@@ -95,11 +144,17 @@ export function RestorationsView({
       const [item] = await api.call("compareItems", { assetIds: [assetId] });
       setSource(item ?? null);
       setRegionId("");
+      setDrawn(null);
+      setDrawing(false);
+      setBaseId("");
+      setNote("");
+      setExcluded(new Set());
       setCurrent(null);
       setError(null);
       if (!item) return;
       setRegions(await api.call("annotationsList", { assetId }));
       setVersions(await api.call("restorationsList", { assetId }));
+      setFields(await api.call("restorationContext", { assetId }).catch(() => []));
     },
     [api],
   );
@@ -108,7 +163,23 @@ export function RestorationsView({
     onSeedUsed();
     void choose(seed);
   }, [seed, onSeedUsed, choose]);
-  const region = regions.find((r) => r.id === regionId) ?? null;
+  const region: Region | null = regionId === "drawn" ? drawn : (regions.find((r) => r.id === regionId) ?? null);
+  const base = versions.find((v) => v.id === baseId) ?? null;
+  const context = restorationContext({ note, fields: useRecord ? fields.filter((f) => !excluded.has(f.label)) : [] }, language, task);
+  // The selected version's faithfulness, measured against what it started from.
+  useEffect(() => {
+    setCheck(current?.check ?? null);
+    setChanges(false);
+    if (!current || current.check) return;
+    let live = true;
+    void api
+      .call("restorationCheck", { id: current.id })
+      .then((c) => live && setCheck(c))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [api, current]);
   // The instructions follow the task until the user writes their own.
   useEffect(() => {
     if (!edited) setPrompt(restorationPrompt(task, language, !!region));
@@ -120,9 +191,9 @@ export function RestorationsView({
     for (const [provider, suggested] of Object.entries(SUGGESTED_IMAGE_MODELS))
       if (keys[provider] || settings.apiProfiles[provider as ApiProvider]?.models?.length)
         for (const m of suggested ?? []) list.add(encodeImageModel(provider as ApiProvider, m));
-    return [...list]
-      .filter((v) => decodeImageModel(v))
-      .sort((a, b) => Number(favorites.includes(b)) - Number(favorites.includes(a)) || a.localeCompare(b));
+    // Favourites first, then the order in which they were added and suggested
+    // (the recommended model of each provider comes first).
+    return [...list].filter((v) => decodeImageModel(v)).sort((a, b) => Number(favorites.includes(b)) - Number(favorites.includes(a)));
   }, [settings, keys]);
   const chosen = models.includes(model) ? model : (models[0] ?? "");
   const choice = decodeImageModel(chosen);
@@ -146,6 +217,9 @@ export function RestorationsView({
         model: choice.model,
         task,
         prompt: prompt.trim(),
+        context,
+        baseId: base?.id ?? null,
+        keepDetail: task === "colorize" ? keepDetail : undefined,
       });
       setVersions(await api.call("restorationsList", { assetId: source.assetId }));
       setCurrent(result);
@@ -181,23 +255,43 @@ export function RestorationsView({
             <ImageIcon size={14} />
             {t(source ? "Cambiar imagen" : "Elegir imagen")}
           </Button>
+          {source && versions.length > 0 && (
+            <label className="restoration-field">
+              {t("Partir de")}
+              <select value={baseId} onChange={(e) => setBaseId(e.target.value)} data-testid="restoration-base">
+                <option value="">{t("El original")}</option>
+                {versions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {`${t(TASK_LABELS[v.task])} · ${new Date(v.createdAt).toLocaleString(language === "en" ? "en-GB" : "es-ES", { dateStyle: "short", timeStyle: "short" })}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </section>
         {source && (
           <>
             <section>
               <h2>{t("2. Zona")}</h2>
-              <select aria-label={t("Zona")} value={regionId} onChange={(e) => setRegionId(e.target.value)}>
-                <option value="">{t("Imagen completa")}</option>
-                {regions.map((r, i) => (
-                  <option key={r.id} value={r.id}>
-                    {`${t("Zona")} ${i + 1}${r.note ? ` · ${r.note.slice(0, 40)}` : ""}`}
-                  </option>
-                ))}
-              </select>
+              <div className="restoration-zone">
+                <select aria-label={t("Zona")} value={regionId} onChange={(e) => setRegionId(e.target.value)} data-testid="restoration-zone">
+                  <option value="">{t("Imagen completa")}</option>
+                  {drawn && <option value="drawn">{t("Zona dibujada")}</option>}
+                  {regions.map((r, i) => (
+                    <option key={r.id} value={r.id}>
+                      {`${t("Anotación")} ${i + 1}${r.note ? ` · ${r.note.slice(0, 40)}` : ""}`}
+                    </option>
+                  ))}
+                </select>
+                <Button className={drawing ? "is-on" : ""} aria-pressed={drawing} onClick={() => setDrawing(!drawing)} data-testid="restoration-draw">
+                  <SquareDashed size={14} />
+                  {t(drawing ? "Arrastra sobre la imagen…" : "Dibujar zona")}
+                </Button>
+              </div>
               <p className="hint">
-                {regions.length
-                  ? t("Con una zona se envía solo ese recorte y el resultado se pega en su sitio; el resto de la imagen no cambia.")
-                  : t("Para restaurar solo una parte, márcala antes con «Anotar» en el visor de la ficha.")}
+                {region
+                  ? t("Solo se envía ese recorte y el resultado se pega en su sitio, con el tono de lo que lo rodea; el resto de la imagen no cambia.")
+                  : t("Para arreglar solo una parte (una mancha, una rotura, una cara), dibuja un recuadro sobre la imagen.")}
               </p>
             </section>
             <section>
@@ -224,6 +318,23 @@ export function RestorationsView({
                   </button>
                 ))}
               </div>
+              {task === "colorize" && (
+                <label className="check-label restoration-keep">
+                  <input
+                    type="checkbox"
+                    checked={keepDetail}
+                    onChange={(e) => {
+                      setKeepDetail(e.target.checked);
+                      saveBool("imago.restoration.keepDetail", e.target.checked);
+                    }}
+                    data-testid="restoration-keep-detail"
+                  />
+                  <span>
+                    {t("Conservar la luz y los detalles")}
+                    <small>{t("Del modelo solo se toma el color: nada puede moverse, añadirse ni suavizarse.")}</small>
+                  </span>
+                </label>
+              )}
               <label className="restoration-prompt">
                 {t("Instrucciones para el modelo")}
                 <textarea
@@ -243,7 +354,68 @@ export function RestorationsView({
               )}
             </section>
             <section>
-              <h2>{t("4. Modelo")}</h2>
+              <h2>{t("4. Contexto")}</h2>
+              <label className="restoration-prompt">
+                {t("Lo que sabes de la foto (opcional)")}
+                <textarea
+                  rows={3}
+                  maxLength={2000}
+                  value={note}
+                  placeholder={t("Lugar, fecha, quiénes son, colores reales (la fachada era ocre, el uniforme azul marino)…")}
+                  onChange={(e) => setNote(e.target.value)}
+                  data-testid="restoration-note"
+                />
+              </label>
+              {fields.length > 0 && (
+                <div className="restoration-record">
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={useRecord}
+                      onChange={(e) => {
+                        setUseRecord(e.target.checked);
+                        saveBool("imago.restoration.record", e.target.checked);
+                      }}
+                      data-testid="restoration-use-record"
+                    />
+                    {t("Usar los datos del registro")}
+                  </label>
+                  {useRecord && (
+                    <ul>
+                      {fields.map((f) => (
+                        <li key={f.label}>
+                          <label className="check-label">
+                            <input
+                              type="checkbox"
+                              checked={!excluded.has(f.label)}
+                              onChange={(e) =>
+                                setExcluded((all) => {
+                                  const next = new Set(all);
+                                  if (e.target.checked) next.delete(f.label);
+                                  else next.add(f.label);
+                                  return next;
+                                })
+                              }
+                            />
+                            <span>
+                              <strong>{f.label}</strong>
+                              <small>{f.value}</small>
+                            </span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              <p className="hint">{t("Ayuda al modelo a elegir colores y detalles verosímiles. Se le pide que no añada nada que no se vea.")}</p>
+              <details className="restoration-sent">
+                <summary>{t("Ver lo que se envía")}</summary>
+                <pre>{restorationRequest(prompt, context) || "—"}</pre>
+              </details>
+            </section>
+            <section>
+              <h2>{t("5. Modelo")}</h2>
               {models.length ? (
                 <ul className="restoration-models" role="radiogroup" aria-label={t("Modelo de imagen")}>
                   {models.map((value) => {
@@ -294,7 +466,7 @@ export function RestorationsView({
               {choice && (
                 <p className="restoration-privacy">
                   <ShieldAlert size={14} />
-                  {t("La imagen (o el recorte) se envía a {p} para procesarla.").replace("{p}", t(PROVIDERS[choice.provider].label))}
+                  {t(context ? "La imagen (o el recorte) y el contexto se envían a {p} para procesarla." : "La imagen (o el recorte) se envía a {p} para procesarla.").replace("{p}", t(PROVIDERS[choice.provider].label))}
                 </p>
               )}
               {remoteBlocked && <p className="restoration-error">{t("Las APIs remotas están desactivadas en Ajustes.")}</p>}
@@ -306,7 +478,7 @@ export function RestorationsView({
               ) : (
                 <Button primary disabled={!choice || !prompt.trim() || remoteBlocked} onClick={() => void run()} data-testid="restoration-run">
                   <Wand2 size={15} />
-                  {t(region ? "Restaurar la zona" : "Restaurar la imagen")}
+                  {t(RUN_LABELS[task][region ? 1 : 0])}
                 </Button>
               )}
               {error && <p className="restoration-error">{t(error)}</p>}
@@ -329,12 +501,78 @@ export function RestorationsView({
           </div>
         ) : (
           <>
+            {current && (
+              <div className="restoration-view" role="tablist" aria-label={t("Vista")}>
+                <button type="button" role="tab" aria-selected={!changes} className={!changes ? "is-selected" : ""} onClick={() => setChanges(false)}>
+                  {t("Comparar")}
+                </button>
+                <button type="button" role="tab" aria-selected={changes} className={changes ? "is-selected" : ""} onClick={() => setChanges(true)} data-testid="restoration-changes">
+                  {t("Cambios")}
+                </button>
+                {check && (
+                  <span className={`restoration-check ${check.level}`} data-testid="restoration-check" data-tooltip={t(CHECK_TEXT[check.level].help)}>
+                    {check.level === "faithful" ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
+                    <strong>{t(CHECK_TEXT[check.level].label)}</strong>
+                    <span>{`${Math.round(check.similarity * 100)} %`}</span>
+                  </span>
+                )}
+              </div>
+            )}
             <BeforeAfter
-              before={preview(source.assetId, source.revision)}
-              after={current ? `imago://restoration/${current.id}` : null}
-              region={current?.region ?? region}
+              before={
+                current?.baseId && versions.some((v) => v.id === current.baseId)
+                  ? `imago://restoration/${current.baseId}`
+                  : !current && base
+                    ? `imago://restoration/${base.id}`
+                    : preview(source.assetId, source.revision)
+              }
+              beforeLabel={t((current ? current.baseId && versions.some((v) => v.id === current.baseId) : base) ? "Partida" : "Original")}
+              after={current ? `imago://restoration/${current.id}${changes ? "/changes" : ""}` : null}
+              only={changes}
+              region={current ? current.region : region}
               running={running}
+              drawing={drawing}
+              onDraw={(box) => {
+                setDrawn(box);
+                setRegionId("drawn");
+                setDrawing(false);
+                setCurrent(null);
+              }}
             />
+            {current && check && (
+              <div className={`restoration-verdict ${check.level}`}>
+                <p>
+                  {t(CHECK_TEXT[check.level].help)}{" "}
+                  {changes &&
+                    t(
+                      current.baseId
+                        ? "En rojo, lo que ha cambiado de forma o de detalle respecto a la versión de partida; los cambios de tono o de color no se marcan."
+                        : "En rojo, lo que ha cambiado de forma o de detalle respecto al original; los cambios de tono o de color no se marcan.",
+                    )}
+                </p>
+                {current.notes?.map((n) => (
+                  <p key={n} className="restoration-error">
+                    {t(n)}
+                  </p>
+                ))}
+                <div className="row">
+                  <Button
+                    onClick={() => {
+                      setBaseId(current.id);
+                      setCurrent(null);
+                    }}
+                    data-testid="restoration-continue"
+                  >
+                    <CornerDownRight size={14} />
+                    {t("Seguir desde esta versión")}
+                  </Button>
+                </div>
+                <details className="restoration-sent">
+                  <summary>{t("Instrucciones y contexto que se enviaron")}</summary>
+                  <pre>{current.prompt}</pre>
+                </details>
+              </div>
+            )}
             <div className="restoration-versions">
               <h2>
                 {t("Versiones de esta imagen")} <span>{versions.length}</span>
@@ -350,7 +588,7 @@ export function RestorationsView({
                         <small>
                           {v.model} · {new Date(v.createdAt).toLocaleString(language === "en" ? "en-GB" : "es-ES", { dateStyle: "short", timeStyle: "short" })}
                         </small>
-                        {v.region && <small>{t("Zona")}</small>}
+                        {(v.region || v.baseId) && <small>{[v.region ? t("Zona") : "", v.baseId ? t("sobre otra versión") : ""].filter(Boolean).join(" · ")}</small>}
                       </span>
                     </button>
                     <span className="restoration-version-actions">
@@ -432,56 +670,128 @@ export function RestorationsView({
   );
 }
 
-/** The original and the restored version, with a divider to drag. */
+/**
+ * The original and the restored version, with a divider to drag; or only the
+ * version (what changed). A region can be drawn on the image: boxes are laid
+ * over the picture itself, not its letterboxed frame.
+ */
 function BeforeAfter({
   before,
+  beforeLabel,
   after,
+  only,
   region,
   running,
+  drawing,
+  onDraw,
 }: {
   before: string;
+  beforeLabel: string;
   after: string | null;
-  region: { x: number; y: number; w: number; h: number } | null;
+  only: boolean;
+  region: Region | null;
   running: boolean;
+  drawing: boolean;
+  onDraw: (box: Region) => void;
 }) {
   const t = useT();
   const [split, setSplit] = useState(0.5);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [frameSize, setFrameSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [draft, setDraft] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const frame = useRef<HTMLDivElement>(null);
   const drag = useRef(false);
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setFrameSize({ w: el.clientWidth, h: el.clientHeight }));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  // Where the picture sits inside the frame (object-fit: contain).
+  const scale = natural ? Math.min(frameSize.w / natural.w, frameSize.h / natural.h) : 0;
+  const stage = natural
+    ? { left: (frameSize.w - natural.w * scale) / 2, top: (frameSize.h - natural.h * scale) / 2, width: natural.w * scale, height: natural.h * scale }
+    : null;
+  const at = (clientX: number, clientY: number) => {
+    const box = frame.current!.getBoundingClientRect();
+    const s = stage!;
+    return {
+      x: Math.min(1, Math.max(0, (clientX - box.left - s.left) / s.width)),
+      y: Math.min(1, Math.max(0, (clientY - box.top - s.top) / s.height)),
+    };
+  };
   const move = (clientX: number) => {
     const box = frame.current!.getBoundingClientRect();
     setSplit(Math.min(1, Math.max(0, (clientX - box.left) / box.width)));
   };
+  const shown = draft
+    ? { x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), w: Math.abs(draft.x1 - draft.x0), h: Math.abs(draft.y1 - draft.y0) }
+    : region;
+  const comparing = !!after && !only;
   return (
     <div className="before-after-wrap">
       <div
         ref={frame}
-        className={`before-after ${after ? "has-after" : ""}`}
+        className={`before-after ${comparing ? "has-after" : ""} ${drawing ? "is-drawing" : ""}`}
         data-testid="before-after"
         onPointerDown={(e) => {
-          if (!after) return;
+          if (drawing && stage) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            const p = at(e.clientX, e.clientY);
+            setDraft({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+            return;
+          }
+          if (!comparing) return;
           drag.current = true;
           e.currentTarget.setPointerCapture(e.pointerId);
           move(e.clientX);
         }}
-        onPointerMove={(e) => drag.current && move(e.clientX)}
-        onPointerUp={() => (drag.current = false)}
+        onPointerMove={(e) => {
+          if (draft) {
+            const p = at(e.clientX, e.clientY);
+            setDraft({ ...draft, x1: p.x, y1: p.y });
+          } else if (drag.current) move(e.clientX);
+        }}
+        onPointerUp={() => {
+          drag.current = false;
+          if (!draft) return;
+          const box = { x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), w: Math.abs(draft.x1 - draft.x0), h: Math.abs(draft.y1 - draft.y0) };
+          setDraft(null);
+          if (box.w >= 0.02 && box.h >= 0.02) onDraw(box);
+        }}
       >
-        <img src={before} alt={t("Original")} draggable={false} />
-        {after && <img className="after" src={after} alt={t("Versión restaurada")} draggable={false} style={{ clipPath: `inset(0 0 0 ${split * 100}%)` }} />}
-        {region && !after && (
-          <span
-            className="before-after-region"
-            style={{ left: `${region.x * 100}%`, top: `${region.y * 100}%`, width: `${region.w * 100}%`, height: `${region.h * 100}%` }}
+        {!only && <img src={before} alt={t("Original")} draggable={false} onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />}
+        {after && (
+          <img
+            className="after"
+            src={after}
+            alt={t("Versión restaurada")}
+            draggable={false}
+            onLoad={(e) => only && setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+            style={comparing ? { clipPath: `inset(0 0 0 ${split * 100}%)` } : undefined}
           />
         )}
-        {after && (
+        {stage && shown && (!after || draft) && (
+          <span
+            className="before-after-region"
+            data-testid="restoration-region"
+            style={{
+              left: stage.left + shown.x * stage.width,
+              top: stage.top + shown.y * stage.height,
+              width: shown.w * stage.width,
+              height: shown.h * stage.height,
+            }}
+          />
+        )}
+        {comparing && (
           <>
             <span className="before-after-line" style={{ left: `${split * 100}%` }} />
-            <span className="before-after-label left">{t("Original")}</span>
+            <span className="before-after-label left">{beforeLabel}</span>
             <span className="before-after-label right">{t("Restaurada")}</span>
           </>
         )}
+        {drawing && !draft && <span className="before-after-hint">{t("Arrastra para marcar la zona que quieres arreglar")}</span>}
         {running && (
           <span className="before-after-running" role="status">
             <span className="chat-typing-indicator">
@@ -493,7 +803,7 @@ function BeforeAfter({
           </span>
         )}
       </div>
-      {after && <p className="hint">{t("Arrastra sobre la imagen para mover la línea entre el original y la versión restaurada.")}</p>}
+      {comparing && <p className="hint">{t("Arrastra sobre la imagen para mover la línea entre el original y la versión restaurada.")}</p>}
     </div>
   );
 }
