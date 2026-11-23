@@ -13,7 +13,7 @@ The demonstration collection has 69 photographs, almost all by **Jean Laurent** 
 
 All access copies were retrieved from **Wikimedia Commons**, whose file records identify their source. Commons is the access source, not the holding institution. Titles were written for the demonstration from the original captions; places, subjects and the other properties were entered for the demonstration and are not catalogue assertions of the holding institutions. Spellings of the photographer's name (“Juan Laurent”, “J. Laurent”, “Jean Laurent”) follow each source and are used to show how Imago unifies values.
 
-Imago shows these access copies as thumbnails and previews; screenshots have been resized. No historical image has been generatively altered or colourised. Present-day photographs in the “Then and now” screenshot are shown live from Wikimedia Commons with their authors and licences.
+Imago shows these access copies as thumbnails and previews; screenshots have been resized. No historical image has been generatively altered or colourised, except in the restoration example described below. Present-day photographs in the “Then and now” screenshot are shown live from Wikimedia Commons with their authors and licences.
 
 **None of these institutions sponsors, endorses or participates in Nodus Imago.** Their logos are not used.
 
@@ -88,6 +88,10 @@ Imago shows these access copies as thumbnails and previews; screenshots have bee
 | Minas de Río Tinto. San Dionisio | Hauser y Menet | 1892 | Biblioteca Nacional de España | [Commons](https://commons.wikimedia.org/wiki/File%3AMinas%20de%20R%C3%ADo%20Tinto-San%20Dionisio.jpg) | Public domain |
 | Minas de Río Tinto. Las teleras | Hauser y Menet | 1892 | Biblioteca Nacional de España | [Commons](https://commons.wikimedia.org/wiki/File%3ALas%20Teleras-Minas%20de%20R%C3%ADo%20Tinto.jpg) | Public domain |
 | Minas de Río Tinto. La maquinaria | Hauser y Menet | 1892 | Biblioteca Nacional de España | [Commons](https://commons.wikimedia.org/wiki/File%3ALa%20Maquinaria-Minas%20de%20R%C3%ADo%20Tinto.jpg) | Public domain |
+
+## Restoration example
+
+`readme-restoration.png` shows a glass-plate negative, *Andreas Martinus Olesen* (photographer's archive www.aagaardsbilleder.dk, Kolding), public domain, retrieved from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Andreas_Martinus_Olesen.jpg). It was repaired and then colourised from the repaired version in Imago's restoration workshop with Google's `gemini-3.1-flash-lite-image`, at a cost of a few cents. Each half of the figure is cut from the full-size versions without retouching; the labels and the divider were added afterwards. The repaired and colourised halves are generated images and are not a historical record.
 
 ## Demonstration data
 

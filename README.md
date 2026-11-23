@@ -68,12 +68,24 @@ Frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence, trends
 
 ![Statistics: the photographs counted by heritage group](docs/screenshots/readme-statistics.png)
 
+### 6. Restore and colourise a copy, without inventing
+
+Repair stains, cracks, folds and missing corners, recover faded contrast, or colourise a black-and-white photograph with an image model from Google Gemini, OpenAI or OpenRouter. Work on the whole image or draw the zone to fix; the answer is pasted back in place, matched to the tones around it, and nothing outside the zone changes. Each version is a separate copy: the original is never modified, and downloads carry an “AI modified” watermark.
+
+Imago keeps the model on a short leash. When colourising, the light and detail of every pixel come from the photograph you started from and only the colour comes from the model, so faces, text and objects cannot move or be redrawn. A repaired black-and-white or sepia photograph keeps its tone, and an answer that comes back zoomed or shifted is lined up with the original. Add what you know about the photograph, or let Imago send the fields of its record, and see the exact instructions before anything is sent. Every version is then checked against its source and marked as faithful, retouched or heavily retouched, and the **Changes** view shows in red where shapes or details differ.
+
+<p align="center">
+  <img src="docs/screenshots/readme-restoration.png" alt="A damaged glass-plate portrait split down the middle: on the left half the original with black spots and scratches next to the repaired version, and on the right half the repaired version next to the colourised one, with the same face, clothes and plate number">
+  <br><sub>A glass-plate negative of Andreas Martinus Olesen, repaired and then colourised from the repaired version with <code>gemini-3.1-flash-lite-image</code>.</sub>
+</p>
+
+> **Limits.** An image model reconstructs what it cannot see. With heavy damage it may redraw faces, hands or lettering that are not the real ones; the check flags these versions, but it cannot recover what was lost. Colours are a plausible guess, not historical evidence, and a warm or toned print may be read as monochrome. Restoration needs a key from one of these providers and sends the image (or the zone) and any context you add to that provider. Use these copies to look and to share, never as a substitute for the original in research or cataloguing.
+
 ## And also
 
 - **Search** by exact words, by meaning (“procession with lanterns”) or with an image; the **visual map** places every image by likeness.
 - **Variants** find the same photograph in other prints, scans and crops; the **comparison table** shows up to six side by side or lays one over another.
 - **Clean and link**: unify values written in different ways, link people, places and subjects to Wikidata (with Getty identifiers) and Iconclass, and complete empty fields from the most similar images.
-- **Restore** or colourise a copy with an image model, never the original, with an “AI modified” watermark on downloads.
 - **Cite and publish**: citations in Chicago, ISO 690 or APA, PDF plates with numbered figures, W3C Web Annotations.
 - **Ask the chat** about your databases; exact figures come from a calculation run over every record on your computer.
 - **Back up and export**: CSV, JSON or XLSX, and full `.imago` backups that can be scheduled and encrypted.
@@ -127,7 +139,7 @@ Imago follows the same contribution rules as Nodus Research: every pull request 
 
 ## Image credits
 
-The screenshots show photographs by Jean Laurent and his studio (1850s–1880s) from the **Rijksmuseum** (CC0), the **Library of Congress** and other holdings on Wikimedia Commons (public domain), and from the **Biblioteca Nacional de España** (public domain or CC BY 4.0), retrieved through Wikimedia Commons. Every image, its source and its rights are listed in the [screenshot notes](docs/screenshots/README.md). Titles, places and subjects were entered for the demonstration. None of these institutions sponsors or endorses Nodus Imago.
+The screenshots show photographs by Jean Laurent and his studio (1850s–1880s) from the **Rijksmuseum** (CC0), the **Library of Congress** and other holdings on Wikimedia Commons (public domain), and from the **Biblioteca Nacional de España** (public domain or CC BY 4.0), retrieved through Wikimedia Commons. The restoration example uses a glass-plate portrait from the Aagaard photographic archive (public domain), also from Wikimedia Commons, and is the only image that has been generatively altered. Every image, its source and its rights are listed in the [screenshot notes](docs/screenshots/README.md). Titles, places and subjects were entered for the demonstration. None of these institutions sponsors or endorses Nodus Imago.
 
 ## License
 
