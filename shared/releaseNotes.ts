@@ -33,6 +33,36 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.5",
+    date: "2026-11-23",
+    highlights: [
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "El taller de restauración no cambia lo que no debe: al colorear, la luz y el detalle salen del original y del modelo solo el color; las fotos en blanco y negro o sepia conservan su tono, y una respuesta ampliada o desplazada se vuelve a alinear.",
+        en: "The restoration workshop no longer changes what it should not: when colourising, light and detail come from the original and only the colour from the model; black-and-white and sepia photographs keep their tone, and an answer that comes back zoomed or shifted is lined up again.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Dibuja la zona que quieres arreglar sobre la imagen, parte de una versión anterior para colorear lo ya restaurado y añade contexto propio o los campos de la ficha; «Ver lo que se envía» muestra las instrucciones exactas.",
+        en: "Draw the zone to fix on the image, start from an earlier version to colourise what you already restored, and add your own context or the record's fields; “See what is sent” shows the exact instructions.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Cada versión se comprueba con su punto de partida y se marca como fiel, con retoques visibles o muy retocada; la vista «Cambios» señala en rojo dónde cambian formas o detalles.",
+        en: "Every version is checked against its starting point and marked as faithful, visibly retouched or heavily retouched; the Changes view shows in red where shapes or details differ.",
+      },
+      {
+        scope: "ai",
+        category: "fix",
+        es: "Las instrucciones de reparar nombran los desconchones, grietas y pliegues y prohíben marcos u óvalos; Gemini 3.1 Flash Lite Image es el modelo sugerido y, si el modelo no devuelve imagen, se muestra lo que respondió. Las fotos verticales ya no se ven recortadas.",
+        en: "Repair instructions name flaking, cracks and folds and forbid frames or ovals; Gemini 3.1 Flash Lite Image is the suggested model, and when the model returns no image its reply is shown. Portrait photographs are no longer shown cropped.",
+      },
+    ],
+  },
+  {
     version: "0.5.4",
     date: "2026-11-23",
     highlights: [

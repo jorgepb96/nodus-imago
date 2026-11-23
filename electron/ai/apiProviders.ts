@@ -390,6 +390,8 @@ export class ApiProviders {
       prompt: string;
       image: Buffer;
       mimeType: "image/jpeg" | "image/png";
+      /** The aspect ratio closest to the image sent ("3:4"), so the answer keeps its shape. */
+      aspect?: string;
     },
     signal: AbortSignal,
   ): Promise<Buffer> {
@@ -402,6 +404,8 @@ export class ApiProviders {
     const limits = { bytes: 64 * 2 ** 20, timeoutMs: 5 * 60_000 };
     const b64 = input.image.toString("base64");
     let out: string | undefined;
+    // What the model said instead of an image (a refusal, a question): shown in the error.
+    let said = "";
     if (style === "openai-images") {
       const form = new FormData();
       form.append("model", model);
@@ -419,16 +423,20 @@ export class ApiProviders {
         `/models/${encodeURIComponent(id)}:generateContent`,
         {
           contents: [{ role: "user", parts: [{ text: input.prompt }, { inline_data: { mime_type: input.mimeType, data: b64 } }] }],
-          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+          generationConfig: { responseModalities: ["IMAGE", "TEXT"], ...(input.aspect ? { imageConfig: { aspectRatio: input.aspect } } : {}) },
         },
         signal,
         geminiNativeBase(providerBase(provider, {})),
         limits,
       );
-      for (const part of result.candidates?.[0]?.content?.parts ?? []) {
+      const candidate = result.candidates?.[0];
+      for (const part of candidate?.content?.parts ?? []) {
         const data = part.inline_data?.data ?? part.inlineData?.data;
         if (typeof data === "string") out = data;
+        else if (typeof part.text === "string" && !part.thought) said += part.text;
       }
+      const reason = candidate?.finishReason ?? result.promptFeedback?.blockReason;
+      if (!out && reason && reason !== "STOP") said = `${said} (${reason})`.trim();
     } else {
       const result = await this.request(
         provider,
@@ -437,6 +445,7 @@ export class ApiProviders {
         {
           model,
           modalities: ["image", "text"],
+          ...(provider === "openrouter" && input.aspect ? { image_config: { aspect_ratio: input.aspect } } : {}),
           messages: [
             {
               role: "user",
@@ -458,9 +467,16 @@ export class ApiProviders {
         for (const part of message.content) {
           const u = part?.image_url?.url;
           if (typeof u === "string" && u.startsWith("data:image/")) out = u.slice(u.indexOf(",") + 1);
+          else if (typeof part?.text === "string") said += part.text;
         }
+      if (typeof message?.content === "string") said += message.content;
     }
-    if (!out) throw new ApiFailure(`${PROVIDERS[provider].label}: el modelo no devolvió ninguna imagen. Comprueba que el modelo genera imágenes.`);
+    if (!out)
+      throw new ApiFailure(
+        said.trim()
+          ? `${PROVIDERS[provider].label}: el modelo no devolvió ninguna imagen. Respondió: «${said.trim().slice(0, 300)}»`
+          : `${PROVIDERS[provider].label}: el modelo no devolvió ninguna imagen. Comprueba que el modelo genera imágenes.`,
+      );
     const bytes = Buffer.from(out, "base64");
     if (bytes.length < 100) throw new ApiFailure("La imagen recibida está vacía o dañada.");
     return bytes;

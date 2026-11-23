@@ -45,6 +45,7 @@ import { Gazetteer } from "./geo/gazetteer";
 import { isCommonsImageRequest, isMapTileRequest } from "./geo/mapRequests";
 import { externalHttpsUrl } from "../shared/externalLinks";
 import { PROVIDERS } from "../shared/aiConfig";
+import { closestAspect, restorationRequest } from "../shared/restoration";
 import { DesktopBackups } from "./export/desktopBackups";
 import { Updates } from "./updates";
 import { autoUpdater } from "electron-updater";
@@ -440,9 +441,9 @@ app.whenReady().then(async () => {
     try {
       const u = new URL(request.url),
         parts = u.pathname.split("/").filter(Boolean);
-      // A restored version: imago://restoration/<id>.
-      if (u.hostname === "restoration" && parts.length === 1 && /^[a-z0-9-]{1,200}$/i.test(parts[0])) {
-        const file = await call("_restorationFile", { id: parts[0] });
+      // A restored version: imago://restoration/<id>; what changed in it: imago://restoration/<id>/changes.
+      if (u.hostname === "restoration" && (parts.length === 1 || (parts.length === 2 && parts[1] === "changes")) && /^[a-z0-9-]{1,200}$/i.test(parts[0])) {
+        const file = await call(parts[1] ? "_restorationDiff" : "_restorationFile", { id: parts[0] });
         return new Response(await fs.readFile(file), {
           headers: { "Content-Type": "image/png", "Cache-Control": "private, max-age=86400" },
         });
@@ -718,15 +719,18 @@ app.whenReady().then(async () => {
         restorationAbort?.abort();
         const abort = (restorationAbort = new AbortController());
         try {
-          const source = await call("_restorationInput", { assetId: data.assetId, region: data.region });
+          const source = await call("_restorationInput", { assetId: data.assetId, region: data.region, baseId: data.baseId });
+          // The instructions, then what is known about the photograph.
+          const prompt = restorationRequest(data.prompt, data.context ?? "");
           const result = await providers.editImage(
             {
               choice: { provider: data.provider, model: data.model },
               profiles: settings.apiProfiles,
               remoteEnabled: settings.remoteEnabled,
-              prompt: data.prompt,
+              prompt,
               image: Buffer.from(source.image, "base64"),
               mimeType: source.mimeType,
+              aspect: closestAspect(source.sent[0], source.sent[1]),
             },
             abort.signal,
           );
@@ -735,10 +739,12 @@ app.whenReady().then(async () => {
             provider: data.provider,
             model: data.model,
             task: data.task,
-            prompt: data.prompt,
+            prompt,
             region: data.region,
             crop: source.crop,
             result: result.toString("base64"),
+            baseId: data.baseId ?? null,
+            keepDetail: data.keepDetail,
           });
         } finally {
           if (restorationAbort === abort) restorationAbort = null;

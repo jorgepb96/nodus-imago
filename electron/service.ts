@@ -1150,7 +1150,13 @@ export class Service {
       case "restorationDelete":
         return this.restorations.delete(input.id);
       case "_restorationInput":
-        return this.restorations.input(input.assetId, input.region);
+        return this.restorations.input(input.assetId, input.region, input.baseId);
+      case "restorationContext":
+        return this.restorations.context(input.assetId);
+      case "restorationCheck":
+        return this.restorations.check(input.id);
+      case "_restorationDiff":
+        return this.restorations.diff(input.id);
       case "_restorationStore":
         return this.restorations.store(input);
       case "_restorationFile":

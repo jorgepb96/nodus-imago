@@ -68,12 +68,21 @@ Frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence, trends
 
 ![Statistics: the photographs counted by heritage group](docs/screenshots/readme-statistics.png)
 
+### 6. Restore and colourise copies
+
+Repair stains, cracks, folds and missing corners, recover faded contrast or colourise a black-and-white photograph with an image model from Google Gemini, OpenAI or OpenRouter. Work on the whole image or on a zone you draw; the zone is pasted back in place and the rest of the image does not change. Each result is saved as a new version, the original file is never modified, and downloads carry an “AI modified” watermark.
+
+When colourising, Imago keeps the lightness and detail of the starting image and takes only the colour from the model. Repairs keep the tone of black-and-white and sepia photographs, and results that come back shifted or zoomed are realigned. You can add a note about the photograph or send the fields of its record, and check the exact instructions before running. Each version is compared with its source and marked as faithful, retouched or heavily retouched; the **Changes** view highlights in red what differs.
+
+![A damaged glass-plate portrait, half original and half repaired, next to the same portrait half repaired and half colourised](docs/screenshots/readme-restoration.png)
+
+**Limitations.** With heavy damage the model may redraw faces, hands or lettering differently from the original; the check flags these versions but cannot recover what was lost. Colours are an estimate, not historical evidence, and a toned print may be taken for black and white. Restoration requires an API key from one of these providers, and the image or zone and any note or record fields are sent to it. Restored copies do not replace the original as a source.
+
 ## And also
 
 - **Search** by exact words, by meaning (“procession with lanterns”) or with an image; the **visual map** places every image by likeness.
 - **Variants** find the same photograph in other prints, scans and crops; the **comparison table** shows up to six side by side or lays one over another.
 - **Clean and link**: unify values written in different ways, link people, places and subjects to Wikidata (with Getty identifiers) and Iconclass, and complete empty fields from the most similar images.
-- **Restore** or colourise a copy with an image model, never the original, with an “AI modified” watermark on downloads.
 - **Cite and publish**: citations in Chicago, ISO 690 or APA, PDF plates with numbered figures, W3C Web Annotations.
 - **Ask the chat** about your databases; exact figures come from a calculation run over every record on your computer.
 - **Back up and export**: CSV, JSON or XLSX, and full `.imago` backups that can be scheduled and encrypted.
@@ -127,7 +136,7 @@ Imago follows the same contribution rules as Nodus Research: every pull request 
 
 ## Image credits
 
-The screenshots show photographs by Jean Laurent and his studio (1850s–1880s) from the **Rijksmuseum** (CC0), the **Library of Congress** and other holdings on Wikimedia Commons (public domain), and from the **Biblioteca Nacional de España** (public domain or CC BY 4.0), retrieved through Wikimedia Commons. Every image, its source and its rights are listed in the [screenshot notes](docs/screenshots/README.md). Titles, places and subjects were entered for the demonstration. None of these institutions sponsors or endorses Nodus Imago.
+The screenshots show photographs by Jean Laurent and his studio (1850s–1880s) from the **Rijksmuseum** (CC0), the **Library of Congress** and other holdings on Wikimedia Commons (public domain), and from the **Biblioteca Nacional de España** (public domain or CC BY 4.0), retrieved through Wikimedia Commons. The restoration example uses a glass-plate portrait from the Aagaard photographic archive (public domain), also from Wikimedia Commons; it is the only image altered with AI. Every image, its source and its rights are listed in the [screenshot notes](docs/screenshots/README.md). Titles, places and subjects were entered for the demonstration. None of these institutions sponsors or endorses Nodus Imago.
 
 ## License
 
