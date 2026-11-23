@@ -1,22 +1,31 @@
-// Results of searching for an annotated detail across the corpus, shown in
-// the image viewer: each image with the part where the detail was found.
-import { useEffect, useState } from "react";
+// Results of searching for a detail across the corpus, shown in the image
+// viewer: an annotated detail or a box drawn with «Buscar», and each image
+// with the part where the detail was found.
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Columns2, ScanSearch } from "lucide-react";
 import type { DetailMatch } from "../../shared/detailSearch";
-import type { ImageAnnotation } from "../../shared/imago";
 import { useT } from "../i18n";
 
 const preview = (id: string, revision?: string) => `imago://asset/${id}/preview${revision ? "?v=" + encodeURIComponent(revision) : ""}`;
 
+/** The part of an image searched for: fractions of the image as shown. */
+export type DetailQuery = { assetId: string; x: number; y: number; w: number; h: number; note?: string };
+
 export function DetailSearchPanel({
-  annotation,
+  query,
   databaseId,
+  backLabel,
+  children,
   onBack,
   onOpenRecord,
   onCompare,
 }: {
-  annotation: ImageAnnotation;
+  query: DetailQuery;
   databaseId: string;
+  /** What «back» returns to. */
+  backLabel: string;
+  /** Shown under the heading: the region searched for, say. */
+  children?: ReactNode;
   onBack: () => void;
   onOpenRecord?: (rowId: string) => void;
   onCompare?: (assetIds: string[]) => void;
@@ -41,8 +50,8 @@ export function DetailSearchPanel({
     setError(null);
     void window.imago
       .call("detailSearch", {
-        assetId: annotation.assetId,
-        region: { x: annotation.x, y: annotation.y, w: annotation.w, h: annotation.h },
+        assetId: query.assetId,
+        region: { x: query.x, y: query.y, w: query.w, h: query.h },
         databaseIds: everywhere ? undefined : [databaseId],
         inside,
       })
@@ -52,18 +61,19 @@ export function DetailSearchPanel({
     return () => {
       cancelled = true;
     };
-  }, [annotation, databaseId, inside, everywhere]);
+  }, [query, databaseId, inside, everywhere]);
   return (
     <div className="detail-panel" data-testid="detail-results">
       <button type="button" className="detail-back" onClick={onBack}>
         <ArrowLeft size={14} />
-        {t("Volver a las anotaciones")}
+        {backLabel}
       </button>
       <h2>
         <ScanSearch size={15} />
         {t("Dónde más aparece este detalle")}
       </h2>
-      {annotation.note && <p className="detail-note">«{annotation.note}»</p>}
+      {children}
+      {query.note && <p className="detail-note">«{query.note}»</p>}
       <label className="check-label">
         <input type="checkbox" checked={inside} disabled={loading} onChange={(e) => setInside(e.target.checked)} />
         {t("Buscar también dentro de las imágenes (más lento la primera vez)")}
@@ -88,7 +98,7 @@ export function DetailSearchPanel({
       )}
       {error && <p className="annotation-error">{t(error)}</p>}
       {results && !loading && onCompare && results.length > 0 && (
-        <button type="button" className="detail-compare" onClick={() => onCompare([annotation.assetId, ...results.slice(0, 5).map((r) => r.assetId)])}>
+        <button type="button" className="detail-compare" onClick={() => onCompare([query.assetId, ...results.slice(0, 5).map((r) => r.assetId)])}>
           <Columns2 size={14} />
           {t("Comparar con los cinco primeros")}
         </button>

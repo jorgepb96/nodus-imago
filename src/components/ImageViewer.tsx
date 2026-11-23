@@ -759,8 +759,9 @@ export function ImageViewer({
         <aside className="viewer-side" data-testid="viewer-annotations" data-tour="viewer-annotations">
           {searching ? (
             <DetailSearchPanel
-              annotation={searching}
+              query={searching}
               databaseId={row.databaseId}
+              backLabel={t("Volver a las anotaciones")}
               onBack={() => setSearching(null)}
               onOpenRecord={
                 onOpenRecord &&
