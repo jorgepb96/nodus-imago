@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import type { ImageAnnotation, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
-import { DetailSearchPanel } from "./DetailSearchPanel";
+import { DetailSearchPanel, type DetailQuery } from "./DetailSearchPanel";
 import { Spinner } from "./ui";
 import { MIN_CROP, validCrop, type Region } from "../../shared/imageRotation";
 import { decodeMultiSelect, type DatabaseColumn } from "../../shared/databases";
@@ -108,7 +108,15 @@ export function ImageViewer({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [drawing, setDrawing] = useState<{ x0: number; y0: number; x: number; y: number } | null>(null);
   const [known, setKnown] = useState<string[]>([]);
-  const [searching, setSearching] = useState<ImageAnnotation | null>(null);
+  /** The detail searched for: an annotation, or a box drawn with «Buscar» (`drawn`). */
+  const [searching, setSearching] = useState<(DetailQuery & { drawn?: boolean }) | null>(null);
+  /** «Buscar»: the next box drawn on the image is searched for in the other images. */
+  const [searchMode, setSearchMode] = useState(false);
+  /**
+   * Whether images can be compared by what they show: an embedding model is
+   * ready and some images have vectors for it. Null while unknown.
+   */
+  const [visual, setVisual] = useState<null | { ready: boolean; indexed: number }>(null);
   const [error, setError] = useState<string | null>(null);
   /** Marking heritage elements: with a point or a rectangle. */
   const [marking, setMarking] = useState<"point" | "rect" | null>(null);
@@ -133,6 +141,7 @@ export function ImageViewer({
   const [applying, setApplying] = useState(false);
   const startCrop = () => {
     setAnnotating(false);
+    setSearchMode(false);
     setMarking(null);
     setMarkDraft(null);
     setDraft(null);
@@ -188,6 +197,7 @@ export function ImageViewer({
     setSelected(null);
     setCropping(null);
     setLoadFailed(false);
+    if (searching?.drawn) setSearching(null);
   }
   useEffect(() => {
     void load();
@@ -207,6 +217,13 @@ export function ImageViewer({
   useEffect(() => {
     void window.imago.call("annotationTags", { databaseId: row.databaseId }).then(setKnown).catch(() => {});
   }, [row.databaseId]);
+  useEffect(() => {
+    void window.imago
+      .call("status")
+      .then((status) => setVisual({ ready: status.semanticReady, indexed: status.indexed }))
+      .catch(() => setVisual({ ready: false, indexed: 0 }));
+  }, []);
+  const visualSearch = !!visual?.ready && visual.indexed > 0;
 
   /** The whole image in view. */
   const fit = useCallback(() => {
@@ -248,8 +265,8 @@ export function ImageViewer({
       cropDrag.current = { grip: grip ?? "new", start: cropping, from };
       return;
     }
-    // Zones for the AI may be drawn over existing marks.
-    if (drawingZone) {
+    // Zones for the AI and boxes to search for may be drawn over existing marks.
+    if (drawingZone || searchMode) {
       const p = point(event);
       event.currentTarget.setPointerCapture(event.pointerId);
       setDrawing({ x0: p.x, y0: p.y, x: p.x, y: p.y });
@@ -294,7 +311,9 @@ export function ImageViewer({
       h = Math.abs(drawing.y - drawing.y0);
     setDrawing(null);
     if (w < 0.01 || h < 0.01) return;
-    if (drawingZone) setAiZones((all) => [...all, { x, y, w, h }].slice(0, 6));
+    if (searchMode) {
+      if (image) setSearching({ assetId: image.id, x, y, w, h, drawn: true });
+    } else if (drawingZone) setAiZones((all) => [...all, { x, y, w, h }].slice(0, 6));
     else if (marking === "rect") setMarkDraft({ kind: "rect", x, y, w, h });
     else setDraft({ x, y, w, h, note: "", tags: [] });
   };
@@ -423,6 +442,7 @@ export function ImageViewer({
       }
       if (event.key === "a" || event.key === "A") {
         setMarking(null);
+        setSearchMode(false);
         setAnnotating((v) => !v);
       }
       if (event.key === "+" || event.key === "=") zoom(1.25);
@@ -564,11 +584,39 @@ export function ImageViewer({
               onClick={() => {
                 setMarking(null);
                 setMarkDraft(null);
+                setSearchMode(false);
                 setAnnotating(!annotating);
               }}
             >
               <SquareDashedMousePointer size={16} />
               {t("Anotar")}
+            </button>
+            <button
+              type="button"
+              className={`viewer-annotate ${searchMode ? "is-on" : ""}`}
+              aria-pressed={searchMode}
+              data-testid="viewer-search"
+              disabled={!image || !visualSearch}
+              data-tooltip={t(
+                visual === null
+                  ? "Comprobando el índice visual…"
+                  : !visual.ready
+                    ? "Para buscar por zonas, elige e instala en Ajustes un modelo de embeddings con visión."
+                    : !visual.indexed
+                      ? "Para buscar por zonas, indexa antes las imágenes para la búsqueda semántica."
+                      : "Arrastra sobre la imagen un recuadro para buscar elementos parecidos en las demás imágenes.",
+              )}
+              onClick={() => {
+                setAnnotating(false);
+                setDraft(null);
+                setMarking(null);
+                setMarkDraft(null);
+                setDrawingZone(false);
+                setSearchMode(!searchMode);
+              }}
+            >
+              <ScanSearch size={16} />
+              {t("Buscar")}
             </button>
             {heritageColumn && (
               <div className="viewer-group viewer-heritage">
@@ -581,6 +629,7 @@ export function ImageViewer({
                   data-tooltip={t("Marca en la imagen un edificio, monumento u obra con un punto o un rectángulo.")}
                   onClick={() => {
                     setAnnotating(false);
+                    setSearchMode(false);
                     setDraft(null);
                     setMarkDraft(null);
                     setMarking(marking ? null : "point");
@@ -637,7 +686,7 @@ export function ImageViewer({
         <div
           ref={stage}
           data-tour="viewer-stage"
-          className={`viewer-stage ${annotating || marking || drawingZone ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
+          className={`viewer-stage ${annotating || marking || drawingZone || searchMode ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
           onWheel={(event) => {
             const r = stage.current!.getBoundingClientRect();
             zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - r.left, event.clientY - r.top);
@@ -746,7 +795,16 @@ export function ImageViewer({
           )}
           {markDraft?.kind === "rect" && <div className="viewer-region is-drawing is-heritage" style={box(markDraft)} />}
           {pending && <div className="viewer-region is-drawing" style={box(pending)} />}
+          {searching?.drawn && !cropping && (
+            <div className="viewer-ai-zone is-search" style={box(searching)} data-testid="viewer-search-box">
+              <ScanSearch size={12} />
+            </div>
+          )}
+          {searchMode && !searching && !pending && (
+            <p className="viewer-hint">{t("Arrastra sobre la imagen un recuadro alrededor de lo que quieres buscar.")}</p>
+          )}
           {heritagePanel === "suggest" &&
+            !searching &&
             aiZones.map((z, i) => (
               <div key={i} className="viewer-ai-zone" style={box(z)}>
                 <b>{i + 1}</b>
@@ -761,8 +819,11 @@ export function ImageViewer({
             <DetailSearchPanel
               query={searching}
               databaseId={row.databaseId}
-              backLabel={t("Volver a las anotaciones")}
-              onBack={() => setSearching(null)}
+              backLabel={t(searching.drawn ? "Cerrar la búsqueda" : "Volver a las anotaciones")}
+              onBack={() => {
+                setSearching(null);
+                setSearchMode(false);
+              }}
               onOpenRecord={
                 onOpenRecord &&
                 ((rowId) => {
@@ -777,7 +838,14 @@ export function ImageViewer({
                   onCompare(ids);
                 })
               }
-            />
+            >
+              {searching.drawn && image && (
+                <div className="detail-query">
+                  <Crop annotation={searching} imageId={image.id} revision={image.revision} ratio={ratio} />
+                  <small>{t("Dibuja otro recuadro sobre la imagen para buscar otra cosa.")}</small>
+                </div>
+              )}
+            </DetailSearchPanel>
           ) : (
           <>
           {heritageColumn && image && heritagePanel === "suggest" ? (
@@ -791,6 +859,7 @@ export function ImageViewer({
               onDraw={(on) => {
                 setAnnotating(false);
                 setMarking(null);
+                setSearchMode(false);
                 setDrawingZone(on);
               }}
               onRemoveZone={(i) => setAiZones((all) => all.filter((_, j) => j !== i))}
