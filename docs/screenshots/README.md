@@ -91,7 +91,7 @@ Imago shows these access copies as thumbnails and previews; screenshots have bee
 
 ## Restoration example
 
-`readme-restoration.png` shows a glass-plate negative, *Andreas Martinus Olesen* (photographer's archive www.aagaardsbilleder.dk, Kolding), public domain, retrieved from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Andreas_Martinus_Olesen.jpg). It was repaired and then colourised from the repaired version in Imago's restoration workshop with Google's `gemini-3.1-flash-lite-image`, at a cost of a few cents. Each half of the figure is cut from the full-size versions without retouching; the labels and the divider were added afterwards. The repaired and colourised halves are generated images and are not a historical record.
+`readme-restoration.png` shows a glass-plate negative, *Andreas Martinus Olesen* (photographer's archive www.aagaardsbilleder.dk, Kolding), public domain, retrieved from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Andreas_Martinus_Olesen.jpg). It was repaired and then colourised from the repaired version in Imago's restoration workshop with Google's `gemini-3.1-flash-lite-image`. The halves are cut from the full-size versions without further editing; only the labels and dividers were added. The repaired and colourised halves are generated images, not historical records.
 
 ## Demonstration data
 
