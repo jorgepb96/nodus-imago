@@ -139,7 +139,27 @@ try {
   await tab("Galería").focus();
   await page.keyboard.press("Alt+ArrowLeft");
   await poll(async () => (await tabOrder())[0].includes("Galería"), "keyboard move");
-  await tab("Solo fotos").dragTo(tab("Tabla"), { targetPosition: { x: 4, y: 10 } });
+  // The tabs are one row that scrolls sideways: press a tab at the end of
+  // the row, carry it to the left edge until the row has scrolled back to
+  // the start, and drop it on the first tab (as a person would; dragTo
+  // scrolls the row between the press and the drag).
+  const row = page.locator(".view-tabs");
+  await row.evaluate((el) => (el.scrollLeft = el.scrollWidth));
+  const pressed = await tab("Solo fotos").boundingBox(),
+    edge = await row.boundingBox();
+  await page.mouse.move(pressed.x + pressed.width / 2, pressed.y + pressed.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + 24, pressed.y + pressed.height / 2, { steps: 12 });
+  // A dragged pointer only reports itself when it moves: keep it moving
+  // near the edge until the row is back at its start.
+  for (let i = 0; i < 120 && (await row.evaluate((el) => el.scrollLeft)) > 0; i++) {
+    await page.mouse.move(edge.x + 12 + (i % 2), pressed.y + pressed.height / 2);
+    await page.waitForTimeout(50);
+  }
+  assert.equal(await row.evaluate((el) => el.scrollLeft), 0, "the tab row scrolls while a tab is dragged near its edge");
+  const onto = await tab("Tabla").boundingBox();
+  await page.mouse.move(onto.x + 4, onto.y + 10, { steps: 4 });
+  await page.mouse.up();
   await poll(async () => (await tabOrder()).findIndex((t) => t.includes("Solo fotos")) < (await tabOrder()).findIndex((t) => t.includes("Tabla")), "drag move");
   const order = await tabOrder();
   // Everything stays after reopening the database.
