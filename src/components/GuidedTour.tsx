@@ -119,7 +119,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     target: "nav-restorations",
-    title: "Restauraciones",
+    title: "Restauración IA",
     body: "Crea versiones restauradas, reparadas o coloreadas con un modelo de imagen de OpenAI, Gemini u OpenRouter. El original no se modifica: cada versión se guarda aparte y se puede descargar con una marca de agua.",
   },
   {

@@ -82,18 +82,20 @@ export function HeritageSuggestPanel({
     setItems(null);
     try {
       const answer = await window.imago.call("heritageSuggest", { assetId, columnId: column.id, whole, zones, choice });
-      const found: Item[] = answer.targets.flatMap((target) =>
-        target.suggestions.map((s, i) => ({
+      const found: Item[] = answer.targets.flatMap((target) => {
+        // The zone comes back as a copy: found by its position, not by identity.
+        const zoneIndex = target.zone ? zones.findIndex((z) => z.x === target.zone!.x && z.y === target.zone!.y) : null;
+        return target.suggestions.map((s, i) => ({
           ...s,
-          key: `${target.zone ? zones.indexOf(target.zone) : "all"}-${i}-${s.name}`,
+          key: `${zoneIndex ?? "all"}-${i}-${s.name}`,
           zone: target.zone,
-          zoneIndex: target.zone ? zones.findIndex((z) => z.x === target.zone!.x && z.y === target.zone!.y) : null,
+          zoneIndex,
           candidates: [],
           chosen: 0,
           // What the model itself doubts is shown unticked.
           selected: !!s.optionId && !inCell.includes(s.optionId) && s.confidence !== "low",
-        })),
-      );
+        }));
+      });
       // The same element named for the whole image and for a zone appears once, with its zone.
       const unique = new Map<string, Item>();
       for (const item of found) {

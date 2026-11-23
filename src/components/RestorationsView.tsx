@@ -235,7 +235,7 @@ export function RestorationsView({
       <aside className="restoration-side">
         <h1>
           <Wand2 size={18} />
-          {t("Restauraciones")}
+          {t("Restauración IA")}
         </h1>
         <p className="hint">
           {t("Crea versiones restauradas o coloreadas con un modelo de imagen. El original no se modifica: cada versión se guarda aparte, con el modelo y las instrucciones que la produjeron.")}
@@ -490,7 +490,7 @@ export function RestorationsView({
         {!source ? (
           <div className="restoration-empty">
             <Wand2 size={32} />
-            <h2>{t("Taller de restauración")}</h2>
+            <h2>{t("Restauración IA")}</h2>
             <p>
               {t("Elige una imagen de cualquier base de datos, o pulsa «Restaurar con IA» en la ficha de un registro. Puedes restaurar la imagen entera o una zona que hayas marcado.")}
             </p>

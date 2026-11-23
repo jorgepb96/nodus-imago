@@ -514,7 +514,7 @@ export function RecordPanel({
                 {onRestore && (
                   <Button
                     data-tour="record-restore"
-                    data-tooltip={t("Abre el taller de restauración con esta imagen. El original no se modifica.")}
+                    data-tooltip={t("Abre Restauración IA con esta imagen. El original no se modifica.")}
                     onClick={() => onRestore(image.id)}
                   >
                     <Wand2 size={15} />

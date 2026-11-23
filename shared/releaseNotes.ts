@@ -33,6 +33,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.5.6",
+    date: "2026-11-23",
+    highlights: [
+      {
+        scope: "visual",
+        category: "new",
+        es: "Nueva herramienta «Buscar» en el visor: dibuja un recuadro sobre la imagen y el panel lateral muestra las imágenes con elementos parecidos, con la opción de buscar también dentro de ellas. Necesita un modelo de embeddings visuales preparado.",
+        en: "New Search tool in the viewer: draw a box on the image and the side panel lists the images with similar elements, optionally looking inside them. It needs a visual embedding model that is ready.",
+      },
+      {
+        scope: "places",
+        category: "fix",
+        es: "«Sugerir con IA» en Patrimonio ya no falla con «reading 'latitude'» cuando ningún municipio del lote está en el nomenclátor, y el lugar que propone el modelo se queda solo en el municipio.",
+        en: "Suggest with AI in Heritage no longer fails with “reading 'latitude'” when no town in the batch is in the gazetteer, and the place the model suggests keeps only the town.",
+      },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "La sección «Restauraciones» pasa a llamarse «Restauración IA», para no confundirla con restaurar una copia de seguridad.",
+        en: "The Restorations section is now called AI restoration, so it is not confused with restoring a backup.",
+      },
+    ],
+  },
+  {
     version: "0.5.5",
     date: "2026-11-23",
     highlights: [

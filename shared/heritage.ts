@@ -560,7 +560,12 @@ export function resolveTowns(entries: { id: string; town: string | null; found: 
   // Where the collection is: the middle of its towns in that country. A town
   // abroad is only taken when it is within reach of it, so a namesake on
   // another continent never stands in for a town the gazetteer lacks.
-  const home = entries.flatMap((e) => (first(e)?.countryCode === country ? [first(e)!] : []));
+  // Only towns actually placed: with no town placed there is no country, and
+  // an unplaced town must not count as one «in» that missing country.
+  const home = entries.flatMap((e) => {
+    const hit = first(e);
+    return hit && country && hit.countryCode === country ? [hit] : [];
+  });
   const median = (values: number[]) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
   const centre = home.length ? { latitude: median(home.map((p) => p.latitude)), longitude: median(home.map((p) => p.longitude)) } : null;
   const reachable = (p: TownHit) => p.countryCode === country || !centre || distanceKm(p, centre) <= 3000;
@@ -738,7 +743,7 @@ export function heritageSuggestPrompt(known: string[], zone: boolean): string {
       ? "This image is a detail cut out of a larger photograph."
       : "This is a photograph, possibly historical.",
     "Identify the specific, named heritage elements that are visible: buildings, monuments, churches, castles, bridges, fountains, statues, squares, streets, landscapes or works of art (paintings, sculptures, altarpieces).",
-    "Name each one as it is commonly known, with the town or city where it is.",
+    "Name each one as it is commonly known, with the town or city where it is (only the town or city, without region or country).",
     known.length
       ? `When one of these elements is visible, use its exact name from this list: ${JSON.stringify(known)}`
       : "",
@@ -768,7 +773,10 @@ export function parseSuggestions(raw: string): Omit<HeritageSuggestion, "optionI
     const name = typeof value?.name === "string" ? value.name.trim().slice(0, 200) : "";
     if (!name || seen.has(foldText(name))) return [];
     seen.add(foldText(name));
-    const place = typeof value.place === "string" && value.place.trim() ? value.place.trim().slice(0, 120) : null;
+    // Only the town: models add the region or the country («Villaverde, Spain»,
+    // «Villaverde (Spain)»), which is not part of an element's label.
+    const town = typeof value.place === "string" ? value.place.split(/\s*[,(;]/)[0].trim().slice(0, 120) : "";
+    const place = town || null;
     const confidence = ["high", "medium", "low"].includes(value.confidence as string) ? (value.confidence as HeritageSuggestion["confidence"]) : "medium";
     return [{ name, place, confidence }];
   }).slice(0, 6);

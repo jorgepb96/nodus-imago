@@ -316,6 +316,12 @@ test("a vision model's answer is read leniently and matched with the property's 
     { name: "Puente Viejo", place: null, confidence: "medium" },
   ]);
   assert.deepEqual(parseSuggestions("no JSON here"), []);
+  // The place keeps only the town: models add the region or the country.
+  assert.deepEqual(
+    parseSuggestions('[{"name":"Puente Viejo","place":"Villaverde, Spain"},{"name":"Torre","place":"Villaverde (Provincia)"},{"name":"Fuente","place":" , Spain"}]').map((s) => s.place),
+    ["Villaverde", "Villaverde", null],
+  );
+  assert.match(heritageSuggestPrompt([], false), /only the town or city, without region or country/);
   const options = [
     { id: "a", label: "Catedral - Villaverde" },
     { id: "b", label: "Puente Viejo - Villaverde" },
@@ -410,6 +416,14 @@ test("town names are read together: a district inside another town of the list i
   assert.deepEqual(towns.get("e"), { latitude: 43.84, longitude: 10.5 });
   assert.equal(towns.get("f"), null);
   assert.deepEqual(towns.get("g"), { latitude: 43.32, longitude: -1.98 });
+  // A batch where no town is in the gazetteer by its name has no country:
+  // its towns stay unplaced instead of the lookup failing.
+  const none = resolveTowns([
+    { id: "h", town: "Villaverde, Spain", found: [district, town] },
+    { id: "i", town: null, found: [] },
+    { id: "j", town: "Nowhere", found: [{ name: "Nowhere Creek", countryCode: "US", latitude: 30, longitude: -90 }] },
+  ]);
+  assert.deepEqual([...none.values()], [null, null, null]);
 });
 
 test("background searches pause where a service fails or Imago closes, resume there, and their proposals apply and revert", () =>

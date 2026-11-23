@@ -1994,13 +1994,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <span className="nav-title">{t("Mesa de comparación")}</span>
             </button>
             <button
-              title={t("Restauraciones")}
+              title={t("Restauración IA")}
               data-tour="nav-restorations"
               className={area === "restorations" ? "active" : ""}
               onClick={() => setArea("restorations")}
             >
               <Wand2 size={18} />
-              <span className="nav-title">{t("Restauraciones")}</span>
+              <span className="nav-title">{t("Restauración IA")}</span>
             </button>
           </nav>
           <div className="sidebar-databases" data-tour="collections" data-tour-fit="content">
