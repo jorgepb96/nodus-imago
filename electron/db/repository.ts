@@ -187,6 +187,42 @@ export class Repository {
     this.db
       .prepare("UPDATE jobs SET state='queued' WHERE state='running'")
       .run();
+    this.learnRecordValues();
+  }
+  /**
+   * Text vectors made before values were kept (value_hash NULL) learn them
+   * once, while their text is still the record's, so the next rename or
+   * conversion does not send every older record back to indexing.
+   */
+  private learnRecordValues() {
+    const done = "migration.recordValues";
+    if (this.db.prepare("SELECT 1 FROM settings WHERE key=?").get(done)) return;
+    const legacy = this.db
+      .prepare(
+        "SELECT row_id,contract,text_hash FROM record_embeddings WHERE value_hash IS NULL",
+      )
+      .all() as { row_id: string; contract: string; text_hash: string }[];
+    const byRow = new Map<string, typeof legacy>();
+    for (const e of legacy)
+      (byRow.get(e.row_id) ?? byRow.set(e.row_id, []).get(e.row_id)!).push(e);
+    const ids = [...byRow.keys()],
+      columns = new Map<string, DatabaseColumn[]>(),
+      learn = this.db.prepare(
+        "UPDATE record_embeddings SET value_hash=?,stale=0 WHERE row_id=? AND contract=?",
+      );
+    this.db.transaction(() => {
+      for (let i = 0; i < ids.length; i += 200)
+        for (const row of this.hydrate(ids.slice(i, i + 200))) {
+          if (!columns.has(row.databaseId))
+            columns.set(row.databaseId, this.detail(row.databaseId).columns);
+          const own = columns.get(row.databaseId)!,
+            text = recordTextHash(recordEmbeddingText(own, row)),
+            values = recordTextHash(recordEmbeddingValues(own, row));
+          for (const e of byRow.get(row.id)!)
+            if (e.text_hash === text) learn.run(values, row.id, e.contract);
+        }
+      this.db.prepare("INSERT INTO settings VALUES(?,'1')").run(done);
+    })();
   }
   close() {
     this.db.close();
