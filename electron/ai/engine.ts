@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
+import os from "node:os";
 import { Repository, now, recordTextHash } from "../db/repository";
-import { recordEmbeddingText } from "../../shared/recordEmbedding";
+import { recordEmbeddingText, recordEmbeddingValues } from "../../shared/recordEmbedding";
 import { Models } from "./models";
 import { InferenceHost } from "./host";
 import { hashFile } from "../import/images";
@@ -51,7 +52,11 @@ import {
   HARRIER_IMAGE_PROMPT,
   embeddingBackendContract,
   embeddingDimensions,
+  embeddingThreads,
 } from "../../shared/embeddingBackends";
+
+/** Logical cores, for the threads of the local embedding model. */
+const CPU_COUNT = os.availableParallelism?.() ?? os.cpus().length;
 
 const LANGUAGE_NAMES: Record<string, string> = {
   es: "español",
@@ -382,11 +387,7 @@ export class Engine {
       if (settings.embeddingModel === ONNX_ID)
         return this.onnx.embed(
           this.models.directory(ONNX_ID),
-          settings.profile === "light"
-            ? 1
-            : settings.profile === "balanced"
-              ? 2
-              : 4,
+          embeddingThreads(settings.profile, CPU_COUNT),
           settings.dimensions,
           prepared,
           signal,
@@ -408,12 +409,7 @@ export class Engine {
           task: "embedding",
           directory: this.models.directory("embeddinggemma2"),
           device: settings.device,
-          threads:
-            settings.profile === "light"
-              ? 1
-              : settings.profile === "balanced"
-                ? 2
-                : 4,
+          threads: embeddingThreads(settings.profile, CPU_COUNT),
           dimensions: settings.dimensions,
           inputs: prepared,
         },
@@ -624,15 +620,19 @@ export class Engine {
       .get(rowId) as { database_id: string } | undefined;
     if (!found) return "skipped" as const;
     const row = this.repo.getRow(rowId),
-      text = recordEmbeddingText(this.recordColumns(found.database_id), row);
+      columns = this.recordColumns(found.database_id),
+      text = recordEmbeddingText(columns, row);
     if (!text) return "skipped" as const;
-    const hash = recordTextHash(text);
+    const hash = recordTextHash(text),
+      values = recordTextHash(recordEmbeddingValues(columns, row));
+    // The vector still describes the record's values (only property names
+    // changed), or its text is exactly the same: nothing to compute.
     if (
       this.repo.db
         .prepare(
-          "UPDATE record_embeddings SET stale=0 WHERE row_id=? AND contract=? AND text_hash=?",
+          "UPDATE record_embeddings SET stale=0,value_hash=? WHERE row_id=? AND contract=? AND (value_hash=? OR (value_hash IS NULL AND text_hash=?))",
         )
-        .run(rowId, contract, hash).changes
+        .run(values, rowId, contract, values, hash).changes
     )
       return "skipped" as const;
     let vector = this.takePrefetched(`record:${rowId}:${hash}`);
@@ -676,9 +676,9 @@ export class Engine {
     if (recordTextHash(current) !== hash) return "skipped" as const;
     this.repo.db
       .prepare(
-        "INSERT INTO record_embeddings(row_id,contract,text_hash,vector,stale) VALUES(?,?,?,?,0) ON CONFLICT(row_id,contract) DO UPDATE SET text_hash=excluded.text_hash,vector=excluded.vector,stale=0",
+        "INSERT INTO record_embeddings(row_id,contract,text_hash,vector,stale,value_hash) VALUES(?,?,?,?,0,?) ON CONFLICT(row_id,contract) DO UPDATE SET text_hash=excluded.text_hash,vector=excluded.vector,stale=0,value_hash=excluded.value_hash",
       )
-      .run(rowId, contract, hash, Buffer.from(new Float32Array(vector).buffer));
+      .run(rowId, contract, hash, Buffer.from(new Float32Array(vector).buffer), values);
     return "imported" as const;
   }
   private columnCache = new Map<

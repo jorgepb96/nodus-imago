@@ -222,7 +222,7 @@ test("columns can be reordered like Notion, without staling record vectors", asy
     const other = repo.importCsv("Otra", ["ID"], ["title"], [["X"]]);
     const [title, place, theme] = d.columns.map((c) => c.id);
     const row = repo.literal({ databaseIds: [d.database.id] }).rows[0];
-    repo.db.prepare("INSERT INTO record_embeddings VALUES(?,?,?,?,0)").run(row.id, "c", recordTextHash(recordEmbeddingText(repo.detail(d.database.id).columns, row)), Buffer.alloc(4));
+    repo.db.prepare("INSERT INTO record_embeddings(row_id,contract,text_hash,vector,stale) VALUES(?,?,?,?,0)").run(row.id, "c", recordTextHash(recordEmbeddingText(repo.detail(d.database.id).columns, row)), Buffer.alloc(4));
     const moved = repo.reorderColumns(d.database.id, [theme, title, place]);
     assert.deepEqual(moved.columns.map((c) => c.id), [theme, title, place]);
     assert.deepEqual(repo.detail(d.database.id).columns.map((c) => c.name), ["Tema", "ID", "Lugar"]);

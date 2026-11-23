@@ -1338,6 +1338,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     viewMenuAnchor = useMemo(() => ({ current: viewMenuAt?.tab ?? null }), [viewMenuAt]);
   const openViewMenu = (id: string, tab: HTMLElement, saved = false) => setViewMenuAt({ id, tab, saved });
   // Tabs move like table columns: drag one, or Alt+←/→ from the keyboard.
+  const tabsRef = useRef<HTMLDivElement>(null);
   const [dragTab, setDragTab] = useState<string | null>(null),
     [dropTab, setDropTab] = useState<{ key: string; side: "before" | "after" } | null>(null);
   const moveTab = (key: string, target: string, side: "before" | "after") =>
@@ -1722,6 +1723,38 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       status?.jobs.filter((job) =>
         ["running", "queued", "paused", "failed"].includes(job.state),
       ).length ?? 0;
+  // The tabs stay on one row and scroll sideways: the mouse wheel scrolls
+  // them too, the tab on screen is brought into view, a dragged tab carries
+  // the row near its edges, and faded edges say more tabs lie beyond.
+  useDragEdgeScroll(tabsRef, !!dragTab);
+  useEffect(() => {
+    const row = tabsRef.current;
+    if (!row) return;
+    const edges = () => {
+      row.classList.toggle("more-left", row.scrollLeft > 1);
+      row.classList.toggle("more-right", row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
+    };
+    const wheel = (event: WheelEvent) => {
+      if (row.scrollWidth <= row.clientWidth || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      row.scrollLeft += event.deltaY;
+    };
+    edges();
+    const observer = new ResizeObserver(edges);
+    observer.observe(row);
+    row.addEventListener("scroll", edges, { passive: true });
+    row.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      observer.disconnect();
+      row.removeEventListener("scroll", edges);
+      row.removeEventListener("wheel", wheel);
+    };
+  }, [area, databaseId, savedViews.length]);
+  useEffect(() => {
+    tabsRef.current
+      ?.querySelector<HTMLElement>(":scope > button.active")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [effectiveView, activeSaved, databaseId, savedViews.length]);
   if (!api)
     return (
       <div className="desktop-required">
@@ -2664,7 +2697,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     )
                   )}
                   <div className="data-toolbar">
-                    <div className="view-tabs" data-tour="db-views">
+                    <div className="view-tabs" data-tour="db-views" ref={tabsRef}>
                       {tabKeys().map((key) => tabButton(key))}
                     </div>
                     <div

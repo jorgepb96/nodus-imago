@@ -17,8 +17,15 @@ export function useDragEdgeScroll(ref: RefObject<HTMLElement | null>, active: bo
     if (!active) return;
     let x: number | null = null,
       frame = 0;
+    // Where the pointer is: from what lies under it (dragover) and from the
+    // dragged element itself (drag), which keeps reporting even where
+    // nothing under the pointer accepts the drop. The last «drag» of some
+    // browsers says 0, 0, and outside the window the scrolling stops: both
+    // ignored.
     const over = (event: DragEvent) => {
-      x = event.clientX;
+      const { clientX, clientY } = event;
+      if (clientX <= 0 || clientY <= 0 || clientX >= innerWidth || clientY >= innerHeight) return;
+      x = clientX;
     };
     // Leaving the window stops the scrolling until the pointer comes back.
     const leave = (event: DragEvent) => {
@@ -35,11 +42,13 @@ export function useDragEdgeScroll(ref: RefObject<HTMLElement | null>, active: bo
       frame = requestAnimationFrame(tick);
     };
     document.addEventListener("dragover", over, true);
+    document.addEventListener("drag", over, true);
     document.addEventListener("dragleave", leave, true);
     frame = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("dragover", over, true);
+      document.removeEventListener("drag", over, true);
       document.removeEventListener("dragleave", leave, true);
     };
   }, [active, ref]);

@@ -36,7 +36,7 @@ import {
   importedOptionColor,
 } from "../../shared/databaseCsv";
 import type { CsvImportOptions } from "../../shared/databaseCsv";
-import { recordEmbeddingText } from "../../shared/recordEmbedding";
+import { recordEmbeddingText, recordEmbeddingValues } from "../../shared/recordEmbedding";
 import { computeFormulas } from "../../shared/databaseFormulaEval";
 import type {
   PropertyFilter,
@@ -116,6 +116,14 @@ export class Repository {
       this.db.exec(
         "ALTER TABLE record_embeddings ADD COLUMN stale INTEGER NOT NULL DEFAULT 0",
       );
+    // Vectors learn the values they describe, so renaming a property does not
+    // make them stale. Older vectors gain it when their text is still current.
+    if (
+      !(this.db.prepare("PRAGMA table_info(record_embeddings)").all() as { name: string }[]).some(
+        (c) => c.name === "value_hash",
+      )
+    )
+      this.db.exec("ALTER TABLE record_embeddings ADD COLUMN value_hash TEXT");
     // Undo history learns what made each batch (so the proposals dialog
     // touches only proposals) and in which order batches were undone (Redo).
     // Batches undone before this existed stay out of Redo.
@@ -1347,11 +1355,18 @@ export class Repository {
     ).run(id, row.databaseId, body);
     // A text vector that no longer describes the record keeps serving searches
     // but is marked for the next indexing pass (manual or automatic).
-    // Undoing an edit makes the old vector current again.
-    const hash = recordTextHash(recordEmbeddingText(columns, row));
+    // Undoing an edit makes the old vector current again. What counts are the
+    // record's values: renaming a property, or moving its values to another,
+    // leaves the vector current. A vector from before values were kept learns
+    // them when its text is still exactly the record's.
+    const hash = recordTextHash(recordEmbeddingText(columns, row)),
+      values = recordTextHash(recordEmbeddingValues(columns, row));
     this.statement(
-      "UPDATE record_embeddings SET stale=(text_hash<>?) WHERE row_id=? AND stale<>(text_hash<>?)",
-    ).run(hash, id, hash);
+      "UPDATE record_embeddings SET value_hash=? WHERE row_id=? AND value_hash IS NULL AND text_hash=?",
+    ).run(values, id, hash);
+    this.statement(
+      "UPDATE record_embeddings SET stale=(CASE WHEN value_hash IS NULL THEN text_hash<>? ELSE value_hash<>? END) WHERE row_id=? AND stale<>(CASE WHEN value_hash IS NULL THEN text_hash<>? ELSE value_hash<>? END)",
+    ).run(hash, values, id, hash, values);
   }
   rebuildText(databaseId?: string) {
     return this.db.transaction(() => {

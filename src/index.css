@@ -6496,9 +6496,33 @@ body.resizing-column * {
   justify-content: flex-end;
   min-height: 46px;
 }
+/* One row of tabs that scrolls sideways (no second row); faded edges show
+   that more tabs lie beyond. */
 .view-tabs {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   column-gap: 18px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 24px;
+}
+.view-tabs::-webkit-scrollbar {
+  display: none;
+}
+.view-tabs > button {
+  flex: none;
+  white-space: nowrap;
+}
+.view-tabs.more-right {
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
+.view-tabs.more-left {
+  mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent);
+}
+.view-tabs.more-left.more-right {
+  mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
 }
 .heatmap thead th > span.heatmap-corner {
   max-width: 200px;
@@ -8435,6 +8459,9 @@ tr:hover .ai-cell-button,
 .active-filters.is-filtered { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--text); }
 .active-filters-list { font-weight: 550; }
 .active-filters-query { display: inline-flex; align-items: center; gap: 3px; }
+.active-filters-more { padding: 0 4px; border-radius: 4px; color: var(--accent-ink, var(--accent)); font-size: 12px; font-weight: 550; }
+.active-filters-more:hover { background: var(--hover); }
+.active-filters-list { overflow-wrap: anywhere; }
 .timeline-axis-labels.is-each { justify-content: stretch; gap: 2px; }
 .timeline-axis-labels.is-each > span { flex: 1; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .heritage-marks h2 { display: flex; align-items: center; gap: 6px; }
@@ -8566,7 +8593,7 @@ tr:hover .ai-cell-button,
   pointer-events: none;
 }
 .view-tabs > button.drop-before::before {
-  left: -11px;
+  left: -10px;
 }
 .view-tabs > button.drop-after::after {
   right: -11px;
