@@ -425,8 +425,17 @@ function OptionPicker({
   const editable = !!onOptionsChanged && !heritage;
   // Edits run one after another on a working copy of the options, so a rename
   // followed at once by a colour never saves over it with the stale list.
+  // A new order shows at once, while it is saved: kept until the column's
+  // options come back from the database.
+  const [pending, setPending] = useState<{ order: string[]; sort: OptionSort } | null>(null);
+  useEffect(() => setPending(null), [column.options, column.config]);
   // The list's order: by hand (positions) or by name, chosen in «···».
-  const sort: OptionSort = column.config.optionSort ?? "manual";
+  const sort: OptionSort = pending?.sort ?? column.config.optionSort ?? "manual";
+  const shown = (options: DatabaseSelectOption[]) => {
+    if (!pending) return sortOptions(options, sort);
+    const at = new Map(pending.order.map((id, i) => [id, i]));
+    return [...options].sort((a, b) => (at.get(a.id) ?? Infinity) - (at.get(b.id) ?? Infinity));
+  };
   const working = useRef<DatabaseSelectOption[]>([]),
     workingConfig = useRef(column.config),
     queue = useRef<Promise<void>>(Promise.resolve());
@@ -461,30 +470,43 @@ function OptionPicker({
     edit((list) => list.map((o) => (o.id === id ? { ...o, ...change } : o)));
   // A name order also rewrites the positions, so every other list (filters,
   // properties) follows it; manual keeps the positions as they are.
-  const chooseSort = (next: OptionSort) =>
-    enqueue(async () => {
+  const chooseSort = (next: OptionSort) => {
+    setPending({ order: sortOptions(column.options, next === "manual" ? sort : next).map((o) => o.id), sort: next });
+    return enqueue(async () => {
       if (next !== "manual") await saveList(sortOptions(working.current, next));
       await saveSort(next);
+    }).catch((e) => {
+      setPending(null);
+      throw e;
     });
+  };
   // Dragging places the option among those shown, and the order becomes manual.
   const move = (id: string, target: string, after: boolean) => {
     if (id === target) return;
     setEditError(null);
-    const shownSort = sort;
+    const list = shown(column.options);
+    const moving = list.find((o) => o.id === id);
+    const rest = list.filter((o) => o.id !== id);
+    const at = rest.findIndex((o) => o.id === target);
+    if (!moving || at < 0) return;
+    rest.splice(after ? at + 1 : at, 0, moving);
+    const order = rest.map((o) => o.id);
+    setPending({ order, sort: "manual" });
     enqueue(async () => {
-      const list = sortOptions(working.current, shownSort);
-      const moving = list.find((o) => o.id === id);
-      const rest = list.filter((o) => o.id !== id);
-      const at = rest.findIndex((o) => o.id === target);
-      if (!moving || at < 0) return;
-      rest.splice(after ? at + 1 : at, 0, moving);
-      await saveList(rest);
+      // The working copy holds any edit saved since (a new colour, a name).
+      // Any option added meanwhile goes last instead of being dropped.
+      const byId = new Map(working.current.map((o) => [o.id, o]));
+      const placed = order.map((oid) => byId.get(oid)).filter((o): o is DatabaseSelectOption => !!o);
+      await saveList([...placed, ...working.current.filter((o) => !order.includes(o.id))]);
       if ((workingConfig.current.optionSort ?? "manual") !== "manual") await saveSort("manual");
-    }).catch((e) => setEditError(e instanceof Error ? e.message : String(e)));
+    }).catch((e) => {
+      setPending(null);
+      setEditError(e instanceof Error ? e.message : String(e));
+    });
   };
   const needle = fold(query.trim());
   const matches = open
-    ? sortOptions(column.options, sort).filter((o) => !needle || fold(o.label).includes(needle))
+    ? shown(column.options).filter((o) => !needle || fold(o.label).includes(needle))
     : [];
   // Selected options first, so a long list never hides what the cell holds.
   // A short list keeps its own order, the one its options are dragged into.
@@ -510,7 +532,7 @@ function OptionPicker({
       <summary aria-label={column.name}>
         <span className="chips">
           {selected.length ? (
-            sortOptions(column.options, sort)
+            shown(column.options)
               .filter((o) => selected.includes(o.id))
               .map((o) => (
                 <span

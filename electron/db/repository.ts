@@ -539,6 +539,14 @@ export class Repository {
   }
   updateColumn(id: string, name?: string, config?: DatabaseColumnConfig) {
     const c = this.column(id);
+    // Only the option order changed (optionSort): nothing to recompute.
+    const { optionSort: _before, ...kept } = c.config;
+    const { optionSort: _after, ...next } = config ?? c.config;
+    const layoutOnly =
+      !!config &&
+      _before !== _after &&
+      (name == null || name === c.name) &&
+      JSON.stringify(kept) === JSON.stringify(next);
     if (c.type === "rollup" && config)
       validateRollup(this, c.databaseId, config);
     this.db.transaction(() => {
@@ -547,6 +555,7 @@ export class Repository {
           "UPDATE db_columns SET name=?,config_json=?,updated_at=? WHERE id=?",
         )
         .run(name ?? c.name, JSON.stringify(config ?? c.config), now(), id);
+      if (layoutOnly) return;
       // Formulas may name the property; the search text holds values only,
       // so a rename alone leaves it as it is. Record vectors that include the
       // old name are refreshed as their records change.
@@ -985,6 +994,11 @@ export class Repository {
       (o) => !input.some((n) => n.id === o.id),
     );
     const gone = new Set(removed.map((o) => o.id));
+    // Order and colour alone change no value, formula or search text: the
+    // whole-database recompute and reindex below are only for names.
+    const relabelled =
+      gone.size > 0 ||
+      input.some((o) => !o.id || column.options.find((x) => x.id === o.id)?.label !== o.label.trim());
     const holding = (value: string) =>
       column.type === "multi_select"
         ? decodeMultiSelect(value).some((id) => gone.has(id))
@@ -1036,6 +1050,7 @@ export class Repository {
             now(),
           ),
       );
+      if (!relabelled) return;
       this.recompute(column.databaseId);
       this.rebuildText(column.databaseId);
     })();
