@@ -1169,7 +1169,8 @@ export class Repository {
       );
     }
   }
-  setCell(rowId: string, columnId: string, raw: string | null, history = true) {
+  /** `batch` groups several cells into one Undo step (a change made through MCP). */
+  setCell(rowId: string, columnId: string, raw: string | null, history = true, batch?: string) {
     const c = this.column(columnId),
       row = this.getRow(rowId);
     if (c.databaseId !== row.databaseId)
@@ -1244,7 +1245,7 @@ export class Repository {
             "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at) VALUES(?,?,?,?,?,?)",
           )
           .run(
-            uuid(),
+            batch ?? uuid(),
             rowId,
             columnId,
             row.cells[columnId] ?? null,

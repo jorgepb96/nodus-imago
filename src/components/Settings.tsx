@@ -26,6 +26,7 @@ import {
   Link2,
   Plus,
   Scale,
+  Plug,
 } from "lucide-react";
 import type { Status, Settings as SettingsType, Job } from "../../shared/imago";
 import type { DatabaseDetail } from "../../shared/databases";
@@ -37,6 +38,7 @@ import { useT } from "../i18n";
 import { DEFAULT_EMBEDDING_API } from "../../shared/embeddingApi";
 import { PROVIDERS } from "../../shared/aiConfig";
 import { ApiSettings } from "./ApiSettings";
+import { McpSettings } from "./McpSettings";
 import { ModelPicker } from "./ModelPicker";
 import { askIndexQuality } from "./IndexQualityDialog";
 import { jobTitle } from "../../shared/jobTitles";
@@ -248,6 +250,7 @@ export function Settings({
         { id: "appearance", label: "Interfaz", Icon: Palette },
         { id: "performance", label: "Rendimiento", Icon: Cpu },
         {id:"updates",label:"Actualizaciones y novedades",Icon:RefreshCw},
+        { id: "mcp", label: "Servidor MCP", Icon: Plug },
       ],
     },
     {
@@ -302,6 +305,7 @@ export function Settings({
       </aside>
       <div className="settings-content">
         {tab === "updates" && <UpdateSettings perform={perform} onWhatsNew={onWhatsNew} />}
+        {tab === "mcp" && <McpSettings perform={perform} />}
         {tab === "tasks" && (
           <div className="settings-section">
             <div className="settings-card-heading">

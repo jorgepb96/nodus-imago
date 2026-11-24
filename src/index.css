@@ -10394,3 +10394,295 @@ tr:hover .ai-cell-button,
     grid-template-columns: 1fr;
   }
 }
+/* Settings → Servidor MCP: the two access levels, the values to copy and the activity. */
+.mcp-access {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+.mcp-access > button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--text);
+}
+.mcp-access > button > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--muted);
+}
+.mcp-access > button strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mcp-access > button small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.mcp-access > button.active {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.mcp-access > button.active > svg {
+  color: var(--accent-ink);
+}
+.mcp-access > button.active.write {
+  border-color: #e8ad4880;
+  background: #e8ad4814;
+}
+.mcp-access > button.active.write > svg {
+  color: #a87728;
+}
+.mcp-subheading {
+  margin: 20px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mcp-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 11px;
+}
+.mcp-value > span {
+  width: 110px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.mcp-value > code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.mcp-clients {
+  margin-top: 16px;
+}
+.mcp-client {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-top: 8px;
+}
+.mcp-client pre {
+  width: 100%;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+.mcp-activity {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.mcp-activity li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.mcp-activity time {
+  width: 72px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mcp-activity code {
+  flex: 1;
+  font-size: 11px;
+}
+.mcp-write-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+/* Settings → Servidor MCP → ChatGPT: OpenAI's secure tunnel, step by step. */
+.mcp-tunnel {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.mcp-tunnel-status {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+.mcp-tunnel-status.connected {
+  border-color: #48ac7960;
+  background: #48ac7912;
+}
+.mcp-tunnel-status.failed {
+  border-color: #ce4c4c55;
+  background: #ce4c4c0f;
+}
+.mcp-tunnel-status > div {
+  flex: 1;
+  min-width: 0;
+}
+.mcp-tunnel-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--accent-ink);
+}
+.mcp-tunnel-status.connected .mcp-tunnel-icon {
+  color: #33805b;
+}
+.mcp-tunnel-status.failed .mcp-tunnel-icon {
+  color: #ce4c4c;
+}
+.mcp-tunnel-title {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.mcp-tunnel-title span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.mcp-tunnel-status p {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.mcp-tunnel-status small {
+  font-size: 9px;
+  color: var(--muted);
+}
+.mcp-tunnel-progress {
+  height: 5px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--line);
+}
+.mcp-tunnel-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+.mcp-tunnel-step {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.mcp-tunnel-step > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.mcp-tunnel-step > div {
+  flex: 1;
+  min-width: 0;
+}
+.mcp-tunnel-step h4 {
+  font-size: 12px;
+  font-weight: 600;
+}
+.mcp-tunnel-step-body {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.mcp-tunnel-field {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text);
+}
+.mcp-tunnel-field input {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+.mcp-tunnel-field .row {
+  display: flex;
+  gap: 6px;
+}
+.mcp-tunnel-field input.invalid {
+  border-color: #ce4c4c;
+}
+.mcp-tunnel-error {
+  padding: 10px 12px;
+  border: 1px solid #ce4c4c55;
+  border-radius: 8px;
+  background: #ce4c4c0f;
+  font-size: 11px;
+  color: #b13d3d;
+}
+.mcp-tunnel-error pre {
+  max-height: 140px;
+  overflow: auto;
+  margin-top: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+.mcp-tunnel-privacy {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid #e8ad4855;
+  border-radius: 8px;
+  background: #e8ad4812;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #8a6420;
+}
+.mcp-tunnel-privacy svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.mcp-tunnel-forget {
+  justify-self: end;
+  color: #ce4c4c;
+}
