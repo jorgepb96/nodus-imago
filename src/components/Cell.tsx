@@ -14,6 +14,8 @@ import { LocationCell } from "./LocationCell";
 import { HistoricalDateCell } from "./HistoricalDateCell";
 import { TextCellPopover } from "./TextCellPopover";
 import { HeritageIcon } from "./HeritageIcon";
+import { OptionIcon } from "./DatabaseIcon";
+import { optionIconValue } from "../../shared/databaseIcons";
 import { heritageScheme, isHeritageColumn, typology } from "../../shared/heritage";
 import { useHeritage } from "../heritageStore";
 import { HeritageAddFooter, HeritageOptionMeta } from "./HeritageCellParts";
@@ -382,8 +384,9 @@ function OptionPicker({
     elements = useHeritage(heritage ? column.id : null),
     scheme = heritage ? heritageScheme(column.config) : null;
   const labels = new Map(column.options.map((o) => [o.id, o.label]));
+  // Heritage elements show their typology; other options the icon chosen for them.
   const iconOf = (optionId: string) => {
-    if (!scheme) return null;
+    if (!scheme) return <OptionIcon value={optionIconValue(column.config, optionId)} size={11} />;
     const e = elements[optionId];
     return <HeritageIcon name={typology(scheme, e?.group ?? null, e?.type ?? null)?.icon} size={11} className="chip-icon" />;
   };
@@ -459,10 +462,18 @@ function OptionPicker({
     });
     working.current = next.map((o, position) => ({ ...o, position }));
   };
-  const saveSort = async (optionSort: OptionSort) => {
-    const config = { ...workingConfig.current, optionSort };
+  const saveConfig = async (change: Partial<DatabaseColumn["config"]>) => {
+    const config = { ...workingConfig.current, ...change };
     await window.imago.call("updateColumn", { id: column.id, config });
     workingConfig.current = config;
+  };
+  const saveSort = (optionSort: OptionSort) => saveConfig({ optionSort });
+  // Option icons live in the column's config, keyed by option id.
+  const saveIcon = (id: string, icon: string | null) => {
+    const icons = { ...(workingConfig.current.optionIcons ?? {}) };
+    if (icon) icons[id] = icon;
+    else delete icons[id];
+    return saveConfig({ optionIcons: icons });
   };
   const edit = (change: (list: DatabaseSelectOption[]) => DatabaseSelectOption[], dropFromCells = false) =>
     enqueue(() => saveList(change(working.current), dropFromCells));
@@ -668,6 +679,8 @@ function OptionPicker({
             <OptionEditMenu
               anchor={editAnchor as React.RefObject<HTMLElement>}
               option={editingOption}
+              icon={optionIconValue(column.config, editingOption.id)}
+              onIcon={(icon) => enqueue(() => saveIcon(editingOption.id, icon))}
               sort={sort}
               onSort={chooseSort}
               onClose={() => setEditing(null)}
@@ -729,6 +742,11 @@ function OptionPicker({
               setDeleteBusy(true);
               setEditError(null);
               edit((list) => list.filter((o) => o.id !== deleting.id), true)
+                .then(() =>
+                  workingConfig.current.optionIcons?.[deleting.id]
+                    ? enqueue(() => saveIcon(deleting.id, null))
+                    : undefined,
+                )
                 .then(() => setDeleting(null))
                 .catch((e) => setEditError(e instanceof Error ? e.message : String(e)))
                 .finally(() => setDeleteBusy(false));

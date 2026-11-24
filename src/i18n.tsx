@@ -2748,6 +2748,8 @@ const en: Record<string, string> = {
   "Pausada al cerrar Imago: reanúdala cuando quieras, sigue donde se quedó.": "Paused when Imago closed: resume it whenever you like; it continues where it stopped.",
   "{error} Pausada: reanúdala cuando vuelva la conexión, sigue donde se quedó.": "{error} Paused: resume it when the connection is back; it continues where it stopped.",
   "Editar opción": "Edit option",
+  "Icono de la opción": "Option icon",
+  Cambiar: "Change",
   Ordenar: "Sort",
   Manual: "Manual",
   "Por nombre (A → Z)": "By name (A → Z)",

@@ -167,6 +167,9 @@ export interface DatabaseColumnConfig {
    * (their positions, the default) or by name. Choosing a name order also
    * rewrites the positions; dragging an option returns to manual. */
   optionSort?: 'manual' | 'name-asc' | 'name-desc';
+  /** select/multi_select/status: a decorative drawn icon per option, keyed by
+   * option id, as «Name» or «Name:colour» (the database icon format). */
+  optionIcons?: Record<string, string>;
   dateTimeZone?: string;
   uniqueIdPrefix?: string;
   uniqueIdPadding?: number;

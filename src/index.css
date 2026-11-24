@@ -8993,6 +8993,24 @@ tr:hover .ai-cell-button,
   flex: 1;
   min-width: 0;
 }
+.option-edit-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+/* A select option's decorative icon: before its name in chips and lists. */
+.option-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  line-height: 0;
+}
+.chip > .option-icon {
+  margin-right: 4px;
+}
+.option-icon-popover .database-icon-picker {
+  border: 0;
+  border-radius: 0;
+}
 .option-edit-heading {
   margin: 6px 2px 2px;
   padding: 8px 6px 4px;

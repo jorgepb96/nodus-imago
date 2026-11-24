@@ -539,12 +539,13 @@ export class Repository {
   }
   updateColumn(id: string, name?: string, config?: DatabaseColumnConfig) {
     const c = this.column(id);
-    // Only the option order changed (optionSort): nothing to recompute.
-    const { optionSort: _before, ...kept } = c.config;
-    const { optionSort: _after, ...next } = config ?? c.config;
+    // Only how the options look changed (their order, their icons): nothing
+    // to recompute.
+    const { optionSort: sortBefore, optionIcons: iconsBefore, ...kept } = c.config;
+    const { optionSort: sortAfter, optionIcons: iconsAfter, ...next } = config ?? c.config;
     const layoutOnly =
       !!config &&
-      _before !== _after &&
+      (sortBefore !== sortAfter || JSON.stringify(iconsBefore ?? {}) !== JSON.stringify(iconsAfter ?? {})) &&
       (name == null || name === c.name) &&
       JSON.stringify(kept) === JSON.stringify(next);
     if (c.type === "rollup" && config)
@@ -884,13 +885,23 @@ export class Repository {
       const names = new Set(detail.columns.map((c) => c.name));
       let name = `${column.name} (${copy})`;
       for (let n = 2; names.has(name); n++) name = `${column.name} (${copy} ${n})`;
+      const map = new Map(column.options.map((o) => [o.id, uuid()]));
+      // Option icons follow their options to the new ids.
+      const config = column.config.optionIcons
+        ? {
+            ...column.config,
+            optionIcons: Object.fromEntries(
+              Object.entries(column.config.optionIcons).flatMap(([oid, icon]) =>
+                map.has(oid) ? [[map.get(oid)!, icon]] : [],
+              ),
+            ),
+          }
+        : column.config;
       this.db
         .prepare("INSERT INTO db_columns VALUES(?,?,?,?,?,?,?,?)")
-        .run(copyId, column.databaseId, name, column.type, column.position + 1, JSON.stringify(column.config), at, at);
-      const map = new Map<string, string>();
+        .run(copyId, column.databaseId, name, column.type, column.position + 1, JSON.stringify(config), at, at);
       for (const o of column.options) {
-        const optionId = uuid();
-        map.set(o.id, optionId);
+        const optionId = map.get(o.id)!;
         this.db
           .prepare("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)")
           .run(optionId, column.databaseId, copyId, o.label, o.color, o.position, at, at);

@@ -2,10 +2,11 @@
 // rename it, delete it (the caller confirms) and pick its colour from a
 // predefined palette or any colour the user chooses.
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { ArrowDownAZ, ArrowUpZA, Check, Hand, Trash2 } from "lucide-react";
+import { ArrowDownAZ, ArrowUpZA, Check, ChevronRight, Hand, Shapes, Trash2 } from "lucide-react";
 import type { DatabaseColumnConfig, DatabaseSelectOption } from "../../shared/databases";
 import { useT } from "../i18n";
 import { CriteriaPopover } from "./CriteriaSelect";
+import { DatabaseIconPicker, OptionIcon } from "./DatabaseIcon";
 
 /** Colour shown for an option without one (the chips' default). */
 export const DEFAULT_OPTION_COLOR = "#6366f1";
@@ -47,6 +48,8 @@ const same = (a: string | null, b: string | null) =>
 export function OptionEditMenu({
   anchor,
   option,
+  icon,
+  onIcon,
   sort,
   onSort,
   onRename,
@@ -56,6 +59,9 @@ export function OptionEditMenu({
 }: {
   anchor: RefObject<HTMLElement>;
   option: DatabaseSelectOption;
+  /** The option's decorative icon («Name:colour») and how to change it. */
+  icon: string | null;
+  onIcon: (icon: string | null) => Promise<void>;
   /** The order of the whole list, chosen here too. */
   sort: OptionSort;
   onSort: (sort: OptionSort) => Promise<void>;
@@ -70,7 +76,9 @@ export function OptionEditMenu({
     [custom, setCustom] = useState(option.color ?? DEFAULT_OPTION_COLOR),
     customTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     // The name last saved: blur, Enter and closing the menu all commit it, once.
-    committed = useRef(option.label);
+    committed = useRef(option.label),
+    iconAnchor = useRef<HTMLButtonElement>(null),
+    [picking, setPicking] = useState(false);
   useEffect(() => {
     setName(option.label);
     committed.current = option.label;
@@ -121,6 +129,32 @@ export function OptionEditMenu({
         <Trash2 size={15} />
         {t("Eliminar")}
       </button>
+      <button
+        ref={iconAnchor}
+        type="button"
+        className="option-edit-item"
+        aria-expanded={picking}
+        onClick={() => setPicking(!picking)}
+      >
+        {icon ? <OptionIcon value={icon} size={15} /> : <Shapes size={15} />}
+        <span className="option-edit-label">{t("Icono")}</span>
+        <small className="option-edit-hint">{t(icon ? "Cambiar" : "Ninguno")}</small>
+        <ChevronRight size={14} />
+      </button>
+      {picking && (
+        <CriteriaPopover
+          anchor={iconAnchor}
+          onClose={() => setPicking(false)}
+          width={340}
+          label={t("Icono de la opción")}
+          className="sidebar-db-icon-popover option-icon-popover"
+        >
+          <header>
+            <strong>{t("Icono de la opción")}</strong>
+          </header>
+          <DatabaseIconPicker value={icon} onChange={(next) => void attempt(() => onIcon(next))} />
+        </CriteriaPopover>
+      )}
       <div className="option-edit-heading">{t("Ordenar")}</div>
       {SORTS.map(({ id, label, icon: Icon }) => (
         <button
