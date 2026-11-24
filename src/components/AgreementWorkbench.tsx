@@ -1529,13 +1529,10 @@ export function AgreementWorkbench({
           )}
           {tab === "method" && <Methodology />}
         </div>
-        <footer>
+        <footer className="agreement-footer">
           <p className="muted">
             {t("Cálculo local · sin llamadas a modelos ni APIs")}
           </p>
-          <Button disabled={busy} onClick={onClose}>
-            {t("Cerrar")}
-          </Button>
           <Button
             primary
             disabled={!validSelection || busy}
@@ -1553,6 +1550,9 @@ export function AgreementWorkbench({
                 ? "Recalcular con filtros actuales"
                 : "Calcular concordancia",
             )}
+          </Button>
+          <Button disabled={busy} onClick={onClose}>
+            {t("Cerrar")}
           </Button>
         </footer>
       </div>

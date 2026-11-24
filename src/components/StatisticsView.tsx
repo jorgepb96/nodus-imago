@@ -247,7 +247,9 @@ export function StatisticsView({
           </Button>
         </header>
         {saved === null ? (
-          <Spinner />
+          <div className="stats-list-loading" role="status">
+            <Spinner />
+          </div>
         ) : saved.length ? (
           <ul>
             {saved.map((s) => {

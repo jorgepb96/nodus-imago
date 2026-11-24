@@ -1653,14 +1653,15 @@ dialog,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   margin-top: 24px;
 }
+/* Takes the whole row up to the grid/list switch, 16px short of it. */
 .database-filter {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 1 340px;
+  flex: 1 1 auto;
   min-width: 0;
   padding: 0 10px;
   border: 1px solid var(--line);
@@ -2476,12 +2477,45 @@ thead th:last-child {
 .modal.wide {
   width: min(1000px, calc(100vw - 70px));
 }
+/* The agreement window keeps one size whatever tab is open (the full height
+   the setup tab reaches) and only its body scrolls: header, tabs and the
+   button strip stay in place. */
+.modal[open]:has(> .modal-content > .agreement-workbench) {
+  display: flex;
+  flex-direction: column;
+  height: min(85vh, calc(100vh - 48px));
+  overflow: hidden;
+}
+.modal-content:has(> .agreement-workbench) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
 .agreement-workbench {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+}
+.agreement-workbench > .agreement-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.agreement-workbench > footer.agreement-footer {
+  flex-shrink: 0;
+  padding: 10px var(--modal-inset);
+  background: linear-gradient(var(--surface), var(--surface)), var(--panel);
 }
 .agreement-tabs {
+  flex-shrink: 0;
   padding: 0 22px;
   overflow-x: auto;
+}
+.agreement-workbench > .agreement-notice {
+  flex-shrink: 0;
 }
 .agreement-tabs button {
   flex-shrink: 0;
@@ -6455,12 +6489,18 @@ body.resizing-column * {
 .stats-list li button.active > svg {
   color: var(--accent);
 }
-.stats-list > p,
-.stats-list > .spinner {
+.stats-list > p {
   margin: 0;
   padding: 14px;
   font-size: 11px;
   line-height: 1.5;
+}
+.stats-list-loading {
+  display: grid;
+  place-items: center;
+  min-height: 64px;
+  padding: 14px;
+  color: var(--muted);
 }
 .stats-main {
   min-width: 0;
@@ -8015,16 +8055,21 @@ body:has(.tour-layer.is-tutorial) .record-image-tools {
 .historical-date-period.certainty-uncertain, .historical-date-period.is-unread { color: #b45309; background: #fef3c7; border-color: #f59e0b66; }
 :root.dark .historical-date-period.certainty-uncertain, :root.dark .historical-date-period.is-unread { color: #fbbf24; background: #f59e0b1f; }
 .historical-date-period.certainty-inferred { font-style: italic; }
-.period-editor { display: flex; flex-direction: column; gap: 12px; padding: 14px; font-size: 12.5px; }
-.period-editor-years { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.period-editor-years label, .period-editor-certainty { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); }
-.period-editor-years input { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); font-variant-numeric: tabular-nums; }
-.period-editor-certainty { flex-direction: row; flex-wrap: wrap; gap: 4px 12px; border: 0; padding: 0; margin: 0; }
-.period-editor-certainty legend { width: 100%; margin-bottom: 4px; }
-.period-editor-certainty label { display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-size: 12.5px; }
-.period-editor-error { color: #dc2626; font-size: 11.5px; }
-.period-editor footer { display: flex; align-items: center; gap: 6px; }
+/* Period editor in the 320px popover: the two year fields share the width
+   (minmax(0, 1fr) and width: 100%, so an input's intrinsic size never pushes
+   the popover into a horizontal scroll), certainty in a tidy 2×2 grid. */
+.period-editor { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 16px; font-size: 12.5px; }
+.period-editor .hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.period-editor-years { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.period-editor-years label { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.period-editor-years input { width: 100%; height: 32px; padding: 0 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.period-editor-certainty { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.period-editor-certainty legend { grid-column: 1 / -1; padding: 0; margin-bottom: 6px; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+.period-editor-certainty label { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--text); font-size: 12.5px; cursor: pointer; }
+.period-editor-error { margin: 0; color: #dc2626; font-size: 11.5px; }
+.period-editor footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
 .period-editor footer .spacer { flex: 1; }
+.period-editor footer .button { min-height: 30px; padding: 5px 12px; }
 .timeline-period.certainty-approx, .timeline-period.certainty-uncertain { color: var(--muted); }
 
 /* Annotated regions: badges on the gallery and the record image. */
@@ -8386,6 +8431,10 @@ body.is-resizing-side { cursor: col-resize; user-select: none; }
 .detail-compare { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #ffffff26; border-radius: 8px; color: #e5e5e5; }
 .detail-compare:hover { background: #ffffff10; }
 .detail-status small { display: block; margin-top: 4px; color: #8b8b94; font-size: 11.5px; line-height: 1.45; }
+/* Searching: a spinner centred above the message, so the wait reads at a glance. */
+.detail-status.is-loading { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 0; text-align: center; }
+.detail-status.is-loading > .spin { color: #e5e5e5; }
+.detail-status.is-loading small { margin-top: 0; }
 .detail-results.is-loading { opacity: 0.4; pointer-events: none; transition: opacity 0.2s; }
 .detail-results { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .detail-results button { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 4px; border-radius: 8px; text-align: left; color: inherit; }
@@ -9300,10 +9349,14 @@ tr:hover .ai-cell-button,
   padding: var(--modal-inset);
   color: var(--muted);
 }
+/* Opaque even above the image viewer, whose --surface is a translucent white:
+   the surface tint is laid over the solid panel colour. Only a slim band. */
 .modal footer.record-preview-footer {
   position: sticky;
   bottom: 0;
   z-index: 2;
+  padding: 10px var(--modal-inset);
+  background: linear-gradient(var(--surface), var(--surface)), var(--panel);
 }
 .record-strip {
   position: sticky;

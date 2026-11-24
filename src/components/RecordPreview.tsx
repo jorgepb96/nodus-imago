@@ -128,11 +128,11 @@ export function RecordPreview({
           </div>
           {onOpenRecord && (
             <footer className="record-preview-footer">
-              <Button onClick={onClose}>{t("Cerrar")}</Button>
               <Button primary onClick={() => onOpenRecord(row.id)}>
                 <SquareArrowOutUpRight size={14} />
                 {t("Abrir registro")}
               </Button>
+              <Button onClick={onClose}>{t("Cerrar")}</Button>
             </footer>
           )}
         </>
