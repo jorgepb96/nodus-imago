@@ -508,9 +508,11 @@ function OptionPicker({
   const matches = open
     ? shown(column.options).filter((o) => !needle || fold(o.label).includes(needle))
     : [];
-  // Selected options first, so a long list never hides what the cell holds.
-  // A short list keeps its own order, the one its options are dragged into.
-  const reorderable = editable && !needle && column.options.length <= 10;
+  // A list drawn whole keeps its own order, the one its options are dragged
+  // into (the cell's chips already show what it holds). Only a vocabulary too
+  // long to draw puts the selected options first, so they are never cut off;
+  // there, and while searching, options are not dragged.
+  const reorderable = editable && !needle && column.options.length <= OPTION_RENDER_LIMIT;
   const ordered = reorderable
     ? matches
     : [
