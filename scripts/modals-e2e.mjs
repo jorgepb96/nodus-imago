@@ -49,14 +49,29 @@ async function inspect(name) {
       })
       .map((el) => {
         const b = el.getBoundingClientRect();
+        // What is really on screen: a window whose body scrolls on its own
+        // clips the controls scrolled past its edges (they sit under the
+        // footer, out of sight), so each one is cut by the scrolling
+        // containers between it and the window.
+        let top = b.top,
+          bottom = b.bottom;
+        for (let p = el.parentElement; p && p !== d; p = p.parentElement)
+          if (/auto|scroll|hidden|clip/.test(getComputedStyle(p).overflowY)) {
+            const c = p.getBoundingClientRect();
+            top = Math.max(top, c.top);
+            bottom = Math.min(bottom, c.bottom);
+          }
         return {
           label: (el.getAttribute("aria-label") || el.textContent || el.tagName)
             .trim()
             .slice(0, 90),
           left: b.left - r.left,
           right: r.right - b.right,
-          bottom: r.bottom - b.bottom,
-          visible: b.bottom > (header?.bottom ?? r.top) && b.top < r.bottom,
+          bottom: r.bottom - bottom,
+          visible:
+            bottom > top &&
+            bottom > (header?.bottom ?? r.top) &&
+            top < r.bottom,
         };
       });
     return {
