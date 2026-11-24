@@ -107,7 +107,8 @@ try {
     columnId: rich.id,
     value: "# Fuente\n\n- Padre\n  - Hijo\n\n**Descripción histórica**",
   });
-  await a.call("updateSettings", { mode: "dark" });
+  // A device preference other than the default (remote APIs are on by default).
+  await a.call("updateSettings", { mode: "dark", remoteEnabled: false });
   await a.call("updateConfigure", {
     automaticChecks: false,
     autoDownload: false,
