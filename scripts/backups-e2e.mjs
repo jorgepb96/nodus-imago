@@ -107,8 +107,14 @@ try {
     columnId: rich.id,
     value: "# Fuente\n\n- Padre\n  - Hijo\n\n**Descripción histórica**",
   });
-  // A device preference other than the default (remote APIs are on by default).
-  await a.call("updateSettings", { mode: "dark", remoteEnabled: false });
+  // Device preferences other than the defaults (remote APIs are on by
+  // default). The custom provider points at this computer, so its key is
+  // accepted with remote APIs off; nothing is ever sent to it.
+  await a.call("updateSettings", {
+    mode: "dark",
+    remoteEnabled: false,
+    apiProfiles: { custom: { baseUrl: "http://127.0.0.1:9/v1", models: [] } },
+  });
   await a.call("updateConfigure", {
     automaticChecks: false,
     autoDownload: false,

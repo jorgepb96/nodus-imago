@@ -92,7 +92,10 @@ export function RecordPanel({
   // unless an inner control or a window opened over the panel took it.
   useEffect(() => {
     const d = dialog.current!;
-    d.show();
+    // Opened from another window (a trial's review list, say), it goes above
+    // it as a modal one: below a modal window it would be inert.
+    if (document.querySelector("dialog:modal")) d.showModal();
+    else d.show();
     const cancel = (e: Event) => {
       e.preventDefault();
       closeRef.current();
