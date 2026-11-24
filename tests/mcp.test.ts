@@ -212,7 +212,8 @@ test("server: loopback only, a token, the settings file outside the collection",
   assert.equal(status.config.access, "read", "read only unless granted");
   assert.ok(status.token.length >= 40);
   const stat = await fs.stat(path.join(root, "mcp.json"));
-  assert.equal(stat.mode & 0o777, 0o600);
+  // POSIX permissions; Windows protects the profile folder with its own ACLs.
+  if (process.platform !== "win32") assert.equal(stat.mode & 0o777, 0o600);
   const stored = JSON.parse(await fs.readFile(path.join(root, "mcp.json"), "utf8"));
   assert.equal(stored.token, status.token);
   // Nothing about MCP inside the collection (what backups copy).
