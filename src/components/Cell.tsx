@@ -519,11 +519,12 @@ function OptionPicker({
   const matches = open
     ? shown(column.options).filter((o) => !needle || fold(o.label).includes(needle))
     : [];
-  // A list drawn whole keeps its own order, the one its options are dragged
-  // into (the cell's chips already show what it holds). Only a vocabulary too
-  // long to draw puts the selected options first, so they are never cut off;
-  // there, and while searching, options are not dragged.
-  const reorderable = editable && !needle && column.options.length <= OPTION_RENDER_LIMIT;
+  // An editable list keeps its own order, the one its options are dragged
+  // into, and is drawn whole however long it is (the cell's chips already show
+  // what it holds). While searching, and where options cannot be edited, the
+  // selected ones come first and a long list is drawn in part.
+  const reorderable = editable && !needle;
+  const limit = reorderable ? Infinity : OPTION_RENDER_LIMIT;
   const ordered = reorderable
     ? matches
     : [
@@ -578,7 +579,7 @@ function OptionPicker({
             />
           )}
           {editError && <p className="annotation-error" role="alert">{t(editError)}</p>}
-          {ordered.slice(0, OPTION_RENDER_LIMIT).map((o) => (
+          {ordered.slice(0, limit).map((o) => (
             <div
               key={o.id}
               className={`option-row${editable ? " is-editable" : ""}${dragged === o.id ? " is-dragged" : ""}${
@@ -693,9 +694,9 @@ function OptionPicker({
               }}
             />
           )}
-          {ordered.length > OPTION_RENDER_LIMIT && (
+          {ordered.length > limit && (
             <p className="muted">
-              {(ordered.length - OPTION_RENDER_LIMIT).toLocaleString()}{" "}
+              {(ordered.length - limit).toLocaleString()}{" "}
               {t("opciones más: escribe para filtrar")}
             </p>
           )}
