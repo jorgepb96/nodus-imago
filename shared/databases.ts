@@ -163,6 +163,13 @@ export interface DatabaseColumnConfig {
   numberDecimals?: number;
   progressMaximum?: number;
   dateIncludeTime?: boolean;
+  /** select/multi_select/status: how the option list is ordered — by hand
+   * (their positions, the default) or by name. Choosing a name order also
+   * rewrites the positions; dragging an option returns to manual. */
+  optionSort?: 'manual' | 'name-asc' | 'name-desc';
+  /** select/multi_select/status: a decorative drawn icon per option, keyed by
+   * option id, as «Name» or «Name:colour» (the database icon format). */
+  optionIcons?: Record<string, string>;
   dateTimeZone?: string;
   uniqueIdPrefix?: string;
   uniqueIdPadding?: number;

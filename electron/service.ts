@@ -492,7 +492,7 @@ export class Service {
       case "reorderColumns":
         return this.repo.reorderColumns(input.databaseId, input.columnIds);
       case "saveOptions":
-        return this.repo.saveOptions(input.columnId, input.options);
+        return this.repo.saveOptions(input.columnId, input.options, { dropFromCells: input.dropFromCells });
       case "createRow":
         return this.repo.createRow(input.databaseId);
       case "createRows":

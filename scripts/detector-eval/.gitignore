@@ -1,0 +1,7 @@
+# Runs and contact sheets show collection images: never commit them.
+*.json
+*.jpg
+sample.txt
+sheets/
+venv/
+cache/

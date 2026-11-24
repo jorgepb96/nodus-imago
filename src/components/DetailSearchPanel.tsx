@@ -7,6 +7,7 @@ import { ArrowLeft, Columns2, ScanSearch } from "lucide-react";
 import type { DetailMatch } from "../../shared/detailSearch";
 import { useT } from "../i18n";
 import { RecordPreview } from "./RecordPreview";
+import { Spinner } from "./ui";
 
 const preview = (id: string, revision?: string) => `imago://asset/${id}/preview${revision ? "?v=" + encodeURIComponent(revision) : ""}`;
 
@@ -96,13 +97,16 @@ export function DetailSearchPanel({
           : "Compara el detalle con cada imagen entera. Funciona mejor cuando el detalle ocupa buena parte de la imagen.")}
       </p>
       {loading && (
-        <p className="detail-status" role="status">
-          {t(inside ? "Buscando dentro de las imágenes…" : "Buscando…")}
-          {inside && elapsed >= 3 && ` ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`}
+        <div className="detail-status is-loading" role="status">
+          <Spinner />
+          <span>
+            {t(inside ? "Buscando dentro de las imágenes…" : "Buscando…")}
+            {inside && elapsed >= 3 && ` ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`}
+          </span>
           {inside && elapsed >= 3 && (
             <small>{t("La primera vez puede tardar unos minutos: las partes de cada imagen se guardan y las búsquedas siguientes son inmediatas.")}</small>
           )}
-        </p>
+        </div>
       )}
       {error && <p className="annotation-error">{t(error)}</p>}
       {results && !loading && onCompare && results.length > 0 && (

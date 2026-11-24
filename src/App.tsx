@@ -160,7 +160,8 @@ import {
 import { decodeDatabaseDate } from "../shared/databaseProperties";
 import { ROLLUP_FUNCTIONS } from "../shared/databases";
 import { RecordPanel } from "./components/RecordPanel";
-import { DatabaseIcon, DatabaseIconPicker } from "./components/DatabaseIcon";
+import { DatabaseIcon, DatabaseIconPicker, OptionIcon } from "./components/DatabaseIcon";
+import { optionIconValue } from "../shared/databaseIcons";
 import { Settings, Jobs } from "./components/Settings";
 import { Home } from "./components/Home";
 import { ImagoMark } from "./components/ImagoMark";
@@ -829,6 +830,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     const next = await api.call("detail", { id });
     setDetail((current) => (current?.database.id === id ? next : current));
     setAllDetails((all) => all.map((d) => (d.database.id === id ? next : d)));
+    setRecordDetail((current) => (current?.database.id === id ? next : current));
     refreshHeritage();
     refresh();
   };
@@ -1085,6 +1087,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         wrap={area !== "search" && prefs.wrap.includes(c.id)}
         column={c}
         value={row.cells[c.id] ?? null}
+        onOptionsChanged={() => void perform(() => reloadDetail(c.databaseId))}
         onSave={(v) =>
           perform(async () => {
             await api.call("setCell", {
@@ -1741,7 +1744,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             c.type === "multi_select"
               ? decodeMultiSelect(row.cells[c.id] ?? null)
               : [row.cells[c.id]];
-          return c.options.filter((o) => selected.includes(o.id));
+          return c.options
+            .filter((o) => selected.includes(o.id))
+            .map((o) => ({ ...o, icon: optionIconValue(c.config, o.id) }));
         })
         .slice(0, 4) ?? []
     );
@@ -3351,6 +3356,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                     } as React.CSSProperties
                                   }
                                 >
+                                  <OptionIcon value={o.icon} size={11} />
                                   {o.label}
                                 </span>
                               ))}
@@ -4709,6 +4715,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             setRecordStrip(null);
           }}
           onChanged={refresh}
+          onOptionsChanged={() => void perform(() => reloadDetail(recordDetail.database.id))}
           onSimilar={similar}
           strip={recordStrip}
           fullscreen={recordFullscreen}

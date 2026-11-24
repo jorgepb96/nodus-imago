@@ -539,6 +539,15 @@ export class Repository {
   }
   updateColumn(id: string, name?: string, config?: DatabaseColumnConfig) {
     const c = this.column(id);
+    // Only how the options look changed (their order, their icons): nothing
+    // to recompute.
+    const { optionSort: sortBefore, optionIcons: iconsBefore, ...kept } = c.config;
+    const { optionSort: sortAfter, optionIcons: iconsAfter, ...next } = config ?? c.config;
+    const layoutOnly =
+      !!config &&
+      (sortBefore !== sortAfter || JSON.stringify(iconsBefore ?? {}) !== JSON.stringify(iconsAfter ?? {})) &&
+      (name == null || name === c.name) &&
+      JSON.stringify(kept) === JSON.stringify(next);
     if (c.type === "rollup" && config)
       validateRollup(this, c.databaseId, config);
     this.db.transaction(() => {
@@ -547,6 +556,7 @@ export class Repository {
           "UPDATE db_columns SET name=?,config_json=?,updated_at=? WHERE id=?",
         )
         .run(name ?? c.name, JSON.stringify(config ?? c.config), now(), id);
+      if (layoutOnly) return;
       // Formulas may name the property; the search text holds values only,
       // so a rename alone leaves it as it is. Record vectors that include the
       // old name are refreshed as their records change.
@@ -875,13 +885,23 @@ export class Repository {
       const names = new Set(detail.columns.map((c) => c.name));
       let name = `${column.name} (${copy})`;
       for (let n = 2; names.has(name); n++) name = `${column.name} (${copy} ${n})`;
+      const map = new Map(column.options.map((o) => [o.id, uuid()]));
+      // Option icons follow their options to the new ids.
+      const config = column.config.optionIcons
+        ? {
+            ...column.config,
+            optionIcons: Object.fromEntries(
+              Object.entries(column.config.optionIcons).flatMap(([oid, icon]) =>
+                map.has(oid) ? [[map.get(oid)!, icon]] : [],
+              ),
+            ),
+          }
+        : column.config;
       this.db
         .prepare("INSERT INTO db_columns VALUES(?,?,?,?,?,?,?,?)")
-        .run(copyId, column.databaseId, name, column.type, column.position + 1, JSON.stringify(column.config), at, at);
-      const map = new Map<string, string>();
+        .run(copyId, column.databaseId, name, column.type, column.position + 1, JSON.stringify(config), at, at);
       for (const o of column.options) {
-        const optionId = uuid();
-        map.set(o.id, optionId);
+        const optionId = map.get(o.id)!;
         this.db
           .prepare("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)")
           .run(optionId, column.databaseId, copyId, o.label, o.color, o.position, at, at);
@@ -964,6 +984,7 @@ export class Repository {
   saveOptions(
     columnId: string,
     input: { id?: string; label: string; color: string | null }[],
+    { dropFromCells = false }: { dropFromCells?: boolean } = {},
   ) {
     const column = this.column(columnId);
     if (!columnTypeHasOptions(column.type))
@@ -983,22 +1004,46 @@ export class Repository {
     const removed = column.options.filter(
       (o) => !input.some((n) => n.id === o.id),
     );
-    for (const option of removed) {
-      const rows = this.db
-        .prepare("SELECT value_text FROM db_cells WHERE column_id=?")
-        .all(columnId) as { value_text: string }[];
-      if (
-        rows.some(
-          (r) =>
-            r.value_text === option.id ||
-            decodeMultiSelect(r.value_text).includes(option.id),
-        )
-      )
-        throw new Error(
-          `La opción «${option.label}» está en uso. Reasigna sus registros antes de eliminarla.`,
-        );
+    const gone = new Set(removed.map((o) => o.id));
+    // Order and colour alone change no value, formula or search text: the
+    // whole-database recompute and reindex below are only for names.
+    const relabelled =
+      gone.size > 0 ||
+      input.some((o) => !o.id || column.options.find((x) => x.id === o.id)?.label !== o.label.trim());
+    const holding = (value: string) =>
+      column.type === "multi_select"
+        ? decodeMultiSelect(value).some((id) => gone.has(id))
+        : gone.has(value);
+    // Cells holding a removed option: refused, unless the user confirmed that
+    // the option is to be taken out of those records.
+    const inUse = gone.size
+      ? (
+          this.db
+            .prepare("SELECT row_id,value_text FROM db_cells WHERE column_id=?")
+            .all(columnId) as { row_id: string; value_text: string }[]
+        ).filter((r) => holding(r.value_text))
+      : [];
+    if (inUse.length && !dropFromCells) {
+      const option = removed.find((o) =>
+        inUse.some((r) => r.value_text === o.id || decodeMultiSelect(r.value_text).includes(o.id)),
+      )!;
+      throw new Error(
+        `La opción «${option.label}» está en uso. Reasigna sus registros antes de eliminarla.`,
+      );
     }
     this.db.transaction(() => {
+      for (const r of inUse) {
+        const kept =
+          column.type === "multi_select"
+            ? decodeMultiSelect(r.value_text).filter((id) => !gone.has(id))
+            : [];
+        this.rawCell(
+          r.row_id,
+          columnId,
+          kept.length ? encodeMultiSelect(kept) : null,
+          column.type,
+        );
+      }
       this.db
         .prepare("DELETE FROM db_select_options WHERE column_id=?")
         .run(columnId);
@@ -1016,6 +1061,7 @@ export class Repository {
             now(),
           ),
       );
+      if (!relabelled) return;
       this.recompute(column.databaseId);
       this.rebuildText(column.databaseId);
     })();

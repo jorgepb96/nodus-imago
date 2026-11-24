@@ -280,6 +280,15 @@ export function isDatabaseIconValue(value: string): boolean {
   return !rest.length && known.has(name) && (color === undefined || (DATABASE_ICON_COLORS as readonly string[]).includes(color));
 }
 
+/** The icon chosen for a select option, if any (only known icons). */
+export function optionIconValue(
+  config: { optionIcons?: Record<string, string> } | null | undefined,
+  optionId: string,
+): string | null {
+  const value = config?.optionIcons?.[optionId];
+  return value && isDatabaseIconValue(value) ? value : null;
+}
+
 /** Icons whose name or words contain every word searched (accents ignored). */
 export function searchDatabaseIcons(query: string): string[] {
   const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();

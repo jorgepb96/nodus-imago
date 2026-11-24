@@ -808,6 +808,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
             .strict(),
         )
         .max(10000),
+      dropFromCells: z.boolean().optional(),
     })
     .strict(),
   createRow: z.object({ databaseId: id }).strict(),

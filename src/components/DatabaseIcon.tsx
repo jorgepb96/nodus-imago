@@ -203,6 +203,7 @@ import {
   DATABASE_ICON_COLORS,
   DATABASE_ICON_GROUPS,
   formatDatabaseIcon,
+  isDatabaseIconValue,
   parseDatabaseIcon,
   searchDatabaseIcons,
   type DatabaseIconColor,
@@ -426,6 +427,16 @@ export function DatabaseIcon({ icon, kind, size = 15 }: { icon?: string | null; 
       aria-hidden
     >
       <Icon size={size} strokeWidth={1.9} />
+    </span>
+  );
+}
+
+/** A select option's decorative icon, in its colour; nothing while none is chosen. */
+export function OptionIcon({ value, size = 12 }: { value?: string | null; size?: number }) {
+  if (!value || !isDatabaseIconValue(value)) return null;
+  return (
+    <span className="option-icon">
+      <DatabaseIcon icon={value} size={size} />
     </span>
   );
 }

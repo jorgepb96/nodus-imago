@@ -33,6 +33,60 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.7.0",
+    date: "2026-11-24",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Cada opción de una propiedad de selección tiene un botón «···» en la propia celda: cambiar el nombre, elegir un color (una paleta con nombre o cualquier color) y eliminarla con confirmación, que la quita de los registros que la tienen.",
+        en: "Every option of a select property has a ··· button in the cell itself: rename it, pick a colour (a named palette or any colour) and delete it after confirming, which removes it from the records that hold it.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Las opciones se reordenan arrastrándolas, en listas de cualquier tamaño, y se pueden ordenar por nombre (A → Z o Z → A) o a mano; arrastrar vuelve al orden manual.",
+        en: "Options are reordered by dragging them, in lists of any length, and can be sorted by name (A → Z or Z → A) or by hand; dragging returns to the manual order.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Cada opción puede llevar un icono decorativo con su propio color, elegido con el mismo selector que los iconos de las bases de datos; se ve en los chips de las celdas, en la lista de opciones y en las tarjetas.",
+        en: "Each option can carry a decorative icon with its own colour, chosen with the same picker as database icons; it shows in the cells' chips, the option list and the cards.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "Reordenar opciones, cambiar su color o su icono es inmediato: ya no se recalcula toda la base de datos.",
+        en: "Reordering options or changing their colour or icon is immediate: the whole database is no longer recalculated.",
+      },
+      {
+        scope: "analysis",
+        category: "enhancement",
+        es: "La ventana de Concordancia mantiene el mismo tamaño en todas sus pestañas, con una franja de botones fina y siempre visible; «Calcular» va antes que «Cerrar».",
+        en: "The Agreement window keeps the same size in all its tabs, with a slim button strip that is always visible; Calculate comes before Close.",
+      },
+      {
+        scope: "visual",
+        category: "fix",
+        es: "La vista previa de un registro desde «Buscar» tiene una franja inferior fina y opaca, con «Abrir registro» antes que «Cerrar».",
+        en: "The record preview opened from Search has a slim, opaque bottom strip, with Open record before Close.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "El editor del periodo de una fecha histórica ya no se desborda: los años comparten el ancho y la certeza va en dos columnas.",
+        en: "The period editor of a historical date no longer overflows: the years share the width and the certainty sits in two columns.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Las estadísticas guardadas y la búsqueda de detalles muestran un indicador de carga centrado, y el filtro de la página de Bases de datos llega hasta los botones de vista.",
+        en: "Saved statistics and the detail search show a centred loading indicator, and the Databases page filter reaches the view buttons.",
+      },
+    ],
+  },
+  {
     version: "0.6.0",
     date: "2026-11-24",
     highlights: [
