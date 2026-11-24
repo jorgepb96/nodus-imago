@@ -1,12 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { Info } from "lucide-react";
+import { GripVertical, Info, MoreHorizontal, Trash2 } from "lucide-react";
 import {
   decodeMultiSelect,
   encodeMultiSelect,
   decodeCheckbox,
 } from "../../shared/databases";
 import { decodeDatabaseDate } from "../../shared/databaseProperties";
-import type { DatabaseColumn } from "../../shared/databases";
+import type { DatabaseColumn, DatabaseSelectOption } from "../../shared/databases";
 import { useT } from "../i18n";
 import { MarkdownView } from "./MarkdownView";
 import { RichTextEditor } from "./RichTextEditor";
@@ -17,6 +17,8 @@ import { HeritageIcon } from "./HeritageIcon";
 import { heritageScheme, isHeritageColumn, typology } from "../../shared/heritage";
 import { useHeritage } from "../heritageStore";
 import { HeritageAddFooter, HeritageOptionMeta } from "./HeritageCellParts";
+import { DEFAULT_OPTION_COLOR, OptionEditMenu } from "./OptionEditMenu";
+import { Button, Modal } from "./ui";
 
 /** Table text cells that open the expanded editor on click, as in Notion. */
 const EXPANDABLE_TYPES = ["title", "text", "rich_text", "ai"];
@@ -26,6 +28,7 @@ export function Cell({
   onSave,
   compact = false,
   wrap = false,
+  onOptionsChanged,
 }: {
   column: DatabaseColumn;
   value: string | null;
@@ -33,6 +36,9 @@ export function Cell({
   compact?: boolean;
   /** Table cell showing its whole text over several lines. */
   wrap?: boolean;
+  /** Select cells: their options can be renamed, recoloured, reordered and
+   * deleted from the list; called once the column's options changed. */
+  onOptionsChanged?: () => void;
 }) {
   const [draft, setDraft] = useState(value ?? ""),
     [busy, setBusy] = useState(false),
@@ -71,6 +77,7 @@ export function Cell({
         column={column}
         selected={selected}
         busy={busy}
+        onOptionsChanged={onOptionsChanged}
         onToggle={(id) =>
           void save(
             column.type === "multi_select"
@@ -348,17 +355,28 @@ function OptionPicker({
   selected,
   busy,
   onToggle,
+  onOptionsChanged,
 }: {
   column: DatabaseColumn;
   selected: string[];
   busy: boolean;
   onToggle: (id: string) => void;
+  onOptionsChanged?: () => void;
 }) {
   const t = useT(),
     [open, setOpen] = useState(false),
     [query, setQuery] = useState(""),
     picker = useRef<HTMLDetailsElement>(null),
     menu = useRef<HTMLDivElement>(null);
+  // Option editing: the «···» menu of one option, the deletion waiting for
+  // confirmation, the option being dragged and where it would land.
+  const [editing, setEditing] = useState<string | null>(null),
+    [deleting, setDeleting] = useState<DatabaseSelectOption | null>(null),
+    [deleteBusy, setDeleteBusy] = useState(false),
+    [editError, setEditError] = useState<string | null>(null),
+    [dragged, setDragged] = useState<string | null>(null),
+    [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null),
+    editAnchor = useRef<HTMLElement | null>(null);
   // Heritage elements carry the icon of their typology.
   const heritage = isHeritageColumn(column),
     elements = useHeritage(heritage ? column.id : null),
@@ -403,16 +421,59 @@ function OptionPicker({
       if (node.isConnected && node.matches(":popover-open")) node.hidePopover();
     };
   }, [open]);
+  // Heritage options are elements with their own records, edited elsewhere.
+  const editable = !!onOptionsChanged && !heritage;
+  // Edits run one after another on a working copy of the options, so a rename
+  // followed at once by a colour never saves over it with the stale list.
+  const working = useRef<DatabaseSelectOption[]>([]),
+    queue = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    working.current = [...column.options].sort((a, b) => a.position - b.position);
+  }, [column.options]);
+  const edit = (change: (list: DatabaseSelectOption[]) => DatabaseSelectOption[], dropFromCells = false) => {
+    const run = queue.current.then(async () => {
+      const next = change(working.current);
+      await window.imago.call("saveOptions", {
+        columnId: column.id,
+        options: next.map(({ id, label, color }) => ({ id, label, color })),
+        ...(dropFromCells ? { dropFromCells } : {}),
+      });
+      working.current = next;
+      onOptionsChanged?.();
+    });
+    queue.current = run.catch(() => undefined);
+    return run;
+  };
+  const patch = (id: string, change: Partial<DatabaseSelectOption>) =>
+    edit((list) => list.map((o) => (o.id === id ? { ...o, ...change } : o)));
+  const move = (id: string, target: string, after: boolean) => {
+    if (id === target) return;
+    setEditError(null);
+    edit((list) => {
+      const moving = list.find((o) => o.id === id);
+      const rest = list.filter((o) => o.id !== id);
+      const at = rest.findIndex((o) => o.id === target);
+      if (!moving || at < 0) return list;
+      rest.splice(after ? at + 1 : at, 0, moving);
+      return rest;
+    }).catch((e) => setEditError(e instanceof Error ? e.message : String(e)));
+  };
   const needle = fold(query.trim());
   const matches = open
     ? column.options.filter((o) => !needle || fold(o.label).includes(needle))
     : [];
   // Selected options first, so a long list never hides what the cell holds.
-  const ordered = [
-    ...matches.filter((o) => selected.includes(o.id)),
-    ...matches.filter((o) => !selected.includes(o.id)),
-  ];
+  // A short list keeps its own order, the one its options are dragged into.
+  const reorderable = editable && !needle && column.options.length <= 10;
+  const ordered = reorderable
+    ? matches
+    : [
+        ...matches.filter((o) => selected.includes(o.id)),
+        ...matches.filter((o) => !selected.includes(o.id)),
+      ];
+  const editingOption = editing ? column.options.find((o) => o.id === editing) : undefined;
   return (
+    <>
     <details
       ref={picker}
       className="option-picker"
@@ -432,7 +493,7 @@ function OptionPicker({
                   className="chip"
                   key={o.id}
                   style={
-                    { "--chip": o.color ?? "#6366f1" } as React.CSSProperties
+                    { "--chip": o.color ?? DEFAULT_OPTION_COLOR } as React.CSSProperties
                   }
                 >
                   {iconOf(o.id)}
@@ -457,15 +518,60 @@ function OptionPicker({
               onChange={(e) => setQuery(e.target.value)}
             />
           )}
+          {editError && <p className="annotation-error" role="alert">{t(editError)}</p>}
           {ordered.slice(0, OPTION_RENDER_LIMIT).map((o) => (
-            <label key={o.id}>
+            <div
+              key={o.id}
+              className={`option-row${editable ? " is-editable" : ""}${dragged === o.id ? " is-dragged" : ""}${
+                dropAt?.id === o.id ? (dropAt.after ? " drop-after" : " drop-before") : ""
+              }`}
+              onDragOver={(e) => {
+                if (!dragged || dragged === o.id) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                const r = e.currentTarget.getBoundingClientRect();
+                const after = e.clientY > r.top + r.height / 2;
+                if (dropAt?.id !== o.id || dropAt.after !== after) setDropAt({ id: o.id, after });
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropAt((d) => (d?.id === o.id ? null : d));
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragged && dropAt) move(dragged, dropAt.id, dropAt.after);
+                setDragged(null);
+                setDropAt(null);
+              }}
+            >
+              {reorderable && (
+                <span
+                  className="option-grip"
+                  draggable
+                  aria-hidden="true"
+                  data-tooltip={t("Arrastra para cambiar la posición")}
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", o.label);
+                    const row = e.currentTarget.parentElement;
+                    if (row) e.dataTransfer.setDragImage(row, 12, row.offsetHeight / 2);
+                    setDragged(o.id);
+                  }}
+                  onDragEnd={() => {
+                    setDragged(null);
+                    setDropAt(null);
+                  }}
+                >
+                  <GripVertical size={14} />
+                </span>
+              )}
+            <label>
               <input
                 type="checkbox"
                 checked={selected.includes(o.id)}
                 disabled={busy}
                 onChange={() => onToggle(o.id)}
               />
-              <i style={{ background: o.color ?? "#6366f1" }} />
+              <i style={{ background: o.color ?? DEFAULT_OPTION_COLOR }} />
               {iconOf(o.id)}
               {heritage ? (
                 <span className="option-label heritage-option">
@@ -493,7 +599,37 @@ function OptionPicker({
                 </button>
               )}
             </label>
+              {editable && (
+                <button
+                  type="button"
+                  className={`option-more${editing === o.id ? " is-open" : ""}`}
+                  aria-label={`${t("Editar opción")} ${o.label}`}
+                  aria-expanded={editing === o.id}
+                  onClick={(e) => {
+                    editAnchor.current = e.currentTarget;
+                    setEditError(null);
+                    setEditing(editing === o.id ? null : o.id);
+                  }}
+                >
+                  <MoreHorizontal size={15} />
+                </button>
+              )}
+            </div>
           ))}
+          {editingOption && (
+            <OptionEditMenu
+              anchor={editAnchor as React.RefObject<HTMLElement>}
+              option={editingOption}
+              onClose={() => setEditing(null)}
+              onRename={(label) => patch(editingOption.id, { label })}
+              onColor={(color) => patch(editingOption.id, { color })}
+              onDelete={() => {
+                setDeleting(editingOption);
+                setEditing(null);
+                setOpen(false);
+              }}
+            />
+          )}
           {ordered.length > OPTION_RENDER_LIMIT && (
             <p className="muted">
               {(ordered.length - OPTION_RENDER_LIMIT).toLocaleString()}{" "}
@@ -522,5 +658,38 @@ function OptionPicker({
         </div>
       )}
     </details>
+    {deleting && (
+      <Modal icon={Trash2} title={t("Eliminar opción")} onClose={() => !deleteBusy && setDeleting(null)}>
+        <div className="modal-body">
+          <h3>{deleting.label}</h3>
+          <p>
+            {t("¿Eliminar esta opción? Se quitará de todos los registros que la tienen. Esta operación no se puede deshacer.")}
+          </p>
+          {editError && <p className="annotation-error" role="alert">{t(editError)}</p>}
+        </div>
+        <footer>
+          <Button disabled={deleteBusy} onClick={() => setDeleting(null)}>
+            {t("Cancelar")}
+          </Button>
+          <Button
+            className="danger"
+            disabled={deleteBusy}
+            aria-busy={deleteBusy}
+            onClick={() => {
+              setDeleteBusy(true);
+              setEditError(null);
+              edit((list) => list.filter((o) => o.id !== deleting.id), true)
+                .then(() => setDeleting(null))
+                .catch((e) => setEditError(e instanceof Error ? e.message : String(e)))
+                .finally(() => setDeleteBusy(false));
+            }}
+          >
+            <Trash2 size={14} />
+            {t("Eliminar")}
+          </Button>
+        </footer>
+      </Modal>
+    )}
+    </>
   );
 }

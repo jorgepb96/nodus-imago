@@ -964,6 +964,7 @@ export class Repository {
   saveOptions(
     columnId: string,
     input: { id?: string; label: string; color: string | null }[],
+    { dropFromCells = false }: { dropFromCells?: boolean } = {},
   ) {
     const column = this.column(columnId);
     if (!columnTypeHasOptions(column.type))
@@ -983,22 +984,41 @@ export class Repository {
     const removed = column.options.filter(
       (o) => !input.some((n) => n.id === o.id),
     );
-    for (const option of removed) {
-      const rows = this.db
-        .prepare("SELECT value_text FROM db_cells WHERE column_id=?")
-        .all(columnId) as { value_text: string }[];
-      if (
-        rows.some(
-          (r) =>
-            r.value_text === option.id ||
-            decodeMultiSelect(r.value_text).includes(option.id),
-        )
-      )
-        throw new Error(
-          `La opción «${option.label}» está en uso. Reasigna sus registros antes de eliminarla.`,
-        );
+    const gone = new Set(removed.map((o) => o.id));
+    const holding = (value: string) =>
+      column.type === "multi_select"
+        ? decodeMultiSelect(value).some((id) => gone.has(id))
+        : gone.has(value);
+    // Cells holding a removed option: refused, unless the user confirmed that
+    // the option is to be taken out of those records.
+    const inUse = gone.size
+      ? (
+          this.db
+            .prepare("SELECT row_id,value_text FROM db_cells WHERE column_id=?")
+            .all(columnId) as { row_id: string; value_text: string }[]
+        ).filter((r) => holding(r.value_text))
+      : [];
+    if (inUse.length && !dropFromCells) {
+      const option = removed.find((o) =>
+        inUse.some((r) => r.value_text === o.id || decodeMultiSelect(r.value_text).includes(o.id)),
+      )!;
+      throw new Error(
+        `La opción «${option.label}» está en uso. Reasigna sus registros antes de eliminarla.`,
+      );
     }
     this.db.transaction(() => {
+      for (const r of inUse) {
+        const kept =
+          column.type === "multi_select"
+            ? decodeMultiSelect(r.value_text).filter((id) => !gone.has(id))
+            : [];
+        this.rawCell(
+          r.row_id,
+          columnId,
+          kept.length ? encodeMultiSelect(kept) : null,
+          column.type,
+        );
+      }
       this.db
         .prepare("DELETE FROM db_select_options WHERE column_id=?")
         .run(columnId);

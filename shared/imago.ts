@@ -815,6 +815,9 @@ export type Commands = {
     input: {
       columnId: string;
       options: { id?: string; label: string; color: string | null }[];
+      /** Removed options still in use are taken out of the records that hold
+       * them instead of refusing the change (the user confirmed it). */
+      dropFromCells?: boolean;
     };
     result: void;
   };

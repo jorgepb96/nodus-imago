@@ -8869,6 +8869,163 @@ tr:hover .ai-cell-button,
 .option-has-link {
   color: var(--accent);
 }
+/* Option rows: grip to drag them into place, the option itself, and a «···»
+   button that shows on hover (or while its menu is open). */
+.option-menu .option-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+}
+.option-menu .option-row:hover,
+.option-menu .option-row:focus-within {
+  background: var(--hover);
+}
+.option-menu .option-row > label {
+  flex: 1;
+  min-width: 0;
+}
+.option-menu .option-row > label:hover {
+  background: transparent;
+}
+.option-menu .option-row.is-editable > label {
+  padding-right: 4px;
+}
+.option-grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 26px;
+  margin-left: 2px;
+  margin-right: -6px;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: grab;
+  opacity: 0.55;
+}
+.option-row:hover .option-grip {
+  opacity: 1;
+}
+.option-grip:active {
+  cursor: grabbing;
+}
+.option-menu .option-more {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  border-radius: 5px;
+  color: var(--muted);
+  opacity: 0;
+}
+.option-row:hover .option-more,
+.option-row:focus-within .option-more,
+.option-more.is-open {
+  opacity: 1;
+}
+.option-menu .option-more:hover,
+.option-more.is-open {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+.option-row.is-dragged {
+  opacity: 0.45;
+}
+.option-row.drop-before::before,
+.option-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.option-row.drop-before::before {
+  top: -1px;
+}
+.option-row.drop-after::after {
+  bottom: -1px;
+}
+/* The «···» menu: name, delete and the colours. Nested in the option list, so
+   the list's own label/button rules are reset here. */
+.option-edit {
+  padding: 6px;
+  font-size: 12.5px;
+}
+.option-edit .option-edit-name {
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 9px;
+  font-size: 12.5px;
+}
+.option-edit .option-edit-error {
+  margin: 0 0 4px;
+  padding: 2px 4px;
+  color: #dc2626;
+  font-size: 11px;
+}
+.option-menu .option-edit .option-edit-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+.option-menu .option-edit .option-edit-item:hover,
+.option-menu .option-edit .option-edit-item:focus-visible {
+  background: var(--hover);
+}
+.option-edit .option-edit-item > svg:first-child {
+  color: var(--muted);
+}
+.option-edit-label {
+  flex: 1;
+  min-width: 0;
+}
+.option-edit-heading {
+  margin: 6px 2px 2px;
+  padding: 8px 6px 4px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.option-swatch {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--chip) 30%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--chip) 18%, var(--panel));
+}
+.option-edit-custom input[type="color"] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+.option-edit-custom input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.option-edit-custom input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 3px;
+}
 .option-link-input {
   width: 100%;
   margin: -2px 0 6px;

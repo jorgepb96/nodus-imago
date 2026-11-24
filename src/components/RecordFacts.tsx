@@ -125,6 +125,7 @@ export function RecordFacts({
   hidden = [],
   perform,
   onChanged,
+  onOptionsChanged = onChanged,
   onOpenRecord,
 }: {
   row: RecordRow;
@@ -135,6 +136,9 @@ export function RecordFacts({
   hidden?: string[];
   perform: Perform;
   onChanged: () => void;
+  /** A select property's options were edited from its cell (by default, the
+   * same refresh as a changed value). */
+  onOptionsChanged?: () => void;
   onOpenRecord?: (rowId: string) => void;
 }) {
   const t = useT(),
@@ -180,6 +184,7 @@ export function RecordFacts({
           <Cell
             column={c}
             value={row.cells[c.id] ?? null}
+            onOptionsChanged={onOptionsChanged}
             onSave={(v) =>
               perform(async () => {
                 await window.imago.call("setCell", {

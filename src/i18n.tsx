@@ -2747,6 +2747,14 @@ const en: Record<string, string> = {
   "Tres pasos, en este orden: Wikidata identifica cada elemento (enlace, tipología y coordenadas); OpenStreetMap sitúa lo que Wikidata no tiene; por último, lo que quede se sitúa en el centro de su localidad, como posición aproximada. Las búsquedas siguen en segundo plano en la lista de tareas; las propuestas se guardan hasta que las revisas.": "Three steps, in this order: Wikidata identifies each element (link, typology and coordinates); OpenStreetMap places what Wikidata lacks; last, whatever is left is placed at the centre of its town, as an approximate position. The searches go on in the background in the task list; the proposals are kept until you review them.",
   "Pausada al cerrar Imago: reanúdala cuando quieras, sigue donde se quedó.": "Paused when Imago closed: resume it whenever you like; it continues where it stopped.",
   "{error} Pausada: reanúdala cuando vuelva la conexión, sigue donde se quedó.": "{error} Paused: resume it when the connection is back; it continues where it stopped.",
+  "Editar opción": "Edit option",
+  Colores: "Colours",
+  Predeterminado: "Default",
+  "Elegir un color": "Choose a colour",
+  "Personalizado…": "Custom…",
+  "Arrastra para cambiar la posición": "Drag to change the position",
+  "Eliminar opción": "Delete option",
+  "¿Eliminar esta opción? Se quitará de todos los registros que la tienen. Esta operación no se puede deshacer.": "Delete this option? It will be removed from every record that has it. This cannot be undone.",
 };
 Object.assign(en, backendEn);
 const patterns = backendPatterns.map(([source, target]) => {

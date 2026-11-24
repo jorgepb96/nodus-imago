@@ -829,6 +829,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     const next = await api.call("detail", { id });
     setDetail((current) => (current?.database.id === id ? next : current));
     setAllDetails((all) => all.map((d) => (d.database.id === id ? next : d)));
+    setRecordDetail((current) => (current?.database.id === id ? next : current));
     refreshHeritage();
     refresh();
   };
@@ -1085,6 +1086,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         wrap={area !== "search" && prefs.wrap.includes(c.id)}
         column={c}
         value={row.cells[c.id] ?? null}
+        onOptionsChanged={() => void perform(() => reloadDetail(c.databaseId))}
         onSave={(v) =>
           perform(async () => {
             await api.call("setCell", {
@@ -4709,6 +4711,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             setRecordStrip(null);
           }}
           onChanged={refresh}
+          onOptionsChanged={() => void perform(() => reloadDetail(recordDetail.database.id))}
           onSimilar={similar}
           strip={recordStrip}
           fullscreen={recordFullscreen}

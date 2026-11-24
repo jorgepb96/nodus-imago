@@ -36,6 +36,7 @@ export function RecordPanel({
   detail,
   onClose,
   onChanged,
+  onOptionsChanged,
   onSimilar,
   onRestore,
   onOpenRecord,
@@ -51,6 +52,8 @@ export function RecordPanel({
   detail: DatabaseDetail;
   onClose: () => void;
   onChanged: () => void;
+  /** A select property's options were edited from one of its cells. */
+  onOptionsChanged?: () => void;
   onSimilar: (id: string) => void;
   /** Opens the restoration workshop with this image. */
   onRestore?: (assetId: string) => void;
@@ -507,6 +510,7 @@ export function RecordPanel({
             hidden={hidden}
             perform={perform}
             onChanged={onChanged}
+            onOptionsChanged={onOptionsChanged}
             onOpenRecord={onOpenRecord}
           />
         </div>
