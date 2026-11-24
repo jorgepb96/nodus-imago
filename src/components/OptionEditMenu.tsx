@@ -2,8 +2,8 @@
 // rename it, delete it (the caller confirms) and pick its colour from a
 // predefined palette or any colour the user chooses.
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { Check, Trash2 } from "lucide-react";
-import type { DatabaseSelectOption } from "../../shared/databases";
+import { ArrowDownAZ, ArrowUpZA, Check, Hand, Trash2 } from "lucide-react";
+import type { DatabaseColumnConfig, DatabaseSelectOption } from "../../shared/databases";
 import { useT } from "../i18n";
 import { CriteriaPopover } from "./CriteriaSelect";
 
@@ -24,12 +24,31 @@ export const OPTION_PALETTE: { label: string; color: string | null }[] = [
   { label: "Rojo", color: "#ef4444" },
 ];
 
+export type OptionSort = NonNullable<DatabaseColumnConfig["optionSort"]>;
+
+/** The options in the order a column shows them: by hand or by name. */
+export function sortOptions<T extends { label: string; position: number }>(options: T[], sort: OptionSort = "manual"): T[] {
+  const list = [...options].sort((a, b) => a.position - b.position);
+  if (sort === "manual") return list;
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  list.sort((a, b) => collator.compare(a.label, b.label));
+  return sort === "name-desc" ? list.reverse() : list;
+}
+
+const SORTS: { id: OptionSort; label: string; icon: typeof Hand }[] = [
+  { id: "manual", label: "Manual", icon: Hand },
+  { id: "name-asc", label: "Por nombre (A → Z)", icon: ArrowDownAZ },
+  { id: "name-desc", label: "Por nombre (Z → A)", icon: ArrowUpZA },
+];
+
 const same = (a: string | null, b: string | null) =>
   (a ?? "").toLowerCase() === (b ?? "").toLowerCase();
 
 export function OptionEditMenu({
   anchor,
   option,
+  sort,
+  onSort,
   onRename,
   onColor,
   onDelete,
@@ -37,6 +56,9 @@ export function OptionEditMenu({
 }: {
   anchor: RefObject<HTMLElement>;
   option: DatabaseSelectOption;
+  /** The order of the whole list, chosen here too. */
+  sort: OptionSort;
+  onSort: (sort: OptionSort) => Promise<void>;
   onRename: (label: string) => Promise<void>;
   onColor: (color: string | null) => Promise<void>;
   onDelete: () => void;
@@ -99,6 +121,20 @@ export function OptionEditMenu({
         <Trash2 size={15} />
         {t("Eliminar")}
       </button>
+      <div className="option-edit-heading">{t("Ordenar")}</div>
+      {SORTS.map(({ id, label, icon: Icon }) => (
+        <button
+          type="button"
+          key={id}
+          className="option-edit-item"
+          aria-pressed={sort === id}
+          onClick={() => sort !== id && void attempt(() => onSort(id))}
+        >
+          <Icon size={15} />
+          <span className="option-edit-label">{t(label)}</span>
+          {sort === id && <Check size={15} />}
+        </button>
+      ))}
       <div className="option-edit-heading">{t("Colores")}</div>
       {OPTION_PALETTE.map((p) => (
         <button

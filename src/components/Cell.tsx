@@ -17,7 +17,7 @@ import { HeritageIcon } from "./HeritageIcon";
 import { heritageScheme, isHeritageColumn, typology } from "../../shared/heritage";
 import { useHeritage } from "../heritageStore";
 import { HeritageAddFooter, HeritageOptionMeta } from "./HeritageCellParts";
-import { DEFAULT_OPTION_COLOR, OptionEditMenu } from "./OptionEditMenu";
+import { DEFAULT_OPTION_COLOR, OptionEditMenu, sortOptions, type OptionSort } from "./OptionEditMenu";
 import { Button, Modal } from "./ui";
 
 /** Table text cells that open the expanded editor on click, as in Notion. */
@@ -425,42 +425,66 @@ function OptionPicker({
   const editable = !!onOptionsChanged && !heritage;
   // Edits run one after another on a working copy of the options, so a rename
   // followed at once by a colour never saves over it with the stale list.
+  // The list's order: by hand (positions) or by name, chosen in «···».
+  const sort: OptionSort = column.config.optionSort ?? "manual";
   const working = useRef<DatabaseSelectOption[]>([]),
+    workingConfig = useRef(column.config),
     queue = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
-    working.current = [...column.options].sort((a, b) => a.position - b.position);
-  }, [column.options]);
-  const edit = (change: (list: DatabaseSelectOption[]) => DatabaseSelectOption[], dropFromCells = false) => {
+    working.current = sortOptions(column.options);
+    workingConfig.current = column.config;
+  }, [column.options, column.config]);
+  const enqueue = (work: () => Promise<void>) => {
     const run = queue.current.then(async () => {
-      const next = change(working.current);
-      await window.imago.call("saveOptions", {
-        columnId: column.id,
-        options: next.map(({ id, label, color }) => ({ id, label, color })),
-        ...(dropFromCells ? { dropFromCells } : {}),
-      });
-      working.current = next;
+      await work();
       onOptionsChanged?.();
     });
     queue.current = run.catch(() => undefined);
     return run;
   };
+  const saveList = async (next: DatabaseSelectOption[], dropFromCells = false) => {
+    await window.imago.call("saveOptions", {
+      columnId: column.id,
+      options: next.map(({ id, label, color }) => ({ id, label, color })),
+      ...(dropFromCells ? { dropFromCells } : {}),
+    });
+    working.current = next.map((o, position) => ({ ...o, position }));
+  };
+  const saveSort = async (optionSort: OptionSort) => {
+    const config = { ...workingConfig.current, optionSort };
+    await window.imago.call("updateColumn", { id: column.id, config });
+    workingConfig.current = config;
+  };
+  const edit = (change: (list: DatabaseSelectOption[]) => DatabaseSelectOption[], dropFromCells = false) =>
+    enqueue(() => saveList(change(working.current), dropFromCells));
   const patch = (id: string, change: Partial<DatabaseSelectOption>) =>
     edit((list) => list.map((o) => (o.id === id ? { ...o, ...change } : o)));
+  // A name order also rewrites the positions, so every other list (filters,
+  // properties) follows it; manual keeps the positions as they are.
+  const chooseSort = (next: OptionSort) =>
+    enqueue(async () => {
+      if (next !== "manual") await saveList(sortOptions(working.current, next));
+      await saveSort(next);
+    });
+  // Dragging places the option among those shown, and the order becomes manual.
   const move = (id: string, target: string, after: boolean) => {
     if (id === target) return;
     setEditError(null);
-    edit((list) => {
+    const shownSort = sort;
+    enqueue(async () => {
+      const list = sortOptions(working.current, shownSort);
       const moving = list.find((o) => o.id === id);
       const rest = list.filter((o) => o.id !== id);
       const at = rest.findIndex((o) => o.id === target);
-      if (!moving || at < 0) return list;
+      if (!moving || at < 0) return;
       rest.splice(after ? at + 1 : at, 0, moving);
-      return rest;
+      await saveList(rest);
+      if ((workingConfig.current.optionSort ?? "manual") !== "manual") await saveSort("manual");
     }).catch((e) => setEditError(e instanceof Error ? e.message : String(e)));
   };
   const needle = fold(query.trim());
   const matches = open
-    ? column.options.filter((o) => !needle || fold(o.label).includes(needle))
+    ? sortOptions(column.options, sort).filter((o) => !needle || fold(o.label).includes(needle))
     : [];
   // Selected options first, so a long list never hides what the cell holds.
   // A short list keeps its own order, the one its options are dragged into.
@@ -486,7 +510,7 @@ function OptionPicker({
       <summary aria-label={column.name}>
         <span className="chips">
           {selected.length ? (
-            column.options
+            sortOptions(column.options, sort)
               .filter((o) => selected.includes(o.id))
               .map((o) => (
                 <span
@@ -620,6 +644,8 @@ function OptionPicker({
             <OptionEditMenu
               anchor={editAnchor as React.RefObject<HTMLElement>}
               option={editingOption}
+              sort={sort}
+              onSort={chooseSort}
               onClose={() => setEditing(null)}
               onRename={(label) => patch(editingOption.id, { label })}
               onColor={(color) => patch(editingOption.id, { color })}

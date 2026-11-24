@@ -163,6 +163,10 @@ export interface DatabaseColumnConfig {
   numberDecimals?: number;
   progressMaximum?: number;
   dateIncludeTime?: boolean;
+  /** select/multi_select/status: how the option list is ordered — by hand
+   * (their positions, the default) or by name. Choosing a name order also
+   * rewrites the positions; dragging an option returns to manual. */
+  optionSort?: 'manual' | 'name-asc' | 'name-desc';
   dateTimeZone?: string;
   uniqueIdPrefix?: string;
   uniqueIdPadding?: number;
