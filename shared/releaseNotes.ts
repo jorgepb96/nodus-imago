@@ -33,6 +33,84 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.6.0",
+    date: "2026-11-24",
+    highlights: [
+      {
+        scope: "general",
+        category: "new",
+        es: "Campana de notificaciones en la cabecera con los avisos de Imago (encuestas, incidencias conocidas, cambios importantes), como en Nodus. Se consulta un archivo público cada cuatro horas sin enviar ningún dato de tu colección, y se puede desactivar en Ajustes › Actualizaciones y novedades.",
+        en: "Notification bell in the header with Imago notices (surveys, known issues, important changes), as in Nodus. A public file is checked every four hours without sending any data from your collection, and it can be turned off in Settings › Updates and news.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Proveedores de IA como en Nodus: cada proveedor se despliega con su clave, «Cargar modelos» con buscador y etiquetas de visión e imagen, y una estrella para marcar favoritos, que son los que ofrecen los selectores. «Comprobar catálogo» avisa de los favoritos que ya no aparecen.",
+        en: "AI providers as in Nodus: each provider unfolds with its key, Load models with a search box and vision and image labels, and a star to mark favourites, which are the ones the selectors offer. Check catalogue flags favourites that no longer appear.",
+      },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "Restauración IA muestra solo los modelos de imagen de las APIs con clave guardada, leídos de sus catálogos, con buscador, filtro por proveedor, orden alfabético y los favoritos primero.",
+        en: "AI restoration lists only the image models of the APIs with a saved key, read from their catalogues, with a search box, a provider filter, alphabetical order and favourites first.",
+      },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "«Permitir APIs remotas» viene activado; al desactivarlo no se envía nada a proveedores remotos y no se pueden introducir sus claves.",
+        en: "Allow remote APIs is on by default; turned off, nothing is sent to remote providers and their keys cannot be entered.",
+      },
+      {
+        scope: "visual",
+        category: "new",
+        es: "Los resultados de «Buscar» en el visor se abren en una ventana con la ficha del registro (los mismos datos y en el mismo orden), sin cerrar el visor ni perder la búsqueda.",
+        en: "Search results in the viewer open in a window with the record's data (the same data, in the same order), without closing the viewer or losing the search.",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "Con una ficha abierta, a un lado o en pantalla completa, el menú lateral y los botones de la cabecera siguen funcionando, y la ficha se cierra al pulsar fuera de ella.",
+        en: "With a record open, at the side or in full screen, the side menu and the header's buttons keep working, and the record closes when you click outside it.",
+      },
+      {
+        scope: "search",
+        category: "enhancement",
+        es: "La búsqueda híbrida es la predeterminada en las bases de datos y en Búsqueda; si eliges otro modo, se recuerda.",
+        en: "Hybrid search is the default in databases and in Search; if you pick another mode, it is remembered.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "La página de Bases de datos tiene un filtro por título y vista de cuadrícula o de lista, que se recuerda.",
+        en: "The Databases page has a filter by title and a grid or list view, which is remembered.",
+      },
+      {
+        scope: "compare",
+        category: "new",
+        es: "Al añadir imágenes a la Mesa de comparación o elegir la de Restauración IA, un botón de filtros aplica las propiedades de las bases de datos elegidas.",
+        en: "When adding images to the Comparison table or choosing one for AI restoration, a filter button applies the properties of the chosen databases.",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "El historial del Chat, la Mesa de comparación y Restauración IA comparten el ancho de su panel lateral, que se puede arrastrar y se recuerda.",
+        en: "The Chat history, the Comparison table and AI restoration share the width of their side panel, which can be dragged and is remembered.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "Las vistas guardadas se pueden arrastrar a cualquier posición entre las pestañas, también entre las vistas predeterminadas.",
+        en: "Saved views can be dragged to any place among the tabs, including between the built-in views.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "El icono de «Estado de la colección» se ve con más brillo en el modo oscuro.",
+        en: "The Collection status icon is brighter in dark mode.",
+      },
+    ],
+  },
+  {
     version: "0.5.6",
     date: "2026-11-23",
     highlights: [

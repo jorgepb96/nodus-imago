@@ -324,6 +324,9 @@ try {
         await waitJobs();
       }
       await call("updateSettings", {
+        // Remote APIs are on by default: this contract runs against a server
+        // on this computer with them off, and must leave them off.
+        remoteEnabled: false,
         apiProfiles: {
           custom: {
             baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
@@ -339,7 +342,7 @@ try {
         apiParallel: 1,
       });
       assert.deepEqual(
-        await call("listProviderModels", { provider: "custom" }),
+        (await call("listProviderModels", { provider: "custom" })).map((m) => m.id),
         ["audit-description", "audit-taxonomy"],
       );
       await page.reload();
@@ -642,7 +645,7 @@ try {
         await assert.rejects(call("listProviderModels", { provider: "custom" }), /Autoriza/);
         assert.equal(traffic.length, beforeTrust);
         await app.evaluate(() => { global.__auditEndpointResponse = 1; });
-        assert.ok((await call("listProviderModels", { provider: "custom" })).includes("audit-description"));
+        assert.ok((await call("listProviderModels", { provider: "custom" })).some((m) => m.id === "audit-description"));
         const prompts = await app.evaluate(({ dialog }) => {
           dialog.showMessageBox = global.__auditOriginalPrompt;
           return global.__auditEndpointPrompts;

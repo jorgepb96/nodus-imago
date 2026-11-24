@@ -11,6 +11,7 @@ import {
   Palette,
   PenLine,
   Plus,
+  RefreshCw,
   ScanLine,
   ShieldAlert,
   ShieldCheck,
@@ -25,7 +26,7 @@ import {
 import type { DatabaseSummary } from "../../shared/databases";
 import type { ImageAnnotation, Settings } from "../../shared/imago";
 import type { CompareItem } from "../../shared/compare";
-import { PROVIDERS, type ApiProvider } from "../../shared/aiConfig";
+import { PROVIDERS, type ApiProvider, type ImageCatalogModel } from "../../shared/aiConfig";
 import {
   IMAGE_API,
   SUGGESTED_IMAGE_MODELS,
@@ -45,6 +46,7 @@ import {
 import { useT } from "../i18n";
 import { Button, Modal } from "./ui";
 import { ImagePicker } from "./CompareView";
+import { SectionSideResize, useSectionSideWidth } from "./SectionSide";
 
 const TASK_ICONS: Record<RestorationTask, React.ReactNode> = {
   restore: <Sparkles size={16} />,
@@ -105,6 +107,7 @@ export function RestorationsView({
 }) {
   const t = useT();
   const api = window.imago;
+  const [sideWidth, resizeSide] = useSectionSideWidth();
   const language = settings.language === "en" ? "en" : "es";
   const [source, setSource] = useState<CompareItem | null>(null);
   const [regions, setRegions] = useState<ImageAnnotation[]>([]);
@@ -124,6 +127,11 @@ export function RestorationsView({
   const [edited, setEdited] = useState(false);
   const [model, setModel] = useState<string>(() => localStorage.getItem("imago.restoration.model") ?? "");
   const [keys, setKeys] = useState<Record<string, boolean>>({});
+  /** The image models of the providers with a saved key, from their catalogues; null while unknown. */
+  const [catalog, setCatalog] = useState<ImageCatalogModel[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
+  const [modelProvider, setModelProvider] = useState<string>(() => localStorage.getItem("imago.restoration.provider") ?? "");
   const [versions, setVersions] = useState<Restoration[]>([]);
   const [current, setCurrent] = useState<Restoration | null>(null);
   const [running, setRunning] = useState(false);
@@ -139,6 +147,18 @@ export function RestorationsView({
       .then((s) => setKeys(s.providers))
       .catch(() => {});
   }, [api]);
+  const loadCatalog = useCallback(
+    (refresh = false) => {
+      setCatalogLoading(true);
+      void api
+        .call("imageModelCatalog", { refresh })
+        .then(setCatalog)
+        .catch(() => setCatalog([]))
+        .finally(() => setCatalogLoading(false));
+    },
+    [api],
+  );
+  useEffect(() => loadCatalog(), [loadCatalog]);
   const choose = useCallback(
     async (assetId: string) => {
       const [item] = await api.call("compareItems", { assetIds: [assetId] });
@@ -185,16 +205,46 @@ export function RestorationsView({
     if (!edited) setPrompt(restorationPrompt(task, language, !!region));
   }, [task, language, region, edited]);
 
-  const models = useMemo(() => {
+  // Only image models: those the catalogues of the providers with a saved key
+  // mark as returning images (their suggested ones while the catalogues are
+  // read), plus the ones added by hand and the favourites. Favourites first,
+  // then by provider and model, alphabetically.
+  const { models, names } = useMemo(() => {
     const favorites = settings.favoriteImageModels ?? [];
     const list = new Set<string>([...favorites, ...(settings.imageModels ?? [])]);
-    for (const [provider, suggested] of Object.entries(SUGGESTED_IMAGE_MODELS))
-      if (keys[provider] || settings.apiProfiles[provider as ApiProvider]?.models?.length)
-        for (const m of suggested ?? []) list.add(encodeImageModel(provider as ApiProvider, m));
-    // Favourites first, then the order in which they were added and suggested
-    // (the recommended model of each provider comes first).
-    return [...list].filter((v) => decodeImageModel(v)).sort((a, b) => Number(favorites.includes(b)) - Number(favorites.includes(a)));
-  }, [settings, keys]);
+    const names = new Map<string, string>();
+    if (catalog)
+      for (const m of catalog) {
+        const value = encodeImageModel(m.provider, m.model);
+        list.add(value);
+        if (m.name) names.set(value, m.name);
+      }
+    else
+      for (const [provider, suggested] of Object.entries(SUGGESTED_IMAGE_MODELS))
+        if (keys[provider]) for (const m of suggested ?? []) list.add(encodeImageModel(provider as ApiProvider, m));
+    const label = (value: string) => t(PROVIDERS[decodeImageModel(value)!.provider].label);
+    const models = [...list]
+      .filter((v) => decodeImageModel(v))
+      .sort(
+        (a, b) =>
+          Number(favorites.includes(b)) - Number(favorites.includes(a)) ||
+          label(a).localeCompare(label(b), undefined, { sensitivity: "base" }) ||
+          decodeImageModel(a)!.model.localeCompare(decodeImageModel(b)!.model, undefined, { sensitivity: "base", numeric: true }),
+      );
+    return { models, names };
+  }, [settings, keys, catalog, t]);
+  const modelProviders = [...new Set(models.map((v) => decodeImageModel(v)!.provider))].sort((a, b) =>
+    t(PROVIDERS[a].label).localeCompare(t(PROVIDERS[b].label), undefined, { sensitivity: "base" }),
+  );
+  const providerFilter = modelProviders.includes(modelProvider as ApiProvider) ? modelProvider : "";
+  const query = modelSearch.trim().toLowerCase();
+  const visibleModels = models.filter((value) => {
+    const m = decodeImageModel(value)!;
+    return (
+      (!providerFilter || m.provider === providerFilter) &&
+      (!query || `${m.model} ${names.get(value) ?? ""} ${t(PROVIDERS[m.provider].label)}`.toLowerCase().includes(query))
+    );
+  });
   const chosen = models.includes(model) ? model : (models[0] ?? "");
   const choice = decodeImageModel(chosen);
   const remoteBlocked = !!choice && !settings.remoteEnabled && !["ollama", "lmstudio"].includes(choice.provider) && !(choice.provider === "custom" && /127\.0\.0\.1|localhost/.test(settings.apiProfiles.custom?.baseUrl ?? ""));
@@ -232,7 +282,7 @@ export function RestorationsView({
 
   return (
     <div className="restoration-page" data-testid="restorations-view">
-      <aside className="restoration-side">
+      <aside className="restoration-side" style={{ width: sideWidth }}>
         <h1>
           <Wand2 size={18} />
           {t("Restauración IA")}
@@ -416,9 +466,39 @@ export function RestorationsView({
             </section>
             <section>
               <h2>{t("5. Modelo")}</h2>
+              {models.length > 0 && (
+                <div className="restoration-model-tools">
+                  <input
+                    type="search"
+                    aria-label={t("Buscar modelo…")}
+                    placeholder={t("Buscar modelo…")}
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    data-testid="restoration-model-search"
+                  />
+                  <select
+                    aria-label={t("Proveedor")}
+                    value={providerFilter}
+                    onChange={(e) => {
+                      setModelProvider(e.target.value);
+                      localStorage.setItem("imago.restoration.provider", e.target.value);
+                    }}
+                    data-testid="restoration-model-provider"
+                  >
+                    <option value="">{t("Todos los proveedores")}</option>
+                    {modelProviders.map((p) => (
+                      <option key={p} value={p}>
+                        {t(PROVIDERS[p].label)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {catalogLoading && <p className="hint">{t("Consultando los catálogos de los proveedores…")}</p>}
               {models.length ? (
                 <ul className="restoration-models" role="radiogroup" aria-label={t("Modelo de imagen")}>
-                  {models.map((value) => {
+                  {!visibleModels.length && <li className="restoration-models-empty">{t("No hay modelos que coincidan.")}</li>}
+                  {visibleModels.map((value) => {
                     const m = decodeImageModel(value)!,
                       favorite = (settings.favoriteImageModels ?? []).includes(value);
                     return (
@@ -433,8 +513,11 @@ export function RestorationsView({
                           }}
                         >
                           <span>
-                            <strong>{m.model}</strong>
-                            <small>{t(PROVIDERS[m.provider].label)}</small>
+                            <strong title={m.model}>{m.model}</strong>
+                            <small>
+                              {t(PROVIDERS[m.provider].label)}
+                              {names.get(value) ? ` · ${names.get(value)}` : ""}
+                            </small>
                           </span>
                         </button>
                         <button
@@ -460,6 +543,15 @@ export function RestorationsView({
                   {t("Añadir modelo")}
                 </Button>
                 <Button onClick={onOpenSettings}>{t("Proveedores")}</Button>
+                <Button
+                  icon
+                  aria-label={t("Actualizar modelos")}
+                  data-tooltip={t("Actualizar modelos")}
+                  disabled={catalogLoading}
+                  onClick={() => loadCatalog(true)}
+                >
+                  <RefreshCw size={14} />
+                </Button>
               </div>
             </section>
             <div className="restoration-run">
@@ -486,6 +578,7 @@ export function RestorationsView({
           </>
         )}
       </aside>
+      <SectionSideResize width={sideWidth} onResize={resizeSide} />
       <section className="restoration-main">
         {!source ? (
           <div className="restoration-empty">
@@ -611,6 +704,7 @@ export function RestorationsView({
           databases={databases}
           taken={[]}
           room={1}
+          equivalences={settings.fieldEquivalences ?? []}
           title={t("Elegir la imagen que quieres restaurar")}
           action={t("Elegir")}
           onClose={() => setPicking(false)}

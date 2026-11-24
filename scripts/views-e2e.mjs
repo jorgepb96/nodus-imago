@@ -235,9 +235,11 @@ try {
   // Full screen, kept for the next record, and back.
   await page.getByTestId("record-fullscreen").click();
   await poll(async () => (await page.getByTestId("record-panel").getAttribute("class")).includes("fullscreen"), "full screen");
+  // Full screen fills the window beside the side menu, which stays usable.
   const width = await page.getByTestId("record-panel").evaluate((el) => el.getBoundingClientRect().width),
-    windowWidth = await page.evaluate(() => window.innerWidth);
-  assert.ok(width >= windowWidth - 2, `full width: ${width} of ${windowWidth}`);
+    windowWidth = await page.evaluate(() => window.innerWidth),
+    menuWidth = await page.locator(".sidebar").evaluate((el) => el.getBoundingClientRect().width);
+  assert.ok(width >= windowWidth - menuWidth - 2, `full width: ${width} of ${windowWidth} beside a ${menuWidth} menu`);
   await page.screenshot({ path: "test-results/views-record-fullscreen.png" });
   await strip.locator(".record-strip-item", { hasText: "R1" }).click();
   await poll(async () => (await page.locator(".record-panel > header strong").innerText()) === "R1", "next record in full screen");

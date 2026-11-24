@@ -388,6 +388,15 @@ export type Commands = {
   modelPreparation: { input: void; result: ModelPreparation };
   prepareModels: { input: { consent: true }; result: string | null };
   openExternalLink: { input: { url: string }; result: void };
+  /** Notices published between releases (see docs/announcements.md). */
+  announcementsList: { input: void; result: import("./announcements").AnnouncementsState };
+  announcementsMarkRead: { input: { id: string }; result: import("./announcements").AnnouncementsState };
+  announcementsClear: { input: void; result: import("./announcements").AnnouncementsState };
+  announcementsConfigure: { input: { enabled: boolean }; result: import("./announcements").AnnouncementsState };
+  announcementsRefresh: {
+    input: void;
+    result: import("./announcements").AnnouncementsState & { refresh: import("./announcements").AnnouncementRefreshResult };
+  };
   agreementRun: { input: AgreementInput; result: AgreementResult };
   agreementList: {
     input: { databaseId: string };
@@ -974,7 +983,9 @@ export type Commands = {
   };
   setApiKey: { input: { provider: ApiProvider; key: string }; result: void };
   clearApiKey: { input: { provider: ApiProvider }; result: void };
-  listProviderModels: { input: { provider: ApiProvider }; result: string[] };
+  listProviderModels: { input: { provider: ApiProvider }; result: import("./aiConfig").ProviderModel[] };
+  /** The image models of the providers with a saved key, read from their catalogues. */
+  imageModelCatalog: { input: { refresh?: boolean }; result: import("./aiConfig").ImageCatalogModel[] };
   provenance: { input: { rowId: string }; result: Provenance[] };
   proposals: { input: void; result: Proposal[] };
   reviewProposals: {
@@ -997,7 +1008,7 @@ export interface ImagoApi {
     ...args: Commands[K]["input"] extends void ? [] : [Commands[K]["input"]]
   ): Promise<Commands[K]["result"]>;
   /** «jobs»: only the queue moved; «data»: records the views show may differ. */
-  onChange(listener: (scope: "jobs" | "data") => void): () => void;
+  onChange(listener: (scope: "jobs" | "data" | "announcements") => void): () => void;
   /** Runs one chat turn in the main process; deltas arrive through onChatDelta. */
   chatSend(request: import("./chat").ChatTurnRequest): Promise<import("./chat").ChatTurnResult>;
   chatCancel(conversationId: string): Promise<void>;

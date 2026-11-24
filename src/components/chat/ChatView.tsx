@@ -43,6 +43,7 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatSidebar } from "./ChatSidebar";
 import { endRun, startRun, useChatRuns } from "./chatRuns";
 import "./chat.css";
+import { SectionSideResize, useSectionSideWidth } from "../SectionSide";
 
 const STARTERS = [
   "Resume esta base de datos en tres puntos.",
@@ -105,6 +106,8 @@ export function ChatView({
   const [archivedCount, setArchivedCount] = useState(0);
   const [showArchived, setShowArchived] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(() => stored(prefix + "history", !compact));
+  // The Chat section's history shares its width with the other sections' side panels.
+  const [sideWidth, resizeSide] = useSectionSideWidth();
   const [contextOpen, setContextOpen] = useState(() => stored(prefix + "context", false));
   const [activeId, setActiveId] = useState<string | null>(null);
   const [newFolderId, setNewFolderId] = useState<string | null>(null);
@@ -386,7 +389,7 @@ export function ChatView({
         </CriteriaPopover>
       )}
       <div className="chat-body">
-        <aside hidden={!historyOpen} className="research-chat-history" data-testid="chat-history">
+        <aside hidden={!historyOpen} className="research-chat-history" data-testid="chat-history" style={compact ? undefined : { width: sideWidth }}>
           <ChatSidebar
             conversations={conversations}
             folders={folders}
@@ -429,6 +432,7 @@ export function ChatView({
             onFolderDelete={setDeletingFolder}
           />
         </aside>
+        {!compact && historyOpen && <SectionSideResize width={sideWidth} onResize={resizeSide} />}
         <section className="chat-main">
           <div className="chat-scroll-frame">
             <div

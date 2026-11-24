@@ -19,6 +19,7 @@ import {
   ChevronRight,
   ChevronLeft,
   LayoutGrid,
+  List as ListIcon,
   Table2,
   ListTree,
   CalendarRange,
@@ -42,6 +43,7 @@ import {
   Moon,
   Sun,
   Clock3,
+  Bell,
   KeyRound,
   Map as MapIcon,
   BarChart3,
@@ -105,6 +107,7 @@ import { askIndexQuality, IndexQualityDialog } from "./components/IndexQualityDi
 import { ChatView } from "./components/chat/ChatView";
 import { CompareView } from "./components/CompareView";
 import { useDragEdgeScroll } from "./edgeScroll";
+import { NotificationsPanel, useAnnouncements } from "./components/NotificationsPanel";
 import { ConvertRelationDialog, LookupDialog } from "./components/RelationTools";
 import type { RecordStripItem } from "./components/RecordPanel";
 import { SidebarDatabases } from "./components/SidebarDatabases";
@@ -142,6 +145,10 @@ import { StatisticsView } from "./components/StatisticsView";
 import {
   DatabaseSearch,
   EMPTY_DATABASE_SEARCH,
+  DATABASE_SEARCH_MODE_KEY,
+  SEARCH_MODE_KEY,
+  saveSearchMode,
+  storedSearchMode,
   type DatabaseSearchState,
 } from "./components/DatabaseSearch";
 import {
@@ -163,6 +170,11 @@ import { DatabaseMap } from "./components/DatabaseMap";
 import { AgreementWorkbench } from "./components/AgreementWorkbench";
 import { Automations } from "./components/Automations";
 
+/** Whether a title contains the filter, ignoring case and accents. */
+function matchesTitle(title: string, filter: string) {
+  const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  return !filter.trim() || fold(title).includes(fold(filter.trim()));
+}
 export default function App() {
   const [language, setLanguage] = useState<"es" | "en">("es");
   // Numbers and dates follow the interface language, not the system's.
@@ -220,7 +232,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   const [query, setQuery] = useState(""),
     // Search starts as Hybrid (words and meaning together); it is Literal
     // while no model is ready for semantic search.
-    [chosenMode, setMode] = useState<"literal" | "semantic" | "hybrid">("hybrid"),
+    // Hybrid by default; the user's choice is remembered.
+    [chosenMode, setMode] = useState<"literal" | "semantic" | "hybrid">(() => storedSearchMode(SEARCH_MODE_KEY)),
     [match, setMatch] = useState<"words" | "phrase" | "partial">("words"),
     [sources, setSources] = useState<"both" | "images" | "text">("both"),
     [scope, setScope] = useState<string[] | undefined>(),
@@ -318,7 +331,31 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   }, [refresh]);
   useEffect(() => () => clearTimeout(dataRefreshTimer.current), []);
   // The database's own search box (literal, semantic or both).
-  const [dbSearch, setDbSearch] = useState<DatabaseSearchState>(EMPTY_DATABASE_SEARCH);
+  // Hybrid by default; the mode the user picks is remembered.
+  // The bell: notices published between releases, unread until read one by one.
+  const notices = useAnnouncements();
+  const [noticesAnchor, setNoticesAnchor] = useState<HTMLElement | null>(null);
+  // The databases page: a filter by title, and cards in a grid or a list (kept on this device).
+  const [databaseFilter, setDatabaseFilter] = useState("");
+  const [databaseLayout, setDatabaseLayout] = useState<"grid" | "list">(() => {
+    try {
+      return localStorage.getItem("imago.databases.layout") === "list" ? "list" : "grid";
+    } catch {
+      return "grid";
+    }
+  });
+  const chooseDatabaseLayout = (layout: "grid" | "list") => {
+    setDatabaseLayout(layout);
+    try {
+      localStorage.setItem("imago.databases.layout", layout);
+    } catch {
+      /* A preference only. */
+    }
+  };
+  const [dbSearch, setDbSearch] = useState<DatabaseSearchState>(() => ({
+    ...EMPTY_DATABASE_SEARCH,
+    mode: storedSearchMode(DATABASE_SEARCH_MODE_KEY),
+  }));
   useEffect(() => {
     setDbSearch((current) => (current.query ? { ...current, query: "" } : current));
   }, [databaseId]);
@@ -440,7 +477,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   );
   useEffect(() => {
     if (!api) return;
-    return api.onChange((scope) => (scope === "jobs" ? refreshStatus() : refreshFromBackground()));
+    return api.onChange((scope) =>
+      scope === "jobs" ? refreshStatus() : scope === "data" ? refreshFromBackground() : undefined,
+    );
   }, [api, refreshStatus, refreshFromBackground]);
   useEffect(() => {
     if (!api) return;
@@ -1343,6 +1382,23 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     [dropTab, setDropTab] = useState<{ key: string; side: "before" | "after" } | null>(null);
   const moveTab = (key: string, target: string, side: "before" | "after") =>
     updatePrefs((current) => ({ ...current, viewOrder: moveViewKey(current.viewOrder, tabKeys(), key, target, side) }));
+  /**
+   * Where a dragged tab would land, from the pointer: before the first other
+   * tab whose middle lies to its right, or after the last one. The whole bar
+   * accepts the drop, the gaps between tabs (where the line shows) included,
+   * so any tab, built-in or saved, can go anywhere.
+   */
+  const dropTarget = (bar: HTMLElement, x: number): { key: string; side: "before" | "after" } | null => {
+    const tabs = [...bar.querySelectorAll<HTMLElement>("button[data-view-key]")].filter(
+      (tab) => !tab.hidden && tab.dataset.viewKey !== dragTab,
+    );
+    for (const tab of tabs) {
+      const box = tab.getBoundingClientRect();
+      if (x < box.left + box.width / 2) return { key: tab.dataset.viewKey!, side: "before" };
+    }
+    const last = tabs[tabs.length - 1];
+    return last ? { key: last.dataset.viewKey!, side: "after" } : null;
+  };
   const setViewColor = (key: string, color: ViewColor | null) =>
     updatePrefs((current) => {
       const viewColors = { ...(current.viewColors ?? {}) };
@@ -1432,20 +1488,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           event.dataTransfer.setData("text/plain", saved?.name ?? t(label));
         }}
         onDragEnd={() => {
-          setDragTab(null);
-          setDropTab(null);
-        }}
-        onDragOver={(event) => {
-          if (!dragTab || dragTab === key) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-          const box = event.currentTarget.getBoundingClientRect(),
-            side = event.clientX < box.left + box.width / 2 ? "before" : "after";
-          if (dropTab?.key !== key || dropTab.side !== side) setDropTab({ key, side });
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          if (dragTab && dropTab) moveTab(dragTab, dropTab.key, dropTab.side);
           setDragTab(null);
           setDropTab(null);
         }}
@@ -1900,6 +1942,35 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               <Moon size={18} />
             )}
           </Button>
+          <span className="header-queue-action">
+            <Button
+              icon
+              data-notifications-trigger
+              aria-label={t("Notificaciones")}
+              title={t("Notificaciones")}
+              aria-expanded={!!noticesAnchor}
+              onClick={(event) => setNoticesAnchor(noticesAnchor ? null : event.currentTarget)}
+              data-testid="header-notifications"
+            >
+              <Bell size={18} />
+            </Button>
+            {notices.unread > 0 && <small data-testid="header-notifications-count">{notices.unread}</small>}
+          </span>
+          {noticesAnchor && (
+            <NotificationsPanel
+              anchor={noticesAnchor}
+              onClose={() => setNoticesAnchor(null)}
+              announcements={notices.announcements}
+              enabled={notices.enabled}
+              onMarkRead={notices.markRead}
+              onRefresh={notices.refresh}
+              onClear={notices.clear}
+              onOpenSettings={() => {
+                setSettingsTab("updates");
+                setArea("settings");
+              }}
+            />
+          )}
           <span className="header-queue-action" data-tour="header-queue">
             <Button
               icon
@@ -2160,6 +2231,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               databases={databases}
               seed={compareSeed}
               onSeedUsed={clearCompareSeed}
+              equivalences={status?.settings.fieldEquivalences ?? []}
               onOpenRecord={(rowId) =>
                 void perform(async () => {
                   const row = await api.call("getRow", { id: rowId });
@@ -2231,9 +2303,51 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       {t("imágenes")}
                     </span>
                   </div>
+                  {databases.length > 0 && (
+                    <div className="database-list-tools">
+                      <label className="database-filter">
+                        <Search size={14} />
+                        <input
+                          type="search"
+                          value={databaseFilter}
+                          placeholder={t("Filtrar por título…")}
+                          aria-label={t("Filtrar bases de datos por título")}
+                          onChange={(e) => setDatabaseFilter(e.target.value)}
+                          data-testid="database-filter"
+                        />
+                        {databaseFilter && (
+                          <button type="button" aria-label={t("Borrar el filtro")} onClick={() => setDatabaseFilter("")}>
+                            <X size={13} />
+                          </button>
+                        )}
+                      </label>
+                      <div className="segmented" role="group" aria-label={t("Vista de las bases de datos")}>
+                        <button
+                          type="button"
+                          className={databaseLayout === "grid" ? "active" : ""}
+                          aria-pressed={databaseLayout === "grid"}
+                          aria-label={t("Cuadrícula")}
+                          data-tooltip={t("Cuadrícula")}
+                          onClick={() => chooseDatabaseLayout("grid")}
+                        >
+                          <LayoutGrid size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className={databaseLayout === "list" ? "active" : ""}
+                          aria-pressed={databaseLayout === "list"}
+                          aria-label={t("Lista")}
+                          data-tooltip={t("Lista")}
+                          onClick={() => chooseDatabaseLayout("list")}
+                        >
+                          <ListIcon size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   {databases.length ? (
-                    <div className="database-cards">
-                      {databases.map((d) => (
+                    <div className={`database-cards${databaseLayout === "list" ? " is-list" : ""}`}>
+                      {databases.filter((d) => matchesTitle(d.name, databaseFilter)).map((d) => (
                         <button key={d.id} onClick={() => navigate(d.id)}>
                           <span className="database-card-icon">
                             <DatabaseIcon icon={d.icon} kind={d.kind} size={23} />
@@ -2248,6 +2362,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                           </span>
                         </button>
                       ))}
+                      {!databases.some((d) => matchesTitle(d.name, databaseFilter)) && (
+                        <p className="database-filter-empty">
+                          {t("Ninguna base de datos coincide con «{q}».").replace("{q}", databaseFilter.trim())}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="collection-welcome">
@@ -2412,6 +2531,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                                   className={mode === m ? "active" : ""}
                                   onClick={() => {
                                     setMode(m);
+                                    saveSearchMode(SEARCH_MODE_KEY, m);
                                     if (m === "literal") {
                                       setImageQuery(null);
                                       setSimilarId(undefined);
@@ -2697,7 +2817,29 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                     )
                   )}
                   <div className="data-toolbar">
-                    <div className="view-tabs" data-tour="db-views" ref={tabsRef}>
+                    <div
+                      className="view-tabs"
+                      data-tour="db-views"
+                      ref={tabsRef}
+                      onDragOver={(event) => {
+                        if (!dragTab) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        const next = dropTarget(event.currentTarget, event.clientX);
+                        if (next?.key !== dropTab?.key || next?.side !== dropTab?.side) setDropTab(next);
+                      }}
+                      onDragLeave={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTab(null);
+                      }}
+                      onDrop={(event) => {
+                        if (!dragTab) return;
+                        event.preventDefault();
+                        const target = dropTarget(event.currentTarget, event.clientX);
+                        if (target) moveTab(dragTab, target.key, target.side);
+                        setDragTab(null);
+                        setDropTab(null);
+                      }}
+                    >
                       {tabKeys().map((key) => tabButton(key))}
                     </div>
                     <div
@@ -2816,6 +2958,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                       key={`search:${detail.database.id}`}
                       value={dbSearch}
                       onChange={(next) => {
+                        if (next.mode !== dbSearch.mode) saveSearchMode(DATABASE_SEARCH_MODE_KEY, next.mode);
                         setDbSearch(next);
                         setOffset(0);
                         setSelected(new Set());

@@ -143,7 +143,9 @@ test("an API model indexes records and images in batches, under its own contract
   let queue: JobQueue | undefined;
   try {
     const localContract = engine.contract();
+    // Remote APIs are allowed by default: turned off, an API model cannot index.
     repo.updateSettings({
+      remoteEnabled: false,
       embeddingModel: "api-embedding",
       embeddingApi: { provider: "gemini", model: "gemini-embedding-2", dimensions: 64 },
     });

@@ -5,6 +5,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  net,
   protocol,
   session,
   safeStorage,
@@ -44,10 +45,11 @@ import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
 import { isCommonsImageRequest, isMapTileRequest } from "./geo/mapRequests";
 import { externalHttpsUrl } from "../shared/externalLinks";
-import { PROVIDERS } from "../shared/aiConfig";
+import { PROVIDERS, remoteProvider } from "../shared/aiConfig";
 import { closestAspect, restorationRequest } from "../shared/restoration";
 import { DesktopBackups } from "./export/desktopBackups";
 import { Updates } from "./updates";
+import { Announcements } from "./announcements";
 import { autoUpdater } from "electron-updater";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -93,6 +95,7 @@ let window: BrowserWindow | null = null,
   closing = false;
 let backups: DesktopBackups | undefined;
 let updates: Updates | undefined;
+let announcements: Announcements | undefined;
 let chats: ChatRunner | undefined;
 let restorationAbort: AbortController | null = null;
 /** Prepared image files by «id/variant?revision», so repeat loads skip the worker. */
@@ -338,6 +341,18 @@ app.whenReady().then(async () => {
       .readFile(path.join(process.resourcesPath, "package-type"), "utf8")
       .then((x) => x.trim())
       .catch(() => "AppImage");
+  announcements = new Announcements({
+    userData: app.getPath("userData"),
+    version: app.getVersion(),
+    // Electron's network stack, so the system proxy applies.
+    fetch: net.fetch.bind(net) as typeof fetch,
+    changed: () => window?.webContents.send("imago:changed", "announcements"),
+    url: process.env.IMAGO_ANNOUNCEMENTS_URL || undefined,
+    // An automated run asks no public server unless it points at its own file.
+    disabled:
+      process.env.IMAGO_DISABLE_ANNOUNCEMENTS === "1" ||
+      (process.env.IMAGO_AUTOMATED === "1" && !process.env.IMAGO_ANNOUNCEMENTS_URL),
+  });
   updates = new Updates(autoUpdater, {
     userData: app.getPath("userData"),
     version: app.getVersion(),
@@ -578,6 +593,14 @@ app.whenReady().then(async () => {
         await shell.openExternal(url);
         return;
       }
+      if (command === "announcementsList") return announcements!.list();
+      if (command === "announcementsMarkRead") return announcements!.markRead((safe as { id: string }).id);
+      if (command === "announcementsClear") return announcements!.clear();
+      if (command === "announcementsConfigure") return announcements!.configure((safe as { enabled: boolean }).enabled);
+      if (command === "announcementsRefresh") {
+        const refresh = await announcements!.refresh("manual");
+        return { ...announcements!.list(), refresh };
+      }
       if (command === "searchPlaces")
         return places.search((safe as { query: string }).query);
       if (command === "openMapAttribution") {
@@ -706,6 +729,9 @@ app.whenReady().then(async () => {
       }
       if (command === "setApiKey") {
         const data = safe as any;
+        const settings = await call("_settings");
+        if (!settings.remoteEnabled && data.key.trim() && remoteProvider(data.provider, settings.apiProfiles))
+          throw new Error("Activa «Permitir APIs remotas» en Ajustes para introducir claves de API.");
         secrets.set(data.provider, data.key);
         return;
       }
@@ -840,6 +866,15 @@ app.whenReady().then(async () => {
         if (result.canceled || !result.filePath) return null;
         await call("_restorationExport", { id: data.id, target: result.filePath, format: data.format, watermark: data.watermark });
         return result.filePath;
+      }
+      if (command === "imageModelCatalog") {
+        const settings = await call("_settings");
+        return providers.imageCatalog(
+          settings.apiProfiles,
+          settings.remoteEnabled,
+          !!(safe as any).refresh,
+          new AbortController().signal,
+        );
       }
       if (command === "listProviderModels") {
         const settings = await call("_settings");
@@ -988,6 +1023,7 @@ app.whenReady().then(async () => {
   window!.webContents.once("did-finish-load", () => {
     backups?.start();
     updates?.start();
+    announcements?.start();
   });
   app.on("activate", () => {
     if (!window) createWindow();
@@ -1005,6 +1041,7 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   closing = true;
   updates?.close();
+  announcements?.close();
   chats?.cancelAll();
   void (async () => {
     await backups?.close();

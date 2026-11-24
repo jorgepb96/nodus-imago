@@ -10,6 +10,19 @@ export function UpdateSettings({ perform, onWhatsNew }: { perform: Perform; onWh
     [state, setState] = useState<UpdateStatus | null>(null);
   const [password, setPassword] = useState(""),
     [confirmation, setConfirmation] = useState("");
+  // Notices published between releases: on by default, off stops the request.
+  const [notices, setNotices] = useState<boolean | null>(null);
+  useEffect(() => {
+    const read = () =>
+      void window.imago
+        .call("announcementsList")
+        .then((s) => setNotices(s.enabled))
+        .catch(() => {});
+    read();
+    return window.imago.onChange((scope) => {
+      if (scope === "announcements") read();
+    });
+  }, []);
   const load = useCallback(
     async () => setState(await window.imago.call("updateStatus")),
     [],
@@ -76,6 +89,26 @@ export function UpdateSettings({ perform, onWhatsNew }: { perform: Perform; onWh
           "Las versiones estables son el canal predeterminado. No se instalan versiones anteriores ni se instala una actualización por el simple hecho de cerrar Imago.",
         )}
       </p>
+      {notices !== null && (
+        <>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={notices}
+              data-testid="toggle-announcements"
+              onChange={(e) =>
+                void perform(async () => setNotices((await window.imago.call("announcementsConfigure", { enabled: e.target.checked })).enabled))
+              }
+            />
+            {t("Recibir avisos de Imago")}
+          </label>
+          <p className="hint">
+            {t(
+              "Avisos publicados entre versiones (encuestas, incidencias conocidas, cambios importantes), en la campana de la cabecera. Se consulta un archivo público cada cuatro horas, sin enviar ningún identificador ni dato de tu colección. Al desactivarlo, Imago deja de hacer esa consulta.",
+            )}
+          </p>
+        </>
+      )}
       <div role="status">{updateStatusMessage(state, t)}</div>
       {state.backupWarning && (
         <p className="hint">

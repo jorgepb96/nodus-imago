@@ -436,6 +436,9 @@ export function ImageViewer({
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement).closest("input,textarea")) return;
+      // Keys typed in a window opened over the viewer (a result of «Buscar») are its own.
+      const within = (event.target as HTMLElement).closest("dialog");
+      if (within && within !== dialog.current) return;
       if (cropping) {
         if (event.key === "Enter" && natural) void applyCrop(cropping);
         return;
@@ -838,6 +841,7 @@ export function ImageViewer({
                   onCompare(ids);
                 })
               }
+              onChanged={onChanged}
             >
               {searching.drawn && image && (
                 <div className="detail-query">

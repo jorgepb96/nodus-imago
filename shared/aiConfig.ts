@@ -18,7 +18,26 @@ export const PROVIDERS = {
 } as const;
 export type ApiProvider = keyof typeof PROVIDERS;
 export type ModelChoice = { provider: "local" | ApiProvider; model: string };
+/**
+ * A provider's endpoint and its favourite models: the ones starred in
+ * Settings, offered by every model selector (as Nodus's favourites).
+ */
 export type ApiProfile = { baseUrl: string; models: string[] };
+/** A model of a provider's catalogue, with what the listing says about it. */
+export type ProviderModel = {
+  id: string;
+  name?: string;
+  /** OpenRouter: the upstream provider, the part of the id before «/». */
+  group?: string;
+  /** Most tokens of context, when the catalogue publishes it. */
+  contextLength?: number;
+  /** Accepts images; undefined when the catalogue does not say. */
+  vision?: boolean;
+  /** Returns images: usable in AI restoration. */
+  imageOutput?: boolean;
+};
+/** An image model of a provider with a saved key, for AI restoration. */
+export type ImageCatalogModel = { provider: ApiProvider; model: string; name?: string };
 export function isLoopbackUrl(value: string) {
   try {
     const u = new URL(value);
@@ -26,6 +45,15 @@ export function isLoopbackUrl(value: string) {
   } catch {
     return false;
   }
+}
+/**
+ * Whether a provider is reached over the network with the endpoint saved:
+ * every cloud provider, and a local server or gateway outside this computer.
+ * Its key can only be entered while remote APIs are allowed.
+ */
+export function remoteProvider(provider: ApiProvider, profiles: Partial<Record<ApiProvider, ApiProfile>>) {
+  const base = profiles[provider]?.baseUrl || PROVIDERS[provider].baseUrl;
+  return !base || !isLoopbackUrl(base);
 }
 export function providerBase(
   provider: ApiProvider,

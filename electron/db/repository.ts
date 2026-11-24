@@ -1800,7 +1800,8 @@ export class Repository {
       visionModel: "lfm3-vl-2b",
       descriptionModel: { provider: "local", model: "lfm3-vl-2b" },
       classificationModel: { provider: "local", model: "lfm3-vl-2b" },
-      remoteEnabled: false,
+      // On by default; turned off, nothing is sent and no key can be entered.
+      remoteEnabled: true,
       apiProfiles: {},
       apiDelayMs: 1000,
       parallelJobs: os.totalmem() >= 12 * 2 ** 30 ? 2 : 1,
