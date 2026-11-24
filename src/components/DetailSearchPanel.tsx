@@ -1,10 +1,12 @@
 // Results of searching for a detail across the corpus, shown in the image
 // viewer: an annotated detail or a box drawn with «Buscar», and each image
-// with the part where the detail was found.
+// with the part where the detail was found. A result opens in a window over
+// the viewer with the record's data, so the search stays where it was.
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Columns2, ScanSearch } from "lucide-react";
 import type { DetailMatch } from "../../shared/detailSearch";
 import { useT } from "../i18n";
+import { RecordPreview } from "./RecordPreview";
 
 const preview = (id: string, revision?: string) => `imago://asset/${id}/preview${revision ? "?v=" + encodeURIComponent(revision) : ""}`;
 
@@ -19,6 +21,7 @@ export function DetailSearchPanel({
   onBack,
   onOpenRecord,
   onCompare,
+  onChanged,
 }: {
   query: DetailQuery;
   databaseId: string;
@@ -27,8 +30,11 @@ export function DetailSearchPanel({
   /** Shown under the heading: the region searched for, say. */
   children?: ReactNode;
   onBack: () => void;
+  /** Opens the full record of a result (from its window). */
   onOpenRecord?: (rowId: string) => void;
   onCompare?: (assetIds: string[]) => void;
+  /** A property edited in a result's window. */
+  onChanged?: () => void;
 }) {
   const t = useT();
   const [inside, setInside] = useState(false);
@@ -37,6 +43,8 @@ export function DetailSearchPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  /** The result opened in a window over the viewer. */
+  const [opened, setOpened] = useState<DetailMatch | null>(null);
   useEffect(() => {
     if (!loading) return;
     const started = Date.now();
@@ -106,7 +114,7 @@ export function DetailSearchPanel({
       <ul className={`detail-results${loading ? " is-loading" : ""}`} aria-busy={loading}>
         {results?.slice(0, 30).map((r) => (
           <li key={r.assetId}>
-            <button type="button" onClick={() => onOpenRecord?.(r.rowId)} disabled={!onOpenRecord} data-tooltip={t("Abrir registro")}>
+            <button type="button" onClick={() => setOpened(r)} data-tooltip={t("Abrir registro")}>
               <span className="detail-thumb">
                 <img src={preview(r.assetId, r.revision)} alt={r.title} loading="lazy" />
                 {r.box && (
@@ -126,6 +134,15 @@ export function DetailSearchPanel({
           </li>
         ))}
       </ul>
+      {opened && (
+        <RecordPreview
+          rowId={opened.rowId}
+          assetId={opened.assetId}
+          onClose={() => setOpened(null)}
+          onChanged={onChanged}
+          onOpenRecord={onOpenRecord}
+        />
+      )}
     </div>
   );
 }

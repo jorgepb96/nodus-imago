@@ -1322,6 +1322,107 @@ export function ViewControls({
   );
 }
 
+/** Drops the filters on properties none of the chosen databases has (and the
+ * groups left empty): the filters follow the databases chosen. */
+export function pruneFilters(
+  filters: PropertyFilter[],
+  groups: PropertyFilterGroup[],
+  details: DatabaseDetail[],
+): { filters: PropertyFilter[]; groups: PropertyFilterGroup[] } {
+  const known = new Set(criteriaColumns(details).map((column) => column.id));
+  const keep = (filter: PropertyFilter) =>
+    (filter.columnIds ?? [filter.columnId]).some((id) => known.has(id));
+  const prune = (list: PropertyFilterGroup[]): PropertyFilterGroup[] =>
+    list
+      .map((group) => ({ ...group, filters: group.filters.filter(keep), groups: prune(group.groups ?? []) }))
+      .filter((group) => group.filters.length || group.groups.length);
+  return { filters: filters.filter(keep), groups: prune(groups) };
+}
+
+/**
+ * Filters only, behind an icon button that opens them in a popover: the
+ * same editor as «Filtrar y ordenar», without sorting, over the properties
+ * of the databases given (used where images are picked from the collection).
+ */
+export function FilterControl({
+  details,
+  filters,
+  groups,
+  logic,
+  onChange,
+  equivalences = [],
+}: {
+  details: DatabaseDetail[];
+  filters: PropertyFilter[];
+  groups: PropertyFilterGroup[];
+  logic: "and" | "or";
+  onChange: (filters: PropertyFilter[], groups: PropertyFilterGroup[], logic: "and" | "or") => void;
+  equivalences?: EquivalenceGroup[];
+}) {
+  const t = useT(),
+    anchor = useRef<HTMLButtonElement>(null),
+    [open, setOpen] = useState(false);
+  const columns = criteriaColumns(details),
+    known = new Set(columns.map((column) => column.id)),
+    // Only the equivalences that reach some property of these databases.
+    offered = equivalences.filter((group) => group.columnIds.some((id) => known.has(id))),
+    count = activeFilterCount(filters, groups);
+  const nodeCount = (filters: PropertyFilter[], groups: PropertyFilterGroup[]): number =>
+    filters.length + groups.reduce((n, group) => n + 1 + nodeCount(group.filters, group.groups ?? []), 0);
+  return (
+    <div className="view-controls filter-control">
+      <button
+        ref={anchor}
+        type="button"
+        className={`button icon-button${count ? " selected" : ""}`}
+        aria-label={t("Filtros")}
+        data-tooltip={t("Filtros")}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        data-testid="picker-filters"
+      >
+        <SlidersHorizontal size={15} />
+        {!!count && <span className="small-count">{count}</span>}
+      </button>
+      {open && (
+        <CriteriaPopover
+          anchor={anchor}
+          label={t("Filtros")}
+          onClose={() => setOpen(false)}
+          className="view-controls-panel"
+          width={650}
+          closeOnFocusOutside={false}
+        >
+          <header>
+            <strong>{t("Filtros")}</strong>
+            <Button icon aria-label={t("Cerrar")} onClick={() => setOpen(false)}>
+              <X size={16} />
+            </Button>
+          </header>
+          <div className="criteria-panel-body">
+            <FilterEditor
+              columns={columns}
+              equivalences={offered}
+              filters={filters}
+              groups={groups}
+              logic={logic}
+              onChange={onChange}
+              total={nodeCount(filters, groups)}
+            />
+          </div>
+          <footer>
+            <span>{t("Las propiedades disponibles son las de las bases de datos elegidas.")}</span>
+            <Button onClick={() => onChange([], [], "and")}>{t("Restablecer")}</Button>
+            <Button primary onClick={() => setOpen(false)}>
+              {t("Listo")}
+            </Button>
+          </footer>
+        </CriteriaPopover>
+      )}
+    </div>
+  );
+}
+
 /** One-line summary of the active criteria under the toolbar: each filter and
  * sort is a chip that opens the panel or removes itself. */
 export function CriteriaBar({

@@ -5,7 +5,9 @@ import {
   isLoopbackUrl,
   type ApiProfile,
   type ApiProvider,
+  type ImageCatalogModel,
   type ModelChoice,
+  type ProviderModel,
 } from "../../shared/aiConfig";
 import {
   anthropicVisionContent,
@@ -20,7 +22,7 @@ import {
   type EmbeddingApiProvider,
 } from "../../shared/embeddingApi";
 import { splitSse, sseData, streamDelta } from "../../shared/chat";
-import { IMAGE_API } from "../../shared/restoration";
+import { IMAGE_API, SUGGESTED_IMAGE_MODELS } from "../../shared/restoration";
 export type CompletionRequest = {
   choice: ModelChoice;
   profiles: Partial<Record<ApiProvider, ApiProfile>>;
@@ -598,21 +600,128 @@ export class ApiProviders {
       );
     return vectors as number[][];
   }
+  /**
+   * A provider's catalogue, as Nodus lists it: each model with its name,
+   * context, whether it accepts images and whether it returns them. Sorted by
+   * id; OpenRouter by upstream provider, then id. OpenRouter's catalogue is
+   * public, so it is read without a key when none is saved.
+   */
   async list(
     provider: ApiProvider,
     profiles: Partial<Record<ApiProvider, ApiProfile>>,
     remoteEnabled: boolean,
     signal: AbortSignal,
-  ) {
+  ): Promise<ProviderModel[]> {
     const base = providerBase(provider, profiles);
     if (!remoteEnabled && !isLoopbackUrl(base))
       throw new ApiFailure(
         "Activa el uso opcional de APIs para consultar este catálogo.",
       );
-    const result = await this.request(provider, base, "/models", null, signal);
-    return (result.data ?? [])
-      .filter((m: any) => typeof m.id === "string")
-      .map((m: any) => m.id as string)
-      .sort();
+    const limits = { bytes: 32 * 2 ** 20, timeoutMs: 30_000 };
+    let result: any;
+    if (provider === "gemini")
+      result = await this.request(
+        provider,
+        geminiNativeBase(base),
+        "/models?pageSize=1000",
+        null,
+        signal,
+        geminiNativeBase(providerBase(provider, {})),
+        limits,
+      );
+    else if (provider === "anthropic")
+      result = await this.request(provider, base, "/models?limit=1000", null, signal, undefined, limits);
+    else if (provider === "openrouter" && !this.secrets.get(provider) && base === providerBase(provider, {}))
+      result = await this.publicCatalog(`${base}/models`, signal, limits);
+    else result = await this.request(provider, base, "/models", null, signal, undefined, limits);
+    const rows: any[] = Array.isArray(result?.data) ? result.data : Array.isArray(result?.models) ? result.models : [];
+    const models = rows.map((m) => catalogModel(provider, m)).filter((m): m is ProviderModel => !!m);
+    return provider === "openrouter"
+      ? models.sort((a, b) => (a.group === b.group ? a.id.localeCompare(b.id) : (a.group ?? "").localeCompare(b.group ?? "")))
+      : models.sort((a, b) => a.id.localeCompare(b.id));
   }
+  /** A public catalogue (OpenRouter's), read without any key. */
+  private async publicCatalog(url: string, signal: AbortSignal, limits: { bytes: number; timeoutMs: number }) {
+    let response: Response;
+    try {
+      response = await this.fetcher(url, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(limits.timeoutMs)]),
+        redirect: "error",
+      });
+    } catch {
+      if (signal.aborted) throw new Error("Solicitud cancelada.");
+      throw new ApiFailure("No se pudo conectar con el proveedor. Comprueba el endpoint y la conexión.");
+    }
+    if (!response.ok) throw new ApiFailure(`HTTP ${response.status} al consultar el catálogo.`);
+    const text = await response.text();
+    if (text.length > limits.bytes) throw new ApiFailure("Respuesta del proveedor demasiado grande.");
+    return JSON.parse(text);
+  }
+  private imageCache: { signature: string; at: number; models: ImageCatalogModel[] } | null = null;
+  /**
+   * The image models of the providers that can edit images and have a saved
+   * key, read from their catalogues (kept for ten minutes). A provider whose
+   * catalogue cannot be read offers its suggested models instead.
+   */
+  async imageCatalog(
+    profiles: Partial<Record<ApiProvider, ApiProfile>>,
+    remoteEnabled: boolean,
+    refresh: boolean,
+    signal: AbortSignal,
+  ): Promise<ImageCatalogModel[]> {
+    const candidates = (["openai", "gemini", "openrouter"] as const).filter((p) => IMAGE_API[p] && this.secrets.get(p));
+    const signature = JSON.stringify([candidates, candidates.map((p) => profiles[p]?.baseUrl ?? ""), remoteEnabled]);
+    if (!refresh && this.imageCache?.signature === signature && Date.now() - this.imageCache.at < 10 * 60_000)
+      return this.imageCache.models;
+    const groups = await Promise.all(
+      candidates.map(async (provider) => {
+        try {
+          const found = (await this.list(provider, profiles, remoteEnabled, signal))
+            .filter((m) => m.imageOutput)
+            .map((m) => ({ provider, model: m.id, ...(m.name && m.name !== m.id ? { name: m.name } : {}) }));
+          if (found.length) return found;
+        } catch {
+          if (signal.aborted) throw new Error("Solicitud cancelada.");
+        }
+        return (SUGGESTED_IMAGE_MODELS[provider] ?? []).map((model) => ({ provider, model }));
+      }),
+    );
+    const models = groups.flat();
+    this.imageCache = { signature, at: Date.now(), models };
+    return models;
+  }
+}
+
+const contextOf = (...values: unknown[]) =>
+  values.find((v): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1024);
+/** One row of a provider's /models answer, as a catalogue model. */
+function catalogModel(provider: ApiProvider, m: any): ProviderModel | null {
+  if (provider === "gemini") {
+    if (typeof m?.name !== "string") return null;
+    const id = m.name.replace(/^models\//, ""),
+      methods: string[] = Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
+    return {
+      id,
+      ...(typeof m.displayName === "string" ? { name: m.displayName } : {}),
+      contextLength: contextOf(m.inputTokenLimit),
+      // Imagen answers through «predict», which Imago does not use.
+      imageOutput: /image/i.test(id) && !/^imagen/i.test(id) && methods.includes("generateContent"),
+    };
+  }
+  if (typeof m?.id !== "string" || !m.id.trim()) return null;
+  const input: string[] | undefined = m.architecture?.input_modalities,
+    output: string[] | undefined = m.architecture?.output_modalities;
+  const vision = Array.isArray(input) ? input.includes("image") : typeof m.capabilities?.vision === "boolean" ? m.capabilities.vision : undefined;
+  return {
+    id: m.id,
+    ...(typeof m.name === "string" ? { name: m.name } : typeof m.display_name === "string" ? { name: m.display_name } : {}),
+    ...(provider === "openrouter" ? { group: m.id.includes("/") ? m.id.split("/")[0] : "other" } : {}),
+    contextLength: contextOf(m.context_length, m.top_provider?.context_length, m.context_window, m.max_context_length, m.max_model_len, m.max_input_tokens),
+    vision,
+    // An edit needs an image in and an image out; OpenAI edits with its image models.
+    imageOutput:
+      provider === "openai"
+        ? /^(gpt-image|chatgpt-image)/.test(m.id)
+        : Array.isArray(output) && output.includes("image") && vision !== false,
+  };
 }

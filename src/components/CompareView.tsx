@@ -17,11 +17,13 @@ import {
   ImagePlus,
 } from "lucide-react";
 import type { CompareBoard, CompareItem } from "../../shared/compare";
-import type { DatabaseSummary } from "../../shared/databases";
-import type { RecordRow } from "../../shared/imago";
+import type { DatabaseDetail, DatabaseSummary } from "../../shared/databases";
+import type { EquivalenceGroup, PropertyFilter, PropertyFilterGroup, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { Button, Modal, Thumbnail } from "./ui";
 import { CriteriaSelect } from "./CriteriaSelect";
+import { FilterControl, pruneFilters } from "./ViewControls";
+import { SectionSideResize, useSectionSideWidth } from "./SectionSide";
 
 const LIMIT = 6;
 type View = { scale: number; x: number; y: number };
@@ -34,14 +36,18 @@ export function CompareView({
   seed,
   onSeedUsed,
   onOpenRecord,
+  equivalences = [],
 }: {
   databases: DatabaseSummary[];
   /** Images sent from a gallery selection: they open in a new board. */
   seed: string[] | null;
   onSeedUsed: () => void;
   onOpenRecord: (rowId: string) => void;
+  /** Equivalent fields of Settings, offered as filters when adding images. */
+  equivalences?: EquivalenceGroup[];
 }) {
   const t = useT();
+  const [sideWidth, resizeSide] = useSectionSideWidth();
   const api = window.imago;
   const [boards, setBoards] = useState<CompareBoard[]>([]);
   const [board, setBoard] = useState<(CompareBoard & { items: CompareItem[] }) | null>(null);
@@ -122,7 +128,7 @@ export function CompareView({
 
   return (
     <div className="compare-page" data-testid="compare-view">
-      <aside className="compare-boards">
+      <aside className="compare-boards" style={{ width: sideWidth }}>
         <h1>
           <Columns2 size={18} />
           {t("Mesa de comparación")}
@@ -149,6 +155,7 @@ export function CompareView({
           </div>
         ))}
       </aside>
+      <SectionSideResize width={sideWidth} onResize={resizeSide} />
       <section className="compare-main">
         {!board ? (
           <div className="compare-empty">
@@ -324,6 +331,7 @@ export function CompareView({
           databases={databases}
           taken={board.assetIds}
           room={LIMIT - board.assetIds.length}
+          equivalences={equivalences}
           onClose={() => setPicking(false)}
           onAdd={(ids) => {
             setPicking(false);
@@ -407,6 +415,7 @@ export function ImagePicker({
   onAdd,
   title,
   action,
+  equivalences = [],
 }: {
   databases: DatabaseSummary[];
   taken: string[];
@@ -415,6 +424,8 @@ export function ImagePicker({
   onAdd: (assetIds: string[]) => void;
   title?: string;
   action?: string;
+  /** The equivalent fields of Settings, offered as filters across databases. */
+  equivalences?: EquivalenceGroup[];
 }) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -422,20 +433,65 @@ export function ImagePicker({
   const [rows, setRows] = useState<RecordRow[]>([]);
   const [chosen, setChosen] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  // Filters over the properties of the databases chosen: their details are
+  // read once each, and a filter on a property none of them has is dropped.
+  const [details, setDetails] = useState<Record<string, DatabaseDetail>>({});
+  const [criteria, setCriteria] = useState<{ filters: PropertyFilter[]; groups: PropertyFilterGroup[]; logic: "and" | "or" }>({
+    filters: [],
+    groups: [],
+    logic: "and",
+  });
+  useEffect(() => {
+    const missing = scope.filter((id) => !details[id]);
+    if (!missing.length) return;
+    let cancelled = false;
+    void Promise.all(missing.map((id) => window.imago.call("detail", { id }).catch(() => null))).then((found) => {
+      if (cancelled) return;
+      setDetails((current) => {
+        const next = { ...current };
+        for (const d of found) if (d) next[d.database.id] = d;
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scope, details]);
+  const scopeDetails = scope.map((id) => details[id]).filter((d): d is DatabaseDetail => !!d);
+  const detailsReady = scopeDetails.length === scope.length;
+  useEffect(() => {
+    if (!detailsReady) return;
+    setCriteria((current) => {
+      const pruned = pruneFilters(current.filters, current.groups, scopeDetails);
+      return pruned.filters.length === current.filters.length && JSON.stringify(pruned.groups) === JSON.stringify(current.groups)
+        ? current
+        : { ...current, ...pruned };
+    });
+    // scopeDetails follows scope and details.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, details, detailsReady]);
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
       setLoading(true);
       void window.imago
-        .call("search", { query, databaseIds: scope.length === databases.length ? undefined : scope, limit: 60 })
+        .call("search", {
+          query,
+          databaseIds: scope.length === databases.length ? undefined : scope,
+          filters: criteria.filters,
+          filterGroups: criteria.groups,
+          filterLogic: criteria.logic,
+          limit: 60,
+        })
         .then((page) => !cancelled && setRows(page.rows.filter((r) => r.images.length)))
+        .catch(() => !cancelled && setRows([]))
         .finally(() => !cancelled && setLoading(false));
     }, 250);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, scope, databases.length]);
+  }, [query, scope, databases.length, criteria]);
   const images = rows.flatMap((row) => row.images.filter((i) => i.width > 0).map((image) => ({ row, image })));
   return (
     <Modal icon={ImagePlus} title={title ?? t("Añadir imágenes a la mesa")} onClose={onClose} wide>
@@ -454,6 +510,14 @@ export function ImagePicker({
               onChange={setScope}
             />
           )}
+          <FilterControl
+            details={scopeDetails}
+            filters={criteria.filters}
+            groups={criteria.groups}
+            logic={criteria.logic}
+            equivalences={equivalences}
+            onChange={(filters, groups, logic) => setCriteria({ filters, groups, logic })}
+          />
         </div>
         {room > 1 && (
           <p className="hint">

@@ -325,6 +325,11 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   modelPreparation: z.undefined(),
   prepareModels: z.object({ consent: z.literal(true) }).strict(),
   probeExperimentalPython: z.undefined(),
+  announcementsList: z.undefined(),
+  announcementsMarkRead: z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/) }).strict(),
+  announcementsClear: z.undefined(),
+  announcementsConfigure: z.object({ enabled: z.boolean() }).strict(),
+  announcementsRefresh: z.undefined(),
   openExternalLink: z
     .object({
       url: z
@@ -933,6 +938,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .strict(),
   clearApiKey: z.object({ provider: providerSchema }).strict(),
   listProviderModels: z.object({ provider: providerSchema }).strict(),
+  imageModelCatalog: z.object({ refresh: z.boolean().optional() }).strict(),
   savedSearches: z.undefined(),
   saveSearch: z.object({ name, input: searchSchema }).strict(),
   removeSearch: z.object({ id }).strict(),

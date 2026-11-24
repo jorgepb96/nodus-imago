@@ -12,9 +12,28 @@ export type DatabaseSearchState = {
   sources: "both" | "images" | "text";
   limit: number;
 };
+export type SearchMode = DatabaseSearchState["mode"];
+/** Hybrid by default; the mode the user picks is kept on this device (literal without an embeddings model). */
+export function storedSearchMode(key: string): SearchMode {
+  try {
+    const value = localStorage.getItem(key);
+    return value === "literal" || value === "semantic" || value === "hybrid" ? value : "hybrid";
+  } catch {
+    return "hybrid";
+  }
+}
+export function saveSearchMode(key: string, mode: SearchMode) {
+  try {
+    localStorage.setItem(key, mode);
+  } catch {
+    /* A preference only. */
+  }
+}
+export const DATABASE_SEARCH_MODE_KEY = "imago.databaseSearch.mode";
+export const SEARCH_MODE_KEY = "imago.search.mode";
 export const EMPTY_DATABASE_SEARCH: DatabaseSearchState = {
   query: "",
-  mode: "literal",
+  mode: "hybrid",
   sources: "both",
   limit: 100,
 };
