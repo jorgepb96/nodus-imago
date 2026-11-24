@@ -50,7 +50,9 @@ export function BackupSettings({
   );
   useEffect(() => {
     void load();
-    const stop = window.imago.onChange(() => void load());
+    const stop = window.imago.onChange((scope) => {
+      if (scope !== "mcp") void load();
+    });
     return stop;
   }, [load]);
   const act = (work: () => Promise<unknown>) =>

@@ -409,6 +409,22 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   searchPlaces: z.object({ query: z.string().trim().max(200) }).strict(),
   openMapAttribution: z.undefined(),
   status: z.undefined(),
+  mcpStatus: z.undefined(),
+  mcpConfigure: z
+    .object({
+      enabled: z.boolean().optional(),
+      port: z.number().int().min(1024).max(65535).optional(),
+      access: z.enum(["read", "write"]).optional(),
+    })
+    .strict(),
+  mcpRegenerateToken: z.undefined(),
+  mcpTunnelStatus: z.undefined(),
+  mcpTunnelConnect: z
+    .object({ tunnelId: z.string().trim().regex(/^tunnel_[0-9a-f]{32}$/), apiKey: z.string().trim().max(1000).optional() })
+    .strict(),
+  mcpTunnelDisconnect: z.undefined(),
+  mcpTunnelForget: z.undefined(),
+  mcpTunnelDiagnostics: z.undefined(),
   listDatabases: z.undefined(),
   createDatabase: z.object({ name, kind: z.enum(["images", "sources", "custom"]).optional() }).strict(),
   convertToRelation: z

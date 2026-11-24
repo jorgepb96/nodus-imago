@@ -20,7 +20,10 @@ import { IMAGE_EXTENSIONS } from "./import/images";
 import { Secrets } from "./secrets/store";
 import { ApiProviders } from "./ai/apiProviders";
 import { ChatRunner } from "./chat/turn";
-import { sandboxScript } from "./chat/sandbox";
+import { runCalc, sandboxScript } from "./chat/sandbox";
+import { McpHost } from "./mcp/server";
+import { McpTunnel } from "./mcp/tunnel";
+import { isMcpTunnelDiagnosticsUrl } from "../shared/mcpTunnel";
 import { commonsQuery, parseCommons } from "../shared/commons";
 import {
   AUTHORITY_SOURCES,
@@ -97,6 +100,8 @@ let backups: DesktopBackups | undefined;
 let updates: Updates | undefined;
 let announcements: Announcements | undefined;
 let chats: ChatRunner | undefined;
+let mcp: McpHost | undefined;
+let tunnel: McpTunnel | undefined;
 let restorationAbort: AbortController | null = null;
 /** Prepared image files by «id/variant?revision», so repeat loads skip the worker. */
 const assetPaths = new Map<string, string>();
@@ -553,6 +558,33 @@ app.whenReady().then(async () => {
   chats = new ChatRunner(call, providers, sandboxScript(__dirname), (delta) =>
     window?.webContents.send("imago:chat-delta", delta),
   );
+  // The local MCP server: off and read only until the user changes it in Settings.
+  mcp = new McpHost({
+    file: path.join(app.getPath("userData"), "mcp.json"),
+    version: app.getVersion(),
+    context: {
+      call: (command, input) => (closing ? Promise.reject(new Error("Imago se está cerrando.")) : call(command, input)),
+      changed: () => window?.webContents.send("imago:changed", "data"),
+      calc: (code, json, timeoutMs) =>
+        runCalc(sandboxScript(__dirname), code, json, new AbortController().signal, { timeoutMs }),
+    },
+    onStatus: () => window?.webContents.send("imago:changed", "mcp"),
+  });
+  // ChatGPT through OpenAI's tunnel: only when the user set it up, and only while the server is on.
+  tunnel = new McpTunnel({
+    root: path.join(app.getPath("userData"), "mcp-tunnel"),
+    version: app.getVersion(),
+    key: {
+      get: () => secrets.get("mcptunnel"),
+      set: (value) => secrets.set("mcptunnel", value),
+      clear: () => secrets.clear("mcptunnel"),
+    },
+    server: { status: () => mcp!.status(), turnOn: () => mcp!.configure({ enabled: true }) },
+    // Electron's network stack, so the system proxy applies.
+    fetch: net.fetch.bind(net) as typeof fetch,
+    onStatus: () => window?.webContents.send("imago:changed", "mcp"),
+  });
+  void mcp.start().then(() => tunnel!.startIfConfigured());
   const trusted = (event: Electron.IpcMainInvokeEvent) =>
     !!window &&
     event.sender === window.webContents &&
@@ -644,6 +676,30 @@ app.whenReady().then(async () => {
           progress: status === "downloading" ? 42 : status === "downloaded" ? 100 : null,
           message: "",
         };
+      }
+      if (command === "mcpStatus") return mcp!.status();
+      if (command === "mcpConfigure") {
+        const before = mcp!.status();
+        const after = await mcp!.configure(safe as any);
+        // The tunnel follows the server: off with it, and onto a new port.
+        if (!after.config.enabled) await tunnel!.stop();
+        else if (!before.running || before.port !== after.port) void tunnel!.restartIfConfigured();
+        return after;
+      }
+      if (command === "mcpRegenerateToken") {
+        const after = await mcp!.regenerateToken();
+        void tunnel!.restartIfConfigured();
+        return after;
+      }
+      if (command === "mcpTunnelStatus") return tunnel!.status();
+      if (command === "mcpTunnelConnect") return tunnel!.connect(safe as any);
+      if (command === "mcpTunnelDisconnect") return tunnel!.disconnect();
+      if (command === "mcpTunnelForget") return tunnel!.forget();
+      if (command === "mcpTunnelDiagnostics") {
+        const url = tunnel!.status().uiUrl;
+        if (!url || !isMcpTunnelDiagnosticsUrl(url)) throw new Error("El túnel no está conectado.");
+        await shell.openExternal(url);
+        return;
       }
       if (command === "updateStatus") return updates!.status();
       if (command === "updateConfigure") return updates!.configure(safe as any);
@@ -1044,6 +1100,8 @@ app.on("before-quit", (event) => {
   announcements?.close();
   chats?.cancelAll();
   void (async () => {
+    tunnel?.killSync();
+    await mcp?.stop().catch(() => {});
     await backups?.close();
     await call("_close");
   })().finally(() => app.exit());

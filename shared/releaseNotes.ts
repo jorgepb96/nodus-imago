@@ -33,6 +33,42 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.8.0",
+    date: "2026-11-24",
+    highlights: [
+      {
+        scope: "ai",
+        category: "new",
+        es: "Servidor MCP local (Ajustes › Servidor MCP): conecta Claude, ChatGPT, Cursor y otros asistentes con tus bases de datos. Está apagado por defecto, solo escucha en este ordenador y pide un token.",
+        en: "Local MCP server (Settings › MCP server): connect Claude, ChatGPT, Cursor and other assistants to your databases. It is off by default, only listens on this computer and asks for a token.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Un asistente conectado puede consultar bases, propiedades y todas las celdas, filtrar y ordenar, buscar por palabras o por significado, encontrar imágenes y detalles parecidos, ver y analizar las fotografías, y calcular resúmenes, estadísticas, cronologías y cualquier cálculo en un proceso aislado.",
+        en: "A connected assistant can read databases, properties and every cell, filter and sort, search by words or by meaning, find similar images and details, look at and analyse the photographs, and compute summaries, statistics, timelines and any calculation in an isolated process.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Por defecto solo lectura. Si lo permites en una ventana de confirmación, el asistente también crea y modifica bases de datos, propiedades de cualquier tipo, opciones, registros y anotaciones, importa imágenes y lanza los análisis de IA; cada cambio de valores se puede deshacer.",
+        en: "Read only by default. If you allow it in a confirmation window, the assistant also creates and changes databases, properties of any type, options, records and annotations, imports images and runs the AI analyses; every change to values can be undone.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "ChatGPT se conecta con el túnel seguro oficial de OpenAI, como en Nodus, sin abrir puertos ni publicar tu colección: Imago descarga y verifica el cliente, guarda la clave cifrada y te guía paso a paso.",
+        en: "ChatGPT connects through OpenAI's official secure tunnel, as in Nodus, without opening ports or publishing your collection: Imago downloads and verifies the client, keeps the key encrypted and guides you step by step.",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "El panel muestra la dirección y el token para copiarlos, la configuración lista para Claude Desktop y Claude Code, y las últimas herramientas que ha usado cada asistente.",
+        en: "The panel shows the address and token to copy, ready-made configuration for Claude Desktop and Claude Code, and the last tools each assistant used.",
+      },
+    ],
+  },
+  {
     version: "0.7.0",
     date: "2026-11-24",
     highlights: [

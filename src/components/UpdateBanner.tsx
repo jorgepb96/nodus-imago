@@ -128,7 +128,9 @@ export function UpdateBanner({
         .then(() => load())
         .catch(() => setStartup(false));
     });
-    const unsubscribe = window.imago.onChange(() => void load());
+    const unsubscribe = window.imago.onChange((scope) => {
+      if (scope !== "mcp") void load();
+    });
     return () => {
       alive = false;
       unsubscribe();

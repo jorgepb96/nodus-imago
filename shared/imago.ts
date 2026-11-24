@@ -1001,6 +1001,14 @@ export type Commands = {
     input: { scope: HistoryScope };
     result: { undo: HistoryStep | null; redo: HistoryStep | null };
   };
+  mcpStatus: { input: void; result: import("./mcp").McpStatus };
+  mcpConfigure: { input: Partial<import("./mcp").McpConfig>; result: import("./mcp").McpStatus };
+  mcpRegenerateToken: { input: void; result: import("./mcp").McpStatus };
+  mcpTunnelStatus: { input: void; result: import("./mcpTunnel").McpTunnelStatus };
+  mcpTunnelConnect: { input: import("./mcpTunnel").McpTunnelConnectInput; result: import("./mcpTunnel").McpTunnelStatus };
+  mcpTunnelDisconnect: { input: void; result: import("./mcpTunnel").McpTunnelStatus };
+  mcpTunnelForget: { input: void; result: import("./mcpTunnel").McpTunnelStatus };
+  mcpTunnelDiagnostics: { input: void; result: void };
   savedSearches: { input: void; result: SavedSearch[] };
   saveSearch: { input: { name: string; input: SearchInput }; result: void };
   removeSearch: { input: { id: string }; result: void };
@@ -1010,8 +1018,9 @@ export interface ImagoApi {
     command: K,
     ...args: Commands[K]["input"] extends void ? [] : [Commands[K]["input"]]
   ): Promise<Commands[K]["result"]>;
-  /** «jobs»: only the queue moved; «data»: records the views show may differ. */
-  onChange(listener: (scope: "jobs" | "data" | "announcements") => void): () => void;
+  /** «jobs»: only the queue moved; «data»: records the views show may differ;
+   * «mcp»: the local MCP server's state or activity. */
+  onChange(listener: (scope: "jobs" | "data" | "announcements" | "mcp") => void): () => void;
   /** Runs one chat turn in the main process; deltas arrive through onChatDelta. */
   chatSend(request: import("./chat").ChatTurnRequest): Promise<import("./chat").ChatTurnResult>;
   chatCancel(conversationId: string): Promise<void>;

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID as uuid } from "node:crypto";
+import sharp from "sharp";
 import { Repository } from "./db/repository";
 import {
   Images,
@@ -986,6 +987,34 @@ export class Service {
         }
         return preparation;
       }
+      case "_mcpImage": {
+        // An image for a model connected through MCP: as Imago shows it
+        // (turned and cropped), as a JPEG every client can read.
+        const size = Math.min(2200, Math.max(256, Math.round(input.maxSize ?? 1568)));
+        const file: string = await this.run("_asset", { id: input.id, variant: size <= 480 ? "thumb" : "preview" });
+        const { data, info } = await sharp(file)
+          .resize(size, size, { fit: "inside", withoutEnlargement: true })
+          .flatten({ background: "#ffffff" })
+          .jpeg({ quality: 85 })
+          .toBuffer({ resolveWithObject: true });
+        return { data: data.toString("base64"), mimeType: "image/jpeg", width: info.width, height: info.height };
+      }
+      case "_mcpSetCells": {
+        // Every cell a tool call writes, at once and as one Undo step: if one
+        // is refused, none is written.
+        const batch = uuid();
+        this.repo.db.transaction(() => {
+          for (const cell of input.cells as { rowId: string; columnId: string; value: string | null }[])
+            this.repo.setCell(cell.rowId, cell.columnId, cell.value, true, batch);
+        })();
+        this.autoIndex.touch();
+        return input.cells.length;
+      }
+      case "_mcpImageOwner":
+        return (
+          (this.repo.db.prepare("SELECT row_id FROM image_assets WHERE id=?").get(input.id) as { row_id: string } | undefined)
+            ?.row_id ?? null
+        );
       case "valueClusters":
         return this.cleanup.clusters(input.columnId);
       case "valueCounts":

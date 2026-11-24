@@ -29,7 +29,9 @@ export function UpdateSettings({ perform, onWhatsNew }: { perform: Perform; onWh
   );
   useEffect(() => {
     void load();
-    return window.imago.onChange(() => void load());
+    return window.imago.onChange((scope) => {
+      if (scope !== "mcp") void load();
+    });
   }, [load]);
   const action = (work: () => Promise<unknown>) =>
     void perform(async () => {
