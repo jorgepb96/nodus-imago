@@ -2506,7 +2506,7 @@ thead th:last-child {
 }
 .agreement-workbench > footer.agreement-footer {
   flex-shrink: 0;
-  padding: 10px var(--modal-inset);
+  padding: 12px var(--modal-inset);
   background: linear-gradient(var(--surface), var(--surface)), var(--panel);
 }
 .agreement-tabs {
@@ -9530,7 +9530,7 @@ tr:hover .ai-cell-button,
   position: sticky;
   bottom: 0;
   z-index: 2;
-  padding: 10px var(--modal-inset);
+  padding: 12px var(--modal-inset);
   background: linear-gradient(var(--surface), var(--surface)), var(--panel);
 }
 .record-strip {
