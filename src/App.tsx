@@ -72,7 +72,7 @@ import type {
   DatabaseKind,
   DatabaseSummary,
 } from "../shared/databases";
-import { decodeMultiSelect, isAiColumn } from "../shared/databases";
+import { decodeMultiSelect, isAiColumn, linkPlace } from "../shared/databases";
 import type { CsvImportPlanData } from "../shared/databaseCsv";
 import type {
   ImagePlan,
@@ -1072,15 +1072,30 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </button>
       );
     }
-    if (c.type === "relation")
+    if (c.type === "relation") {
+      // The linked records by title, with where each link places the record.
+      const links = row.links?.[c.id] ?? [];
       return (
         <button
-          className="text-link"
+          className="cell-relation"
+          data-testid="relation-cell"
+          title={links.map((l) => (linkPlace(l) ? `${l.title} (${linkPlace(l)})` : l.title)).join("\n")}
           onClick={() => void perform(() => open(row))}
         >
-          {t("Relación")} ↗
+          {links.length ? (
+            links.slice(0, 3).map((l) => (
+              <span key={l.id} className="relation-pill">
+                {l.title}
+                {linkPlace(l) && <small>{linkPlace(l)}</small>}
+              </span>
+            ))
+          ) : (
+            <span className="muted">—</span>
+          )}
+          {links.length > 3 && <span className="relation-more">+{links.length - 3}</span>}
         </button>
       );
+    }
     const cell = (
       <Cell
         compact

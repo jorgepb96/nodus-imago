@@ -65,6 +65,8 @@ export type ImageAppearance = {
   year: number | null;
   date: string | null;
   page: string | null;
+  /** The figure or plate number, from the link to the work. */
+  figure?: string | null;
   caption: string | null;
   note: string | null;
   /** How the record's image relates to the one on screen ("self": it is that record). */

@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS image_assets(id TEXT PRIMARY KEY,database_id TEXT NOT
 CREATE INDEX IF NOT EXISTS assets_database ON image_assets(database_id,row_id);
 CREATE INDEX IF NOT EXISTS assets_hash ON image_assets(content_hash);
 CREATE TABLE IF NOT EXISTS db_relations(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,row_id TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,target_kind TEXT NOT NULL,target_id TEXT NOT NULL,target_vault_id TEXT,label TEXT,position INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS relations_row ON db_relations(row_id,column_id);
+CREATE INDEX IF NOT EXISTS relations_target ON db_relations(target_id);
+CREATE TABLE IF NOT EXISTS relation_details(a TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,b TEXT NOT NULL REFERENCES db_rows(id) ON DELETE CASCADE,page TEXT,figure TEXT,caption TEXT,note TEXT,updated_at TEXT NOT NULL,PRIMARY KEY(a,b));
+CREATE INDEX IF NOT EXISTS relation_details_b ON relation_details(b);
 CREATE TABLE IF NOT EXISTS search_documents(row_id TEXT PRIMARY KEY REFERENCES db_rows(id) ON DELETE CASCADE,database_id TEXT NOT NULL,body TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(row_id UNINDEXED,database_id UNINDEXED,body,tokenize='unicode61 remove_diacritics 2');
 CREATE TRIGGER IF NOT EXISTS search_insert AFTER INSERT ON search_documents BEGIN INSERT INTO records_fts(rowid,row_id,database_id,body) VALUES(new.rowid,new.row_id,new.database_id,new.body); END;

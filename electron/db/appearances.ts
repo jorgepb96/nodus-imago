@@ -119,30 +119,52 @@ export class Appearances {
     };
   }
 
-  /** The work of a record: related source records (with author and year), or a property's text. */
-  private work(column: DatabaseColumn | null, row: RecordRow) {
-    if (!column) return { work: null, author: null, workDetail: null };
-    if (column.type !== "relation") return { work: exportCellText(column, row).trim() || null, author: null, workDetail: null };
-    const targets = (
-      this.repo.db
-        .prepare("SELECT target_id FROM db_relations WHERE row_id=? AND column_id=? AND target_kind='db_row' ORDER BY position")
-        .all(row.id, column.id) as { target_id: string }[]
-    ).map((r) => r.target_id);
-    if (!targets.length) return { work: null, author: null, workDetail: null };
-    const sources = this.repo.hydrate(targets);
+  /**
+   * The works of a record: one per related source record (with its author
+   * and year, and the page, figure and caption its link records), or the
+   * text of a property.
+   */
+  private works(column: DatabaseColumn | null, row: RecordRow) {
+    type Work = {
+      key: string | null;
+      work: string | null;
+      author: string | null;
+      workDetail: string | null;
+      year: number | null;
+      page: string | null;
+      figure: string | null;
+      caption: string | null;
+      note: string | null;
+    };
+    const none: Work = { key: null, work: null, author: null, workDetail: null, year: null, page: null, figure: null, caption: null, note: null };
+    if (!column) return [none];
+    if (column.type !== "relation") return [{ ...none, work: exportCellText(column, row).trim() || null }];
+    const links = row.links?.[column.id] ?? [];
+    if (!links.length) return [none];
+    const sources = new Map(this.repo.hydrate(links.map((l) => l.id)).map((r) => [r.id, r]));
     const details = new Map<string, DatabaseDetail>();
     const detail = (id: string) => details.get(id) ?? details.set(id, this.repo.detail(id)).get(id)!;
     const text = (source: RecordRow, pattern: RegExp) => {
       const col = detail(source.databaseId).columns.find((c) => c.type !== "title" && pattern.test(c.name.trim()));
       return col ? exportCellText(col, source).trim() || null : null;
     };
-    const author = sources.map((s) => text(s, AUTHOR)).filter(Boolean).join("; ") || null,
-      year = sources.map((s) => text(s, YEAR)).filter(Boolean).join("; ") || null;
-    return {
-      work: sources.map((s) => s.title).join("; ") || null,
-      author,
-      workDetail: [author, year].filter(Boolean).join(" · ") || null,
-    };
+    return links.map((link): Work => {
+      const source = sources.get(link.id);
+      const author = source ? text(source, AUTHOR) : null,
+        year = source ? text(source, YEAR) : null,
+        parsed = year?.match(/\b(1[0-9]{3}|20[0-9]{2})\b/);
+      return {
+        key: link.id,
+        work: link.title,
+        author,
+        workDetail: [author, year].filter(Boolean).join(" · ") || null,
+        year: parsed ? Number(parsed[1]) : null,
+        page: link.page ?? null,
+        figure: link.figure ?? null,
+        caption: link.caption ?? null,
+        note: link.note ?? null,
+      };
+    });
   }
 
   /** Every appearance of the image's family, the image's own record first among equal years. */
@@ -165,29 +187,33 @@ export class Appearances {
       const row = rows.get(e.rowId);
       if (!row) return [];
       const used = this.fieldsFor(detail(row.databaseId), fields[row.databaseId]);
-      const work = this.work(used.work, row);
-      return [
-        {
-          id: row.id,
-          manual: false,
-          assetId: e.assetId,
-          rowId: row.id,
-          databaseId: row.databaseId,
-          databaseName: row.databaseName,
-          title: row.title,
-          revision: e.revision,
-          work: work.work,
-          workDetail: work.workDetail,
-          author: work.author,
-          year: e.year,
-          date: e.date,
-          page: used.page ? exportCellText(used.page, row).trim() || null : null,
-          caption: used.caption ? exportCellText(used.caption, row).trim() || null : null,
-          note: null,
-          match: e.member ? e.member.match : "self",
-          fields: { work: used.work?.id ?? null, page: used.page?.id ?? null, caption: used.caption?.id ?? null },
-        },
-      ];
+      const page = used.page ? exportCellText(used.page, row).trim() || null : null,
+        caption = used.caption ? exportCellText(used.caption, row).trim() || null : null;
+      // One line per work the record is linked to: the same photograph in
+      // five books is five appearances, each with its own page and caption.
+      const works = this.works(used.work, row);
+      return works.map((work) => ({
+        id: works.length > 1 && work.key ? `${row.id}:${work.key}` : row.id,
+        manual: false,
+        assetId: e.assetId,
+        rowId: row.id,
+        databaseId: row.databaseId,
+        databaseName: row.databaseName,
+        title: row.title,
+        revision: e.revision,
+        work: work.work,
+        workDetail: work.workDetail,
+        author: work.author,
+        // The year of the publication when the source gives one.
+        year: work.year ?? e.year,
+        date: work.year ? String(work.year) : e.date,
+        page: work.page ?? page,
+        figure: work.figure,
+        caption: work.caption ?? caption,
+        note: work.note,
+        match: e.member ? e.member.match : "self",
+        fields: { work: used.work?.id ?? null, page: used.page?.id ?? null, caption: used.caption?.id ?? null },
+      }));
     });
     const hashes = [family.contentHash, ...new Set(family.members.map((m) => m.contentHash))];
     for (const m of this.manual(hashes))

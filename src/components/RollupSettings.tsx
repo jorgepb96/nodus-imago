@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import {
+  LINK_FIELD_LABELS,
+  LINK_FIELDS,
+  LINK_ROLLUP_TARGETS,
+  relationHasPlace,
   ROLLUP_FUNCTIONS,
   type DatabaseColumnConfig,
   type DatabaseDetail,
@@ -61,9 +65,14 @@ export function RollupSettings({
       <CriteriaSelect
         label={t("Propiedad relacionada")}
         disabled={!target}
-        options={
-          target?.columns.map((c) => ({ value: c.id, label: c.name })) ?? []
-        }
+        options={[
+          // What each link records (page, figure, caption, note).
+          ...LINK_FIELDS.filter((f) => f === "note" || relationHasPlace(relation ?? { config: {} }, detail.database.kind, target?.database.kind)).map((f) => ({
+            value: LINK_ROLLUP_TARGETS[f],
+            label: `${t(LINK_FIELD_LABELS[f])} · ${t("del vínculo")}`,
+          })),
+          ...(target?.columns.map((c) => ({ value: c.id, label: c.name })) ?? []),
+        ]}
         values={value.rollupTargetColumnId ? [value.rollupTargetColumnId] : []}
         onChange={(v) => onChange({ ...value, rollupTargetColumnId: v[0] })}
       />

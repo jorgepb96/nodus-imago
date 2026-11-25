@@ -1,6 +1,7 @@
 import type { Repository } from "./repository";
 import {
   aggregateRollup,
+  linkRollupField,
   ROLLUP_FUNCTIONS,
   type DatabaseColumn,
   type DatabaseColumnConfig,
@@ -21,6 +22,14 @@ export function validateRollup(
     );
   if (!relation || !relation.config.relationTargetDatabaseId)
     throw Error("Selecciona una relación de esta base de datos.");
+  // A field of each link (page, figure, caption, note): text.
+  if (linkRollupField(config.rollupTargetColumnId)) {
+    if (!ROLLUP_FUNCTIONS.some((f) => f.id === config.rollupFunction))
+      throw Error("Agregación no válida.");
+    if (!["show", "show_unique", "count", "count_values", "count_empty", "count_unique", "percent_empty", "percent_not_empty"].includes(config.rollupFunction!))
+      throw Error("Esta agregación no se aplica a un dato del vínculo.");
+    return;
+  }
   const target = repo
     .detail(relation.config.relationTargetDatabaseId)
     .columns.find(
@@ -142,7 +151,25 @@ export function recomputeRollups(repo: Repository, changedDatabase: string) {
       );
     else {
       const relation = byId.get(c.config.rollupRelationColumnId ?? ""),
-        target = targetOf(c),
+        field = linkRollupField(c.config.rollupTargetColumnId);
+      if (field) {
+        // A field of each link, in the order of the links.
+        const values = new Map<string, (string | null)[]>();
+        for (const link of repo.db
+          .prepare(
+            `SELECT r.row_id,d.${field} value FROM db_relations r JOIN db_rows t ON t.id=r.target_id LEFT JOIN relation_details d ON d.a=min(r.row_id,r.target_id) AND d.b=max(r.row_id,r.target_id) WHERE r.column_id=? AND r.target_kind='db_row' ORDER BY r.position,r.id`,
+          )
+          .all(relation?.id ?? "") as { row_id: string; value: string | null }[])
+          (values.get(link.row_id) ?? values.set(link.row_id, []).get(link.row_id)!).push(link.value?.trim() || null);
+        for (const row of own)
+          row.cells[c.id] = relation && c.config.rollupFunction ? aggregateRollup(c.config.rollupFunction, values.get(row.id) ?? []) : null;
+        for (const row of own) {
+          repo.rawCell(row.id, c.id, row.cells[c.id] ?? null, c.type);
+          dirty.set(row.id, row);
+        }
+        continue;
+      }
+      const target = targetOf(c),
         targetRows = target
           ? new Map(rows(target.databaseId).map((r) => [r.id, r]))
           : new Map<string, RecordRow>();

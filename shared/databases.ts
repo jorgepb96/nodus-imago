@@ -218,6 +218,12 @@ export interface DatabaseColumnConfig {
   relationCardinality?: 'one' | 'many';
   /** A compatible relation property on the target database. New links are mirrored there. */
   relationInverseColumnId?: string;
+  /**
+   * Whether each link also records where the related record shows it: page,
+   * figure and caption. Absent, links to or from a Sources database have them.
+   * Every link can carry a note.
+   */
+  relationLinkDetails?: boolean;
   /** rollup columns: aggregate a property across the rows a relation column links to. */
   rollupRelationColumnId?: string; // a 'relation' (db_row) column on THIS database
   rollupTargetColumnId?: string; // a column id on the related database ('__title__' for its title)
@@ -501,6 +507,69 @@ export interface DatabaseRelation {
   createdAt: string;
 }
 
+/**
+ * What one link between two records records: where the related record shows
+ * the other (a photograph on page 12 of a book, as figure 3, with its caption)
+ * and a note. The same details are seen from both records.
+ */
+export interface LinkDetails {
+  page?: string | null;
+  figure?: string | null;
+  caption?: string | null;
+  note?: string | null;
+}
+export const LINK_FIELDS = ['page', 'figure', 'caption', 'note'] as const;
+export type LinkField = (typeof LINK_FIELDS)[number];
+export const LINK_FIELD_LABELS: Record<LinkField, string> = {
+  page: 'Página',
+  figure: 'Figura o lámina',
+  caption: 'Pie de foto',
+  note: 'Nota',
+};
+/** Rollup targets that show a field of each link instead of a related property. */
+export const LINK_ROLLUP_TARGETS: Record<LinkField, string> = {
+  page: '__link_page__',
+  figure: '__link_figure__',
+  caption: '__link_caption__',
+  note: '__link_note__',
+};
+export function linkRollupField(target: string | null | undefined): LinkField | null {
+  return (Object.entries(LINK_ROLLUP_TARGETS).find(([, id]) => id === target)?.[0] as LinkField | undefined) ?? null;
+}
+/** A record a relation links to, with the link's details. */
+export interface RelationLink extends LinkDetails {
+  id: string;
+  title: string;
+  databaseId: string;
+}
+/** Trimmed details, without empty fields; null when nothing is left. */
+export function cleanLinkDetails(details: LinkDetails | null | undefined): LinkDetails | null {
+  const out: LinkDetails = {};
+  for (const field of LINK_FIELDS) {
+    const value = details?.[field];
+    if (typeof value === 'string' && value.trim()) out[field] = value.replace(/[ \t]+/g, ' ').trim().slice(0, 4000);
+  }
+  return Object.keys(out).length ? out : null;
+}
+/** «p. 12 · fig. 3»: where the link places the record, for a cell or a list. */
+export function linkPlace(details: LinkDetails | null | undefined): string {
+  return [details?.page ? `p. ${details.page}` : '', details?.figure ? `fig. ${details.figure}` : '']
+    .filter(Boolean)
+    .join(' · ');
+}
+/**
+ * Whether a relation's links record page, figure and caption: set on the
+ * property, or else when either side is a Sources database.
+ */
+export function relationHasPlace(
+  column: Pick<DatabaseColumn, 'config'>,
+  ownKind: DatabaseKind | null | undefined,
+  targetKind: DatabaseKind | null | undefined,
+): boolean {
+  if (typeof column.config.relationLinkDetails === 'boolean') return column.config.relationLinkDetails;
+  return ownKind === 'sources' || targetKind === 'sources';
+}
+
 /** A candidate shown in the relation picker. */
 export interface RelationTarget {
   kind: RelationTargetKind;
@@ -539,6 +608,8 @@ export interface DatabaseRow {
   attachments?: Record<string, DatabaseAttachment[]>;
   /** columnId → number of relations, for relation columns (labels fetched on demand). */
   relationCounts?: Record<string, number>;
+  /** columnId → the records a relation links to, in order, with what each link records. */
+  links?: Record<string, RelationLink[]>;
   /** columnId → computed rollup display value, for rollup columns (derived, read-only). */
   rollups?: Record<string, string>;
   /**

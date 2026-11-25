@@ -85,12 +85,13 @@ Escritura (solo con permiso):
 | `imago_create_records`, `imago_update_records`, `imago_delete_records` | Registros con valores por nombre de propiedad; crea las opciones que falten |
 | `imago_import_images` | Importa ficheros o carpetas de imágenes como tarea en segundo plano |
 | `imago_annotate_image`, `imago_delete_annotation` | Regiones con nota y etiquetas |
+| `imago_set_link_details` | Página, figura o lámina, pie de foto y nota de un vínculo entre dos registros (una foto en la página 12 de un libro) |
 | `imago_run_ai_properties` | Encola la IA de Imago para rellenar propiedades de IA |
 | `imago_undo`, `imago_redo` | Deshacer y rehacer |
 
 ### Valores
 
-Lectura y escritura usan el mismo formato: etiquetas de opción (no ids), números, booleanos, fechas `AAAA-MM-DD` o `{start,end,includeTime}`, fechas históricas como texto («c. 1930», «s. XIX») o `{text,start,end,certainty}`, personas como nombres, ubicaciones como `{name,address,latitude,longitude}`, relaciones como ids de registro (al escribir también títulos exactos) e imágenes como `{imageId,fileName}`. Bases y propiedades se nombran por id o por nombre exacto.
+Lectura y escritura usan el mismo formato: etiquetas de opción (no ids), números, booleanos, fechas `AAAA-MM-DD` o `{start,end,includeTime}`, fechas históricas como texto («c. 1930», «s. XIX») o `{text,start,end,certainty}`, personas como nombres, ubicaciones como `{name,address,latitude,longitude}`, relaciones como ids de registro (al escribir también títulos exactos; `imago_get_record` añade el título de cada registro enlazado y lo que guarda su vínculo) e imágenes como `{imageId,fileName}`. Bases y propiedades se nombran por id o por nombre exacto.
 
 ## ChatGPT: túnel seguro de OpenAI
 

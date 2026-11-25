@@ -22,6 +22,7 @@ import {
   databaseToCsv,
   databaseToJson,
   databaseToMatrix,
+  withLinkNoteColumns,
 } from "../shared/databaseExport";
 import { buildXlsx } from "./export/xlsx";
 import { writeBackup, restoreBackup, verifyBackup } from "./export/backup";
@@ -71,6 +72,7 @@ const CONTENT_WRITES = new Set([
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
+  "setLinkDetails", "setRelationPlace", "convertToRelation", "pairRelation", "createWorkFromFamily",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -400,6 +402,10 @@ export class Service {
         return this.repo.unpairRelation(input.columnId);
       case "linkedRecords":
         return this.repo.linkedRecords(input.rowId);
+      case "setLinkDetails":
+        return this.repo.setLinkDetails(input.rowId, input.columnId, input.targetId, input.details);
+      case "setRelationPlace":
+        return this.repo.setRelationPlace(input.columnId, input.place);
       case "setDatabaseKind":
         return this.repo.setKind(input.id, input.kind);
       case "setDatabaseIcon":
@@ -687,7 +693,9 @@ export class Service {
         }
         const format = input.format;
         // Linked values carry their URIs and Getty identifiers in a column of their own.
-        const exported = this.authorities.exportColumns(detail.columns, rows);
+        const authorities = this.authorities.exportColumns(detail.columns, rows);
+        // JSON carries every link's details; tables get a column for captions and notes.
+        const exported = format === "json" ? authorities : withLinkNoteColumns(authorities.columns, authorities.rows);
         const data =
           format === "csv"
             ? databaseToCsv(exported.columns, exported.rows)

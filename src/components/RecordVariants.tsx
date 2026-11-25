@@ -361,7 +361,7 @@ export function RecordVariants({
           </Button>
         </header>
         <p className="hint">
-          {t("Cada registro de la familia es una aparición; la obra, la página y el pie de foto salen de sus propiedades. Añade a mano las reproducciones que no tengas en tus bases de datos.")}
+          {t("Cada registro de la familia es una aparición, y una por cada fuente con la que esté enlazado; la página, la figura y el pie de foto salen del vínculo o de sus propiedades. Añade a mano las reproducciones que no tengas en tus bases de datos.")}
         </p>
         {draft && (
           <form
@@ -425,7 +425,7 @@ export function RecordVariants({
                     <strong>{a.work ?? "—"}</strong>
                     {a.workDetail && <small>{a.workDetail}</small>}
                   </td>
-                  <td>{a.page ?? "—"}</td>
+                  <td>{[a.page, a.figure ? `fig. ${a.figure}` : ""].filter(Boolean).join(" · ") || "—"}</td>
                   <td className="rv-caption">{a.caption ?? (a.manual ? "—" : a.title)}</td>
                   <td className="rv-record">
                     {a.manual ? (

@@ -3,8 +3,8 @@
 // into this database, showing a relation in both databases, and the records
 // linked with a record, shown in its panel (a book's photographs).
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, Link2, Loader2, Unlink } from "lucide-react";
-import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
+import { ArrowLeftRight, Link2, Loader2, Pencil, Unlink } from "lucide-react";
+import { LINK_FIELD_LABELS, LINK_FIELDS, LINK_ROLLUP_TARGETS, cleanLinkDetails, linkPlace, relationHasPlace, type DatabaseColumn, type DatabaseDetail, type LinkDetails } from "../../shared/databases";
 import type { RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { Button, Modal, Thumbnail } from "./ui";
@@ -235,8 +235,23 @@ export function LookupDialog({
 }) {
   const t = useT();
   const target = details.find((d) => d.database.id === relation.config.relationTargetDatabaseId) ?? null;
-  const options = (target?.columns ?? []).filter((c) => !["attachment", "files", "relation", "button", "ai_image", "rollup"].includes(c.type));
-  const [picked, setPicked] = useState(options.find((c) => c.type !== "title")?.id ?? options[0]?.id ?? "");
+  const own = details.find((d) => d.database.id === relation.databaseId) ?? null;
+  // What each link records comes first when the relation has it.
+  const place = relationHasPlace(relation, own?.database.kind, target?.database.kind);
+  const linkOptions = LINK_FIELDS.filter((f) => place || f === "note").map((f) => ({
+    id: LINK_ROLLUP_TARGETS[f],
+    name: t(LINK_FIELD_LABELS[f]),
+    linkField: true,
+  }));
+  const options = [
+    ...linkOptions,
+    ...(target?.columns ?? [])
+      .filter((c) => !["attachment", "files", "relation", "button", "ai_image", "rollup"].includes(c.type))
+      .map((c) => ({ id: c.id, name: c.name, linkField: false, title: c.type === "title" })),
+  ];
+  const [picked, setPicked] = useState(
+    (target?.columns ?? []).find((c) => !["title", "attachment", "files", "relation", "button", "ai_image", "rollup"].includes(c.type))?.id ?? options[0]?.id ?? "",
+  );
   const chosen = options.find((c) => c.id === picked);
   return (
     <Modal icon={ArrowLeftRight} title={t("Traer una propiedad de «{db}»").replace("{db}", target?.database.name ?? "")} onClose={onClose}>
@@ -253,8 +268,9 @@ export function LookupDialog({
               type: "rollup",
               config: {
                 rollupRelationColumnId: relation.id,
-                rollupTargetColumnId: chosen.type === "title" ? "__title__" : chosen.id,
-                rollupFunction: "show_unique",
+                rollupTargetColumnId: "title" in chosen && chosen.title ? "__title__" : chosen.id,
+                // One value per link, in the links' order.
+                rollupFunction: chosen.linkField ? "show" : "show_unique",
               },
             });
             onDone();
@@ -268,11 +284,24 @@ export function LookupDialog({
         <label>
           {t("Propiedad")}
           <select value={picked} data-testid="lookup-property" onChange={(e) => setPicked(e.target.value)}>
-            {options.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
+            {!!linkOptions.length && (
+              <optgroup label={t("De cada vínculo")}>
+                {linkOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label={t("De «{db}»").replace("{db}", target?.database.name ?? "")}>
+              {options
+                .filter((c) => !c.linkField)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </optgroup>
           </select>
         </label>
         <footer className="modal-actions">
@@ -292,12 +321,14 @@ export function LookupDialog({
 export function RelationPairing({
   column,
   databaseName,
+  databaseKind,
   perform,
   onChanged,
 }: {
   column: DatabaseColumn;
   /** This database's name: the twin's default name. */
   databaseName: string;
+  databaseKind?: DatabaseDetail["database"]["kind"];
   perform: Perform;
   onChanged: () => void;
 }) {
@@ -323,8 +354,23 @@ export function RelationPairing({
     setRevision((n) => n + 1);
     onChanged();
   };
+  const place = relationHasPlace(column, databaseKind, target.database.kind);
   return (
     <div className="relation-pairing" data-testid="relation-pairing">
+      <label className="check-label">
+        <input
+          type="checkbox"
+          data-testid="relation-place"
+          checked={place}
+          onChange={(e) =>
+            void perform(async () => {
+              await window.imago.call("setRelationPlace", { columnId: column.id, place: e.target.checked });
+              done();
+            })
+          }
+        />
+        {t("Cada vínculo guarda la página, la figura y el pie de foto")}
+      </label>
       {twin ? (
         <>
           <p>
@@ -372,12 +418,97 @@ export function RelationPairing({
   );
 }
 
+/** «p. 12 · fig. 3 · “caption”»: what a link records, in one line. */
+export function linkSummary(details: LinkDetails | null | undefined) {
+  return [linkPlace(details), details?.caption ? `«${details.caption}»` : "", details?.note ?? ""].filter(Boolean).join(" · ");
+}
+
+/**
+ * Where a linked record shows this one (page, figure, caption) and a note:
+ * a small form under the link. Page, figure and caption only where they
+ * apply (links to or from Sources, or turned on for the relation).
+ */
+export function LinkDetailsForm({
+  rowId,
+  columnId,
+  targetId,
+  details,
+  place,
+  perform,
+  onDone,
+}: {
+  /** The record holding the relation, the relation and the linked record. */
+  rowId: string;
+  columnId: string;
+  targetId: string;
+  details: LinkDetails | null | undefined;
+  place: boolean;
+  perform: Perform;
+  onDone: (saved: boolean) => void;
+}) {
+  const t = useT();
+  const [draft, setDraft] = useState<LinkDetails>({ ...details });
+  const field = (key: keyof LinkDetails, label: string, wide = false, long = false) => (
+    <label className={wide ? "wide" : undefined}>
+      {t(label)}
+      {long ? (
+        <textarea rows={2} value={draft[key] ?? ""} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
+      ) : (
+        <input value={draft[key] ?? ""} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
+      )}
+    </label>
+  );
+  return (
+    <form
+      className="link-details-form"
+      data-testid="link-details-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void perform(async () => {
+          await window.imago.call("setLinkDetails", { rowId, columnId, targetId, details: cleanLinkDetails(draft) });
+          onDone(true);
+        });
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onDone(false);
+        }
+      }}
+    >
+      {place && field("page", "Página")}
+      {place && field("figure", "Figura o lámina")}
+      {place && field("caption", "Pie de foto", true, true)}
+      {field("note", "Nota", true)}
+      <footer>
+        <Button type="button" onClick={() => onDone(false)}>
+          {t("Cancelar")}
+        </Button>
+        <Button primary type="submit" data-testid="link-details-save">
+          {t("Guardar")}
+        </Button>
+      </footer>
+    </form>
+  );
+}
+
 type LinkedGroup = Awaited<ReturnType<typeof window.imago.call<"linkedRecords">>>[number];
 
 /** The records linked with a record: their images when they have them (a book's photographs). */
-export function LinkedRecords({ row, onOpenRecord }: { row: RecordRow; onOpenRecord?: (rowId: string) => void }) {
+export function LinkedRecords({
+  row,
+  onOpenRecord,
+  perform,
+}: {
+  row: RecordRow;
+  onOpenRecord?: (rowId: string) => void;
+  /** Without it the details of each link are shown but not edited. */
+  perform?: Perform;
+}) {
   const t = useT();
-  const [groups, setGroups] = useState<LinkedGroup[]>([]);
+  const [groups, setGroups] = useState<LinkedGroup[]>([]),
+    [editing, setEditing] = useState<string | null>(null),
+    [revision, setRevision] = useState(0);
   useEffect(() => {
     let cancelled = false;
     void window.imago
@@ -387,13 +518,28 @@ export function LinkedRecords({ row, onOpenRecord }: { row: RecordRow; onOpenRec
     return () => {
       cancelled = true;
     };
-  }, [row.id, row.updatedAt]);
+  }, [row.id, row.updatedAt, revision]);
   if (!groups.length) return null;
   return (
     <section className="linked-records" data-testid="linked-records">
       <h3>{t("Registros enlazados")}</h3>
       {groups.map((g) => {
         const withImages = g.rows.some((r) => r.images.length);
+        const key = (r: RecordRow) => `${g.columnId}:${g.direction}:${r.id}`;
+        const edit = (r: RecordRow) =>
+          perform && (
+            <Button
+              icon
+              className="linked-edit"
+              data-testid="linked-edit"
+              aria-label={`${t(g.place ? "Página, pie y nota de" : "Nota de")} ${r.title}`}
+              data-tooltip={t(g.place ? "Página, figura, pie de foto y nota de este vínculo" : "Nota de este vínculo")}
+              onClick={() => setEditing(editing === key(r) ? null : key(r))}
+            >
+              <Pencil size={12} />
+            </Button>
+          );
+        const form = g.rows.find((r) => key(r) === editing);
         return (
           <div key={g.columnId + g.direction} className="linked-group" data-testid="linked-group">
             <h4>
@@ -406,19 +552,47 @@ export function LinkedRecords({ row, onOpenRecord }: { row: RecordRow; onOpenRec
             {withImages ? (
               <div className="linked-grid">
                 {g.rows.slice(0, 60).map((r) => (
-                  <button key={r.id} type="button" className="linked-tile" onClick={() => onOpenRecord?.(r.id)} aria-label={`${t("Abrir registro")} ${r.title}`} data-tooltip={r.title}>
-                    <Thumbnail id={r.images[0]?.id} revision={r.images[0]?.revision} alt={r.title} />
-                    <small>{r.title}</small>
-                  </button>
+                  <div key={r.id} className="linked-tile-wrap">
+                    <button type="button" className="linked-tile" onClick={() => onOpenRecord?.(r.id)} aria-label={`${t("Abrir registro")} ${r.title}`} data-tooltip={r.title}>
+                      <Thumbnail id={r.images[0]?.id} revision={r.images[0]?.revision} alt={r.title} />
+                      <small>{r.title}</small>
+                      {linkPlace(g.details[r.id]) && <small className="linked-place">{linkPlace(g.details[r.id])}</small>}
+                    </button>
+                    {edit(r)}
+                  </div>
                 ))}
               </div>
             ) : (
               <div className="linked-chips">
                 {g.rows.slice(0, 60).map((r) => (
-                  <button key={r.id} type="button" className="linked-chip" onClick={() => onOpenRecord?.(r.id)}>
-                    {r.title}
-                  </button>
+                  <span key={r.id} className="linked-chip-wrap">
+                    <button type="button" className="linked-chip" onClick={() => onOpenRecord?.(r.id)}>
+                      {r.title}
+                      {linkPlace(g.details[r.id]) && <small className="linked-place"> · {linkPlace(g.details[r.id])}</small>}
+                    </button>
+                    {edit(r)}
+                  </span>
                 ))}
+              </div>
+            )}
+            {form && perform && (
+              <div className="linked-form">
+                <p className="hint">
+                  <strong>{form.title}</strong>
+                </p>
+                <LinkDetailsForm
+                  // The link is held by whichever record has the relation.
+                  rowId={g.direction === "out" ? row.id : form.id}
+                  columnId={g.columnId}
+                  targetId={g.direction === "out" ? form.id : row.id}
+                  details={g.details[form.id]}
+                  place={g.place}
+                  perform={perform}
+                  onDone={(saved) => {
+                    setEditing(null);
+                    if (saved) setRevision((n) => n + 1);
+                  }}
+                />
               </div>
             )}
             {g.total > 60 && <p className="hint">{t("Y {n} más.").replace("{n}", (g.total - 60).toLocaleString())}</p>}

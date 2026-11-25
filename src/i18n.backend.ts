@@ -353,6 +353,10 @@ export const backendEn: Record<string, string> = {
   "El diagnóstico del túnel agotó el tiempo de espera.": "The tunnel diagnostics timed out.",
   "El túnel no está conectado.": "The tunnel is not connected.",
   "La descarga no procede de la publicación oficial de OpenAI en GitHub.": "The download does not come from OpenAI's official GitHub release.",
+  "La propiedad no es una relación de este registro.": "The property is not a relation of this record.",
+  "Este registro no está enlazado por esa relación.": "This record is not linked through that relation.",
+  "La propiedad no es una relación.": "The property is not a relation.",
+  "Esta agregación no se aplica a un dato del vínculo.": "This aggregation does not apply to a field of the link."
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */

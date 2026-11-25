@@ -316,7 +316,7 @@ export function matchesCondition(column: DatabaseColumn, row: DatabaseRow, cond:
       return cond.op === 'isEmpty' ? count === 0 : cond.op === 'notEmpty' ? count > 0 : true;
     }
     case 'relation': {
-      const count = row.relationCounts?.[column.id] ?? 0;
+      const count = row.links?.[column.id]?.length ?? row.relationCounts?.[column.id] ?? 0;
       return cond.op === 'isEmpty' ? count === 0 : cond.op === 'notEmpty' ? count > 0 : true;
     }
     default:

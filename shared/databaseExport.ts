@@ -4,8 +4,8 @@
  * is unit-tested; the XLSX writer (which needs a zip lib) lives in electron/export.
  */
 
-import { decodeCheckbox, decodeMultiSelect, decodeNumber } from './databases';
-import type { DatabaseColumn, DatabaseRow } from './databases';
+import { cleanLinkDetails, decodeCheckbox, decodeMultiSelect, decodeNumber, linkPlace } from './databases';
+import type { DatabaseColumn, DatabaseRow, RelationLink } from './databases';
 import { decodeHistoricalDate } from './historicalDate';
 import {
   decodeDatabaseButton,
@@ -34,7 +34,10 @@ export function exportCellText(col: DatabaseColumn, row: DatabaseRow): string {
     case 'files':
       return (row.attachments?.[col.id] ?? []).map((a) => a.fileName ?? '').filter(Boolean).join(', ');
     case 'relation':
-      return String(row.relationCounts?.[col.id] ?? 0);
+      // «Book (p. 12 · fig. 3); Other book»: the titles, and where each link places the record.
+      return row.links
+        ? (row.links[col.id] ?? []).map((l) => (linkPlace(l) ? `${l.title} (${linkPlace(l)})` : l.title)).join('; ')
+        : String(row.relationCounts?.[col.id] ?? 0);
     case 'historical_date':
       return decodeHistoricalDate(raw)?.text ?? '';
     case 'date': {
@@ -58,6 +61,49 @@ export function exportCellText(col: DatabaseColumn, row: DatabaseRow): string {
   }
 }
 
+/** What the links of a relation cell say, for full-text search: their details, not the titles. */
+export function linkSearchText(links: RelationLink[] | undefined): string {
+  return (links ?? [])
+    .flatMap((l) => [l.page, l.figure, l.caption, l.note])
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** «Book — caption · note», one per link with a caption or note; empty when none has. */
+export function linkNotesText(links: RelationLink[] | undefined): string {
+  return (links ?? [])
+    .filter((l) => l.caption || l.note)
+    .map((l) => `${l.title} — ${[l.caption, l.note].filter(Boolean).join(' · ')}`)
+    .join('; ');
+}
+
+/**
+ * For CSV and XLSX: after each relation whose links carry captions or notes,
+ * a column with them («Book — caption · note; …»). Page and figure already
+ * go with each title in the relation's own column.
+ */
+export function withLinkNoteColumns(columns: DatabaseColumn[], rows: DatabaseRow[]): { columns: DatabaseColumn[]; rows: DatabaseRow[] } {
+  const noted = new Set(
+    columns
+      .filter((c) => c.type === 'relation' && rows.some((r) => (r.links?.[c.id] ?? []).some((l) => l.caption || l.note)))
+      .map((c) => c.id),
+  );
+  if (!noted.size) return { columns, rows };
+  const out: DatabaseColumn[] = [];
+  for (const c of columns) {
+    out.push(c);
+    if (noted.has(c.id)) out.push({ ...c, id: `links:${c.id}`, name: `${c.name} · pies y notas`, type: 'text', options: [], config: {} });
+  }
+  return {
+    columns: out,
+    rows: rows.map((row) => {
+      const cells = { ...row.cells };
+      for (const id of noted) cells[`links:${id}`] = linkNotesText(row.links?.[id]) || null;
+      return { ...row, cells };
+    }),
+  };
+}
+
 /** A cell's value typed for JSON (numbers/booleans/arrays where meaningful). */
 export function exportCellValue(col: DatabaseColumn, row: DatabaseRow): unknown {
   const raw = row.cells[col.id] ?? null;
@@ -75,7 +121,9 @@ export function exportCellValue(col: DatabaseColumn, row: DatabaseRow): unknown 
     case 'files':
       return (row.attachments?.[col.id] ?? []).map((a) => a.fileName ?? '').filter(Boolean);
     case 'relation':
-      return row.relationCounts?.[col.id] ?? 0;
+      return row.links
+        ? (row.links[col.id] ?? []).map((l) => ({ id: l.id, title: l.title, ...cleanLinkDetails(l) }))
+        : (row.relationCounts?.[col.id] ?? 0);
     case 'date':
       return decodeDatabaseDate(raw);
     case 'person':

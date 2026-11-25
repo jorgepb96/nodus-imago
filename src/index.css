@@ -10686,3 +10686,198 @@ tr:hover .ai-cell-button,
   justify-self: end;
   color: #ce4c4c;
 }
+/* Relations: the linked records by title, what each link records, and a
+   search that finds as you type. */
+.cell-relation {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 24px;
+  overflow: hidden;
+  padding: 2px 0;
+  text-align: left;
+}
+.relation-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 1px 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 11px;
+  color: var(--accent-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relation-pill small,
+.relation-more {
+  font-size: 10px;
+  color: var(--muted);
+}
+.relation-editor {
+  display: grid;
+  gap: 6px;
+}
+.relation-links {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.relation-link {
+  display: grid;
+  gap: 2px;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.relation-link-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.relation-link-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--accent-ink);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relation-link-title:hover {
+  text-decoration: underline;
+}
+.relation-link .icon-button {
+  width: 24px;
+  height: 24px;
+  opacity: 0.6;
+}
+.relation-link:hover .icon-button,
+.relation-link .icon-button:focus-visible {
+  opacity: 1;
+}
+.relation-link-details {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relation-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+}
+.relation-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.relation-choices {
+  gap: 2px;
+}
+.relation-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: left;
+}
+.relation-choice:hover,
+.relation-choice:focus-visible {
+  background: var(--accent-soft);
+}
+.relation-choice span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relation-choice.is-new {
+  color: var(--accent-ink);
+}
+.link-details-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0;
+  padding: 10px;
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--panel));
+}
+.link-details-form label {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.link-details-form label.wide,
+.link-details-form footer {
+  grid-column: 1 / -1;
+}
+.link-details-form input,
+.link-details-form textarea {
+  width: 100%;
+}
+.link-details-form footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.linked-tile-wrap,
+.linked-chip-wrap {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.linked-tile-wrap {
+  display: grid;
+}
+.linked-tile-wrap .linked-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  background: var(--panel);
+  opacity: 0;
+}
+.linked-tile-wrap:hover .linked-edit,
+.linked-tile-wrap .linked-edit:focus-visible {
+  opacity: 1;
+}
+.linked-chip-wrap .linked-edit {
+  width: 22px;
+  height: 22px;
+}
+.linked-tile .linked-place {
+  color: var(--accent-ink);
+}
+.linked-form {
+  margin-top: 8px;
+}
+.linked-form .hint {
+  margin: 0 0 4px;
+}

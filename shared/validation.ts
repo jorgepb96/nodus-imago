@@ -441,6 +441,23 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   pairRelation: z.object({ columnId: id, name: z.string().trim().max(200) }).strict(),
   unpairRelation: z.object({ columnId: id }).strict(),
   linkedRecords: z.object({ rowId: id }).strict(),
+  setLinkDetails: z
+    .object({
+      rowId: id,
+      columnId: id,
+      targetId: id,
+      details: z
+        .object({
+          page: z.string().max(200).nullable().optional(),
+          figure: z.string().max(200).nullable().optional(),
+          caption: z.string().max(4000).nullable().optional(),
+          note: z.string().max(4000).nullable().optional(),
+        })
+        .strict()
+        .nullable(),
+    })
+    .strict(),
+  setRelationPlace: z.object({ columnId: id, place: z.boolean() }).strict(),
   setDatabaseKind: z.object({ id, kind: z.enum(["images", "sources", "custom"]).nullable() }).strict(),
   setDatabaseIcon: z
     .object({ id, icon: z.string().max(40).refine(isDatabaseIconValue, "Icono desconocido.").nullable() })

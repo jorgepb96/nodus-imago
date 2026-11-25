@@ -234,7 +234,7 @@ export type Proposal = {
 /** Which change batches an Undo or Redo button may touch. */
 export type HistoryScope = "all" | "proposals";
 /** How a change batch was made; null is a single edit. */
-export type HistoryKind = "proposals" | "cleanup" | "locate" | null;
+export type HistoryKind = "proposals" | "cleanup" | "locate" | "link" | null;
 /** What the next Undo or Redo in a scope would change, shown before it runs. */
 export type HistoryStep = {
   kind: HistoryKind;
@@ -469,8 +469,19 @@ export type Commands = {
       direction: "out" | "in";
       total: number;
       rows: RecordRow[];
+      /** Whether the links record page, figure and caption. */
+      place: boolean;
+      /** What each link records, by the other record's id. */
+      details: Record<string, import("./databases").LinkDetails>;
     }[];
   };
+  /** What the link between a record and one it links to records; null clears it. One step of the history. */
+  setLinkDetails: {
+    input: { rowId: string; columnId: string; targetId: string; details: import("./databases").LinkDetails | null };
+    result: import("./databases").LinkDetails | null;
+  };
+  /** Whether a relation's links record page, figure and caption (both sides of a two-way relation). */
+  setRelationPlace: { input: { columnId: string; place: boolean }; result: void };
   setDatabaseKind: { input: { id: string; kind: import("./databases").DatabaseKind | null }; result: void };
   /** A drawn icon and its colour («Name» or «Name:colour»), or null for the kind's icon. */
   setDatabaseIcon: { input: { id: string; icon: string | null }; result: void };

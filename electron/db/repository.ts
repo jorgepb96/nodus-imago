@@ -24,10 +24,12 @@ import type {
   DatabaseKind,
   DatabaseRow,
   DatabaseSummary,
+  LinkDetails,
+  RelationLink,
 } from "../../shared/databases";
-import { DATABASE_TEMPLATES } from "../../shared/databases";
+import { DATABASE_TEMPLATES, LINK_FIELDS, cleanLinkDetails, relationHasPlace } from "../../shared/databases";
 import { databaseCellStorage } from "../../shared/databaseCellStorage";
-import { exportCellText } from "../../shared/databaseExport";
+import { exportCellText, linkSearchText } from "../../shared/databaseExport";
 import {
   splitMultiValue,
   normalizeCsvValue,
@@ -466,19 +468,38 @@ export class Repository {
   linkedRecords(rowId: string, limit = 200) {
     const row = this.getRow(rowId),
       columns = this.detail(row.databaseId).columns.filter((c) => c.type === "relation");
-    const groups: { columnId: string; name: string; databaseName: string; direction: "out" | "in"; total: number; rows: RecordRow[] }[] = [];
+    const groups: {
+      columnId: string;
+      name: string;
+      databaseName: string;
+      direction: "out" | "in";
+      total: number;
+      rows: RecordRow[];
+      /** Whether the links record page, figure and caption. */
+      place: boolean;
+      /** What each link records, by the other record's id. */
+      details: Record<string, LinkDetails>;
+    }[] = [];
+    const detailsOf = (others: RecordRow[]) =>
+      Object.fromEntries(others.flatMap((r) => {
+        const d = this.linkDetails(rowId, r.id);
+        return d ? [[r.id, d]] : [];
+      }));
     const ownTwins = new Set(columns.map((c) => c.config.relationInverseColumnId).filter(Boolean));
     for (const c of columns) {
       const ids = this.relationIds(rowId, c.id).filter((id) => this.db.prepare("SELECT 1 FROM db_rows WHERE id=?").get(id));
       if (!ids.length) continue;
       const target = c.config.relationTargetDatabaseId as string | undefined;
+      const rows = this.hydrate(ids.slice(0, limit));
       groups.push({
         columnId: c.id,
         name: c.name,
         databaseName: target ? this.detail(target).database.name : "",
         direction: "out",
         total: ids.length,
-        rows: this.hydrate(ids.slice(0, limit)),
+        rows,
+        place: this.relationPlace(c),
+        details: detailsOf(rows),
       });
     }
     const incoming = this.db
@@ -491,13 +512,16 @@ export class Repository {
       if (!ownTwins.has(link.column_id)) (byColumn.get(link.column_id) ?? byColumn.set(link.column_id, []).get(link.column_id)!).push(link.row_id);
     for (const [columnId, ids] of byColumn) {
       const c = this.column(columnId);
+      const rows = this.hydrate([...new Set(ids)].slice(0, limit));
       groups.push({
         columnId,
         name: c.name,
         databaseName: this.detail(c.databaseId).database.name,
         direction: "in",
         total: ids.length,
-        rows: this.hydrate([...new Set(ids)].slice(0, limit)),
+        rows,
+        place: this.relationPlace(c),
+        details: detailsOf(rows),
       });
     }
     return groups;
@@ -514,6 +538,74 @@ export class Repository {
           this.db.prepare("UPDATE db_columns SET config_json=?,updated_at=? WHERE id=?").run(JSON.stringify(config), now(), id);
         }
     })();
+  }
+  /** Whether a relation's links record page, figure and caption (see relationHasPlace). */
+  relationPlace(column: DatabaseColumn): boolean {
+    const kind = (id: string | undefined) =>
+      id ? ((this.db.prepare("SELECT kind FROM db_databases WHERE id=?").get(id) as { kind: DatabaseKind | null } | undefined)?.kind ?? null) : null;
+    return relationHasPlace(column, kind(column.databaseId), kind(column.config.relationTargetDatabaseId as string | undefined));
+  }
+  /** Turns page, figure and caption on or off for a relation and its twin. */
+  setRelationPlace(columnId: string, place: boolean) {
+    const c = this.column(columnId);
+    if (c.type !== "relation") throw new Error("La propiedad no es una relación.");
+    const twinId = c.config.relationInverseColumnId as string | undefined;
+    this.db.transaction(() => {
+      for (const id of [columnId, twinId])
+        if (id && this.db.prepare("SELECT 1 FROM db_columns WHERE id=?").get(id))
+          this.db
+            .prepare("UPDATE db_columns SET config_json=?,updated_at=? WHERE id=?")
+            .run(JSON.stringify({ ...this.column(id).config, relationLinkDetails: place }), now(), id);
+    })();
+  }
+  /** What the link between two records records; null when nothing. */
+  linkDetails(a: string, b: string): LinkDetails | null {
+    const [x, y] = a < b ? [a, b] : [b, a];
+    const row = this.db.prepare("SELECT page,figure,caption,note FROM relation_details WHERE a=? AND b=?").get(x, y) as LinkDetails | undefined;
+    return cleanLinkDetails(row);
+  }
+  /**
+   * Records where a linked record shows this one (page, figure, caption) and
+   * a note. The details belong to the pair of records, so both sides of a
+   * two-way relation see them. One step of the history.
+   */
+  setLinkDetails(rowId: string, columnId: string, targetId: string, details: LinkDetails | null, history = true, batch?: string) {
+    const column = this.column(columnId),
+      row = this.getRow(rowId);
+    if (column.type !== "relation" || column.databaseId !== row.databaseId)
+      throw new Error("La propiedad no es una relación de este registro.");
+    if (!this.relationIds(rowId, columnId).includes(targetId))
+      throw new Error("Este registro no está enlazado por esa relación.");
+    const target = this.getRow(targetId);
+    const next = cleanLinkDetails(details),
+      before = this.linkDetails(rowId, targetId);
+    if (JSON.stringify(before) === JSON.stringify(next)) return before;
+    const [a, b] = rowId < targetId ? [rowId, targetId] : [targetId, rowId],
+      at = now();
+    this.db.transaction(() => {
+      if (next)
+        this.db
+          .prepare(
+            "INSERT INTO relation_details(a,b,page,figure,caption,note,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(a,b) DO UPDATE SET page=excluded.page,figure=excluded.figure,caption=excluded.caption,note=excluded.note,updated_at=excluded.updated_at",
+          )
+          .run(a, b, ...LINK_FIELDS.map((f) => next[f] ?? null), at);
+      else this.db.prepare("DELETE FROM relation_details WHERE a=? AND b=?").run(a, b);
+      if (history)
+        this.db
+          .prepare(
+            "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at,kind) VALUES(?,?,?,?,?,?,'link')",
+          )
+          .run(batch ?? uuid(), rowId, columnId, JSON.stringify({ target: targetId, details: before }), JSON.stringify({ target: targetId, details: next }), at);
+      const update = this.db.prepare("UPDATE db_rows SET updated_at=? WHERE id=?");
+      update.run(at, rowId);
+      update.run(at, targetId);
+      // Rollups showing a field of the links, on either side.
+      this.recompute(row.databaseId);
+      if (target.databaseId !== row.databaseId) this.recompute(target.databaseId);
+      this.indexRow(rowId);
+      this.indexRow(targetId);
+    })();
+    return next;
   }
   /** Keeps the twin of a two-way relation in step with a change on one side. */
   private mirrorRelation(rowId: string, column: DatabaseColumn, before: string[], after: string[]) {
@@ -1334,6 +1426,20 @@ export class Repository {
     const titleCols = this.db
       .prepare("SELECT id,database_id FROM db_columns WHERE type='title'")
       .all() as any[];
+    // The records each relation links to, with their titles and what each
+    // link records (page, figure, caption, note).
+    const links = this.db
+      .prepare(
+        `SELECT r.row_id,r.column_id,r.target_id id,t.database_id databaseId,coalesce(NULLIF(tc.value_text,''),substr(t.id,1,8)) title,d.page,d.figure,d.caption,d.note FROM db_relations r JOIN db_rows t ON t.id=r.target_id LEFT JOIN db_columns k ON k.database_id=t.database_id AND k.type='title' LEFT JOIN db_cells tc ON tc.row_id=t.id AND tc.column_id=k.id LEFT JOIN relation_details d ON d.a=min(r.row_id,r.target_id) AND d.b=max(r.row_id,r.target_id) WHERE r.row_id IN (${p}) AND r.target_kind='db_row' ORDER BY r.position,r.id`,
+      )
+      .all(...ids) as (RelationLink & { row_id: string; column_id: string })[];
+    const linksByRow = new Map<string, Record<string, RelationLink[]>>();
+    for (const { row_id, column_id, ...link } of links) {
+      const byColumn = linksByRow.get(row_id) ?? linksByRow.set(row_id, {}).get(row_id)!;
+      (byColumn[column_id] ??= []).push(
+        Object.fromEntries(Object.entries(link).filter(([, v]) => v != null)) as unknown as RelationLink,
+      );
+    }
     const systemColumns = this.db
       .prepare(
         "SELECT id,database_id,type,config_json FROM db_columns WHERE type IN ('unique_id','created_time','last_edited_time')",
@@ -1368,6 +1474,7 @@ export class Repository {
     for (const row of rows) {
       row.cells = cellsByRow.get(row.id) ?? {};
       row.annotations = annotationsByRow.get(row.id) ?? [];
+      row.links = linksByRow.get(row.id) ?? {};
       for (const column of systemColumns.filter(
         (c) => c.database_id === row.databaseId,
       ))
@@ -1425,8 +1532,10 @@ export class Repository {
   ) {
     const row = suppliedRow ?? this.getRow(id),
       columns = suppliedColumns ?? this.detail(row.databaseId).columns;
+    // Relations add what their links record (a caption, a note), not the
+    // titles of other records.
     const body = columns
-      .map((c) => exportCellText(c, row))
+      .map((c) => (c.type === "relation" ? linkSearchText(row.links?.[c.id]) : exportCellText(c, row)))
       .concat(
         row.images.map((a) =>
           [a.fileName, a.description, JSON.stringify(a.metadata)]
@@ -2038,7 +2147,9 @@ export class Repository {
         .all(batch) as any[];
       for (const c of changes)
         if (
-          (this.getRow(c.row_id).cells[c.column_id] ?? null) !== c.after_value
+          c.kind === "link"
+            ? !this.linkMatches(c.row_id, c.after_value)
+            : (this.getRow(c.row_id).cells[c.column_id] ?? null) !== c.after_value
         )
           throw new Error(
             "El valor cambió después de esta operación. No se ha deshecho ningún cambio.",
@@ -2073,7 +2184,8 @@ export class Repository {
         )
         .get() as { seq: number; mark: number };
       for (const c of changes) {
-        this.setCell(c.row_id, c.column_id, c.before_value, false);
+        if (c.kind === "link") this.replayLink(c.row_id, c.column_id, c.before_value);
+        else this.setCell(c.row_id, c.column_id, c.before_value, false);
         this.db
           .prepare(
             `UPDATE history SET undone=1,undone_seq=?,undo_mark=?${restores.length ? ",kind='cleanup'" : ""} WHERE id=?`,
@@ -2083,6 +2195,29 @@ export class Repository {
       for (const id of databases) this.rebuildText(id);
       return changes.length;
     })();
+  }
+  /** Whether a link's details are still those a history entry left. */
+  private linkMatches(rowId: string, value: string | null) {
+    const { target, details } = JSON.parse(value ?? "{}") as { target: string; details: LinkDetails | null };
+    return JSON.stringify(this.linkDetails(rowId, target)) === JSON.stringify(cleanLinkDetails(details));
+  }
+  /** Puts back a link's details from history; a link removed since keeps none. */
+  private replayLink(rowId: string, columnId: string, value: string | null) {
+    const { target, details } = JSON.parse(value ?? "{}") as { target: string; details: LinkDetails | null };
+    if (!this.db.prepare("SELECT 1 FROM db_rows WHERE id=?").get(target)) return;
+    if (!this.relationIds(rowId, columnId).includes(target)) {
+      const [a, b] = rowId < target ? [rowId, target] : [target, rowId];
+      const clean = cleanLinkDetails(details);
+      if (clean)
+        this.db
+          .prepare(
+            "INSERT INTO relation_details(a,b,page,figure,caption,note,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(a,b) DO UPDATE SET page=excluded.page,figure=excluded.figure,caption=excluded.caption,note=excluded.note,updated_at=excluded.updated_at",
+          )
+          .run(a, b, ...LINK_FIELDS.map((f) => clean[f] ?? null), now());
+      else this.db.prepare("DELETE FROM relation_details WHERE a=? AND b=?").run(a, b);
+      return;
+    }
+    this.setLinkDetails(rowId, columnId, target, details, false);
   }
   /** Re-applies the last undone batch in a scope (see redoBatch). */
   redo(scope: HistoryScope = "all") {
@@ -2096,13 +2231,16 @@ export class Repository {
         .all(batch) as any[];
       for (const c of changes)
         if (
-          (this.getRow(c.row_id).cells[c.column_id] ?? null) !== c.before_value
+          c.kind === "link"
+            ? !this.linkMatches(c.row_id, c.before_value)
+            : (this.getRow(c.row_id).cells[c.column_id] ?? null) !== c.before_value
         )
           throw new Error(
             "El valor cambió después de deshacer. No se ha rehecho ningún cambio.",
           );
       for (const c of changes) {
-        this.setCell(c.row_id, c.column_id, c.after_value, false);
+        if (c.kind === "link") this.replayLink(c.row_id, c.column_id, c.after_value);
+        else this.setCell(c.row_id, c.column_id, c.after_value, false);
         this.db
           .prepare(
             "UPDATE history SET undone=0,undone_seq=NULL,undo_mark=NULL WHERE id=?",

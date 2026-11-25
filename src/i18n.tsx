@@ -2855,6 +2855,19 @@ const en: Record<string, string> = {
   "Imago eliminará de este equipo el ID del túnel y la clave de ejecución guardada. Podrás configurarlos otra vez cuando quieras.": "Imago will remove the tunnel ID and the saved runtime key from this computer. You can set them up again whenever you like.",
   "Borrar conexión guardada": "Delete saved connection",
   "Usa el transporte Streamable HTTP con la URL de arriba y la cabecera «Authorization: Bearer <token>». El servidor no se publica en Internet: para ChatGPT usa la pestaña ChatGPT, que conecta mediante el túnel seguro de OpenAI.": "Use the Streamable HTTP transport with the URL above and the header “Authorization: Bearer <token>”. The server is not published on the Internet: for ChatGPT use the ChatGPT tab, which connects through OpenAI's secure tunnel.",
+  "Figura o lámina": "Figure or plate",
+  "Página, pie y nota de": "Page, caption and note of",
+  "Nota de": "Note of",
+  "Página, figura, pie de foto y nota de este vínculo": "Page, figure, caption and note of this link",
+  "Nota de este vínculo": "Note of this link",
+  "Cada vínculo guarda la página, la figura y el pie de foto": "Each link records the page, the figure and the caption",
+  "De cada vínculo": "From each link",
+  "De «{db}»": "From “{db}”",
+  "del vínculo": "of the link",
+  "Quitar el vínculo": "Remove the link",
+  "Añadir de «{db}»…": "Add from “{db}”…",
+  "Crear «{title}» en «{db}»": "Create “{title}” in “{db}”",
+  "Cada registro de la familia es una aparición, y una por cada fuente con la que esté enlazado; la página, la figura y el pie de foto salen del vínculo o de sus propiedades. Añade a mano las reproducciones que no tengas en tus bases de datos.": "Each record of the family is an appearance, one for each source it is linked to; the page, figure and caption come from the link or from its properties. Add by hand the reproductions you do not have in your databases.",
 };
 Object.assign(en, backendEn);
 const patterns = backendPatterns.map(([source, target]) => {

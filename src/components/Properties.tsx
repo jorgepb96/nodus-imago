@@ -568,7 +568,7 @@ export function Properties({
                 </>
               )}
               {type === "relation" && selected && (
-                <RelationPairing column={selected} databaseName={detail.database.name} perform={perform} onChanged={onChanged} />
+                <RelationPairing column={selected} databaseName={detail.database.name} databaseKind={detail.database.kind} perform={perform} onChanged={onChanged} />
               )}
               {type === "rollup" && (
                 <RollupSettings
