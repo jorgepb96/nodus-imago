@@ -11126,8 +11126,10 @@ tr:hover .ai-cell-button,
 }
 .circ-origin select {
   max-width: 260px;
-  height: 26px;
+  min-height: 28px;
+  padding: 3px 26px 3px 8px;
   font-size: 11.5px;
+  line-height: 1.3;
 }
 .circ-suggest {
   display: flex;
@@ -11175,5 +11177,97 @@ tr:hover .ai-cell-button,
   .circ-crop {
     width: 100%;
     max-width: 180px;
+  }
+}
+/* The circulation of a collection, above its variant families. */
+.circ-overview {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.circ-overview h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+.circ-overview h4 {
+  margin: 12px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.circ-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 18px;
+}
+.circ-top {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.circ-top button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px;
+  border-radius: 8px;
+  text-align: left;
+}
+.circ-top button:hover {
+  background: var(--accent-soft);
+}
+.circ-top .image-frame {
+  flex: none;
+  width: 46px;
+  height: 36px;
+  border-radius: 4px;
+}
+.circ-top span {
+  display: grid;
+  min-width: 0;
+  font-size: 12px;
+}
+.circ-top strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.circ-top small {
+  color: var(--muted);
+}
+.circ-years {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 110px;
+  padding-bottom: 1px;
+  border-bottom: 1px solid var(--line);
+}
+.circ-years span {
+  flex: 1;
+  min-width: 1px;
+  min-height: 1px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+.circ-years-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+@media (max-width: 860px) {
+  .circ-overview-grid {
+    grid-template-columns: 1fr;
   }
 }

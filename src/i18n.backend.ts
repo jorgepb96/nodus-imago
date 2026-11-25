@@ -357,7 +357,9 @@ export const backendEn: Record<string, string> = {
   "Este registro no está enlazado por esa relación.": "This record is not linked through that relation.",
   "La propiedad no es una relación.": "The property is not a relation.",
   "Esta agregación no se aplica a un dato del vínculo.": "This aggregation does not apply to a field of the link.",
-  "Elige una base de datos de obras fotográficas.": "Choose a database of photographic works."
+  "Elige una base de datos de obras fotográficas.": "Choose a database of photographic works.",
+  "Una imagen no puede proceder de sí misma.": "An image cannot come from itself.",
+  "Esa imagen ya procede de esta: se formaría un círculo.": "That image already comes from this one: it would make a loop."
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */

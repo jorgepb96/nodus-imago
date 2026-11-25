@@ -23,6 +23,8 @@ const WORK = /obra|fuente|libro|publicaci|revista|[aá]lbum|source|work|book|jou
   CAPTION = /pie|caption|leyenda|^t[ií]tulo$|^title$/i,
   AUTHOR = /autor|author|creador|creator/i,
   YEAR = /^a[nñ]o$|fecha|year|date/i;
+/** Properties of a source that say when it was printed, most telling first. */
+const PUBLISHED_YEAR = [/edici[oó]n|edition|publicaci[oó]n|publicad|published|impres|printed/i, /^a[nñ]o$|^year$/i, YEAR];
 const TEXTUAL = ["text", "rich_text", "select", "multi_select", "status", "number", "url"];
 
 type Row = {
@@ -113,7 +115,9 @@ export class Appearances {
         return null;
       }
     };
-    const relation = relations.find((c) => kindOf(c.config.relationTargetDatabaseId as string) === "sources") ?? relations[0] ?? null;
+    // A photographic work, a person or an event is not where the photograph was printed.
+    const printed = relations.filter((c) => !["works", "people", "events"].includes(kindOf(c.config.relationTargetDatabaseId as string) ?? ""));
+    const relation = printed.find((c) => kindOf(c.config.relationTargetDatabaseId as string) === "sources") ?? printed[0] ?? null;
     return {
       work: chosen.work === null ? null : (byId(chosen.work) ?? relation ?? named(WORK)),
       page: chosen.page === null ? null : (byId(chosen.page) ?? named(PAGE)),
@@ -150,10 +154,20 @@ export class Appearances {
       const col = detail(source.databaseId).columns.find((c) => c.type !== "title" && pattern.test(c.name.trim()));
       return col ? exportCellText(col, source).trim() || null : null;
     };
+    // When a work was printed: an edition or publication date first, then a plain year, then any date.
+    const printedIn = (source: RecordRow) => {
+      const columns = detail(source.databaseId).columns.filter((c) => ["number", "text", "date", "historical_date", "select"].includes(c.type));
+      for (const pattern of PUBLISHED_YEAR) {
+        const col = columns.find((c) => pattern.test(c.name.trim()));
+        const value = col ? exportCellText(col, source).trim() : "";
+        if (value) return value;
+      }
+      return null;
+    };
     return links.map((link): Work => {
       const source = sources.get(link.id);
       const author = source ? text(source, AUTHOR) : null,
-        year = source ? text(source, YEAR) : null,
+        year = source ? printedIn(source) : null,
         parsed = year?.match(/\b(1[0-9]{3}|20[0-9]{2})\b/);
       return {
         key: link.id,
@@ -167,6 +181,17 @@ export class Appearances {
         note: link.note ?? null,
       };
     });
+  }
+
+  /**
+   * When and with which caption a record was published: one entry per work it
+   * is linked to (the source's year and the link's caption), or its own
+   * caption property. For the circulation of a whole collection.
+   */
+  publications(row: RecordRow): { year: number | null; caption: string | null }[] {
+    const used = this.fieldsFor(this.repo.detail(row.databaseId));
+    const caption = used.caption ? exportCellText(used.caption, row).trim() || null : null;
+    return this.works(used.work, row).map((w) => ({ year: w.year, caption: w.caption ?? caption }));
   }
 
   /** Every appearance of the image's family, the image's own record first among equal years. */

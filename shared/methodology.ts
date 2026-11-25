@@ -4,6 +4,7 @@
 // them into a printable document (shared/methodologyHtml.ts).
 import type { DatabaseKind } from "./databases";
 import type { StatResult, StatSpec } from "./statistics";
+import type { CirculationSummary } from "./variants";
 
 export type MethodologyOption = {
   label: string;
@@ -143,6 +144,8 @@ export type MethodologyData = {
     undone: number;
   };
   agreement: MethodologyAgreement[];
+  /** The circulation of the photographs (variant families at balanced sensitivity), with how many sources the researcher set. */
+  circulation: (CirculationSummary & { origins: number }) | null;
   variants: {
     sensitivity: { name: string; bits: number; cosine: number | null }[];
     images: number;

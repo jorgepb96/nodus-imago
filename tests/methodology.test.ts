@@ -136,6 +136,27 @@ test("the document has a cover, contents, numbered sections, charts and the runn
     // Every sentence of the report has an English version.
     const missing = [...asked].filter((s) => /[a-záéíóúñ]{3}/i.test(s) && translate(s, "en") === s && !["Rollup", "URL", "Email"].includes(s));
     assert.deepEqual(missing, [], "translated");
+    // With circulation: its own section and charts.
+    const withCirculation = renderMethodologyHtml(
+      {
+        ...data,
+        circulation: {
+          families: 3,
+          published: 2,
+          top: [{ assetId: "a", rowId: "r", title: "Puente romano", uses: 4, publications: 2, first: 1935, last: 1948 }],
+          firstYears: [{ year: 1935, count: 1 }, { year: 1948, count: 1 }],
+          gap: { median: 7, min: 5, max: 9, n: 2 },
+          captionsChange: 1,
+          origins: 1,
+        },
+      },
+      (s) => (asked.add(s), s),
+    );
+    assert.match(withCirculation, /id="circulation"/);
+    assert.match(withCirculation, /Circulación de las imágenes/);
+    assert.match(withCirculation, /pasaron 7,0 años de mediana/);
+    const untranslated = [...asked].filter((s) => /[a-záéíóúñ]{3}/i.test(s) && translate(s, "en") === s && !["Rollup", "URL", "Email", "Total"].includes(s));
+    assert.deepEqual(untranslated, [], "the circulation is translated too");
     const en = renderMethodologyHtml({ ...data, language: "en" }, (s) => translate(s, "en"));
     assert.match(en, /<html lang="en">/);
     assert.match(en, /Methodology report/);

@@ -106,6 +106,21 @@ export type ImageCirculation = {
   captions: number;
 };
 
+/** The circulation of a collection: the photographs reproduced most, when they were published, and how long after the taking. */
+export type CirculationSummary = {
+  families: number;
+  /** Families with at least one known publication. */
+  published: number;
+  /** The most reproduced photographs: one per family, its uses and publication span. */
+  top: { assetId: string; rowId: string; title: string; revision?: string; uses: number; publications: number; first: number | null; last: number | null }[];
+  /** First known publications by year (one per family). */
+  firstYears: { year: number; count: number }[];
+  /** Years between the taking and the first publication, where both are known. */
+  gap: { median: number | null; min: number | null; max: number | null; n: number };
+  /** Families whose captions differ between uses. */
+  captionsChange: number;
+};
+
 /** The work (a record in a works database) a record is linked to, with every record linked to it. */
 export type WorkLink = {
   workId: string;

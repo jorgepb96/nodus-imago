@@ -403,6 +403,47 @@ ${a.prompts.length ? `<h4>${esc(t("Instrucciones completas enviadas al modelo"))
         : ""),
   });
 
+  // Circulation of the photographs
+  const c = data.circulation;
+  if (c && c.families > 0)
+    sections.push({
+      id: "circulation",
+      title: t("Circulación de las imágenes"),
+      eyebrow: t("Genealogía"),
+      lead: t("Dónde y cuándo se publicó cada fotografía, cuánto tiempo después de la toma y con qué pies."),
+      html:
+        `<div class="prose">${[
+          t("Cada fotografía reúne sus versiones (copias, escaneos, recortes y reproducciones) detectadas con sensibilidad equilibrada y confirmadas o corregidas por la investigación. La fecha de publicación es el año de la fuente que la imprime; la de la copia, la fecha del registro de cada versión; la de la toma, la de su obra fotográfica cuando se reunieron en una."),
+          fill(t("{published} de las {families} fotografías con versiones tienen alguna publicación conocida, y {captions} se publicaron con pies distintos. La investigación indicó de qué versión procede {origins} de ellas."), {
+            published: num(c.published),
+            families: num(c.families),
+            captions: num(c.captionsChange),
+            origins: num(c.origins),
+          }),
+          c.gap.median !== null
+            ? fill(t("Entre la toma y la primera publicación pasaron {median} años de mediana (de {min} a {max}, en {n} fotografías con fecha de toma)."), {
+                median: dec(c.gap.median, 1),
+                min: num(c.gap.min ?? 0),
+                max: num(c.gap.max ?? 0),
+                n: num(c.gap.n),
+              })
+            : "",
+        ]
+          .filter(Boolean)
+          .map(p)
+          .join("")}</div>` +
+        fig(bars(c.top.map((x) => ({ label: x.title, value: x.uses }))), t("Las fotografías más reproducidas: número de usos de cada una.")) +
+        fig(
+          columns(
+            c.firstYears.length ? Array.from({ length: c.firstYears.at(-1)!.year - c.firstYears[0].year + 1 }, (_, i) => String(c.firstYears[0].year + i)) : [],
+            c.firstYears.length
+              ? Array.from({ length: c.firstYears.at(-1)!.year - c.firstYears[0].year + 1 }, (_, i) => c.firstYears.find((y) => y.year === c.firstYears[0].year + i)?.count ?? 0)
+              : [],
+          ),
+          t("Primeras publicaciones conocidas por año."),
+        ),
+    });
+
   // 7. Agreement
   if (data.agreement.length)
     sections.push({
@@ -732,7 +773,7 @@ ${body}
 }
 
 /** Long sections start on a page of their own; short ones follow on. */
-const BREAK_BEFORE = new Set(["corpus", "vocabularies", "models", "ai", "agreement", "statistics"]);
+const BREAK_BEFORE = new Set(["corpus", "vocabularies", "models", "ai", "circulation", "agreement", "statistics"]);
 export const KIND_LABELS: Record<string, string> = {
   images: "Imágenes",
   sources: "Fuentes",

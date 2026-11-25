@@ -674,6 +674,11 @@ export type Commands = {
     input: { databaseIds?: string[]; sensitivity: import("./variants").Sensitivity; search?: SearchInput };
     result: import("./variants").VariantFamily[];
   };
+  /** The circulation of the families: the photographs reproduced most, when first published, how long after the taking. */
+  circulationSummary: {
+    input: { databaseIds?: string[]; sensitivity: import("./variants").Sensitivity; search?: SearchInput };
+    result: import("./variants").CirculationSummary;
+  };
   variantsOf: {
     input: { assetId: string; sensitivity?: import("./variants").Sensitivity };
     result: import("./variants").VariantFamily | null;

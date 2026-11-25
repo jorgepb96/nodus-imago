@@ -1181,11 +1181,15 @@ export class Service {
         return importTropy(this.repo, this.images, input.file);
       case "iiifImport":
         return importIiif(this.repo, this.images, input);
-      case "_methodologyData":
-        return collectMethodology(
-          { repo: this.repo, contract: this.engine.contract(), dimensions: this.engine.dimensions() },
-          input as { databaseIds: string[] },
-        );
+      case "_methodologyData": {
+        const { databaseIds } = input as { databaseIds: string[] };
+        // The circulation needs the variant families; a collection without fingerprints has none.
+        const circulation = await this.variants
+          .families({ databaseIds, sensitivity: "balanced" })
+          .then((families) => this.circulation.summary(families))
+          .catch(() => null);
+        return collectMethodology({ repo: this.repo, contract: this.engine.contract(), dimensions: this.engine.dimensions(), circulation }, { databaseIds });
+      }
       case "_platesPrepare":
         return preparePlates(this.repo, input);
       case "detailSearch":
@@ -1226,6 +1230,14 @@ export class Service {
           sensitivity: input.sensitivity,
           rowIds: input.search ? await this.selected(input.search) : undefined,
         });
+      case "circulationSummary":
+        return this.circulation.summary(
+          await this.variants.families({
+            databaseIds: input.databaseIds,
+            sensitivity: input.sensitivity,
+            rowIds: input.search ? await this.selected(input.search) : undefined,
+          }),
+        );
       case "variantsOf":
         return this.variants.of(input.assetId, input.sensitivity);
       case "imageVariants":

@@ -41,6 +41,8 @@ export type MethodologyContext = {
   /** The search index's current contract and its vector size. */
   contract: string;
   dimensions: number;
+  /** The circulation of the databases' photographs, computed by the service (it needs the variant families). */
+  circulation?: import("../../shared/variants").CirculationSummary | null;
 };
 
 export function collectMethodology(ctx: MethodologyContext, input: { databaseIds: string[] }): Omit<MethodologyData, "environment"> {
@@ -404,6 +406,12 @@ export function collectMethodology(ctx: MethodologyContext, input: { databaseIds
       undone: count(`SELECT count(*) n FROM history WHERE undone=1 AND row_id IN ${inRows}`, ...ids),
     },
     agreement,
+    circulation: ctx.circulation
+      ? {
+          ...ctx.circulation,
+          origins: hashes.length ? one<{ n: number }>(`SELECT count(*) n FROM image_origins WHERE content_hash IN (${marks(hashes)})`, ...hashes).n : 0,
+        }
+      : null,
     variants: {
       sensitivity: Object.entries(SENSITIVITY).map(([name, v]) => ({ name, bits: v.bits, cosine: v.cosine })),
       images: hashes.length,

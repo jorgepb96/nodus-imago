@@ -724,6 +724,15 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       search: searchSchema.optional(),
     })
     .strict(),
+  circulationSummary: z
+    .object({
+      databaseIds: z.array(id).max(50).optional(),
+      sensitivity: z.enum(["strict", "balanced", "broad"]),
+      // The records of the view on screen (data source and filters): only
+      // their images are grouped. Without it, every image in databaseIds.
+      search: searchSchema.optional(),
+    })
+    .strict(),
   variantsOf: z.object({ assetId: id, sensitivity: z.enum(["strict", "balanced", "broad"]).optional() }).strict(),
   imageVariants: z.object({ assetId: id, sensitivity: z.enum(["strict", "balanced", "broad"]).optional() }).strict(),
   variantVerdict: z

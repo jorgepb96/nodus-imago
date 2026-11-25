@@ -133,6 +133,8 @@ test("the links to a work undo as one step, and records under a work are appeara
       "the family and the record under the same work",
     );
     assert.equal(lines.find((l) => l.title === "C")!.match, "confirmed");
+    // The work is the photograph itself, not where it was printed.
+    assert.ok(lines.every((l) => l.work !== repo.getRow(result.workId).title && !l.publicationYear), "the work's relation is not a publication");
     repo.undo(); // C's link
     repo.undo(); // the gathering
     for (const id of [a, b, d]) assert.equal(repo.getRow(id).links![obra.id]?.length ?? 0, 0);

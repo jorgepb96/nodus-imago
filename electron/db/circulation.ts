@@ -9,7 +9,16 @@ import type { Repository } from "./repository";
 import type { Variants } from "./variants";
 import type { Appearances } from "./appearances";
 import type { Works } from "./works";
-import type { AppearanceFields, CirculationEntry, ImageAppearance, ImageCirculation, Sensitivity } from "../../shared/variants";
+import type {
+  AppearanceFields,
+  CirculationEntry,
+  CirculationSummary,
+  ImageAppearance,
+  ImageCirculation,
+  Sensitivity,
+  VariantFamily,
+} from "../../shared/variants";
+import type { RecordRow } from "../../shared/imago";
 import { decodeHistoricalDate, representativeYear } from "../../shared/historicalDate";
 import { decodeDatabaseLocation } from "../../shared/databaseProperties";
 import { exportCellText } from "../../shared/databaseExport";
@@ -114,6 +123,68 @@ export class Circulation {
       firstPublication: first?.id ?? null,
       gapYears: first && capture.year !== null ? first.publicationYear! - capture.year : null,
       captions: captions.size,
+    };
+  }
+
+  /**
+   * The circulation of many families at once: how often each photograph was
+   * used and published, when it was first published, how long after its
+   * taking, and whether its captions changed. One pass over the records.
+   */
+  summary(families: VariantFamily[]): CirculationSummary {
+    const rowIds = [...new Set(families.flatMap((f) => f.members.map((m) => m.rowId)))];
+    const rows = new Map<string, RecordRow>();
+    for (let i = 0; i < rowIds.length; i += 300) for (const r of this.repo.hydrate(rowIds.slice(i, i + 300))) rows.set(r.id, r);
+    const publications = new Map<string, { year: number | null; caption: string | null }[]>();
+    for (const r of rows.values()) publications.set(r.id, this.appearances.publications(r));
+    const manual = this.repo.db.prepare("SELECT year,caption FROM image_appearances WHERE content_hash=?");
+    const top: CirculationSummary["top"] = [];
+    const firstYears = new Map<number, number>();
+    const gaps: number[] = [];
+    let published = 0,
+      captionsChange = 0;
+    for (const f of families) {
+      const members = [...new Map(f.members.map((m) => [m.rowId, m])).values()];
+      const pubs = [
+        ...members.flatMap((m) => publications.get(m.rowId) ?? []),
+        ...[...new Set(f.members.map((m) => m.contentHash))].flatMap((h) => manual.all(h) as { year: number | null; caption: string | null }[]),
+      ];
+      const years = pubs.map((p) => p.year).filter((y): y is number => y !== null).sort((a, b) => a - b);
+      const captions = new Set<string>();
+      for (const p of pubs) if (p.caption) captions.add(p.caption.replace(/[\s.,;:«»"“”]+/g, " ").trim().toLocaleLowerCase());
+      if (captions.size > 1) captionsChange++;
+      if (years.length) {
+        published++;
+        firstYears.set(years[0], (firstYears.get(years[0]) ?? 0) + 1);
+        // The taking, from the work its records are gathered under.
+        const gathered = members.find((m) => this.works.workOf(m.rowId));
+        if (gathered) {
+          const taken = this.capture(gathered.rowId, gathered.assetId).year;
+          if (taken !== null && years[0] >= taken) gaps.push(years[0] - taken);
+        }
+      }
+      const head = f.members[0];
+      top.push({
+        assetId: head.assetId,
+        rowId: head.rowId,
+        title: head.title,
+        revision: head.revision,
+        uses: Math.max(members.length, pubs.length),
+        publications: years.length,
+        first: years[0] ?? null,
+        last: years.at(-1) ?? null,
+      });
+    }
+    top.sort((a, b) => b.uses - a.uses || b.publications - a.publications || a.title.localeCompare(b.title, "es"));
+    gaps.sort((a, b) => a - b);
+    const median = gaps.length ? (gaps.length % 2 ? gaps[(gaps.length - 1) / 2] : (gaps[gaps.length / 2 - 1] + gaps[gaps.length / 2]) / 2) : null;
+    return {
+      families: families.length,
+      published,
+      top: top.slice(0, 12),
+      firstYears: [...firstYears].map(([year, count]) => ({ year, count })).sort((a, b) => a.year - b.year),
+      gap: { median, min: gaps[0] ?? null, max: gaps.at(-1) ?? null, n: gaps.length },
+      captionsChange,
     };
   }
 

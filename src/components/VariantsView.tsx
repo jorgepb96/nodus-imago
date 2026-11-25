@@ -2,9 +2,9 @@
 // reproductions, other scans, crops), each family in date order so its first
 // dated appearance and later reuses can be read.
 import { useCallback, useEffect, useState } from "react";
-import { Columns2, Copy, Fingerprint, RefreshCw } from "lucide-react";
+import { Columns2, Copy, Fingerprint, RefreshCw, Route } from "lucide-react";
 import type { Job, SearchInput } from "../../shared/imago";
-import type { Sensitivity, VariantFamily, VariantStatus } from "../../shared/variants";
+import type { CirculationSummary, Sensitivity, VariantFamily, VariantStatus } from "../../shared/variants";
 import { useT, formatNumber } from "../i18n";
 import { Button, Thumbnail } from "./ui";
 
@@ -35,6 +35,7 @@ export function VariantsView({
   const [everywhere, setEverywhere] = useState(false);
   const [status, setStatus] = useState<VariantStatus | null>(null);
   const [families, setFamilies] = useState<VariantFamily[] | null>(null);
+  const [summary, setSummary] = useState<CirculationSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scope = everywhere ? undefined : [databaseId];
@@ -54,6 +55,11 @@ export function VariantsView({
       ]);
       setStatus(s);
       setFamilies(f);
+      // The circulation summary arrives on its own: the families never wait for it.
+      void window.imago
+        .call("circulationSummary", { databaseIds: ids, sensitivity, ...(filterKey ? { search: JSON.parse(filterKey) as SearchInput } : {}) })
+        .then(setSummary)
+        .catch(() => setSummary(null));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -135,6 +141,7 @@ export function VariantsView({
               : t("No se han encontrado imágenes repetidas con esta sensibilidad.")}
         </p>
       )}
+      {summary && summary.families > 0 && <CirculationOverview summary={summary} onOpenRecord={onOpenRecord} />}
       <div className="variants-list">
         {families?.slice(0, 200).map((family) => (
           <section key={family.id} className="variant-family" data-testid="variant-family">
@@ -175,5 +182,72 @@ export function VariantsView({
         ))}
       </div>
     </div>
+  );
+}
+
+/** The circulation of the collection: what stands out, the most reproduced photographs, and first publications by year. */
+function CirculationOverview({ summary, onOpenRecord }: { summary: CirculationSummary; onOpenRecord: (rowId: string) => void }) {
+  const t = useT();
+  const max = Math.max(1, ...summary.firstYears.map((y) => y.count));
+  const span = summary.firstYears.length ? [summary.firstYears[0].year, summary.firstYears.at(-1)!.year] : null;
+  // Years without first publications are drawn too, so gaps read as gaps.
+  const years = span ? Array.from({ length: Math.min(200, span[1] - span[0] + 1) }, (_, i) => span[0] + i) : [];
+  const countOf = new Map(summary.firstYears.map((y) => [y.year, y.count]));
+  return (
+    <section className="circ-overview" data-testid="circulation-overview">
+      <h3>
+        <Route size={16} /> {t("Circulación")}
+      </h3>
+      <div className="circ-facts">
+        <span className="circ-fact">
+          <b>{formatNumber(summary.published, 0)}</b> {t("de")} {formatNumber(summary.families, 0)} {t("fotografías con alguna publicación conocida")}
+        </span>
+        {summary.gap.median !== null && (
+          <span className="circ-fact" data-tooltip={t("De {min} a {max} años, en {n} fotografías con fecha de toma").replace("{min}", String(summary.gap.min)).replace("{max}", String(summary.gap.max)).replace("{n}", String(summary.gap.n))}>
+            <b>{formatNumber(summary.gap.median, 1)}</b> {t("años de mediana entre la toma y la primera publicación")}
+          </span>
+        )}
+        {summary.captionsChange > 0 && (
+          <span className="circ-fact">
+            <b>{formatNumber(summary.captionsChange, 0)}</b> {t("fotografías publicadas con pies distintos")}
+          </span>
+        )}
+      </div>
+      <div className="circ-overview-grid">
+        <div>
+          <h4>{t("Las más reproducidas")}</h4>
+          <ol className="circ-top">
+            {summary.top.map((item) => (
+              <li key={item.assetId}>
+                <button type="button" onClick={() => onOpenRecord(item.rowId)}>
+                  <Thumbnail id={item.assetId} revision={item.revision} alt={item.title} />
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>
+                      {t("{n} usos").replace("{n}", String(item.uses))}
+                      {item.first !== null && ` · ${item.first === item.last ? item.first : `${item.first}–${item.last}`}`}
+                    </small>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+        {years.length > 0 && (
+          <div>
+            <h4>{t("Primeras publicaciones por año")}</h4>
+            <div className="circ-years" role="img" aria-label={t("Primeras publicaciones por año")}>
+              {years.map((year) => (
+                <span key={year} data-tooltip={`${year}: ${countOf.get(year) ?? 0}`} style={{ height: `${((countOf.get(year) ?? 0) / max) * 100}%` }} />
+              ))}
+            </div>
+            <div className="circ-years-axis">
+              <span>{span![0]}</span>
+              <span>{span![1]}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

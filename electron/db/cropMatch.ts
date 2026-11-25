@@ -93,6 +93,8 @@ export function locate(whole: Miniature, part: Miniature, fractions = [1, 0.85, 
 }
 const search = (whole: Miniature, part: Miniature) => locate(whole, part).score;
 
+/** Correlation from which the place of a crop is trusted. */
+const PLACEMENT_SCORE = 0.6;
 /** Finer widths to say where a crop sits (the match itself needs only the coarse ones). */
 const PLACEMENT_FRACTIONS = [1, 0.93, 0.86, 0.79, 0.72, 0.65, 0.58, 0.51, 0.44, 0.37];
 /**
@@ -102,10 +104,18 @@ const PLACEMENT_FRACTIONS = [1, 0.93, 0.86, 0.79, 0.72, 0.65, 0.58, 0.51, 0.44, 
  * show the same field or are not the same photograph.
  */
 export function cropPlacement(a: Miniature, b: Miniature): { inner: "a" | "b"; rect: { x: number; y: number; w: number; h: number }; kept: number } | null {
-  const bInA = locate(a, b, PLACEMENT_FRACTIONS),
-    aInB = locate(b, a, PLACEMENT_FRACTIONS);
+  // Coarse widths first, then every hundredth around the best one.
+  const refined = (whole: Miniature, part: Miniature) => {
+    const coarse = locate(whole, part, PLACEMENT_FRACTIONS);
+    const around = Array.from({ length: 9 }, (_, i) => Math.round((coarse.w + (i - 4) * 0.01) * 100) / 100).filter((f) => f > 0.3 && f <= 1);
+    const fine = locate(whole, part, around);
+    return fine.score > coarse.score ? fine : coarse;
+  };
+  const bInA = refined(a, b),
+    aInB = refined(b, a);
   const pick = bInA.score >= aInB.score ? { inner: "b" as const, p: bInA } : { inner: "a" as const, p: aInB };
-  if (pick.p.score < SAME_PHOTOGRAPH) return null;
+  // Asked only of images already known to be the same photograph: a lower bar than the match itself.
+  if (pick.p.score < PLACEMENT_SCORE) return null;
   const kept = pick.p.w * pick.p.h;
   // The same field, give or take a scanner's margin.
   if (kept > 0.92) return null;

@@ -829,7 +829,8 @@ function CirculationSection({
                       ↳ {t("Procede de")} {label(byId.get(e.parent)!)}
                     </small>
                   )}
-                  <strong>{e.work ?? t("Sin obra")}</strong>
+                  <strong>{e.work ?? e.title ?? t("Sin obra")}</strong>
+                  {!e.work && e.databaseName && <small>{e.databaseName}</small>}
                   {(e.workDetail || e.page || e.figure) && (
                     <small>{[e.workDetail, e.page ? `p. ${e.page}` : "", e.figure ? `fig. ${e.figure}` : ""].filter(Boolean).join(" · ")}</small>
                   )}
