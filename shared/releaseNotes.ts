@@ -33,6 +33,66 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.0",
+    date: "2026-11-25",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Cada vínculo entre registros guarda la página, la figura o lámina, el pie de foto y una nota: una fotografía en la página 12 de un libro, con el pie con que se publicó. Se ve igual desde la foto y desde el libro, se puede deshacer y se puede traer a la tabla para filtrar, ordenar y contar.",
+        en: "Each link between records keeps the page, the figure or plate, the caption and a note: a photograph on page 12 of a book, with the caption it was printed with. It reads the same from the photograph and from the book, can be undone and can be brought into the table to filter, sort and count.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Obras fotográficas: «Reunir en una obra» crea una ficha para la fotografía (fotógrafo, fecha de toma, lugar) y le enlaza todas sus copias, escaneos y reproducciones, que se escriben una sola vez.",
+        en: "Photographic works: «Gather into a work» creates one record for the photograph (photographer, date taken, place) and links every copy, scan and reproduction to it, so its data is written once.",
+      },
+      {
+        scope: "catalogue",
+        category: "new",
+        es: "Nuevos tipos de base de datos, Personas y Acontecimientos, con sus propiedades de partida.",
+        en: "New database kinds, People and Events, with their starting properties.",
+      },
+      {
+        scope: "visual",
+        category: "new",
+        es: "Circulación de cada fotografía: de la toma a cada publicación en orden de fecha, con el año de publicación y el de la copia por separado, la primera publicación conocida, los cambios de pie, la parte de la imagen que conserva cada recorte y de qué versión procede cada una. Se exporta a CSV.",
+        en: "The circulation of each photograph: from the taking to every publication in date order, with the publication and copy years apart, the first known publication, changing captions, the part of the image each crop keeps and which version each one comes from. It exports to CSV.",
+      },
+      {
+        scope: "analysis",
+        category: "new",
+        es: "La vista Variantes resume la circulación de la colección: las fotografías más reproducidas, las primeras publicaciones por año y los años entre la toma y la primera publicación.",
+        en: "The Variants view sums up the collection's circulation: the most reproduced photographs, first publications by year and the years between the taking and the first publication.",
+      },
+      {
+        scope: "publish",
+        category: "new",
+        es: "Informe metodológico en PDF (menú de la base de datos): portada, índice, gráficos y texto justificado en el idioma de la interfaz, con los datos y su huella, las categorías, los modelos de IA con su revisión y sus instrucciones exactas, lo revisado y corregido, la concordancia, los parámetros, las vistas, las estadísticas y la circulación. Anexo técnico en JSON opcional.",
+        en: "Methodology report as a PDF (database menu): cover, contents, charts and justified text in the interface language, with the data and its fingerprint, the categories, the AI models with their revision and exact instructions, what was reviewed and corrected, agreement, parameters, views, statistics and circulation. Optional technical annex in JSON.",
+      },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "Cada valor que escribe la IA guarda el modelo, su revisión y las instrucciones exactas con que se generó, y si después se corrigió a mano.",
+        en: "Each value the AI writes keeps the model, its revision and the exact instructions it was produced with, and whether it was corrected by hand afterwards.",
+      },
+      {
+        scope: "catalogue",
+        category: "enhancement",
+        es: "Las relaciones muestran los títulos de los registros enlazados en la tabla y en la ficha, buscan mientras escribes y crean el registro que falta.",
+        en: "Relations show the titles of the linked records in the table and the record, search as you type and create the missing record.",
+      },
+      {
+        scope: "publish",
+        category: "fix",
+        es: "Al exportar a CSV o XLSX, las relaciones daban un número en lugar de los títulos enlazados; ahora salen los títulos con su página, y una columna con pies y notas.",
+        en: "When exporting to CSV or XLSX, relations gave a number instead of the linked titles; they now give the titles with their page, and a column of captions and notes.",
+      },
+    ],
+  },
+  {
     version: "0.8.0",
     date: "2026-11-24",
     highlights: [
