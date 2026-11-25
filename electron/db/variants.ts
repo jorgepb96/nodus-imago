@@ -11,6 +11,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { CropPlacement } from "../../shared/variants";
 import type { Repository } from "./repository";
 import type { CompareBoards } from "./compare";
 import type { CompareItem } from "../../shared/compare";
@@ -26,7 +27,7 @@ import type {
 } from "../../shared/variants";
 import { SENSITIVITY } from "../../shared/variants";
 import { imagePipeline } from "../import/images";
-import { cropMatch, MINIATURE, SAME_PHOTOGRAPH, type Miniature } from "./cropMatch";
+import { cropMatch, cropPlacement, MINIATURE, SAME_PHOTOGRAPH, type Miniature } from "./cropMatch";
 
 /** Fingerprint length in hex characters: 128 bits. Older 64-bit ones are recalculated. */
 export const FINGERPRINT_HEX = 32;
@@ -460,6 +461,60 @@ export class Variants {
   }
 
   /** Records (or clears, with null) what the researcher decided about two images. */
+  /**
+   * Whether one file is a crop of the other and where it sits in the wider
+   * one, judged on their miniatures; kept in the collection (two files never
+   * change). Null when they show the same field or no miniature is ready.
+   */
+  placement(a: string, b: string): CropPlacement | null {
+    if (a === b) return null;
+    const key = pairKey(a, b);
+    const cached = this.repo.db.prepare("SELECT placement FROM image_crops WHERE pair=?").get(key) as { placement: string | null } | undefined;
+    const decode = (json: string | null): CropPlacement | null => {
+      if (!json) return null;
+      const stored = JSON.parse(json) as { inner: string; rect: CropPlacement["rect"]; kept: number };
+      return { inner: stored.inner, rect: stored.rect, kept: stored.kept };
+    };
+    if (cached) return decode(cached.placement);
+    const one = this.repo.db.prepare("SELECT width,height,pixels FROM image_miniatures WHERE content_hash=?");
+    const ra = one.get(a) as { width: number; height: number; pixels: Buffer } | undefined,
+      rb = one.get(b) as { width: number; height: number; pixels: Buffer } | undefined;
+    if (!ra || !rb) return null;
+    const mini = (r: { width: number; height: number; pixels: Buffer }) => ({ width: r.width, height: r.height, pixels: new Uint8Array(r.pixels) });
+    const found = cropPlacement(mini(ra), mini(rb));
+    const placement = found ? { inner: found.inner === "a" ? a : b, rect: found.rect, kept: found.kept } : null;
+    this.repo.db.prepare("INSERT OR REPLACE INTO image_crops VALUES(?,?)").run(key, placement ? JSON.stringify(placement) : null);
+    return placement;
+  }
+  /** The file each file of a set was reproduced from, as the researcher said. */
+  origins(hashes: string[]): Map<string, string> {
+    if (!hashes.length) return new Map();
+    return new Map(
+      (this.repo.db
+        .prepare(`SELECT content_hash,source_hash FROM image_origins WHERE content_hash IN (${hashes.map(() => "?").join(",")})`)
+        .all(...hashes) as { content_hash: string; source_hash: string }[]).map((r) => [r.content_hash, r.source_hash]),
+    );
+  }
+  /** «Procede de»: the image this one was reproduced from; null clears it. */
+  setOrigin(assetId: string, sourceAssetId: string | null) {
+    const hash = (this.repo.asset(assetId) as Asset).content_hash;
+    if (!sourceAssetId) {
+      this.repo.db.prepare("DELETE FROM image_origins WHERE content_hash=?").run(hash);
+      return;
+    }
+    const source = (this.repo.asset(sourceAssetId) as Asset).content_hash;
+    if (source === hash) throw new Error("Una imagen no puede proceder de sí misma.");
+    // No loops: the source may not come, at any remove, from this image.
+    const seen = new Set([hash]);
+    for (let next: string | undefined = source; next; next = this.origins([next]).get(next)) {
+      if (seen.has(next)) throw new Error("Esa imagen ya procede de esta: se formaría un círculo.");
+      seen.add(next);
+    }
+    this.repo.db
+      .prepare("INSERT INTO image_origins VALUES(?,?,?) ON CONFLICT(content_hash) DO UPDATE SET source_hash=excluded.source_hash,updated_at=excluded.updated_at")
+      .run(hash, source, new Date().toISOString());
+  }
+
   setVerdict(assetId: string, otherAssetId: string, verdict: VariantVerdict | null, kind: VariantKind | null = null) {
     const a = (this.repo.asset(assetId) as Asset).content_hash,
       b = (this.repo.asset(otherAssetId) as Asset).content_hash;

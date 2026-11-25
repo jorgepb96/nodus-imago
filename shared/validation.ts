@@ -566,6 +566,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   annotationsExport: z.object({ databaseId: id }).strict(),
   tropyImport: z.undefined(),
   iiifImport: z.object({ url: z.string().url().max(2000).refine((u) => u.startsWith("https://")), perCanvas: z.boolean() }).strict(),
+  saveCsv: z.object({ fileName: z.string().trim().min(1).max(200), text: z.string().max(20_000_000) }).strict(),
   methodologyData: z.object({ databaseIds: z.array(id).min(1).max(100) }).strict(),
   methodologyPdf: z
     .object({
@@ -734,6 +735,17 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   workOf: z.object({ rowId: id }).strict(),
+  imageCirculation: z
+    .object({
+      assetId: id,
+      sensitivity: z.enum(["strict", "balanced", "broad"]).optional(),
+      fields: z
+        .record(id, z.object({ work: id.nullable().optional(), page: id.nullable().optional(), caption: id.nullable().optional() }).strict())
+        .refine((value) => Object.keys(value).length <= 50, "Demasiadas bases de datos.")
+        .optional(),
+    })
+    .strict(),
+  imageOrigin: z.object({ assetId: id, sourceAssetId: id.nullable() }).strict(),
   createWorkFromFamily: z
     .object({
       assetId: id,

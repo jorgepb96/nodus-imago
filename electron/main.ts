@@ -889,6 +889,17 @@ app.whenReady().then(async () => {
         if (result.canceled || !result.filePaths[0]) return null;
         return call("_tropyImport", { file: result.filePaths[0] });
       }
+      if (command === "saveCsv") {
+        const data = safe as { fileName: string; text: string };
+        const target = await dialog.showSaveDialog(window, {
+          defaultPath: path.join(app.getPath("documents"), data.fileName.replace(/[\\/:*?"<>|]/g, "-") + ".csv"),
+          filters: [{ name: "CSV", extensions: ["csv"] }],
+        });
+        if (target.canceled || !target.filePath) return null;
+        // With a byte-order mark, so spreadsheets read accents correctly.
+        await fs.writeFile(target.filePath, "\ufeff" + data.text, "utf8");
+        return target.filePath;
+      }
       if (command === "methodologyData") {
         const data = await call("_methodologyData", safe);
         return {

@@ -40,6 +40,7 @@ import { CompareBoards } from "./db/compare";
 import { Variants } from "./db/variants";
 import { Appearances } from "./db/appearances";
 import { Works } from "./db/works";
+import { Circulation } from "./db/circulation";
 import { VisualMaps } from "./db/visualMap";
 import { ValueCleanup } from "./db/cleanup";
 import { Authorities } from "./db/authorities";
@@ -74,7 +75,7 @@ const CONTENT_WRITES = new Set([
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
-  "setLinkDetails", "setRelationPlace", "convertToRelation", "pairRelation", "createWorkFromFamily",
+  "setLinkDetails", "setRelationPlace", "imageOrigin", "convertToRelation", "pairRelation", "createWorkFromFamily",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -107,6 +108,7 @@ export class Service {
   variants: Variants;
   appearances: Appearances;
   works: Works;
+  circulation: Circulation;
   visualMaps: VisualMaps;
   cleanup: ValueCleanup;
   authorities: Authorities;
@@ -201,6 +203,7 @@ export class Service {
     this.queue.fingerprint = (payload, index) => this.variants.fingerprintOne(payload, index);
     this.works = new Works(this.repo, this.variants);
     this.appearances = new Appearances(this.repo, this.variants, this.works);
+    this.circulation = new Circulation(this.repo, this.variants, this.appearances, this.works);
     this.details = new DetailSearch(this.repo, this.engine);
     this.suggestions = new NeighbourSuggestions(this.repo, () => {
       try {
@@ -1229,6 +1232,12 @@ export class Service {
         return this.variants.ofImage(input.assetId, input.sensitivity);
       case "variantVerdict":
         this.variants.setVerdict(input.assetId, input.otherAssetId, input.verdict, input.kind ?? null);
+        this.changed();
+        return true;
+      case "imageCirculation":
+        return this.circulation.of(input.assetId, input.sensitivity, input.fields);
+      case "imageOrigin":
+        this.variants.setOrigin(input.assetId, input.sourceAssetId);
         this.changed();
         return true;
       case "workOf":

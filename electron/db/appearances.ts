@@ -201,6 +201,7 @@ export class Appearances {
       }
     }
     const rows = new Map(this.repo.hydrate(entries.map((e) => e.rowId)).map((r) => [r.id, r]));
+    const hashOf = new Map([...rows.values()].flatMap((r) => r.images.map((i) => [i.id, i.contentHash] as const)));
     const details = new Map<string, DatabaseDetail>();
     const detail = (id: string) => details.get(id) ?? details.set(id, this.repo.detail(id)).get(id)!;
     const lines: ImageAppearance[] = entries.flatMap((e) => {
@@ -231,6 +232,11 @@ export class Appearances {
         figure: work.figure,
         caption: work.caption ?? caption,
         note: work.note,
+        // Kept apart for the circulation: when the work printed it, and when this copy was made.
+        publicationYear: work.year,
+        copyYear: e.year,
+        copyDate: e.date,
+        contentHash: e.member?.contentHash ?? (e.member ? null : anchor.content_hash) ?? hashOf.get(e.assetId) ?? null,
         match: e.member ? e.member.match : "self",
         fields: { work: used.work?.id ?? null, page: used.page?.id ?? null, caption: used.caption?.id ?? null },
       }));
@@ -253,6 +259,10 @@ export class Appearances {
         page: m.page,
         caption: m.caption,
         note: m.note,
+        publicationYear: m.year,
+        copyYear: null,
+        copyDate: null,
+        contentHash: m.contentHash,
         match: null,
       });
     return lines.sort(

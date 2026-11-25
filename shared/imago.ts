@@ -576,6 +576,8 @@ export type Commands = {
   tropyImport: { input: void; result: StandardImport | null };
   iiifImport: { input: { url: string; perCanvas: boolean }; result: StandardImport };
   /** Handled in the main process: numbered figures with captions, as PDF. */
+  /** Saves a CSV the interface composed (a circulation, a table) where the researcher chooses. */
+  saveCsv: { input: { fileName: string; text: string }; result: string | null };
   /** The facts of a methodology report for some databases, with the app's environment. */
   methodologyData: { input: { databaseIds: string[] }; result: import("./methodology").MethodologyData };
   /** Prints a methodology report (and saves its technical annex) where the researcher chooses. */
@@ -689,6 +691,13 @@ export type Commands = {
     };
     result: boolean;
   };
+  /** Where a photograph went: its taking and every use in date order. */
+  imageCirculation: {
+    input: { assetId: string; sensitivity?: import("./variants").Sensitivity; fields?: Record<string, import("./variants").AppearanceFields> };
+    result: import("./variants").ImageCirculation;
+  };
+  /** «Procede de»: the image one was reproduced from; null clears it. */
+  imageOrigin: { input: { assetId: string; sourceAssetId: string | null }; result: boolean };
   /** The work a record is linked to (in a works database), or null. */
   workOf: { input: { rowId: string }; result: import("./variants").WorkLink | null };
   /** Gathers an image's family into one work, created when the record has none. */

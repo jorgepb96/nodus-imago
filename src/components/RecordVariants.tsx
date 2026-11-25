@@ -3,7 +3,8 @@
 // rejects, names and compares, and the works in which the photograph appears,
 // from the records of its family and from reproductions added by hand.
 import { useEffect, useState } from "react";
-import { BookOpen, Camera, Check, Columns2, Layers, Pencil, Plus, Search, Settings2, Trash2, Undo2, X } from "lucide-react";
+import { BookOpen, Camera, Check, Columns2, Download, Layers, Pencil, Plus, Route, Search, Settings2, Trash2, Undo2, X } from "lucide-react";
+import { tableToCsv } from "../../shared/databaseExport";
 import type { DatabaseColumn, DatabaseSummary } from "../../shared/databases";
 import type { ImageAsset, RecordRow } from "../../shared/imago";
 import type {
@@ -15,6 +16,8 @@ import type {
   VariantKind,
   VariantVerdict,
   WorkLink,
+  ImageCirculation,
+  CirculationEntry,
 } from "../../shared/variants";
 import { VARIANT_KINDS } from "../../shared/variants";
 import { useT } from "../i18n";
@@ -86,6 +89,7 @@ export function RecordVariants({
     [query, setQuery] = useState(""),
     [found, setFound] = useState<RecordRow[]>([]),
     [work, setWork] = useState<WorkLink | null>(null),
+    [circulation, setCirculation] = useState<ImageCirculation | null>(null),
     [gathering, setGathering] = useState<{ title: string; databaseId: string } | null>(null),
     [worksDbs, setWorksDbs] = useState<DatabaseSummary[]>([]);
   const imageId = image?.id;
@@ -98,12 +102,14 @@ export function RecordVariants({
       window.imago.call("imageVariants", { assetId: imageId, sensitivity }),
       window.imago.call("imageAppearances", { assetId: imageId, sensitivity, fields: JSON.parse(fieldsKey) }),
       window.imago.call("workOf", { rowId: row.id }).catch(() => null),
+      window.imago.call("imageCirculation", { assetId: imageId, sensitivity, fields: JSON.parse(fieldsKey) }).catch(() => null),
     ])
-      .then(([v, a, w]) => {
+      .then(([v, a, w, c]) => {
         if (cancelled) return;
         setVariants(v);
         setAppearances(a);
         setWork(w);
+        setCirculation(c);
         onCount?.(v.members.length);
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)));
@@ -621,6 +627,265 @@ export function RecordVariants({
           </details>
         )}
       </section>
+      {circulation && (
+        <CirculationSection
+          circulation={circulation}
+          image={image}
+          row={row}
+          perform={perform}
+          onOpenRecord={onOpenRecord}
+          onChanged={reload}
+        />
+      )}
     </div>
+  );
+}
+
+const KIND_SHORT: Record<VariantKind, string> = KIND_LABEL;
+
+/**
+ * «Circulación»: the taking and every use of the photograph in date order,
+ * with when the work printed it and when the copy was made, the part of the
+ * image each one keeps, a caption that changes, and «Procede de».
+ */
+function CirculationSection({
+  circulation,
+  image,
+  row,
+  perform,
+  onOpenRecord,
+  onChanged,
+}: {
+  circulation: ImageCirculation;
+  image: ImageAsset;
+  row: RecordRow;
+  perform: Perform;
+  onOpenRecord?: (rowId: string) => void;
+  onChanged: () => void;
+}) {
+  const t = useT();
+  const { capture, entries } = circulation;
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const first = circulation.firstPublication ? byId.get(circulation.firstPublication) : null;
+  const label = (e: CirculationEntry) => [e.work ?? e.title ?? t("Sin obra"), e.publicationYear ?? e.copyYear].filter(Boolean).join(" · ");
+  const setOrigin = (e: CirculationEntry, source: CirculationEntry | null) =>
+    e.assetId &&
+    void perform(async () => {
+      await window.imago.call("imageOrigin", { assetId: e.assetId!, sourceAssetId: source?.assetId ?? null });
+      onChanged();
+    });
+  const exportCsv = () =>
+    void perform(async () => {
+      const yes = t("sí");
+      const header = [
+        t("Momento"),
+        t("Año"),
+        t("Fecha de la copia"),
+        t("Obra"),
+        t("Página"),
+        t("Figura o lámina"),
+        t("Pie de foto"),
+        t("Nota"),
+        t("Registro"),
+        t("Base de datos"),
+        t("Relación con esta imagen"),
+        t("Parte conservada"),
+        t("Procede de"),
+        t("Primera publicación"),
+        t("El pie cambia"),
+        t("Pie anterior"),
+      ];
+      const rows: string[][] = [
+        // The taking: its date, the photographer and place, and where they come from.
+        [t("Toma"), String(capture.year ?? ""), capture.date ?? "", capture.workTitle ?? "", "", "", "", [capture.photographer, capture.place].filter(Boolean).join(" · "), capture.workTitle ? "" : row.title, "", "", "", "", "", "", ""],
+        ...entries.map((e) => [
+          t(e.publicationYear !== null ? "Publicación" : "Copia"),
+          String(e.publicationYear ?? e.copyYear ?? ""),
+          e.copyDate ?? String(e.copyYear ?? ""),
+          e.work ?? "",
+          e.page ?? "",
+          e.figure ?? "",
+          e.caption ?? "",
+          e.note ?? "",
+          e.manual ? t("Añadida a mano") : (e.title ?? ""),
+          e.databaseName ?? "",
+          e.match === "self" ? t("Esta ficha") : e.kind ? t(KIND_SHORT[e.kind]) : e.match ? t(MATCH_LABEL[e.match]) : "",
+          e.crop ? `${Math.round(e.crop.kept * 100)} %` : "",
+          e.parent ? label(byId.get(e.parent)!) : "",
+          e.id === circulation.firstPublication ? yes : "",
+          e.captionChanged ? yes : "",
+          e.previousCaption ?? "",
+        ]),
+      ];
+      const file = await window.imago.call("saveCsv", { fileName: `${t("Circulación")} - ${row.title}`, text: tableToCsv(header, rows) });
+      if (file) onChanged();
+    });
+  /** The image on screen with the part a use keeps, or the use with the part the image on screen keeps. */
+  const cropView = (e: CirculationEntry) => {
+    if (!e.crop) return null;
+    const wider = e.crop.of === "other" ? { id: image.id, revision: image.revision } : { id: e.assetId!, revision: e.revision };
+    const r = e.crop.rect;
+    return (
+      <figure className="circ-crop" data-testid="circulation-crop" data-tooltip={t(e.crop.of === "other" ? "La parte de la imagen en pantalla que conserva este uso" : "La parte de este uso que conserva la imagen en pantalla")}>
+        <span className="circ-crop-frame">
+          <img src={`imago://asset/${wider.id}/thumb${wider.revision ? "?v=" + encodeURIComponent(wider.revision) : ""}`} alt="" />
+          <i style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }} />
+        </span>
+        <figcaption>
+          {(e.crop.of === "other" ? t("Conserva el {n} % de la imagen en pantalla") : t("La imagen en pantalla conserva el {n} % de esta")).replace("{n}", String(Math.round(e.crop.kept * 100)))}
+        </figcaption>
+      </figure>
+    );
+  };
+  return (
+    <section className="rv-section rv-circulation" data-testid="circulation">
+      <header className="rv-head">
+        <h3>
+          <Route size={16} /> {t("Circulación")}
+        </h3>
+        <Button data-testid="circulation-export" onClick={exportCsv}>
+          <Download size={14} />
+          {t("Exportar CSV")}
+        </Button>
+      </header>
+      <p className="hint">{t("De la toma a cada publicación, en orden de fecha: cuándo la imprimió cada obra, cuándo se hizo cada copia, qué parte de la imagen conserva y con qué pie se publicó.")}</p>
+      <div className="circ-facts">
+        {first && (
+          <span className="circ-fact" data-testid="circulation-first">
+            <b>{t("Primera publicación conocida")}</b> {first.publicationYear} · {first.work}
+          </span>
+        )}
+        {circulation.gapYears !== null && circulation.gapYears >= 0 && (
+          <span className="circ-fact">
+            <b>{circulation.gapYears}</b> {t(circulation.gapYears === 1 ? "año entre la toma y la primera publicación" : "años entre la toma y la primera publicación")}
+          </span>
+        )}
+        <span className="circ-fact">
+          <b>{entries.length}</b> {t(entries.length === 1 ? "uso" : "usos")}
+        </span>
+        {circulation.captions > 1 && (
+          <span className="circ-fact">
+            <b>{circulation.captions}</b> {t("pies distintos")}
+          </span>
+        )}
+      </div>
+      <ol className="circ-timeline">
+        <li className="circ-item circ-capture" data-testid="circulation-capture">
+          <span className="circ-when">
+            <strong>{capture.year ?? "—"}</strong>
+            <small>{t("Toma")}</small>
+          </span>
+          <div className="circ-card">
+            <div className="circ-main">
+              <strong>
+                <Camera size={14} /> {capture.date ?? t("Fecha de toma desconocida")}
+              </strong>
+              {(capture.photographer || capture.place) && <span>{[capture.photographer, capture.place].filter(Boolean).join(" · ")}</span>}
+              <small>
+                {capture.from === "work"
+                  ? t("De la obra fotográfica «{title}»").replace("{title}", capture.workTitle ?? "")
+                  : t("De esta ficha: reúne las versiones en una obra para fijar la fecha de toma")}
+              </small>
+            </div>
+            {capture.workId && (
+              <button type="button" className="text-link" onClick={() => onOpenRecord?.(capture.workId!)}>
+                {t("Abrir obra")} ↗
+              </button>
+            )}
+          </div>
+        </li>
+        {entries.map((e, i) => {
+          const earlier = entries.slice(0, i).filter((x) => x.assetId && x.contentHash !== e.contentHash);
+          const suggested = !e.parent && e.suggestedParent ? byId.get(e.suggestedParent) : null;
+          return (
+            <li
+              key={e.id}
+              className={"circ-item" + (e.match === "self" ? " is-self" : "") + (e.id === circulation.firstPublication ? " is-first" : "")}
+              style={{ ["--depth" as string]: e.depth }}
+              data-testid="circulation-entry"
+            >
+              <span className="circ-when">
+                <strong>{e.publicationYear ?? e.copyYear ?? "—"}</strong>
+                {e.publicationYear !== null && e.copyYear !== null && e.copyYear !== e.publicationYear && (
+                  <small>
+                    {t("copia")} {e.copyDate ?? e.copyYear}
+                  </small>
+                )}
+                {e.publicationYear === null && e.copyYear !== null && <small>{t("copia")}</small>}
+              </span>
+              <div className="circ-card">
+                {e.assetId ? (
+                  <button type="button" className="circ-thumb" onClick={() => e.rowId && onOpenRecord?.(e.rowId)} aria-label={`${t("Abrir registro")} ${e.title ?? ""}`}>
+                    <Thumbnail id={e.assetId} revision={e.revision} alt={e.title ?? ""} />
+                  </button>
+                ) : (
+                  <span className="circ-thumb circ-thumb-empty">
+                    <BookOpen size={18} />
+                  </span>
+                )}
+                <div className="circ-main">
+                  {e.parent && byId.get(e.parent) && (
+                    <small className="circ-branch">
+                      ↳ {t("Procede de")} {label(byId.get(e.parent)!)}
+                    </small>
+                  )}
+                  <strong>{e.work ?? t("Sin obra")}</strong>
+                  {(e.workDetail || e.page || e.figure) && (
+                    <small>{[e.workDetail, e.page ? `p. ${e.page}` : "", e.figure ? `fig. ${e.figure}` : ""].filter(Boolean).join(" · ")}</small>
+                  )}
+                  {e.caption && (
+                    <p className="circ-caption">
+                      «{e.caption}»
+                      {e.captionChanged && (
+                        <span className="circ-changed" data-testid="circulation-caption-changed" data-tooltip={`${t("Pie anterior")}: «${e.previousCaption}»`}>
+                          {t("El pie cambia")}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {e.captionChanged && e.previousCaption && <small className="circ-previous">{t("Antes")}: «{e.previousCaption}»</small>}
+                  <div className="rv-tags">
+                    {e.id === circulation.firstPublication && <span className="circ-tag is-first">{t("Primera publicación conocida")}</span>}
+                    {e.match === "self" ? (
+                      <span className="variant-match match-self">{t("Esta ficha")}</span>
+                    ) : e.kind ? (
+                      <span className="variant-match match-confirmed">{t(KIND_SHORT[e.kind])}</span>
+                    ) : e.match ? (
+                      <span className={`variant-match match-${e.match}`}>{t(MATCH_LABEL[e.match])}</span>
+                    ) : (
+                      <span className="rv-manual">{t("Añadida a mano")}</span>
+                    )}
+                  </div>
+                  {e.assetId && earlier.length > 0 && (
+                    <label className="circ-origin">
+                      {t("Procede de")}
+                      <select
+                        value={e.parent ?? ""}
+                        data-testid="circulation-origin"
+                        onChange={(ev) => setOrigin(e, byId.get(ev.target.value) ?? null)}
+                      >
+                        <option value="">{t("Sin indicar")}</option>
+                        {earlier.map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {label(x)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {suggested && (
+                    <p className="circ-suggest" data-testid="circulation-suggestion">
+                      {t("¿Procede de «{work}»? Es un recorte de esa imagen.").replace("{work}", label(suggested))}
+                      <Button onClick={() => setOrigin(e, suggested)}>{t("Sí")}</Button>
+                    </p>
+                  )}
+                </div>
+                {cropView(e)}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
