@@ -224,9 +224,9 @@ export class Appearances {
         work: work.work,
         workDetail: work.workDetail,
         author: work.author,
-        // The year of the publication when the source gives one.
-        year: work.year ?? e.year,
-        date: work.year ? String(work.year) : e.date,
+        // The record's date; the source's year when the record has none.
+        year: e.year ?? work.year,
+        date: e.date ?? (work.year ? String(work.year) : null),
         page: work.page ?? page,
         figure: work.figure,
         caption: work.caption ?? caption,

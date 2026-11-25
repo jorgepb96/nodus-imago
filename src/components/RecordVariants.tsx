@@ -276,7 +276,9 @@ export function RecordVariants({
           <div className="rv-work" data-testid="variant-work">
             <Camera size={16} />
             <span>
-              {t("Obra")}: <strong>{work.title}</strong>
+              <span>
+                {t("Obra")}: <strong>{work.title}</strong>
+              </span>
               <small>
                 {work.databaseName} · {(work.reproductions.length === 1 ? t("1 reproducción enlazada") : t("{n} reproducciones enlazadas")).replace("{n}", work.reproductions.length.toLocaleString())}
               </small>

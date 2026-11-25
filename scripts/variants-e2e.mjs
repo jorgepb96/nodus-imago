@@ -156,6 +156,23 @@ try {
   await poll(async () => (await appear.getByTestId("appearance-row").count()) === 4, "manual appearance deleted");
   checks.push("Works it appears in: date order, page and caption by name, a chosen property, one added and deleted by hand");
 
+  // The family gathered into one photographic work, in a new «Fotografías».
+  await tab.getByTestId("variants-gather").click();
+  const gather = tab.getByTestId("variant-gather-form");
+  assert.equal(await gather.getByLabel("Título de la obra").inputValue(), "A");
+  await gather.getByLabel("Título de la obra").fill("Vista de Toledo");
+  await gather.getByTestId("variant-gather-apply").click();
+  await tab.getByTestId("variant-work").filter({ hasText: "Vista de Toledo" }).waitFor();
+  const worksDb = (await call("listDatabases")).find((d) => d.kind === "works");
+  assert.equal(worksDb.name, "Fotografías");
+  const work = await call("workOf", { rowId: row("A") });
+  assert.equal(work.title, "Vista de Toledo");
+  assert.deepEqual(work.reproductions.sort(), ["A", "B", "C", "D"].map(row).sort(), "every record of the family under the work");
+  assert.equal(await tab.getByTestId("variants-gather").count(), 0, "gathered once");
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: "test-results/variants-work.png" });
+  checks.push("The family gathered into one photographic work in a new «Fotografías» database, every record linked to it");
+
   // Two versions to the comparison board.
   await tab.locator(".rv-self input[type=checkbox]").check();
   await tab.getByTestId("variant-card").filter({ hasText: "B" }).first().locator("input[type=checkbox]").check();

@@ -202,7 +202,7 @@ const WRITE_TOOLS = [
   "imago_create_database", "imago_update_database", "imago_delete_database", "imago_add_property", "imago_update_property",
   "imago_convert_property", "imago_delete_property", "imago_reorder_properties", "imago_create_records", "imago_update_records",
   "imago_delete_records", "imago_import_images", "imago_annotate_image", "imago_delete_annotation", "imago_run_ai_properties",
-  "imago_undo", "imago_redo",
+  "imago_set_link_details", "imago_undo", "imago_redo",
 ];
 
 test("server: loopback only, a token, the settings file outside the collection", async () => {
@@ -429,6 +429,16 @@ test("write: granting access closes old sessions; the new one creates databases,
     const anaId = plaza.Retratados[0];
     const ana = await ok(client, "imago_get_record", { recordId: anaId });
     assert.ok(ana.values["Aparece en"].includes(plazaId), "the twin relation follows");
+    // What a link records, written by title and read from both records.
+    const described = await ok(client, "imago_set_link_details", { recordId: plazaId, property: "Retratados", linked: "Ana Pérez", note: "A la izquierda" });
+    assert.deepEqual(described.details, { note: "A la izquierda" });
+    const plazaLinks = (await ok(client, "imago_get_record", { recordId: plazaId })).links;
+    assert.equal(plazaLinks.find((l: { property: string }) => l.property === "Retratados").records.find((r: { title: string }) => r.title === "Ana Pérez").note, "A la izquierda");
+    const anaLinks = (await ok(client, "imago_get_record", { recordId: anaId })).links;
+    assert.equal(anaLinks[0].records[0].note, "A la izquierda", "both records see it");
+    const notLinked = await callTool(client, "imago_set_link_details", { recordId: plazaId, property: "Retratados", linked: "Nadie", note: "x" });
+    assert.equal(notLinked.isError, true);
+    await ok(client, "imago_undo");
 
     // Updates, clearing and undo.
     await ok(client, "imago_update_records", { updates: [{ recordId: plazaId, values: { Copias: 4, Web: null, Tipo: "retrato" } }] });

@@ -173,6 +173,61 @@ try {
   );
   checks.push("Statistics by relation count photographs per book");
 
+  // Each link records where the book prints the photograph, from the record panel.
+  await openDatabase("Fotos");
+  const f2Cell = page.locator("tbody tr").nth(1).getByTestId("relation-cell");
+  assert.match(await f2Cell.innerText(), /Álbum de viaje/, "the table shows the linked book by title");
+  await page.locator("tbody tr").getByRole("button", { name: "Abrir registro", exact: true }).nth(1).click();
+  const libro = page.locator(".record-property").filter({ has: page.locator("label", { hasText: /^Libro$/ }) });
+  const link = libro.getByTestId("relation-link").filter({ hasText: "Álbum de viaje" });
+  await link.getByTestId("relation-link-edit").click();
+  const form = link.getByTestId("link-details-form");
+  await form.getByLabel("Página", { exact: true }).fill("12");
+  await form.getByLabel("Figura o lámina", { exact: true }).fill("3");
+  await form.getByLabel("Pie de foto", { exact: true }).fill("Vista desde el mirador");
+  await form.getByTestId("link-details-save").click();
+  await poll(async () => (await call("getRow", { id: photo("F2").id })).links[book.id]?.[0]?.page === "12", "link details saved");
+  await poll(async () => /p\. 12 · fig\. 3/.test(await link.innerText()), "the link shows its page and figure");
+  // A book found as you type, and a new one created from the search.
+  await libro.getByRole("textbox", { name: "Libro", exact: true }).fill("Cuader");
+  await libro.getByTestId("relation-choice").filter({ hasText: "Cuaderno" }).click();
+  await poll(async () => (await call("getRow", { id: photo("F2").id })).links[book.id]?.length === 2, "second book linked");
+  await libro.getByRole("textbox", { name: "Libro", exact: true }).fill("Atlas de España");
+  await libro.getByTestId("relation-create").click();
+  await poll(async () => (await call("getRow", { id: photo("F2").id })).links[book.id]?.some((l) => l.title === "Atlas de España"), "new book created and linked");
+  assert.ok((await call("search", { databaseIds: [books.id], query: "Atlas", limit: 5 })).rows.some((r) => r.title === "Atlas de España"));
+  assert.equal((await call("getRow", { id: photo("F2").id })).links[book.id].find((l) => l.title === "Álbum de viaje").page, "12", "details kept while linking more");
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: "test-results/relations-link-details.png" });
+  await page.locator(".record-panel>header").getByRole("button", { name: "Cerrar", exact: true }).click();
+  // The page and figure, brought into the table as a property of the link.
+  await page.locator('th[data-column] .column-header-label', { hasText: /^Libro$/ }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Traer una propiedad de la base relacionada" }).click();
+  await page.getByTestId("lookup-property").selectOption({ label: "Página" });
+  await page.getByTestId("lookup-apply").click();
+  await poll(async () => (await call("detail", { id: photos.database.id })).columns.some((c) => c.name === "Página (Libro)"), "link rollup added");
+  const pageColumn = (await call("detail", { id: photos.database.id })).columns.find((c) => c.name === "Página (Libro)");
+  assert.equal((await call("getRow", { id: photo("F2").id })).cells[pageColumn.id], "12");
+  // The book's record shows the page under the photograph, and edits it too.
+  await openDatabase("Obras");
+  await page.locator("tbody tr").getByRole("button", { name: "Abrir registro", exact: true }).nth(1).click();
+  await poll(async () => /p\. 12/.test(await page.getByTestId("linked-records").innerText()), "the book shows the page");
+  await page.locator(".record-panel>header").getByRole("button", { name: "Cerrar", exact: true }).click();
+  checks.push("Page, figure and caption recorded on a link from the record panel, seen from the book, brought into the table; books found as you type and created from the search");
+
+  // People and events databases from the dialog.
+  await page.getByRole("button", { name: "Nueva base de datos", exact: true }).first().click();
+  const peopleDialog = page.getByRole("dialog");
+  await peopleDialog.getByLabel("Nombre", { exact: true }).fill("Fotógrafos");
+  await peopleDialog.getByTestId("database-kinds").getByText("Personas", { exact: true }).click();
+  await page.screenshot({ path: "test-results/relations-kinds.png" });
+  await peopleDialog.getByRole("button", { name: "Crear", exact: true }).click();
+  await page.getByRole("heading", { name: "Fotógrafos", exact: true }).waitFor();
+  const peopleDb = (await call("listDatabases")).find((d) => d.name === "Fotógrafos");
+  assert.equal(peopleDb.kind, "people");
+  assert.deepEqual((await call("detail", { id: peopleDb.id })).columns.map((c) => c.name), ["Nombre", "Retrato", "Fechas", "Papel", "Wikidata", "Notas"]);
+  checks.push("A people database from the dialog, with its starting properties");
+
   assert.deepEqual(errors, []);
   await fs.writeFile("test-results/relations-e2e.json", JSON.stringify({ status: "passed", checks, errors }, null, 2));
   console.log("Relations E2E passed:", checks.join("; "));

@@ -836,12 +836,8 @@ try {
         .getByRole("textbox", { name: "Relacionado", exact: true })
         .fill("IMG002");
       await relations
-        .getByRole("button", { name: "Buscar", exact: true })
-        .click();
-      await relations
-        .locator(".relation-choices label")
+        .getByTestId("relation-choice")
         .filter({ hasText: "IMG002" })
-        .locator("input")
         .click();
       await poll(async () =>
         (await call("getRow", { id: rows[0].id })).cells[
