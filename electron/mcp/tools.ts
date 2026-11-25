@@ -9,9 +9,11 @@ import { validateCommand } from "../../shared/validation";
 import {
   COLUMN_TYPES,
   columnTypeHasOptions,
+  DATABASE_KINDS,
   ROLLUP_FUNCTIONS,
   type DatabaseColumn,
   type DatabaseDetail,
+  type DatabaseKind,
   type DatabaseSummary,
 } from "../../shared/databases";
 import { filterOperators } from "../../shared/viewCriteria";
@@ -880,15 +882,15 @@ export function registerImagoTools(server: McpServer, ctx: ImagoMcpContext, opti
     {
       title: "Create a database",
       description:
-        "Creates a database. kind chooses its starting properties: images (title, images, author, historical date, location, categories…), sources, custom (only a title); without kind it starts with a title and an images property.",
+        "Creates a database. kind chooses its starting properties: images (title, images, author, historical date, location, categories…), sources (books, magazines, albums), works (each photograph once: photographer, date taken, place; its prints and reproductions link to it), people, events, custom (title and images); without kind it starts with a title and an images property.",
       inputSchema: {
         name: z.string().trim().min(1).max(300),
-        kind: z.enum(["images", "sources", "custom"]).optional(),
+        kind: z.enum(DATABASE_KINDS).optional(),
         icon: z.string().max(40).optional().describe("An icon name from Imago's set (optional)."),
       },
       annotations: WRITE,
     },
-    handler("imago_create_database", "write", async (args: { name: string; kind?: "images" | "sources" | "custom"; icon?: string }) => {
+    handler("imago_create_database", "write", async (args: { name: string; kind?: DatabaseKind; icon?: string }) => {
       const detail: DatabaseDetail = await run("createDatabase", { name: args.name, ...(args.kind ? { kind: args.kind } : {}) });
       if (args.icon) await run("setDatabaseIcon", { id: detail.database.id, icon: args.icon });
       const list = await listDatabases();
@@ -906,11 +908,11 @@ export function registerImagoTools(server: McpServer, ctx: ImagoMcpContext, opti
         database: databaseRef,
         name: z.string().trim().min(1).max(300).optional(),
         icon: z.string().max(40).nullable().optional(),
-        kind: z.enum(["images", "sources", "custom"]).nullable().optional(),
+        kind: z.enum(DATABASE_KINDS).nullable().optional(),
       },
       annotations: WRITE,
     },
-    handler("imago_update_database", "write", async (args: { database: string; name?: string; icon?: string | null; kind?: "images" | "sources" | "custom" | null }) => {
+    handler("imago_update_database", "write", async (args: { database: string; name?: string; icon?: string | null; kind?: DatabaseKind | null }) => {
       const detail = await resolveDatabase(args.database),
         id = detail.database.id;
       if (args.name) await run("renameDatabase", { id, name: args.name });

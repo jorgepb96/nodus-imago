@@ -685,6 +685,13 @@ export type Commands = {
     };
     result: boolean;
   };
+  /** The work a record is linked to (in a works database), or null. */
+  workOf: { input: { rowId: string }; result: import("./variants").WorkLink | null };
+  /** Gathers an image's family into one work, created when the record has none. */
+  createWorkFromFamily: {
+    input: { assetId: string; sensitivity?: import("./variants").Sensitivity; databaseId?: string | null; title?: string | null };
+    result: { workId: string; databaseId: string; linked: number; skipped: number; created: boolean };
+  };
   imageAppearances: {
     input: {
       assetId: string;

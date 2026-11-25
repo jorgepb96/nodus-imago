@@ -2,7 +2,7 @@ import { z } from "zod";
 import { DATABASE_VIEWS } from "./savedViews";
 import { backupPreferencesSchema } from "./backups";
 import { updatePreferencesSchema } from "./updates";
-import { isDatabaseColumnType } from "./databases";
+import { DATABASE_KINDS, isDatabaseColumnType } from "./databases";
 import { isDatabaseIconValue } from "./databaseIcons";
 import { FILTER_LABELS } from "./viewCriteria";
 import { externalHttpsUrl } from "./externalLinks";
@@ -426,7 +426,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   mcpTunnelForget: z.undefined(),
   mcpTunnelDiagnostics: z.undefined(),
   listDatabases: z.undefined(),
-  createDatabase: z.object({ name, kind: z.enum(["images", "sources", "custom"]).optional() }).strict(),
+  createDatabase: z.object({ name, kind: z.enum(DATABASE_KINDS).optional() }).strict(),
   convertToRelation: z
     .object({
       id,
@@ -458,7 +458,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   setRelationPlace: z.object({ columnId: id, place: z.boolean() }).strict(),
-  setDatabaseKind: z.object({ id, kind: z.enum(["images", "sources", "custom"]).nullable() }).strict(),
+  setDatabaseKind: z.object({ id, kind: z.enum(DATABASE_KINDS).nullable() }).strict(),
   setDatabaseIcon: z
     .object({ id, icon: z.string().max(40).refine(isDatabaseIconValue, "Icono desconocido.").nullable() })
     .strict(),
@@ -725,6 +725,15 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       kind: z.enum(["copy", "crop", "retouch", "reproduction", "other_take"]).nullable().optional(),
     })
     .strict(),
+  workOf: z.object({ rowId: id }).strict(),
+  createWorkFromFamily: z
+    .object({
+      assetId: id,
+      sensitivity: z.enum(["strict", "balanced", "broad"]).optional(),
+      databaseId: id.nullable().optional(),
+      title: z.string().trim().max(500).nullable().optional(),
+    })
+    .strict(),
   imageAppearances: z
     .object({
       assetId: id,
@@ -863,7 +872,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       types: z.array(type).max(500),
       headers: z.array(name).max(500),
       nullMarkersAsEmpty: z.boolean().optional(),
-      kind: z.enum(["images", "sources", "custom"]).optional(),
+      kind: z.enum(DATABASE_KINDS).optional(),
     })
     .strict(),
   imagePreview: z

@@ -3,8 +3,8 @@
 // rejects, names and compares, and the works in which the photograph appears,
 // from the records of its family and from reproductions added by hand.
 import { useEffect, useState } from "react";
-import { BookOpen, Check, Columns2, Pencil, Plus, Search, Settings2, Trash2, Undo2, X } from "lucide-react";
-import type { DatabaseColumn } from "../../shared/databases";
+import { BookOpen, Camera, Check, Columns2, Layers, Pencil, Plus, Search, Settings2, Trash2, Undo2, X } from "lucide-react";
+import type { DatabaseColumn, DatabaseSummary } from "../../shared/databases";
 import type { ImageAsset, RecordRow } from "../../shared/imago";
 import type {
   AppearanceFields,
@@ -14,6 +14,7 @@ import type {
   Sensitivity,
   VariantKind,
   VariantVerdict,
+  WorkLink,
 } from "../../shared/variants";
 import { VARIANT_KINDS } from "../../shared/variants";
 import { useT } from "../i18n";
@@ -58,6 +59,7 @@ export function RecordVariants({
   onOpenRecord,
   onCompare,
   onCount,
+  onChanged,
 }: {
   row: RecordRow;
   /** The image the panel is on. */
@@ -67,6 +69,8 @@ export function RecordVariants({
   onCompare?: (assetIds: string[]) => void;
   /** How many versions were found, for the tab's label. */
   onCount?: (count: number) => void;
+  /** Records changed (gathered into a work): the panel and the table reload. */
+  onChanged?: () => void;
 }) {
   const t = useT();
   const [sensitivity, setSensitivity] = useState<Sensitivity>("balanced"),
@@ -80,7 +84,10 @@ export function RecordVariants({
     [draft, setDraft] = useState<Draft | null>(null),
     [finding, setFinding] = useState(false),
     [query, setQuery] = useState(""),
-    [found, setFound] = useState<RecordRow[]>([]);
+    [found, setFound] = useState<RecordRow[]>([]),
+    [work, setWork] = useState<WorkLink | null>(null),
+    [gathering, setGathering] = useState<{ title: string; databaseId: string } | null>(null),
+    [worksDbs, setWorksDbs] = useState<DatabaseSummary[]>([]);
   const imageId = image?.id;
   const fieldsKey = JSON.stringify(fields);
   useEffect(() => {
@@ -90,11 +97,13 @@ export function RecordVariants({
     void Promise.all([
       window.imago.call("imageVariants", { assetId: imageId, sensitivity }),
       window.imago.call("imageAppearances", { assetId: imageId, sensitivity, fields: JSON.parse(fieldsKey) }),
+      window.imago.call("workOf", { rowId: row.id }).catch(() => null),
     ])
-      .then(([v, a]) => {
+      .then(([v, a, w]) => {
         if (cancelled) return;
         setVariants(v);
         setAppearances(a);
+        setWork(w);
         onCount?.(v.members.length);
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)));
@@ -103,7 +112,10 @@ export function RecordVariants({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageId, sensitivity, fieldsKey, revision]);
-  useEffect(() => setPicked([]), [imageId]);
+  useEffect(() => {
+    setPicked([]);
+    setGathering(null);
+  }, [imageId]);
   // The properties of each database in the list, to choose work, page and caption.
   const databaseIds = [...new Set((appearances ?? []).flatMap((a) => (a.databaseId ? [a.databaseId] : [])))];
   const databasesKey = databaseIds.join("|");
@@ -166,6 +178,22 @@ export function RecordVariants({
     setFound(page.rows.filter((r) => r.id !== row.id && r.images.length));
   };
   const members = variants?.members ?? [];
+  // The records of the family (one per record, this one included) and those not yet under the work.
+  const familyRows = [...new Set([row.id, ...members.map((m) => m.rowId)])];
+  const missing = work ? familyRows.filter((id) => id !== work.workId && !work.reproductions.includes(id)) : [];
+  const startGathering = () =>
+    void perform(async () => {
+      const dbs = (await window.imago.call("listDatabases")).filter((d) => d.kind === "works");
+      setWorksDbs(dbs);
+      setGathering({ title: row.title, databaseId: dbs[0]?.id ?? "" });
+    });
+  const gather = (title: string | null, databaseId: string | null) =>
+    void perform(async () => {
+      await window.imago.call("createWorkFromFamily", { assetId: image.id, sensitivity, databaseId: databaseId || null, title });
+      setGathering(null);
+      reload();
+      onChanged?.();
+    });
   const card = (m: ImageVariantMember, rejected = false) => {
     const chosen = picked.includes(m.assetId);
     return (
@@ -244,6 +272,67 @@ export function RecordVariants({
           {t("Las versiones de esta imagen en todas tus bases de datos. Confirma o descarta cada coincidencia: tus decisiones se guardan aparte de la detección automática y también se aplican en la vista Variantes.")}
         </p>
         {error && <p className="error">{t(error)}</p>}
+        {work && (
+          <div className="rv-work" data-testid="variant-work">
+            <Camera size={16} />
+            <span>
+              {t("Obra")}: <strong>{work.title}</strong>
+              <small>
+                {work.databaseName} · {(work.reproductions.length === 1 ? t("1 reproducción enlazada") : t("{n} reproducciones enlazadas")).replace("{n}", work.reproductions.length.toLocaleString())}
+              </small>
+            </span>
+            {!!missing.length && (
+              <Button data-testid="variant-work-link" onClick={() => gather(null, work.databaseId)}>
+                <Layers size={14} />
+                {(missing.length === 1 ? t("Enlazar la que falta") : t("Enlazar las {n} que faltan")).replace("{n}", missing.length.toLocaleString())}
+              </Button>
+            )}
+            <Button onClick={() => onOpenRecord?.(work.workId)}>{t("Abrir obra")}</Button>
+          </div>
+        )}
+        {gathering && (
+          <form
+            className="rv-gather"
+            data-testid="variant-gather-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              gather(gathering.title, gathering.databaseId || null);
+            }}
+          >
+            <p>
+              {(familyRows.length === 1
+                ? t("Se creará una ficha de obra para esta fotografía y se enlazará con esta ficha.")
+                : t("Se creará una ficha de obra para esta fotografía y se enlazarán con ella las {n} fichas de la familia.")
+              ).replace("{n}", familyRows.length.toLocaleString())}{" "}
+              {t(worksDbs.length ? "Los datos de la fotografía se escriben una vez, en la obra." : "Irá a una base nueva, «Fotografías», donde los datos de la fotografía se escriben una vez.")}
+            </p>
+            <label>
+              {t("Título de la obra")}
+              <input autoFocus required value={gathering.title} onChange={(e) => setGathering({ ...gathering, title: e.target.value })} />
+            </label>
+            {worksDbs.length > 1 && (
+              <label>
+                {t("Base de datos")}
+                <select value={gathering.databaseId} onChange={(e) => setGathering({ ...gathering, databaseId: e.target.value })}>
+                  {worksDbs.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <footer>
+              <Button type="button" onClick={() => setGathering(null)}>
+                {t("Cancelar")}
+              </Button>
+              <Button primary type="submit" data-testid="variant-gather-apply" disabled={!gathering.title.trim()}>
+                <Layers size={14} />
+                {t("Reunir en una obra")}
+              </Button>
+            </footer>
+          </form>
+        )}
         <div className="rv-group">
           <div className="rv-group-head">
             <h4>{t("Esta imagen")}</h4>
@@ -261,6 +350,17 @@ export function RecordVariants({
                 <Plus size={14} />
                 {t("Añadir a la familia")}
               </Button>
+              {!work && (
+                <Button
+                  data-testid="variants-gather"
+                  aria-expanded={!!gathering}
+                  data-tooltip={t("Una ficha para la fotografía (fotógrafo, fecha de toma, lugar) con la que se enlazan todas sus versiones")}
+                  onClick={() => (gathering ? setGathering(null) : startGathering())}
+                >
+                  <Layers size={14} />
+                  {t("Reunir en una obra")}
+                </Button>
+              )}
             </div>
           </div>
           <div className="rv-cards">

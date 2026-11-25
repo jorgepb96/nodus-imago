@@ -5,7 +5,9 @@
 // the record preview opened from «Buscar», so both show the same data.
 import { useEffect, useState } from "react";
 import { Pencil, Plus, Search, X } from "lucide-react";
-import { relationHasPlace, type DatabaseColumn, type DatabaseDetail } from "../../shared/databases";
+import { relationHasPlace, type DatabaseColumn, type DatabaseDetail, type DatabaseKind } from "../../shared/databases";
+
+const ENTITY_KINDS: DatabaseKind[] = ["sources", "works", "people", "events"];
 import type { Provenance, RecordRow } from "../../shared/imago";
 import { Button } from "./ui";
 import { Cell } from "./Cell";
@@ -219,6 +221,9 @@ export function RecordFacts({
       cancelled = true;
     };
   }, [row.id]);
+  // A source, a photograph as a work, a person or an event: what links to
+  // it (a book's photographs, a work's reproductions) comes first.
+  const entity = ENTITY_KINDS.includes(detail.database.kind ?? "custom");
   // Same order as the table (the database's column order) and the same
   // hidden properties, which stay reachable in a folded list.
   const hiddenSet = new Set(hidden);
@@ -269,8 +274,7 @@ export function RecordFacts({
   );
   return (
     <>
-      {/* A source's records (a book's photographs) come first. */}
-      {detail.database.kind === "sources" && <LinkedRecords row={row} onOpenRecord={onOpenRecord} perform={perform} />}
+      {entity && <LinkedRecords row={row} onOpenRecord={onOpenRecord} perform={perform} />}
       <h2>{t("Propiedades")}</h2>
       <div className="record-properties" data-tour="record-properties">
         {shownProperties.map(property)}
@@ -287,7 +291,7 @@ export function RecordFacts({
           </div>
         </details>
       )}
-      {detail.database.kind !== "sources" && <LinkedRecords row={row} onOpenRecord={onOpenRecord} perform={perform} />}
+      {!entity && <LinkedRecords row={row} onOpenRecord={onOpenRecord} perform={perform} />}
       {!!provenance.length && (
         <details className="metadata provenance">
           <summary>{t("Procedencia de las propuestas")}</summary>

@@ -39,6 +39,7 @@ import { Annotations } from "./db/annotations";
 import { CompareBoards } from "./db/compare";
 import { Variants } from "./db/variants";
 import { Appearances } from "./db/appearances";
+import { Works } from "./db/works";
 import { VisualMaps } from "./db/visualMap";
 import { ValueCleanup } from "./db/cleanup";
 import { Authorities } from "./db/authorities";
@@ -104,6 +105,7 @@ export class Service {
   boards: CompareBoards;
   variants: Variants;
   appearances: Appearances;
+  works: Works;
   visualMaps: VisualMaps;
   cleanup: ValueCleanup;
   authorities: Authorities;
@@ -196,7 +198,8 @@ export class Service {
       }
     });
     this.queue.fingerprint = (payload, index) => this.variants.fingerprintOne(payload, index);
-    this.appearances = new Appearances(this.repo, this.variants);
+    this.works = new Works(this.repo, this.variants);
+    this.appearances = new Appearances(this.repo, this.variants, this.works);
     this.details = new DetailSearch(this.repo, this.engine);
     this.suggestions = new NeighbourSuggestions(this.repo, () => {
       try {
@@ -1222,6 +1225,13 @@ export class Service {
         this.variants.setVerdict(input.assetId, input.otherAssetId, input.verdict, input.kind ?? null);
         this.changed();
         return true;
+      case "workOf":
+        return this.works.workOf(input.rowId);
+      case "createWorkFromFamily": {
+        const result = await this.works.fromFamily(input);
+        this.changed();
+        return result;
+      }
       case "imageAppearances":
         return this.appearances.list(input.assetId, input.sensitivity, input.fields);
       case "appearanceSave": {

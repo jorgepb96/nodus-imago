@@ -372,7 +372,7 @@ export interface DatabaseColumn {
 }
 
 /** What a database is for: it chooses its starting properties (all editable). */
-export const DATABASE_KINDS = ['images', 'sources', 'custom'] as const;
+export const DATABASE_KINDS = ['images', 'sources', 'works', 'people', 'events', 'custom'] as const;
 export type DatabaseKind = (typeof DATABASE_KINDS)[number];
 /** The starting properties of each kind (the title always comes first). */
 export const DATABASE_TEMPLATES: Record<
@@ -397,6 +397,33 @@ export const DATABASE_TEMPLATES: Record<
     { name: 'Año', type: 'number' },
     { name: 'Identificador', type: 'text' },
     { name: 'Cubierta', type: 'attachment' },
+  ],
+  // A photograph once, however many prints, scans and reproductions of it
+  // the collection holds: those link to it and show its data.
+  works: [
+    { name: 'Título', type: 'title' },
+    { name: 'Imagen de referencia', type: 'attachment' },
+    { name: 'Fotógrafo', type: 'text' },
+    { name: 'Fecha de toma', type: 'historical_date' },
+    { name: 'Lugar', type: 'location' },
+    { name: 'Temas', type: 'multi_select' },
+    { name: 'Notas', type: 'text' },
+  ],
+  people: [
+    { name: 'Nombre', type: 'title' },
+    { name: 'Retrato', type: 'attachment' },
+    { name: 'Fechas', type: 'historical_date' },
+    { name: 'Papel', type: 'multi_select', options: ['Fotógrafo', 'Autor', 'Editor', 'Retratado'] },
+    { name: 'Wikidata', type: 'url' },
+    { name: 'Notas', type: 'text' },
+  ],
+  events: [
+    { name: 'Nombre', type: 'title' },
+    { name: 'Imágenes', type: 'attachment' },
+    { name: 'Fecha', type: 'historical_date' },
+    { name: 'Lugar', type: 'location' },
+    { name: 'Tipo', type: 'select' },
+    { name: 'Notas', type: 'text' },
   ],
   // The classic Imago database: a title and images, the rest is up to you.
   custom: [

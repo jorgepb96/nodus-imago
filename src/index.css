@@ -10120,6 +10120,7 @@ tr:hover .ai-cell-button,
 /* New database: its kind (images, sources, custom). */
 .database-kinds {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin: 16px 0 0;
   padding: 0;
@@ -10880,4 +10881,70 @@ tr:hover .ai-cell-button,
 }
 .linked-form .hint {
   margin: 0 0 4px;
+}
+
+.database-kinds > .hint {
+  grid-column: 1 / -1;
+}
+@media (max-width: 560px) {
+  .database-kinds {
+    grid-template-columns: 1fr;
+  }
+}
+/* The work a photograph is gathered into, and the form that gathers it. */
+.rv-work {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--panel));
+  font-size: 12.5px;
+}
+.rv-work > span {
+  display: grid;
+  flex: 1;
+  min-width: 180px;
+  gap: 2px;
+}
+.rv-work small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.rv-gather {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--panel));
+}
+.rv-gather p,
+.rv-gather footer {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.rv-gather label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.rv-gather footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@media (max-width: 560px) {
+  .rv-gather {
+    grid-template-columns: 1fr;
+  }
 }

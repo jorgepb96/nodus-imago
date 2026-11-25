@@ -8,6 +8,9 @@ import {
 } from "react";
 import {
   BookOpen,
+  Camera,
+  CalendarDays,
+  Users,
   Database,
   Image as ImageIcon,
   Search,
@@ -3976,6 +3979,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   {([
                     ["images", ImageIcon, "Imágenes", "Fotografías, grabados o dibujos: título, imágenes, autor, fecha, ubicación, categorías y archivo."],
                     ["sources", BookOpen, "Fuentes", "Libros, revistas, álbumes y documentos: título, tipo, autor, editorial, lugar, año, identificador y cubierta."],
+                    ["works", Camera, "Obras fotográficas", "Cada fotografía una sola vez, con su fotógrafo, fecha de toma y lugar. Sus copias, escaneos y reproducciones se enlazan a ella."],
+                    ["people", Users, "Personas", "Fotógrafos, autores, editores o retratados: nombre, retrato, fechas, papel y Wikidata."],
+                    ["events", CalendarDays, "Acontecimientos", "Guerras, visitas, fiestas o inauguraciones: nombre, imágenes, fecha, lugar y tipo."],
                     ["custom", Settings2, "Personalizada", "Título e imágenes: define tú el resto de las propiedades."],
                   ] as const).map(([kind, Icon, label, hint]) => (
                     <label key={kind} className={"database-kind" + (newKind === kind ? " is-chosen" : "")}>

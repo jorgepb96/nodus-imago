@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { Repository } from "./repository";
 import type { Variants } from "./variants";
+import type { Works } from "./works";
 import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
 import type { RecordRow } from "../../shared/imago";
 import type {
@@ -53,6 +54,7 @@ export class Appearances {
   constructor(
     private repo: Repository,
     private variants: Variants,
+    private workIndex?: Works,
   ) {}
 
   /** Reproductions added by hand to these files. */
@@ -180,6 +182,24 @@ export class Appearances {
         seen.add(m.rowId);
         entries.push({ member: m, rowId: m.rowId, assetId: m.assetId, year: m.year, date: m.date, revision: m.revision });
       }
+    // The records gathered with this one under a work count too, matched or not.
+    const work = this.workIndex?.workOf(anchor.row_id) ?? null;
+    if (work) {
+      const others = this.repo.hydrate(work.reproductions.filter((id) => !seen.has(id)));
+      for (const r of others) {
+        seen.add(r.id);
+        const image = r.images[0];
+        const item = image ? this.variants.describeOne(image.id) : null;
+        entries.push({
+          member: { match: "confirmed" } as ImageVariantMember,
+          rowId: r.id,
+          assetId: image?.id ?? "",
+          year: item?.year ?? null,
+          date: item?.date ?? null,
+          revision: image?.revision,
+        });
+      }
+    }
     const rows = new Map(this.repo.hydrate(entries.map((e) => e.rowId)).map((r) => [r.id, r]));
     const details = new Map<string, DatabaseDetail>();
     const detail = (id: string) => details.get(id) ?? details.set(id, this.repo.detail(id)).get(id)!;
@@ -195,7 +215,7 @@ export class Appearances {
       return works.map((work) => ({
         id: works.length > 1 && work.key ? `${row.id}:${work.key}` : row.id,
         manual: false,
-        assetId: e.assetId,
+        assetId: e.assetId || null,
         rowId: row.id,
         databaseId: row.databaseId,
         databaseName: row.databaseName,

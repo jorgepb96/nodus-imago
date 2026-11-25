@@ -46,6 +46,17 @@ export type ImageVariants = {
   members: ImageVariantMember[];
   rejected: ImageVariantMember[];
 };
+/** The work (a record in a works database) a record is linked to, with every record linked to it. */
+export type WorkLink = {
+  workId: string;
+  title: string;
+  databaseId: string;
+  databaseName: string;
+  /** The relation from the record's database to the works database. */
+  columnId: string;
+  /** The records linked to the work (its prints, scans and reproductions). */
+  reproductions: string[];
+};
 /** Which property gives each part of an appearance, per database (null: detected). */
 export type AppearanceFields = { work?: string | null; page?: string | null; caption?: string | null };
 /** A reproduction of a photograph: a record of its family, or one added by hand. */

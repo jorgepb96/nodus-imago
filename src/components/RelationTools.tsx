@@ -10,6 +10,12 @@ import { useT } from "../i18n";
 import { Button, Modal, Thumbnail } from "./ui";
 import type { Perform } from "./Properties";
 
+const KIND_LABELS: Partial<Record<NonNullable<DatabaseDetail["database"]["kind"]>, string>> = {
+  sources: "Fuentes",
+  works: "Obras fotográficas",
+  people: "Personas",
+  events: "Acontecimientos",
+};
 type Preview = Awaited<ReturnType<typeof window.imago.call<"convertToRelation">>>;
 const MATCHABLE = new Set(["title", "text", "select", "multi_select", "status", "number", "url", "unique_id", "formula"]);
 
@@ -130,7 +136,7 @@ export function ConvertRelationDialog({
               {others.map((d) => (
                 <option key={d.database.id} value={d.database.id}>
                   {d.database.name}
-                  {d.database.kind === "sources" ? ` · ${t("Fuentes")}` : ""}
+                  {d.database.kind && KIND_LABELS[d.database.kind] ? ` · ${t(KIND_LABELS[d.database.kind]!)}` : ""}
                 </option>
               ))}
             </select>
