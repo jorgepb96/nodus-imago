@@ -9,6 +9,7 @@ const entries = [
   "scripts/views-e2e.mjs",
   "scripts/variants-e2e.mjs",
   "scripts/relations-e2e.mjs",
+  "scripts/methodology-e2e.mjs",
   "scripts/agreement-e2e.mjs",
   "scripts/phase2-e2e.mjs",
   "scripts/backups-e2e.mjs",

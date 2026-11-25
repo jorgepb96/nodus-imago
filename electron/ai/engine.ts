@@ -1257,6 +1257,12 @@ export class Engine {
       throw new Error("El modelo no ha devuelto texto.");
     if (process.env.IMAGO_DEBUG_AI)
       console.error("[imago-ai] " + JSON.stringify(result));
+    // What wrote the value, kept with it in the history: the methodology
+    // report says which model and which exact instructions produced it.
+    const origin = () => ({
+      kind: "ai" as const,
+      source: JSON.stringify({ model: modelName, revision, prompt: this.repo.rememberPrompt(prompt) }),
+    });
     if (preset) {
       // Clear the live preview: the saved value (or nothing) replaces it.
       this.onCellStream?.({ rowId: row.id, columnId: column.id, text: null });
@@ -1293,6 +1299,9 @@ export class Engine {
           row.id,
           column.id,
           column.type === "multi_select" ? JSON.stringify([...new Set(ids)]) : ids[0],
+          true,
+          undefined,
+          origin(),
         );
         return "imported" as const;
       }
@@ -1304,7 +1313,7 @@ export class Engine {
         return "skipped" as const;
       // An AI property is filled in directly (Undo reverts it); it is not a
       // proposal waiting in the review queue.
-      this.repo.setCell(row.id, column.id, value);
+      this.repo.setCell(row.id, column.id, value, true, undefined, origin());
       return "imported" as const;
     }
     let value: string | null;

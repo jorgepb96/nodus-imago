@@ -120,6 +120,7 @@ import { VariantsView } from "./components/VariantsView";
 import { RestorationsView } from "./components/RestorationsView";
 import { SuggestDialog } from "./components/SuggestDialog";
 import { PlatesDialog } from "./components/PlatesDialog";
+import { MethodologyDialog } from "./components/MethodologyDialog";
 import { IiifDialog } from "./components/IiifDialog";
 import { NetworkView } from "./components/NetworkView";
 import { VisualMapView } from "./components/VisualMapView";
@@ -265,6 +266,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "automations"
       | "suggest"
       | "plates"
+      | "methodology"
       | "iiif"
       | "cleanup"
       | "authorities"
@@ -2828,6 +2830,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               >
                                 {t("Exportar anotaciones (W3C)")}
                               </button>
+                              <button data-testid="methodology-open" onClick={() => setModal("methodology")}>
+                                {t("Informe metodológico")}
+                              </button>
                               <button
                                 onClick={() => setModal("deleteDatabase")}
                               >
@@ -4416,6 +4421,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           column={detail.columns.find((c) => c.id === toolColumn)!}
           onClose={() => setModal(null)}
           onChanged={() => void reloadDetail(detail.database.id)}
+        />
+      )}
+      {modal === "methodology" && detail && (
+        <MethodologyDialog
+          detail={detail}
+          details={allDetails.length ? allDetails : [detail]}
+          onClose={() => setModal(null)}
+          onDone={(message) => {
+            notify(message);
+            setModal(null);
+          }}
         />
       )}
       {modal === "plates" && detail && status && (

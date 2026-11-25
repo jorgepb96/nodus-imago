@@ -10948,3 +10948,23 @@ tr:hover .ai-cell-button,
     grid-template-columns: 1fr;
   }
 }
+/* Methodology report dialog. */
+.methodology-form {
+  display: grid;
+  gap: 12px;
+}
+.methodology-databases {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.methodology-databases legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}

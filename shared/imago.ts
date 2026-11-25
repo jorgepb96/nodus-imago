@@ -234,7 +234,7 @@ export type Proposal = {
 /** Which change batches an Undo or Redo button may touch. */
 export type HistoryScope = "all" | "proposals";
 /** How a change batch was made; null is a single edit. */
-export type HistoryKind = "proposals" | "cleanup" | "locate" | "link" | null;
+export type HistoryKind = "proposals" | "cleanup" | "locate" | "link" | "ai" | null;
 /** What the next Undo or Redo in a scope would change, shown before it runs. */
 export type HistoryStep = {
   kind: HistoryKind;
@@ -576,6 +576,10 @@ export type Commands = {
   tropyImport: { input: void; result: StandardImport | null };
   iiifImport: { input: { url: string; perCanvas: boolean }; result: StandardImport };
   /** Handled in the main process: numbered figures with captions, as PDF. */
+  /** The facts of a methodology report for some databases, with the app's environment. */
+  methodologyData: { input: { databaseIds: string[] }; result: import("./methodology").MethodologyData };
+  /** Prints a methodology report (and saves its technical annex) where the researcher chooses. */
+  methodologyPdf: { input: { html: string; fileName: string; annex: string | null }; result: { file: string; annex: string | null } | null };
   platesExport: {
     input: { rowIds: string[]; template: string; title: string; label: string; listTitle: string; start: number };
     result: { file: string; figures: number } | null;

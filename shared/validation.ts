@@ -566,6 +566,14 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   annotationsExport: z.object({ databaseId: id }).strict(),
   tropyImport: z.undefined(),
   iiifImport: z.object({ url: z.string().url().max(2000).refine((u) => u.startsWith("https://")), perCanvas: z.boolean() }).strict(),
+  methodologyData: z.object({ databaseIds: z.array(id).min(1).max(100) }).strict(),
+  methodologyPdf: z
+    .object({
+      html: z.string().min(1).max(30_000_000),
+      fileName: z.string().trim().min(1).max(200),
+      annex: z.string().max(30_000_000).nullable(),
+    })
+    .strict(),
   platesExport: z
     .object({
       rowIds: z.array(id).min(1).max(500),

@@ -140,6 +140,9 @@ export class Repository {
       ["kind", "TEXT"],
       ["undone_seq", "INTEGER"],
       ["undo_mark", "INTEGER"],
+      // What wrote an AI value: model, revision and the hash of the exact
+      // instructions (kept in ai_prompts), for the methodology report.
+      ["source", "TEXT"],
     ])
       if (!historyColumns.has(name))
         this.db.exec(`ALTER TABLE history ADD COLUMN ${name} ${type}`);
@@ -1262,7 +1265,15 @@ export class Repository {
     }
   }
   /** `batch` groups several cells into one Undo step (a change made through MCP). */
-  setCell(rowId: string, columnId: string, raw: string | null, history = true, batch?: string) {
+  setCell(
+    rowId: string,
+    columnId: string,
+    raw: string | null,
+    history = true,
+    batch?: string,
+    /** Who wrote it, when not the researcher: an AI property's model and instructions. */
+    origin?: { kind: HistoryKind; source?: string },
+  ) {
     const c = this.column(columnId),
       row = this.getRow(rowId);
     if (c.databaseId !== row.databaseId)
@@ -1334,7 +1345,7 @@ export class Repository {
       if (history && (row.cells[columnId] ?? null) !== value)
         this.db
           .prepare(
-            "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at) VALUES(?,?,?,?,?,?)",
+            "INSERT INTO history(batch_id,row_id,column_id,before_value,after_value,created_at,kind,source) VALUES(?,?,?,?,?,?,?,?)",
           )
           .run(
             batch ?? uuid(),
@@ -1343,6 +1354,8 @@ export class Repository {
             row.cells[columnId] ?? null,
             value,
             now(),
+            origin?.kind ?? null,
+            origin?.source ?? null,
           );
       this.rawCell(rowId, columnId, value, c.type);
       this.db
@@ -2195,6 +2208,12 @@ export class Repository {
       for (const id of databases) this.rebuildText(id);
       return changes.length;
     })();
+  }
+  /** Keeps the exact instructions an AI value was written with; returns their hash. */
+  rememberPrompt(text: string): string {
+    const hash = createHash("sha256").update(text).digest("hex");
+    this.db.prepare("INSERT OR IGNORE INTO ai_prompts(hash,text,created_at) VALUES(?,?,?)").run(hash, text, now());
+    return hash;
   }
   /** Whether a link's details are still those a history entry left. */
   private linkMatches(rowId: string, value: string | null) {

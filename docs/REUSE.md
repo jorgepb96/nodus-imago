@@ -24,6 +24,7 @@ La integración posterior de lugares se consultó en la revisión **db026617457e
 | `shared/providers.ts`, `electron/ai/providers.ts` | `shared/aiConfig.ts`, `electron/ai/apiProviders.ts` | Identificadores y endpoints de proveedores; transporte reducido a inferencia visual y consulta explícita del catálogo |
 | `electron/ai/databaseAiColumn.ts` | `electron/ai/engine.ts` | Orquestación por propiedad y fuente de imagen; cola persistente, propuestas y protección de anotaciones añadidas |
 | `src/assets/nodus-logo.svg`, `shared/nodusMark.json` | `build/icon-light.svg`, `build/icon-dark.svg`, `src/components/ImagoMark.tsx` | La N conserva el path canónico, el trazo, los nodos y sus colores; se integra en un objetivo fotográfico y se ofrecen variantes clara/oscura. |
+| `shared/professionalReport.ts`, `electron/export/htmlToPdf.ts` | `shared/methodologyHtml.ts`, comando `methodologyPdf` de `electron/main.ts` | Portada, índice, encabezados numerados, tipografía y tablas del informe profesional; la cabecera con la marca y el pie con la paginación se dibujan con cajas de margen CSS (`@page`) en lugar de sellarlos con pdf-lib, y los gráficos son SVG en línea |
 | — (nuevo) | `shared/visionOutput.ts` | Parser estricto para la salida real de LFM3: razonamiento, cabeceras, sobres `minimax:tool_call` y vocabulario de clasificación. No se copia de Nodus; se añade tras la validación con pesos |
 
 ## Rutas estudiadas que no se copiaron completas

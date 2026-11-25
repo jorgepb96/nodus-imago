@@ -53,6 +53,7 @@ import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
 import { preparePlates } from "./export/plates";
+import { collectMethodology } from "./export/methodology";
 import { annotationsW3c, importIiif, importTropy } from "./import/standards";
 import { buildNetwork } from "./db/network";
 import { ChatData } from "./chat/data";
@@ -1177,6 +1178,11 @@ export class Service {
         return importTropy(this.repo, this.images, input.file);
       case "iiifImport":
         return importIiif(this.repo, this.images, input);
+      case "_methodologyData":
+        return collectMethodology(
+          { repo: this.repo, contract: this.engine.contract(), dimensions: this.engine.dimensions() },
+          input as { databaseIds: string[] },
+        );
       case "_platesPrepare":
         return preparePlates(this.repo, input);
       case "detailSearch":

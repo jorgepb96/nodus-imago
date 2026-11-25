@@ -13,6 +13,7 @@ import {
 } from "electron";
 import { Worker } from "node:worker_threads";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import fs from "node:fs/promises";
 import { chatTurnSchema, validateCommand } from "../shared/validation";
@@ -887,6 +888,51 @@ app.whenReady().then(async () => {
         });
         if (result.canceled || !result.filePaths[0]) return null;
         return call("_tropyImport", { file: result.filePaths[0] });
+      }
+      if (command === "methodologyData") {
+        const data = await call("_methodologyData", safe);
+        return {
+          ...data,
+          environment: {
+            app: app.getVersion(),
+            platform: process.platform,
+            arch: process.arch,
+            electron: process.versions.electron,
+            chromium: process.versions.chrome,
+          },
+        };
+      }
+      if (command === "methodologyPdf") {
+        const data = safe as { html: string; fileName: string; annex: string | null };
+        const target = await dialog.showSaveDialog(window, {
+          defaultPath: path.join(app.getPath("documents"), data.fileName.replace(/[\\/:*?"<>|]/g, "-") + ".pdf"),
+          filters: [{ name: "PDF", extensions: ["pdf"] }],
+        });
+        if (target.canceled || !target.filePath) return null;
+        // Printed from a file in a hidden window with JavaScript off: the
+        // logo and charts are inline, and nothing in the page runs.
+        const folder = path.join(app.getPath("temp"), `imago-report-${randomUUID()}`);
+        await fs.mkdir(folder, { recursive: true });
+        const page = path.join(folder, "report.html");
+        await fs.writeFile(page, data.html, "utf8");
+        const printer = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true, contextIsolation: true } });
+        try {
+          await printer.loadFile(page);
+          const pdf = await printer.webContents.printToPDF({ pageSize: "A4", printBackground: true, preferCSSPageSize: true });
+          await fs.writeFile(target.filePath, pdf);
+        } finally {
+          // Destroyed on the next tick: tearing it down at once races Chromium's own cleanup.
+          setImmediate(() => {
+            if (!printer.isDestroyed()) printer.destroy();
+            void fs.rm(folder, { recursive: true, force: true });
+          });
+        }
+        let annex: string | null = null;
+        if (data.annex) {
+          annex = target.filePath.replace(/\.pdf$/i, "") + ".json";
+          await fs.writeFile(annex, data.annex, "utf8");
+        }
+        return { file: target.filePath, annex };
       }
       if (command === "platesExport") {
         const data = safe as { rowIds: string[]; template: string; title: string; label: string; listTitle: string; start: number };
