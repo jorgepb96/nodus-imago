@@ -8107,6 +8107,8 @@ body:has(.tour-layer.is-tutorial) .record-image-tools {
 .viewer-annotate.is-on { color: #111; background: #f59e0b; border-color: #f59e0b; }
 .viewer-spacer { flex: 1; }
 .viewer-body { flex: 1; min-height: 0; display: flex; }
+.viewer-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.viewer-main > .viewer-stage { flex: 1; min-height: 0; }
 .viewer-stage { position: relative; flex: 1; min-width: 0; overflow: hidden; cursor: grab; touch-action: none; user-select: none; background: radial-gradient(circle at center, #1a1a1d, #0b0b0d); }
 .viewer-stage:active { cursor: grabbing; }
 .viewer-stage.is-annotating { cursor: crosshair; }
@@ -11640,7 +11642,7 @@ tr:hover .ai-cell-button,
   display: flex;
   gap: 6px;
   margin: 0;
-  padding: 2px 2px 6px;
+  padding: 5px 5px 8px;
   overflow-x: auto;
   overflow-y: hidden;
   list-style: none;
@@ -11659,6 +11661,10 @@ tr:hover .ai-cell-button,
 }
 .viewer-strip-item:hover {
   background: #ffffff14;
+}
+.viewer-strip-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .viewer-strip-item.is-current {
   border-color: var(--accent);

@@ -11,6 +11,7 @@ const entries = [
   "scripts/relations-e2e.mjs",
   "scripts/methodology-e2e.mjs",
   "scripts/visual-tags-e2e.mjs",
+  "scripts/viewer-strip-e2e.mjs",
   "scripts/agreement-e2e.mjs",
   "scripts/phase2-e2e.mjs",
   "scripts/backups-e2e.mjs",
