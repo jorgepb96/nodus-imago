@@ -66,6 +66,8 @@ export const RESTORE_EXTRA_TABLES = [
   "ai_prompts",
   "image_crops",
   "image_origins",
+  "image_tags",
+  "image_tag_reviews",
   "image_miniatures",
   "automation_control",
 ] as const;

@@ -679,6 +679,8 @@ export class Repository {
     this.db.transaction(() => {
       // The twin of a two-way relation stays, as a one-way relation.
       if (c.type === "relation" && c.config.relationInverseColumnId) this.unpairRelation(id);
+      // «Etiquetas visuales» gone: so are the regions of its tags.
+      if (c.config.visualTags) this.db.prepare("DELETE FROM image_tags WHERE option_id IN (SELECT id FROM db_select_options WHERE column_id=?)").run(id);
       this.db.prepare("DELETE FROM history WHERE column_id=?").run(id);
       this.db.prepare("DELETE FROM db_columns WHERE id=?").run(id);
       this.pruneEquivalences([id]);
@@ -1156,6 +1158,8 @@ export class Repository {
             now(),
           ),
       );
+      // Visual tags removed: their regions go, and every record is re-filled.
+      if (column.config.visualTags && gone.size) this.syncVisualTagsOf(column.databaseId);
       if (!relabelled) return;
       this.recompute(column.databaseId);
       this.rebuildText(column.databaseId);
@@ -1292,6 +1296,8 @@ export class Repository {
       throw new Error(
         "Propiedad calculada o de archivo: utiliza su editor específico.",
       );
+    if (c.config.visualTags)
+      throw new Error("Las etiquetas visuales se asignan dibujando regiones sobre la imagen.");
     const value = normalizeCellValue(c.type, raw);
     const optionIds =
       c.type === "multi_select"
@@ -1446,6 +1452,29 @@ export class Repository {
         `SELECT r.row_id,r.column_id,r.target_id id,t.database_id databaseId,coalesce(NULLIF(tc.value_text,''),substr(t.id,1,8)) title,d.page,d.figure,d.caption,d.note FROM db_relations r JOIN db_rows t ON t.id=r.target_id LEFT JOIN db_columns k ON k.database_id=t.database_id AND k.type='title' LEFT JOIN db_cells tc ON tc.row_id=t.id AND tc.column_id=k.id LEFT JOIN relation_details d ON d.a=min(r.row_id,r.target_id) AND d.b=max(r.row_id,r.target_id) WHERE r.row_id IN (${p}) AND r.target_kind='db_row' ORDER BY r.position,r.id`,
       )
       .all(...ids) as (RelationLink & { row_id: string; column_id: string })[];
+    // Visual tags: appearances of each tag (validated regions) and whether
+    // every image was reviewed, for databases with «Etiquetas visuales».
+    const tagged = new Set(
+      (this.db.prepare("SELECT DISTINCT database_id FROM db_columns WHERE type='multi_select' AND json_extract(config_json,'$.visualTags')=1").all() as { database_id: string }[]).map(
+        (r) => r.database_id,
+      ),
+    );
+    const visualCounts = new Map<string, Record<string, number>>(),
+      visualReviewed = new Map<string, { images: number; reviewed: number }>();
+    if (tagged.size) {
+      for (const r of this.db
+        .prepare(
+          `SELECT a.row_id,t.option_id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id WHERE a.row_id IN (${p}) AND t.state='validated' GROUP BY a.row_id,t.option_id`,
+        )
+        .all(...ids) as { row_id: string; option_id: string; n: number }[])
+        (visualCounts.get(r.row_id) ?? visualCounts.set(r.row_id, {}).get(r.row_id)!)[r.option_id] = r.n;
+      for (const r of this.db
+        .prepare(
+          `SELECT a.row_id,count(*) images,count(v.asset_id) reviewed FROM image_assets a LEFT JOIN image_tag_reviews v ON v.asset_id=a.id WHERE a.row_id IN (${p}) GROUP BY a.row_id`,
+        )
+        .all(...ids) as { row_id: string; images: number; reviewed: number }[])
+        visualReviewed.set(r.row_id, r);
+    }
     const linksByRow = new Map<string, Record<string, RelationLink[]>>();
     for (const { row_id, column_id, ...link } of links) {
       const byColumn = linksByRow.get(row_id) ?? linksByRow.set(row_id, {}).get(row_id)!;
@@ -1488,6 +1517,14 @@ export class Repository {
       row.cells = cellsByRow.get(row.id) ?? {};
       row.annotations = annotationsByRow.get(row.id) ?? [];
       row.links = linksByRow.get(row.id) ?? {};
+      if (tagged.has(row.databaseId)) {
+        const counts = visualCounts.get(row.id) ?? {},
+          seen = visualReviewed.get(row.id);
+        row.visualTags = {
+          counts,
+          review: Object.keys(counts).length ? "tagged" : seen && seen.images > 0 && seen.reviewed >= seen.images ? "empty" : "unreviewed",
+        };
+      }
       for (const column of systemColumns.filter(
         (c) => c.database_id === row.databaseId,
       ))
@@ -2209,6 +2246,46 @@ export class Repository {
       return changes.length;
     })();
   }
+  /**
+   * Fills a record's «Etiquetas visuales» from the validated regions of its
+   * images: its tags, most frequent first. Not a step of the history: the
+   * regions are what changes, and they say it.
+   */
+  syncVisualTags(rowId: string) {
+    const row = this.db.prepare("SELECT database_id FROM db_rows WHERE id=?").get(rowId) as { database_id: string } | undefined;
+    if (!row) return;
+    const column = this.db
+      .prepare("SELECT id FROM db_columns WHERE database_id=? AND type='multi_select' AND json_extract(config_json,'$.visualTags')=1")
+      .get(row.database_id) as { id: string } | undefined;
+    if (!column) return;
+    const ids = (
+      this.db
+        .prepare(
+          "SELECT t.option_id id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id JOIN db_select_options o ON o.id=t.option_id AND o.column_id=? WHERE a.row_id=? AND t.state='validated' GROUP BY t.option_id ORDER BY n DESC,min(o.position)",
+        )
+        .all(column.id, rowId) as { id: string }[]
+    ).map((r) => r.id);
+    const value = ids.length ? encodeMultiSelect(ids) : null;
+    const current = (this.db.prepare("SELECT value_text v FROM db_cells WHERE row_id=? AND column_id=?").get(rowId, column.id) as { v: string | null } | undefined)?.v ?? null;
+    if (current !== value) this.rawCell(rowId, column.id, value, "multi_select");
+    this.touchRows([rowId]);
+    this.recompute(row.database_id);
+    this.indexRow(rowId);
+  }
+  /** Re-fills «Etiquetas visuales» for every record of a database, dropping regions of removed tags. */
+  syncVisualTagsOf(databaseId: string) {
+    const column = this.db
+      .prepare("SELECT id FROM db_columns WHERE database_id=? AND type='multi_select' AND json_extract(config_json,'$.visualTags')=1")
+      .get(databaseId) as { id: string } | undefined;
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `DELETE FROM image_tags WHERE asset_id IN (SELECT id FROM image_assets WHERE database_id=?) AND option_id NOT IN (SELECT id FROM db_select_options WHERE column_id=?)`,
+        )
+        .run(databaseId, column?.id ?? "");
+      for (const { id } of this.db.prepare("SELECT id FROM db_rows WHERE database_id=?").all(databaseId) as { id: string }[]) this.syncVisualTags(id);
+    })();
+  }
   /** Keeps the exact instructions an AI value was written with; returns their hash. */
   rememberPrompt(text: string): string {
     const hash = createHash("sha256").update(text).digest("hex");
@@ -2342,6 +2419,7 @@ export class Repository {
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM image_assets WHERE id=?").run(id);
       this.normalizeImagePositions(asset.row_id);
+      this.syncVisualTags(asset.row_id);
       this.indexRow(asset.row_id);
       this.db
         .prepare(
@@ -2359,6 +2437,7 @@ export class Repository {
         this.db.prepare("DELETE FROM image_assets WHERE id=?").run(asset.id);
       for (const rowId of new Set(assets.map((asset) => asset.row_id))) {
         this.normalizeImagePositions(rowId);
+        this.syncVisualTags(rowId);
         this.touchRows([rowId]);
         this.indexRow(rowId);
       }
@@ -2400,10 +2479,12 @@ export class Repository {
           )
           .run(row.databaseId, row.id, targetColumn.id, asset.id);
         this.normalizeImagePositions(asset.row_id);
+        this.syncVisualTags(asset.row_id);
         this.touchRows([asset.row_id]);
         this.indexRow(asset.row_id);
       }
       this.normalizeImagePositions(row.id);
+      this.syncVisualTags(row.id);
       this.touchRows([row.id]);
       this.indexRow(row.id);
     })();

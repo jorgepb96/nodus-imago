@@ -224,6 +224,8 @@ export interface DatabaseColumnConfig {
    * Every link can carry a note.
    */
   relationLinkDetails?: boolean;
+  /** multi_select: the «Etiquetas visuales» of the database, filled from the regions drawn on its images. */
+  visualTags?: boolean;
   /** rollup columns: aggregate a property across the rows a relation column links to. */
   rollupRelationColumnId?: string; // a 'relation' (db_row) column on THIS database
   rollupTargetColumnId?: string; // a column id on the related database ('__title__' for its title)
@@ -637,6 +639,8 @@ export interface DatabaseRow {
   relationCounts?: Record<string, number>;
   /** columnId → the records a relation links to, in order, with what each link records. */
   links?: Record<string, RelationLink[]>;
+  /** The record's visual tags (appearances and review), when its database has «Etiquetas visuales». */
+  visualTags?: import("./visualTags").RowVisualTags;
   /** columnId → computed rollup display value, for rollup columns (derived, read-only). */
   rollups?: Record<string, string>;
   /**

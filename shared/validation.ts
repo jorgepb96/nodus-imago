@@ -744,6 +744,22 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   workOf: z.object({ rowId: id }).strict(),
+  visualTagsList: z.object({ assetId: id }).strict(),
+  visualTagSave: z
+    .object({
+      id: id.optional(),
+      assetId: id,
+      x: z.number().min(0).max(1),
+      y: z.number().min(0).max(1),
+      w: z.number().min(0).max(1),
+      h: z.number().min(0).max(1),
+      optionId: id.nullable().optional(),
+      label: z.string().trim().max(200).nullable().optional(),
+    })
+    .strict(),
+  visualTagDelete: z.object({ id }).strict(),
+  visualTagReview: z.object({ assetId: id, reviewed: z.boolean() }).strict(),
+  visualTagsSummary: z.object({ databaseId: id }).strict(),
   imageCirculation: z
     .object({
       assetId: id,

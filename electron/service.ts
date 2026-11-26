@@ -40,6 +40,7 @@ import { CompareBoards } from "./db/compare";
 import { Variants } from "./db/variants";
 import { Appearances } from "./db/appearances";
 import { Works } from "./db/works";
+import { VisualTags } from "./db/visualTags";
 import { Circulation } from "./db/circulation";
 import { VisualMaps } from "./db/visualMap";
 import { ValueCleanup } from "./db/cleanup";
@@ -75,7 +76,7 @@ const CONTENT_WRITES = new Set([
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
-  "setLinkDetails", "setRelationPlace", "imageOrigin", "convertToRelation", "pairRelation", "createWorkFromFamily",
+  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "convertToRelation", "pairRelation", "createWorkFromFamily",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -108,6 +109,7 @@ export class Service {
   variants: Variants;
   appearances: Appearances;
   works: Works;
+  visualTags: VisualTags;
   circulation: Circulation;
   visualMaps: VisualMaps;
   cleanup: ValueCleanup;
@@ -202,6 +204,7 @@ export class Service {
     });
     this.queue.fingerprint = (payload, index) => this.variants.fingerprintOne(payload, index);
     this.works = new Works(this.repo, this.variants);
+    this.visualTags = new VisualTags(this.repo);
     this.appearances = new Appearances(this.repo, this.variants, this.works);
     this.circulation = new Circulation(this.repo, this.variants, this.appearances, this.works);
     this.details = new DetailSearch(this.repo, this.engine);
@@ -1252,6 +1255,25 @@ export class Service {
         this.variants.setOrigin(input.assetId, input.sourceAssetId);
         this.changed();
         return true;
+      case "visualTagsList": {
+        const asset = this.repo.asset(input.assetId) as { database_id: string };
+        return { regions: this.visualTags.list(input.assetId), reviewed: this.visualTags.reviewed(input.assetId), column: this.visualTags.column(asset.database_id) };
+      }
+      case "visualTagSave": {
+        const saved = this.visualTags.save(input);
+        this.changed();
+        return saved;
+      }
+      case "visualTagDelete":
+        this.visualTags.delete(input.id);
+        this.changed();
+        return true;
+      case "visualTagReview":
+        this.visualTags.setReviewed(input.assetId, input.reviewed);
+        this.changed();
+        return true;
+      case "visualTagsSummary":
+        return this.visualTags.summary(input.databaseId);
       case "workOf":
         return this.works.workOf(input.rowId);
       case "createWorkFromFamily": {
