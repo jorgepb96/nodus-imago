@@ -93,7 +93,7 @@ import type {
 } from "../shared/imago";
 import { LanguageContext, uiLocale, useT } from "./i18n";
 import { UpdateBanner } from "./components/UpdateBanner";
-import { applyTheme } from "./theme/apply";
+import { applyTheme, switchTheme } from "./theme/apply";
 import { applyAppIcon } from "./theme/appIcon";
 import { Button, Empty, Modal, Spinner, Thumbnail } from "./components/ui";
 import { Cell } from "./components/Cell";
@@ -122,6 +122,7 @@ import { SuggestDialog } from "./components/SuggestDialog";
 import { PlatesDialog } from "./components/PlatesDialog";
 import { MethodologyDialog } from "./components/MethodologyDialog";
 import { VisualTagsCell } from "./components/VisualTagsCell";
+import { Toast } from "./components/Toast";
 import { isVisualTagsColumn } from "../shared/visualTags";
 import { IiifDialog } from "./components/IiifDialog";
 import { NetworkView } from "./components/NetworkView";
@@ -1959,16 +1960,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             icon
             title={t("Cambiar tema")}
             aria-label={t("Cambiar tema")}
-            onClick={() =>
+            onClick={() => {
+              if (!status) return;
+              // Painted at once; saved in the background (no reload of the views).
+              const mode: "light" | "dark" = document.documentElement.classList.contains("dark") ? "light" : "dark";
+              const next = { ...status.settings, mode };
+              switchTheme(next);
+              setStatus((current) => (current ? { ...current, settings: next } : current));
+              void applyAppIcon(mode === "dark").catch(() => {});
               void perform(async () => {
-                await api.call("updateSettings", {
-                  mode: document.documentElement.classList.contains("dark")
-                    ? "light"
-                    : "dark",
-                });
-                refresh();
-              })
-            }
+                await api.call("updateSettings", { mode });
+              });
+            }}
           >
             {document.documentElement.classList.contains("dark") ? (
               <Sun size={18} />
@@ -3881,17 +3884,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           }}
         />
       )}
-      {toast && (
-        <div
-          className={"toast " + (toast.error ? "error" : "")}
-          role={toast.error ? "alert" : "status"}
-        >
-          <span>{t(toast.message)}</span>
-          <Button icon aria-label={t("Cerrar")} onClick={() => setToast(null)}>
-            <X size={14} />
-          </Button>
-        </div>
-      )}
+      {toast && <Toast message={toast.message} error={toast.error} onClose={() => setToast(null)} />}
       {modal === "bulkAdd" && detail && (
         <Modal icon={Plus} title={t("Añadir registros")} onClose={() => setModal(null)}>
           <form

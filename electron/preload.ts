@@ -9,9 +9,17 @@ const plain = (error: unknown) =>
       "",
     ),
   );
+/**
+ * «reply was never sent»: the main process went away mid-call because Imago
+ * is closing, restarting to install an update or reloading the window. Not a
+ * failure to report: the call simply never answers, as the main process does
+ * itself while it closes, and no red message is left behind.
+ */
+const closing = (error: unknown) => /reply was never sent/i.test(String((error as Error)?.message ?? error));
 const api: ImagoApi = {
   call: (command, ...args) =>
     ipcRenderer.invoke("imago:call", command, args[0]).catch((error) => {
+      if (closing(error)) return new Promise<never>(() => {});
       throw plain(error);
     }),
   onChange: (listener) => {
@@ -20,7 +28,11 @@ const api: ImagoApi = {
     ipcRenderer.on("imago:changed", handler);
     return () => ipcRenderer.removeListener("imago:changed", handler);
   },
-  chatSend: (request) => ipcRenderer.invoke("imago:chat-send", request),
+  chatSend: (request) =>
+    ipcRenderer.invoke("imago:chat-send", request).catch((error) => {
+      if (closing(error)) return new Promise<never>(() => {});
+      throw plain(error);
+    }),
   chatCancel: (conversationId) =>
     ipcRenderer.invoke("imago:chat-cancel", conversationId),
   onChatDelta: (listener) => {

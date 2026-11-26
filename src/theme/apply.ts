@@ -1,5 +1,17 @@
 import { THEMES, deriveThemeTokens } from "./themes.mjs";
 import type { Settings } from "../../shared/imago";
+/**
+ * Switches light/dark, the palette or the accent at once, as Nodus does: the
+ * new colours are painted in the same frame, with transitions off so nothing
+ * fades in late, and saved afterwards by the caller.
+ */
+export function switchTheme(settings: Settings) {
+  const root = document.documentElement;
+  root.classList.add("theme-switching");
+  applyTheme(settings);
+  // Two frames: the new colours are painted before transitions come back.
+  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
+}
 export function applyTheme(settings: Settings) {
   const root = document.documentElement;
   const mode =

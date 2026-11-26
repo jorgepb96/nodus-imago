@@ -34,6 +34,7 @@ import { Button, Modal } from "./ui";
 import { embeddingThreads } from "../../shared/embeddingBackends";
 import type { Perform } from "./Properties";
 import { THEMES } from "../theme/themes.mjs";
+import { switchTheme } from "../theme/apply";
 import { useT } from "../i18n";
 import { DEFAULT_EMBEDDING_API } from "../../shared/embeddingApi";
 import { PROVIDERS } from "../../shared/aiConfig";
@@ -228,11 +229,14 @@ export function Settings({
     text: string;
     source: string;
   } | null>(null);
-  const update = (patch: Partial<SettingsType>) =>
+  const update = (patch: Partial<SettingsType>) => {
+    // Appearance changes are painted at once, before they are saved.
+    if ("mode" in patch || "theme" in patch || "accent" in patch) switchTheme({ ...status.settings, ...patch });
     void perform(async () => {
       await window.imago.call("updateSettings", patch);
       onChanged();
     });
+  };
   const s = status.settings;
   useEffect(() => setTab(initialTab), [initialTab]);
   const navigation = [

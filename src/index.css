@@ -11573,3 +11573,23 @@ tr:hover .ai-cell-button,
 .visual-tags-count {
   margin-left: 3px;
 }
+
+/* While the theme switches, nothing fades: the new colours appear at once. */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
+
+/* The message joins the top layer (a popover): undo the popover's own box. */
+.toast[popover] {
+  inset: auto auto 24px 50%;
+  margin: 0;
+  padding: 10px 13px 10px 18px;
+  overflow: visible;
+  color: var(--text);
+}
+.toast[popover].error {
+  color: #ce4c4c;
+}
