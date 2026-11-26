@@ -869,7 +869,7 @@ export function ImageViewer({
                 onClick={() => setShowTags(!showTags)}
               >
                 {showTags ? <Eye size={14} /> : <EyeOff size={14} />}
-                <Tag size={13} />
+                <span>{t("Etiquetas")}</span>
               </button>
               <button
                 type="button"
@@ -880,7 +880,7 @@ export function ImageViewer({
                 onClick={() => setShowNotes(!showNotes)}
               >
                 {showNotes ? <Eye size={14} /> : <EyeOff size={14} />}
-                <SquareDashedMousePointer size={13} />
+                <span>{t("Anotaciones")}</span>
               </button>
             </div>
           </>
@@ -1174,7 +1174,8 @@ export function ImageViewer({
                       return (
                         <span key={optionId} className="chip" style={{ "--chip": option?.color ?? DEFAULT_OPTION_COLOR } as React.CSSProperties}>
                           <OptionIcon value={optionIconValue(tagColumn.config, optionId)} size={11} />
-                          {option?.label} {n > 1 && <b>×{n}</b>}
+                          {option?.label}
+                          {n > 1 && <b className="visual-tags-count">×{n}</b>}
                         </span>
                       );
                     })}

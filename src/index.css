@@ -11439,13 +11439,26 @@ tr:hover .ai-cell-button,
   font-size: 11px;
   color: var(--muted);
 }
+.viewer-layers {
+  gap: 4px;
+}
 .viewer-layers button {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.viewer-layers button svg {
+  flex: none;
 }
 .viewer-layers button[aria-pressed="false"] {
-  opacity: 0.55;
+  opacity: 0.5;
+}
+.viewer-layers button[aria-pressed="false"] span {
+  text-decoration: line-through;
 }
 .viewer-tagging {
   display: flex;
@@ -11551,4 +11564,12 @@ tr:hover .ai-cell-button,
 .sticky-scrollbar {
   scrollbar-width: auto;
   scrollbar-color: auto;
+}
+
+/* Selected, the tag's tab moves clear of the corner grip. */
+.viewer-tag.is-selected .viewer-tag-label {
+  left: 12px;
+}
+.visual-tags-count {
+  margin-left: 3px;
 }

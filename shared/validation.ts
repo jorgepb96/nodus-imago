@@ -138,7 +138,7 @@ const limit = z.number().int().min(2).max(60).optional();
 const heritageLevel = z.enum(["element", "type", "group"]).optional();
 const includeParts = z.boolean().optional();
 export const statSpec = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart, heritageLevel, includeParts }).strict(),
+  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart, heritageLevel, includeParts, count: z.enum(["records", "appearances"]).optional() }).strict(),
   z
     .object({
       kind: z.literal("crosstab"),

@@ -134,7 +134,11 @@ export class VisualTags {
       const tags = this.column(databaseId, true)!;
       const same = tags.options.find((o) => o.label.toLocaleLowerCase() === term.label.toLocaleLowerCase());
       if (same) return same.id;
-      this.repo.saveOptions(tags.id, [...tags.options.map((o) => ({ id: o.id, label: o.label, color: o.color })), { label: term.label, color: term.color }]);
+      // A term without a colour gets one of the palette, so tags are told apart on the image.
+      this.repo.saveOptions(tags.id, [
+        ...tags.options.map((o) => ({ id: o.id, label: o.label, color: o.color })),
+        { label: term.label, color: term.color ?? importedOptionColor(tags.options.length) },
+      ]);
       const created = this.repo.column(tags.id).options.find((o) => o.label === term.label)!;
       const icon = dictionary.config.optionIcons?.[term.id];
       if (icon) {

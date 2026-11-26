@@ -601,6 +601,16 @@ export function OptionPicker({
           onKeyDown={onFloatingKey}
         />
         {editError && <p className="annotation-error" role="alert">{t(editError)}</p>}
+        {typed && !exact && (
+          <button
+            type="button"
+            className={`tag-picker-create${active === -1 ? " is-active" : ""}`}
+            data-testid="tag-picker-create"
+            onClick={() => floating.onCreate(typed)}
+          >
+            {t("Crear «{tag}»").replace("{tag}", typed)} <kbd>↵</kbd>
+          </button>
+        )}
         <div className="tag-picker-list">
           {ordered.slice(0, 200).map((o, i) => (
             <div key={o.id} className={`option-row${editable ? " is-editable" : ""}${i === active ? " is-active" : ""}`} data-testid="tag-picker-option">
@@ -644,16 +654,6 @@ export function OptionPicker({
             </>
           )}
         </div>
-        {typed && !exact && (
-          <button
-            type="button"
-            className={`tag-picker-create${active === -1 ? " is-active" : ""}`}
-            data-testid="tag-picker-create"
-            onClick={() => floating.onCreate(typed)}
-          >
-            {t("Crear «{tag}»").replace("{tag}", typed)} <kbd>↵</kbd>
-          </button>
-        )}
         {!typed && !column.options.length && <p className="muted">{t("Escribe el nombre de la primera etiqueta y pulsa Intro.")}</p>}
         {editingOption && (
           <OptionEditMenu
