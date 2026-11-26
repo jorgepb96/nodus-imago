@@ -407,6 +407,7 @@ app.whenReady().then(async () => {
         await backups!.close();
         // From here the service refuses work: the window must stop asking.
         closing = true;
+        window?.webContents.send("imago:closing");
         await call("_close");
       } else if (closing) {
         app.relaunch();
@@ -1153,6 +1154,8 @@ app.on("before-quit", (event) => {
   if (closing || !worker) return;
   event.preventDefault();
   closing = true;
+  // Calls left unanswered from here are the closing, not errors to show.
+  window?.webContents.send("imago:closing");
   updates?.close();
   announcements?.close();
   chats?.cancelAll();

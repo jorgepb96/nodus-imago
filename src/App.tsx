@@ -93,7 +93,7 @@ import type {
 } from "../shared/imago";
 import { LanguageContext, uiLocale, useT } from "./i18n";
 import { UpdateBanner } from "./components/UpdateBanner";
-import { applyTheme } from "./theme/apply";
+import { applyTheme, switchTheme } from "./theme/apply";
 import { applyAppIcon } from "./theme/appIcon";
 import { Button, Empty, Modal, Spinner, Thumbnail } from "./components/ui";
 import { Cell } from "./components/Cell";
@@ -122,6 +122,8 @@ import { SuggestDialog } from "./components/SuggestDialog";
 import { PlatesDialog } from "./components/PlatesDialog";
 import { MethodologyDialog } from "./components/MethodologyDialog";
 import { VisualTagsCell } from "./components/VisualTagsCell";
+import { Toast } from "./components/Toast";
+import type { BrowseList } from "./components/ViewerStrip";
 import { isVisualTagsColumn } from "../shared/visualTags";
 import { IiifDialog } from "./components/IiifDialog";
 import { NetworkView } from "./components/NetworkView";
@@ -305,6 +307,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   // Records opened together (a point of the map), shown as a strip in the
   // record panel, and whether the panel fills the window (kept on this device).
   const [recordStrip, setRecordStrip] = useState<{ label: string; items: RecordStripItem[] } | null>(null),
+    /** The list the open record came from: the viewer's strip moves along it. */
+    [recordBrowse, setRecordBrowse] = useState<BrowseList | null>(null),
     [recordFullscreen, setRecordFullscreen] = useState(() => {
       try {
         return localStorage.getItem("imago.recordPanel.fullscreen") === "1";
@@ -864,9 +868,27 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setFilters([]);
     setSimilarId(undefined);
   };
-  const open = async (row: RecordRow) => {
-    const d = await api.call("detail", { id: row.databaseId });
-    setRecordDetail(d);
+  /**
+   * Opens a record. Opened from a database view or the search results, the
+   * list on screen (its filters, order and search) goes with it, so the
+   * viewer's strip can move along it; `browse` keeps a list already chosen.
+   */
+  const open = async (row: RecordRow, browse?: BrowseList | null) => {
+    const at = page.rows.findIndex((r) => r.id === row.id);
+    setRecordBrowse(
+      browse !== undefined
+        ? browse
+        : (area === "databases" || area === "search") && at >= 0
+          ? {
+              input: area === "search" ? { ...executed } : { ...viewSearch, sorts },
+              index: offset + at,
+              total: page.total,
+              label: area === "search" ? t("Resultados de la búsqueda") : (detail?.database.name ?? ""),
+            }
+          : null,
+    );
+    // Moving along the list stays in the same database: its properties are known.
+    if (!(browse && recordDetail?.database.id === row.databaseId)) setRecordDetail(await api.call("detail", { id: row.databaseId }));
     setOpenRow(await api.call("getRow", { id: row.id }));
   };
   // The last box ticked or unticked: Shift+click applies the same to every
@@ -1959,16 +1981,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             icon
             title={t("Cambiar tema")}
             aria-label={t("Cambiar tema")}
-            onClick={() =>
+            onClick={() => {
+              if (!status) return;
+              // Painted at once; saved in the background (no reload of the views).
+              const mode: "light" | "dark" = document.documentElement.classList.contains("dark") ? "light" : "dark";
+              const next = { ...status.settings, mode };
+              switchTheme(next);
+              setStatus((current) => (current ? { ...current, settings: next } : current));
               void perform(async () => {
-                await api.call("updateSettings", {
-                  mode: document.documentElement.classList.contains("dark")
-                    ? "light"
-                    : "dark",
-                });
-                refresh();
-              })
-            }
+                await api.call("updateSettings", { mode });
+              });
+            }}
           >
             {document.documentElement.classList.contains("dark") ? (
               <Sun size={18} />
@@ -3881,17 +3904,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           }}
         />
       )}
-      {toast && (
-        <div
-          className={"toast " + (toast.error ? "error" : "")}
-          role={toast.error ? "alert" : "status"}
-        >
-          <span>{t(toast.message)}</span>
-          <Button icon aria-label={t("Cerrar")} onClick={() => setToast(null)}>
-            <X size={14} />
-          </Button>
-        </div>
-      )}
+      {toast && <Toast message={toast.message} error={toast.error} onClose={() => setToast(null)} />}
       {modal === "bulkAdd" && detail && (
         <Modal icon={Plus} title={t("Añadir registros")} onClose={() => setModal(null)}>
           <form
@@ -4764,6 +4777,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onOptionsChanged={() => void perform(() => reloadDetail(recordDetail.database.id))}
           onSimilar={similar}
           strip={recordStrip}
+          browse={recordBrowse}
+          onBrowse={(rowId, index) =>
+            void perform(async () => {
+              const next = recordBrowse ? { ...recordBrowse, index } : null;
+              await open(await api.call("getRow", { id: rowId }), next);
+            })
+          }
           fullscreen={recordFullscreen}
           onFullscreen={fillRecordPanel}
           citation={

@@ -22,6 +22,7 @@ import {
   SquareDashedMousePointer,
   Tag,
   Tags,
+  GalleryHorizontalEnd,
   Eye,
   EyeOff,
   CheckCheck,
@@ -33,6 +34,7 @@ import { OptionIcon } from "./DatabaseIcon";
 import { DEFAULT_OPTION_COLOR } from "./OptionEditMenu";
 import { optionIconValue } from "../../shared/databaseIcons";
 import type { VisualTagRegion } from "../../shared/visualTags";
+import { BROWSE_BATCH, useBrowse, ViewerStrip, type BrowseList } from "./ViewerStrip";
 import type { ImageAnnotation, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { DetailSearchPanel, type DetailQuery } from "./DetailSearchPanel";
@@ -93,8 +95,14 @@ export function ImageViewer({
   onOpenRecord,
   onCompare,
   columns,
+  browse,
+  onBrowse,
 }: {
   row: RecordRow;
+  /** The list the record was opened from: its photographs fill the strip under the image. */
+  browse?: BrowseList | null;
+  /** Opens another record of that list in the viewer. */
+  onBrowse?: (rowId: string, index: number) => void;
   /** The database's properties: heritage ones can be marked on the image. */
   columns?: DatabaseColumn[];
   initialIndex?: number;
@@ -109,7 +117,43 @@ export function ImageViewer({
   const dialog = useRef<HTMLDialogElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(Math.min(initialIndex, Math.max(0, row.images.length - 1)));
-  const image = row.images[index];
+  // Another record of the list: its first image, or its last when coming back.
+  const [rowShown, setRowShown] = useState(row.id);
+  const [enterAt, setEnterAt] = useState<"start" | "end">("start");
+  if (rowShown !== row.id) {
+    setRowShown(row.id);
+    setIndex(enterAt === "end" ? Math.max(0, row.images.length - 1) : 0);
+    setEnterAt("start");
+  }
+  const image = row.images[Math.min(index, Math.max(0, row.images.length - 1))];
+  /** The strip of the list's photographs under the image, shown or hidden (remembered). */
+  const [stripShown, setStripShown] = useState(() => {
+    try {
+      return localStorage.getItem("imago.viewerStrip") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleStrip = () => {
+    setStripShown((on) => {
+      try {
+        localStorage.setItem("imago.viewerStrip", on ? "0" : "1");
+      } catch {
+        /* A preference of this window only. */
+      }
+      return !on;
+    });
+  };
+  const { items: stripItems, step: stepList, batch: readBatch } = useBrowse(browse);
+  /** The next (1) or previous (-1) photograph of the list; false at its end. */
+  const stepRecord = async (direction: 1 | -1) => {
+    if (!browse || !onBrowse) return false;
+    const next = await stepList(browse.index, direction);
+    if (!next) return false;
+    setEnterAt(direction === -1 ? "end" : "start");
+    onBrowse(next.row.id, next.index);
+    return true;
+  };
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [view, setView] = useState<View>({ scale: 1, x: 0, y: 0 });
   const [annotating, setAnnotating] = useState(false);
@@ -594,8 +638,15 @@ export function ImageViewer({
       if (event.key === "+" || event.key === "=") zoom(1.25);
       if (event.key === "-") zoom(0.8);
       if (event.key === "0") fit();
-      if (event.key === "ArrowRight" && index < row.images.length - 1) setIndex(index + 1);
-      if (event.key === "ArrowLeft" && index > 0) setIndex(index - 1);
+      // The arrows go through the record's images, then on to the next or previous photograph of the list.
+      if (event.key === "ArrowRight") {
+        if (index < row.images.length - 1) setIndex(index + 1);
+        else void stepRecord(1);
+      }
+      if (event.key === "ArrowLeft") {
+        if (index > 0) setIndex(index - 1);
+        else void stepRecord(-1);
+      }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -883,6 +934,19 @@ export function ImageViewer({
                 <span>{t("Anotaciones")}</span>
               </button>
             </div>
+            {browse && onBrowse && (
+              <button
+                type="button"
+                className={`viewer-annotate ${stripShown ? "is-on" : ""}`}
+                aria-pressed={stripShown}
+                data-testid="viewer-strip-toggle"
+                data-tooltip={t(stripShown ? "Ocultar la tira de fotos" : "Mostrar la tira con las fotos de la lista (← → para pasar)")}
+                onClick={toggleStrip}
+              >
+                <GalleryHorizontalEnd size={16} />
+                {t("Tira")}
+              </button>
+            )}
           </>
         )}
         <span className="viewer-spacer" />
@@ -891,212 +955,231 @@ export function ImageViewer({
         </button>
       </header>
       <div className="viewer-body">
-        <div
-          ref={stage}
-          data-tour="viewer-stage"
-          className={`viewer-stage ${annotating || marking || drawingZone || searchMode || tagging ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
-          onWheel={(event) => {
-            const r = stage.current!.getBoundingClientRect();
-            zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - r.left, event.clientY - r.top);
-          }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onDoubleClick={() => !annotating && !marking && !cropping && !tagging && zoom(2)}
-        >
-          {image && (
-            <img
-              key={image.id}
-              className="viewer-image"
-              src={src(image.id, image.revision, cropping ? "full" : "preview")}
-              alt={row.title}
-              draggable={false}
-              onLoad={(event) => {
-                setLoadFailed(false);
-                setNatural({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight });
-              }}
-              onError={() => setLoadFailed(true)}
-              style={
-                natural
-                  ? { width: natural.w * view.scale, height: natural.h * view.scale, transform: `translate(${view.x}px, ${view.y}px)` }
-                  : { visibility: "hidden" }
-              }
-            />
-          )}
-          {image && !natural && (
-            <div className="viewer-loading" role="status" data-testid="viewer-loading">
-              {loadFailed ? (
-                <>
-                  <ImageOff size={22} />
-                  {t("No se ha podido cargar la imagen.")}
-                  {cropping && (
-                    <button type="button" className="viewer-annotate" onClick={cancelCrop}>
-                      {t("Cancelar")}
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Spinner />
-                  {t(cropping ? "Preparando la imagen completa…" : "Cargando la imagen…")}
-                </>
-              )}
-            </div>
-          )}
-          {cropping && natural && (
-            <div className="crop-frame" style={box(cropping)} data-grip="move" data-testid="viewer-crop-frame">
-              {GRIPS.map((grip) => (
-                <span key={grip} className={`crop-grip is-${grip}`} data-grip={grip} />
-              ))}
-            </div>
-          )}
-          {!cropping && showNotes && notes.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              className={`viewer-region ${selected === a.id ? "is-selected" : ""}`}
-              style={{ ...box(a), "--region": a.color ?? COLORS[0] } as unknown as React.CSSProperties}
-              data-tooltip={[a.note, a.tags.join(", ")].filter(Boolean).join(" · ") || t("Sin nota")}
-              aria-label={a.note || t("Anotación")}
-              onClick={() => {
-                setSelected(a.id);
-                document.getElementById(`annotation-${a.id}`)?.scrollIntoView({ block: "nearest" });
-              }}
-            />
-          ))}
-          {!cropping &&
-            showNotes &&
-            shownMarks.map((m) => {
-              const e = heritageElements[m.optionId!];
-              const icon = heritageColumn && typology(heritageScheme(heritageColumn.config), e?.group ?? null, e?.type ?? null)?.icon;
-              const label = heritageColumn?.options.find((o) => o.id === m.optionId)?.label ?? "";
-              const at = box(m) as { left?: number; top?: number };
-              return m.kind === "point" ? (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`viewer-mark ${selected === m.id ? "is-selected" : ""}`}
-                  style={natural ? { left: at.left, top: at.top } : { display: "none" }}
-                  aria-label={label}
-                  data-tooltip={label}
-                  onClick={() => setSelected(m.id)}
-                >
-                  <HeritageIcon name={icon} size={13} />
-                </button>
-              ) : (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`viewer-region is-heritage ${selected === m.id ? "is-selected" : ""}`}
-                  style={box(m)}
-                  aria-label={label}
-                  data-tooltip={label}
-                  onClick={() => setSelected(m.id)}
-                >
-                  <span className="viewer-mark-label">
-                    <HeritageIcon name={icon} size={11} /> {label}
-                  </span>
-                </button>
-              );
-            })}
-          {!cropping &&
-            showTags &&
-            tagRegions.map((r) => {
-              const option = tagColumn?.options.find((o) => o.id === r.optionId);
-              const chosen = tagging && tagSelected === r.id;
-              return (
-                <div
-                  key={r.id}
-                  data-tag-region={r.id}
-                  data-testid="viewer-tag-region"
-                  className={`viewer-tag ${chosen ? "is-selected" : ""} ${tagging ? "is-live" : ""} ${tagDraft?.id === r.id ? "is-retagging" : ""}`}
-                  style={{ ...box(r), "--tag": option?.color ?? DEFAULT_OPTION_COLOR } as unknown as React.CSSProperties}
-                  aria-label={option?.label}
-                >
-                  <span className="viewer-tag-label">
-                    <OptionIcon value={tagColumn ? optionIconValue(tagColumn.config, r.optionId) : null} size={11} />
-                    {option?.label ?? "…"}
-                  </span>
-                  {chosen && GRIPS.map((grip) => <span key={grip} className={`crop-grip is-${grip}`} data-grip={grip} />)}
-                  {chosen && !tagDraft && (
-                    <span className="viewer-tag-tools">
-                      <button
-                        type="button"
-                        aria-label={t("Cambiar la etiqueta")}
-                        data-tooltip={t("Cambiar la etiqueta")}
-                        data-testid="viewer-tag-retag"
-                        onClick={() => setTagDraft({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h })}
-                      >
-                        <Tag size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={t("Eliminar la región")}
-                        data-tooltip={t("Eliminar la región (Supr)")}
-                        data-testid="viewer-tag-delete"
-                        onClick={() => void removeTag(r.id)}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          {tagDraft && !tagDraft.id && <div className="viewer-tag is-drawing" style={box(tagDraft)} />}
-          {tagDraft && natural && image && (
-            <div
-              className="viewer-tag-picker"
-              style={pickerAt(tagDraft)}
-              onPointerDown={(e) => e.stopPropagation()}
-              onWheel={(e) => e.stopPropagation()}
-            >
-              <OptionPicker
-                column={tagColumn ?? { id: "", databaseId: row.databaseId, name: "", type: "multi_select", position: 0, config: {}, options: [] }}
-                selected={[]}
-                busy={false}
-                onToggle={() => {}}
-                onOptionsChanged={() => {
-                  void loadTags();
-                  window.dispatchEvent(new CustomEvent("imago:reload-detail"));
-                  onChanged();
+        {/* The image, and under it the strip: the side panel keeps its full height. */}
+        <div className="viewer-main">
+          <div
+            ref={stage}
+            data-tour="viewer-stage"
+            className={`viewer-stage ${annotating || marking || drawingZone || searchMode || tagging ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
+            onWheel={(event) => {
+              const r = stage.current!.getBoundingClientRect();
+              zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - r.left, event.clientY - r.top);
+            }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onDoubleClick={() => !annotating && !marking && !cropping && !tagging && zoom(2)}
+          >
+            {image && (
+              <img
+                key={image.id}
+                className="viewer-image"
+                src={src(image.id, image.revision, cropping ? "full" : "preview")}
+                alt={row.title}
+                draggable={false}
+                onLoad={(event) => {
+                  setLoadFailed(false);
+                  setNatural({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight });
                 }}
-                floating={{
-                  placeholder: t(tagDraft.id ? "Otra etiqueta…" : "Buscar o crear etiqueta…"),
-                  extra: tagDictionary ? { title: t("Del diccionario «{name}»").replace("{name}", tagDictionary.name), column: tagDictionary } : undefined,
-                  onPick: (optionId) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, optionId }),
-                  onCreate: (label) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, label }),
-                  onClose: () => setTagDraft(null),
+                onError={() => setLoadFailed(true)}
+                style={
+                  natural
+                    ? { width: natural.w * view.scale, height: natural.h * view.scale, transform: `translate(${view.x}px, ${view.y}px)` }
+                    : { visibility: "hidden" }
+                }
+              />
+            )}
+            {image && !natural && (
+              <div className="viewer-loading" role="status" data-testid="viewer-loading">
+                {loadFailed ? (
+                  <>
+                    <ImageOff size={22} />
+                    {t("No se ha podido cargar la imagen.")}
+                    {cropping && (
+                      <button type="button" className="viewer-annotate" onClick={cancelCrop}>
+                        {t("Cancelar")}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Spinner />
+                    {t(cropping ? "Preparando la imagen completa…" : "Cargando la imagen…")}
+                  </>
+                )}
+              </div>
+            )}
+            {cropping && natural && (
+              <div className="crop-frame" style={box(cropping)} data-grip="move" data-testid="viewer-crop-frame">
+                {GRIPS.map((grip) => (
+                  <span key={grip} className={`crop-grip is-${grip}`} data-grip={grip} />
+                ))}
+              </div>
+            )}
+            {!cropping && showNotes && notes.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className={`viewer-region ${selected === a.id ? "is-selected" : ""}`}
+                style={{ ...box(a), "--region": a.color ?? COLORS[0] } as unknown as React.CSSProperties}
+                data-tooltip={[a.note, a.tags.join(", ")].filter(Boolean).join(" · ") || t("Sin nota")}
+                aria-label={a.note || t("Anotación")}
+                onClick={() => {
+                  setSelected(a.id);
+                  document.getElementById(`annotation-${a.id}`)?.scrollIntoView({ block: "nearest" });
                 }}
               />
-            </div>
-          )}
-          {tagging && !tagRegions.length && !pending && !tagDraft && (
-            <p className="viewer-hint">{t("Arrastra sobre la imagen alrededor de un elemento para etiquetarlo.")}</p>
-          )}
-          {markDraft?.kind === "point" && natural && (
-            <span className="viewer-mark is-drawing" style={box(markDraft) as React.CSSProperties} />
-          )}
-          {markDraft?.kind === "rect" && <div className="viewer-region is-drawing is-heritage" style={box(markDraft)} />}
-          {pending && <div className="viewer-region is-drawing" style={box(pending)} />}
-          {searching?.drawn && !cropping && (
-            <div className="viewer-ai-zone is-search" style={box(searching)} data-testid="viewer-search-box">
-              <ScanSearch size={12} />
-            </div>
-          )}
-          {searchMode && !searching && !pending && (
-            <p className="viewer-hint">{t("Arrastra sobre la imagen un recuadro alrededor de lo que quieres buscar.")}</p>
-          )}
-          {heritagePanel === "suggest" &&
-            !searching &&
-            aiZones.map((z, i) => (
-              <div key={i} className="viewer-ai-zone" style={box(z)}>
-                <b>{i + 1}</b>
-              </div>
             ))}
-          {annotating && !notes.length && !pending && (
-            <p className="viewer-hint">{t("Arrastra sobre la imagen para marcar la primera zona.")}</p>
-          )}
+            {!cropping &&
+              showNotes &&
+              shownMarks.map((m) => {
+                const e = heritageElements[m.optionId!];
+                const icon = heritageColumn && typology(heritageScheme(heritageColumn.config), e?.group ?? null, e?.type ?? null)?.icon;
+                const label = heritageColumn?.options.find((o) => o.id === m.optionId)?.label ?? "";
+                const at = box(m) as { left?: number; top?: number };
+                return m.kind === "point" ? (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`viewer-mark ${selected === m.id ? "is-selected" : ""}`}
+                    style={natural ? { left: at.left, top: at.top } : { display: "none" }}
+                    aria-label={label}
+                    data-tooltip={label}
+                    onClick={() => setSelected(m.id)}
+                  >
+                    <HeritageIcon name={icon} size={13} />
+                  </button>
+                ) : (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`viewer-region is-heritage ${selected === m.id ? "is-selected" : ""}`}
+                    style={box(m)}
+                    aria-label={label}
+                    data-tooltip={label}
+                    onClick={() => setSelected(m.id)}
+                  >
+                    <span className="viewer-mark-label">
+                      <HeritageIcon name={icon} size={11} /> {label}
+                    </span>
+                  </button>
+                );
+              })}
+            {!cropping &&
+              showTags &&
+              tagRegions.map((r) => {
+                const option = tagColumn?.options.find((o) => o.id === r.optionId);
+                const chosen = tagging && tagSelected === r.id;
+                return (
+                  <div
+                    key={r.id}
+                    data-tag-region={r.id}
+                    data-testid="viewer-tag-region"
+                    className={`viewer-tag ${chosen ? "is-selected" : ""} ${tagging ? "is-live" : ""} ${tagDraft?.id === r.id ? "is-retagging" : ""}`}
+                    style={{ ...box(r), "--tag": option?.color ?? DEFAULT_OPTION_COLOR } as unknown as React.CSSProperties}
+                    aria-label={option?.label}
+                  >
+                    <span className="viewer-tag-label">
+                      <OptionIcon value={tagColumn ? optionIconValue(tagColumn.config, r.optionId) : null} size={11} />
+                      {option?.label ?? "…"}
+                    </span>
+                    {chosen && GRIPS.map((grip) => <span key={grip} className={`crop-grip is-${grip}`} data-grip={grip} />)}
+                    {chosen && !tagDraft && (
+                      <span className="viewer-tag-tools">
+                        <button
+                          type="button"
+                          aria-label={t("Cambiar la etiqueta")}
+                          data-tooltip={t("Cambiar la etiqueta")}
+                          data-testid="viewer-tag-retag"
+                          onClick={() => setTagDraft({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h })}
+                        >
+                          <Tag size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={t("Eliminar la región")}
+                          data-tooltip={t("Eliminar la región (Supr)")}
+                          data-testid="viewer-tag-delete"
+                          onClick={() => void removeTag(r.id)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            {tagDraft && !tagDraft.id && <div className="viewer-tag is-drawing" style={box(tagDraft)} />}
+            {tagDraft && natural && image && (
+              <div
+                className="viewer-tag-picker"
+                style={pickerAt(tagDraft)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onWheel={(e) => e.stopPropagation()}
+              >
+                <OptionPicker
+                  column={tagColumn ?? { id: "", databaseId: row.databaseId, name: "", type: "multi_select", position: 0, config: {}, options: [] }}
+                  selected={[]}
+                  busy={false}
+                  onToggle={() => {}}
+                  onOptionsChanged={() => {
+                    void loadTags();
+                    window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+                    onChanged();
+                  }}
+                  floating={{
+                    placeholder: t(tagDraft.id ? "Otra etiqueta…" : "Buscar o crear etiqueta…"),
+                    extra: tagDictionary ? { title: t("Del diccionario «{name}»").replace("{name}", tagDictionary.name), column: tagDictionary } : undefined,
+                    onPick: (optionId) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, optionId }),
+                    onCreate: (label) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, label }),
+                    onClose: () => setTagDraft(null),
+                  }}
+                />
+              </div>
+            )}
+            {tagging && !tagRegions.length && !pending && !tagDraft && (
+              <p className="viewer-hint">{t("Arrastra sobre la imagen alrededor de un elemento para etiquetarlo.")}</p>
+            )}
+            {markDraft?.kind === "point" && natural && (
+              <span className="viewer-mark is-drawing" style={box(markDraft) as React.CSSProperties} />
+            )}
+            {markDraft?.kind === "rect" && <div className="viewer-region is-drawing is-heritage" style={box(markDraft)} />}
+            {pending && <div className="viewer-region is-drawing" style={box(pending)} />}
+            {searching?.drawn && !cropping && (
+              <div className="viewer-ai-zone is-search" style={box(searching)} data-testid="viewer-search-box">
+                <ScanSearch size={12} />
+              </div>
+            )}
+            {searchMode && !searching && !pending && (
+              <p className="viewer-hint">{t("Arrastra sobre la imagen un recuadro alrededor de lo que quieres buscar.")}</p>
+            )}
+            {heritagePanel === "suggest" &&
+              !searching &&
+              aiZones.map((z, i) => (
+                <div key={i} className="viewer-ai-zone" style={box(z)}>
+                  <b>{i + 1}</b>
+                </div>
+              ))}
+            {annotating && !notes.length && !pending && (
+              <p className="viewer-hint">{t("Arrastra sobre la imagen para marcar la primera zona.")}</p>
+            )}
+          </div>
+        {browse && onBrowse && stripShown && !cropping && (
+          <ViewerStrip
+            browse={browse}
+            items={stripItems}
+            currentRowId={row.id}
+            onOpen={(item) => {
+              setEnterAt("start");
+              onBrowse(item.row.id, item.index);
+            }}
+            onStep={(direction) => void stepRecord(direction)}
+            onMore={(direction) => {
+              const edge = direction === 1 ? (stripItems.at(-1)?.index ?? browse.index) : (stripItems[0]?.index ?? browse.index);
+              void readBatch(Math.floor(edge / BROWSE_BATCH) + direction);
+            }}
+          />
+        )}
         </div>
         <aside className="viewer-side" data-testid="viewer-annotations" data-tour="viewer-annotations">
           {searching ? (

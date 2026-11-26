@@ -33,6 +33,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.1",
+    date: "2026-11-26",
+    highlights: [
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "El visor de imágenes muestra abajo una tira con las fotografías de la lista desde la que se abrió el registro (la tabla con sus filtros y orden, o los resultados de la búsqueda). Las flechas ← → pasan de una foto a otra y de un registro al siguiente, leyendo nuevas tandas hasta agotar el filtro; el botón «Tira» de la cabecera la oculta o la muestra.",
+        en: "The image viewer shows a strip below with the photographs of the list the record was opened from (the table with its filters and order, or the search results). The ← → arrows move from photo to photo and from one record to the next, reading new batches until the filter runs out; the «Strip» button in the header hides or shows it.",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "El cambio entre tema claro y oscuro es instantáneo.",
+        en: "Switching between the light and dark themes is instant.",
+      },
+      {
+        scope: "general",
+        category: "fix",
+        es: "Al actualizar ya no aparece el aviso rojo «reply was never sent», y los avisos se muestran siempre por encima de las ventanas abiertas, sin quedar tapados ni desenfocados.",
+        en: "Updating no longer shows the red «reply was never sent» message, and messages always appear above open windows, never covered or blurred.",
+      },
+    ],
+  },
+  {
     version: "0.9.0",
     date: "2026-11-26",
     highlights: [
