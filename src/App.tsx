@@ -1988,7 +1988,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               const next = { ...status.settings, mode };
               switchTheme(next);
               setStatus((current) => (current ? { ...current, settings: next } : current));
-              void applyAppIcon(mode === "dark").catch(() => {});
               void perform(async () => {
                 await api.call("updateSettings", { mode });
               });

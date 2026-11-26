@@ -1,14 +1,17 @@
 import { THEMES, deriveThemeTokens } from "./themes.mjs";
 import type { Settings } from "../../shared/imago";
+import { applyAppIcon } from "./appIcon";
 /**
  * Switches light/dark, the palette or the accent at once, as Nodus does: the
  * new colours are painted in the same frame, with transitions off so nothing
- * fades in late, and saved afterwards by the caller.
+ * fades in late, and saved afterwards by the caller. The macOS Dock icon
+ * follows at the same time.
  */
 export function switchTheme(settings: Settings) {
   const root = document.documentElement;
   root.classList.add("theme-switching");
   applyTheme(settings);
+  void applyAppIcon(root.classList.contains("dark")).catch(() => {});
   // Two frames: the new colours are painted before transitions come back.
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
 }
