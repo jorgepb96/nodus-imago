@@ -81,9 +81,11 @@ When colourising, Imago keeps the lightness and detail of the starting image and
 ## And also
 
 - **Search** by exact words, by meaning (“procession with lanterns”) or with an image; the **visual map** places every image by likeness.
-- **Variants** find the same photograph in other prints, scans and crops; the **comparison table** shows up to six side by side or lays one over another.
+- **Variants** find the same photograph in other prints, scans and crops, and gather them into one **photographic work** that holds the photographer, date taken and place once; the **comparison table** shows up to six side by side or lays one over another.
+- **Relate** photographs to the books, people and events of other databases, in both directions: each link records the page, figure and caption where the book prints the photograph, and can be filtered, counted and cited.
 - **Clean and link**: unify values written in different ways, link people, places and subjects to Wikidata (with Getty identifiers) and Iconclass, and complete empty fields from the most similar images.
 - **Cite and publish**: citations in Chicago, ISO 690 or APA, PDF plates with numbered figures, W3C Web Annotations.
+- **Methodology report**: a PDF in the interface language that documents a study for others to reproduce or assess — the data and its fingerprint, the vocabularies, every AI model with its revision and exact instructions, what was reviewed and corrected, agreement trials, thresholds, saved views and statistics, with charts and an optional JSON annex.
 - **Ask the chat** about your databases; exact figures come from a calculation run over every record on your computer.
 - **Back up and export**: CSV, JSON or XLSX, and full `.imago` backups that can be scheduled and encrypted.
 - **Guided tutorials** walk you through each task on the real interface.

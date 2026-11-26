@@ -12,6 +12,7 @@ const ROLES: [RegExp, string][] = [
   [/(signatura|shelfmark|call number|inventario|inventory|^id|identificador|identifier|referencia)/i, "reference"],
   [/(lugar|place|localidad|location)/i, "place"],
 ];
+const PUBLISHED = /(fuente|libro|obra|publicaci|publicad|revista|[aá]lbum|reproduc|source|book|work|journal|magazine|published)/i;
 /** File names, paths and links: what a column called "Archivo" holds when it means the file, not the archive. */
 const FILE_LIKE = /^(https?:\/\/|file:)|%20|[\\/][^\s]*\.[a-z0-9]{2,4}$|\.(jpe?g|png|tiff?|gif|webp|heic|pdf)$/i;
 function holdsFiles(column: DatabaseColumn, sample: DatabaseRow[]): boolean {
@@ -26,6 +27,12 @@ function holdsFiles(column: DatabaseColumn, sample: DatabaseRow[]): boolean {
 export function citationRoles(columns: DatabaseColumn[], sample: DatabaseRow[] = []): Partial<Record<string, string>> {
   const roles: Partial<Record<string, string>> = {};
   for (const column of columns) {
+    // A relation to the books or magazines that reproduce the image, with
+    // where each one prints it: «Book (p. 12 · fig. 3)».
+    if (column.type === "relation" && PUBLISHED.test(column.name.trim()) && !roles.publication) {
+      roles.publication = column.name;
+      continue;
+    }
     if (["title", "button", "files", "attachment", "ai_image", "rich_text", "relation", "rollup"].includes(column.type)) continue;
     if (holdsFiles(column, sample)) continue;
     const role =
@@ -47,14 +54,14 @@ export const CITATION_STYLES: Record<CitationStyle, string> = {
 export function citationTemplate(columns: DatabaseColumn[], style: CitationStyle = "chicago", sample: DatabaseRow[] = []): string {
   const r = citationRoles(columns, sample);
   if (style === "iso690")
-    return [slot(r.author) && `${slot(r.author)}.`, slot(r.title) && `${slot(r.title)} [fotografía].`, slot(r.place) && `${slot(r.place)},`, slot(r.date) && `${slot(r.date)}.`, slot(r.holding) && `${slot(r.holding)}.`, slot(r.reference) && `${slot(r.reference)}.`]
+    return [slot(r.author) && `${slot(r.author)}.`, slot(r.title) && `${slot(r.title)} [fotografía].`, slot(r.place) && `${slot(r.place)},`, slot(r.date) && `${slot(r.date)}.`, slot(r.publication) && `${slot(r.publication)}.`, slot(r.holding) && `${slot(r.holding)}.`, slot(r.reference) && `${slot(r.reference)}.`]
       .filter(Boolean)
       .join(" ");
   if (style === "apa")
-    return [slot(r.author) && `${slot(r.author)}`, slot(r.date) && `(${slot(r.date)}).`, slot(r.title) && `${slot(r.title)} [Fotografía].`, slot(r.holding) && `${slot(r.holding)}.`, slot(r.reference) && `${slot(r.reference)}.`]
+    return [slot(r.author) && `${slot(r.author)}`, slot(r.date) && `(${slot(r.date)}).`, slot(r.title) && `${slot(r.title)} [Fotografía].`, slot(r.publication) && `${slot(r.publication)}.`, slot(r.holding) && `${slot(r.holding)}.`, slot(r.reference) && `${slot(r.reference)}.`]
       .filter(Boolean)
       .join(" ");
-  return [slot(r.author), slot(r.title) && `«${slot(r.title)}»`, slot(r.place), slot(r.date), slot(r.holding), slot(r.reference)].filter(Boolean).join(", ") + ".";
+  return [slot(r.author), slot(r.title) && `«${slot(r.title)}»`, slot(r.place), slot(r.date), slot(r.publication), slot(r.holding), slot(r.reference)].filter(Boolean).join(", ") + ".";
 }
 
 /** Fills a template for one record; empty properties leave no stray punctuation. */

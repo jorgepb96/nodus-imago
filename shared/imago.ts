@@ -234,7 +234,7 @@ export type Proposal = {
 /** Which change batches an Undo or Redo button may touch. */
 export type HistoryScope = "all" | "proposals";
 /** How a change batch was made; null is a single edit. */
-export type HistoryKind = "proposals" | "cleanup" | "locate" | null;
+export type HistoryKind = "proposals" | "cleanup" | "locate" | "link" | "ai" | null;
 /** What the next Undo or Redo in a scope would change, shown before it runs. */
 export type HistoryStep = {
   kind: HistoryKind;
@@ -469,8 +469,19 @@ export type Commands = {
       direction: "out" | "in";
       total: number;
       rows: RecordRow[];
+      /** Whether the links record page, figure and caption. */
+      place: boolean;
+      /** What each link records, by the other record's id. */
+      details: Record<string, import("./databases").LinkDetails>;
     }[];
   };
+  /** What the link between a record and one it links to records; null clears it. One step of the history. */
+  setLinkDetails: {
+    input: { rowId: string; columnId: string; targetId: string; details: import("./databases").LinkDetails | null };
+    result: import("./databases").LinkDetails | null;
+  };
+  /** Whether a relation's links record page, figure and caption (both sides of a two-way relation). */
+  setRelationPlace: { input: { columnId: string; place: boolean }; result: void };
   setDatabaseKind: { input: { id: string; kind: import("./databases").DatabaseKind | null }; result: void };
   /** A drawn icon and its colour («Name» or «Name:colour»), or null for the kind's icon. */
   setDatabaseIcon: { input: { id: string; icon: string | null }; result: void };
@@ -565,6 +576,12 @@ export type Commands = {
   tropyImport: { input: void; result: StandardImport | null };
   iiifImport: { input: { url: string; perCanvas: boolean }; result: StandardImport };
   /** Handled in the main process: numbered figures with captions, as PDF. */
+  /** Saves a CSV the interface composed (a circulation, a table) where the researcher chooses. */
+  saveCsv: { input: { fileName: string; text: string }; result: string | null };
+  /** The facts of a methodology report for some databases, with the app's environment. */
+  methodologyData: { input: { databaseIds: string[] }; result: import("./methodology").MethodologyData };
+  /** Prints a methodology report (and saves its technical annex) where the researcher chooses. */
+  methodologyPdf: { input: { html: string; fileName: string; annex: string | null }; result: { file: string; annex: string | null } | null };
   platesExport: {
     input: { rowIds: string[]; template: string; title: string; label: string; listTitle: string; start: number };
     result: { file: string; figures: number } | null;
@@ -657,6 +674,11 @@ export type Commands = {
     input: { databaseIds?: string[]; sensitivity: import("./variants").Sensitivity; search?: SearchInput };
     result: import("./variants").VariantFamily[];
   };
+  /** The circulation of the families: the photographs reproduced most, when first published, how long after the taking. */
+  circulationSummary: {
+    input: { databaseIds?: string[]; sensitivity: import("./variants").Sensitivity; search?: SearchInput };
+    result: import("./variants").CirculationSummary;
+  };
   variantsOf: {
     input: { assetId: string; sensitivity?: import("./variants").Sensitivity };
     result: import("./variants").VariantFamily | null;
@@ -673,6 +695,20 @@ export type Commands = {
       kind?: import("./variants").VariantKind | null;
     };
     result: boolean;
+  };
+  /** Where a photograph went: its taking and every use in date order. */
+  imageCirculation: {
+    input: { assetId: string; sensitivity?: import("./variants").Sensitivity; fields?: Record<string, import("./variants").AppearanceFields> };
+    result: import("./variants").ImageCirculation;
+  };
+  /** «Procede de»: the image one was reproduced from; null clears it. */
+  imageOrigin: { input: { assetId: string; sourceAssetId: string | null }; result: boolean };
+  /** The work a record is linked to (in a works database), or null. */
+  workOf: { input: { rowId: string }; result: import("./variants").WorkLink | null };
+  /** Gathers an image's family into one work, created when the record has none. */
+  createWorkFromFamily: {
+    input: { assetId: string; sensitivity?: import("./variants").Sensitivity; databaseId?: string | null; title?: string | null };
+    result: { workId: string; databaseId: string; linked: number; skipped: number; created: boolean };
   };
   imageAppearances: {
     input: {

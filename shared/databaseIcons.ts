@@ -253,6 +253,9 @@ export type DatabaseIconColor = (typeof DATABASE_ICON_COLORS)[number];
 export const DEFAULT_DATABASE_ICON: Record<DatabaseKind | "none", string> = {
   images: "Images",
   sources: "BookOpen",
+  works: "Camera",
+  people: "Users",
+  events: "CalendarDays",
   custom: "Database",
   none: "Database",
 };

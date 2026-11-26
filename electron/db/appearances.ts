@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { Repository } from "./repository";
 import type { Variants } from "./variants";
+import type { Works } from "./works";
 import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
 import type { RecordRow } from "../../shared/imago";
 import type {
@@ -22,6 +23,8 @@ const WORK = /obra|fuente|libro|publicaci|revista|[aá]lbum|source|work|book|jou
   CAPTION = /pie|caption|leyenda|^t[ií]tulo$|^title$/i,
   AUTHOR = /autor|author|creador|creator/i,
   YEAR = /^a[nñ]o$|fecha|year|date/i;
+/** Properties of a source that say when it was printed, most telling first. */
+const PUBLISHED_YEAR = [/edici[oó]n|edition|publicaci[oó]n|publicad|published|impres|printed/i, /^a[nñ]o$|^year$/i, YEAR];
 const TEXTUAL = ["text", "rich_text", "select", "multi_select", "status", "number", "url"];
 
 type Row = {
@@ -53,6 +56,7 @@ export class Appearances {
   constructor(
     private repo: Repository,
     private variants: Variants,
+    private workIndex?: Works,
   ) {}
 
   /** Reproductions added by hand to these files. */
@@ -111,7 +115,9 @@ export class Appearances {
         return null;
       }
     };
-    const relation = relations.find((c) => kindOf(c.config.relationTargetDatabaseId as string) === "sources") ?? relations[0] ?? null;
+    // A photographic work, a person or an event is not where the photograph was printed.
+    const printed = relations.filter((c) => !["works", "people", "events"].includes(kindOf(c.config.relationTargetDatabaseId as string) ?? ""));
+    const relation = printed.find((c) => kindOf(c.config.relationTargetDatabaseId as string) === "sources") ?? printed[0] ?? null;
     return {
       work: chosen.work === null ? null : (byId(chosen.work) ?? relation ?? named(WORK)),
       page: chosen.page === null ? null : (byId(chosen.page) ?? named(PAGE)),
@@ -119,30 +125,73 @@ export class Appearances {
     };
   }
 
-  /** The work of a record: related source records (with author and year), or a property's text. */
-  private work(column: DatabaseColumn | null, row: RecordRow) {
-    if (!column) return { work: null, author: null, workDetail: null };
-    if (column.type !== "relation") return { work: exportCellText(column, row).trim() || null, author: null, workDetail: null };
-    const targets = (
-      this.repo.db
-        .prepare("SELECT target_id FROM db_relations WHERE row_id=? AND column_id=? AND target_kind='db_row' ORDER BY position")
-        .all(row.id, column.id) as { target_id: string }[]
-    ).map((r) => r.target_id);
-    if (!targets.length) return { work: null, author: null, workDetail: null };
-    const sources = this.repo.hydrate(targets);
+  /**
+   * The works of a record: one per related source record (with its author
+   * and year, and the page, figure and caption its link records), or the
+   * text of a property.
+   */
+  private works(column: DatabaseColumn | null, row: RecordRow) {
+    type Work = {
+      key: string | null;
+      work: string | null;
+      author: string | null;
+      workDetail: string | null;
+      year: number | null;
+      page: string | null;
+      figure: string | null;
+      caption: string | null;
+      note: string | null;
+    };
+    const none: Work = { key: null, work: null, author: null, workDetail: null, year: null, page: null, figure: null, caption: null, note: null };
+    if (!column) return [none];
+    if (column.type !== "relation") return [{ ...none, work: exportCellText(column, row).trim() || null }];
+    const links = row.links?.[column.id] ?? [];
+    if (!links.length) return [none];
+    const sources = new Map(this.repo.hydrate(links.map((l) => l.id)).map((r) => [r.id, r]));
     const details = new Map<string, DatabaseDetail>();
     const detail = (id: string) => details.get(id) ?? details.set(id, this.repo.detail(id)).get(id)!;
     const text = (source: RecordRow, pattern: RegExp) => {
       const col = detail(source.databaseId).columns.find((c) => c.type !== "title" && pattern.test(c.name.trim()));
       return col ? exportCellText(col, source).trim() || null : null;
     };
-    const author = sources.map((s) => text(s, AUTHOR)).filter(Boolean).join("; ") || null,
-      year = sources.map((s) => text(s, YEAR)).filter(Boolean).join("; ") || null;
-    return {
-      work: sources.map((s) => s.title).join("; ") || null,
-      author,
-      workDetail: [author, year].filter(Boolean).join(" · ") || null,
+    // When a work was printed: an edition or publication date first, then a plain year, then any date.
+    const printedIn = (source: RecordRow) => {
+      const columns = detail(source.databaseId).columns.filter((c) => ["number", "text", "date", "historical_date", "select"].includes(c.type));
+      for (const pattern of PUBLISHED_YEAR) {
+        const col = columns.find((c) => pattern.test(c.name.trim()));
+        const value = col ? exportCellText(col, source).trim() : "";
+        if (value) return value;
+      }
+      return null;
     };
+    return links.map((link): Work => {
+      const source = sources.get(link.id);
+      const author = source ? text(source, AUTHOR) : null,
+        year = source ? printedIn(source) : null,
+        parsed = year?.match(/\b(1[0-9]{3}|20[0-9]{2})\b/);
+      return {
+        key: link.id,
+        work: link.title,
+        author,
+        workDetail: [author, year].filter(Boolean).join(" · ") || null,
+        year: parsed ? Number(parsed[1]) : null,
+        page: link.page ?? null,
+        figure: link.figure ?? null,
+        caption: link.caption ?? null,
+        note: link.note ?? null,
+      };
+    });
+  }
+
+  /**
+   * When and with which caption a record was published: one entry per work it
+   * is linked to (the source's year and the link's caption), or its own
+   * caption property. For the circulation of a whole collection.
+   */
+  publications(row: RecordRow): { year: number | null; caption: string | null }[] {
+    const used = this.fieldsFor(this.repo.detail(row.databaseId));
+    const caption = used.caption ? exportCellText(used.caption, row).trim() || null : null;
+    return this.works(used.work, row).map((w) => ({ year: w.year, caption: w.caption ?? caption }));
   }
 
   /** Every appearance of the image's family, the image's own record first among equal years. */
@@ -158,36 +207,64 @@ export class Appearances {
         seen.add(m.rowId);
         entries.push({ member: m, rowId: m.rowId, assetId: m.assetId, year: m.year, date: m.date, revision: m.revision });
       }
+    // The records gathered with this one under a work count too, matched or not.
+    const work = this.workIndex?.workOf(anchor.row_id) ?? null;
+    if (work) {
+      const others = this.repo.hydrate(work.reproductions.filter((id) => !seen.has(id)));
+      for (const r of others) {
+        seen.add(r.id);
+        const image = r.images[0];
+        const item = image ? this.variants.describeOne(image.id) : null;
+        entries.push({
+          member: { match: "confirmed" } as ImageVariantMember,
+          rowId: r.id,
+          assetId: image?.id ?? "",
+          year: item?.year ?? null,
+          date: item?.date ?? null,
+          revision: image?.revision,
+        });
+      }
+    }
     const rows = new Map(this.repo.hydrate(entries.map((e) => e.rowId)).map((r) => [r.id, r]));
+    const hashOf = new Map([...rows.values()].flatMap((r) => r.images.map((i) => [i.id, i.contentHash] as const)));
     const details = new Map<string, DatabaseDetail>();
     const detail = (id: string) => details.get(id) ?? details.set(id, this.repo.detail(id)).get(id)!;
     const lines: ImageAppearance[] = entries.flatMap((e) => {
       const row = rows.get(e.rowId);
       if (!row) return [];
       const used = this.fieldsFor(detail(row.databaseId), fields[row.databaseId]);
-      const work = this.work(used.work, row);
-      return [
-        {
-          id: row.id,
-          manual: false,
-          assetId: e.assetId,
-          rowId: row.id,
-          databaseId: row.databaseId,
-          databaseName: row.databaseName,
-          title: row.title,
-          revision: e.revision,
-          work: work.work,
-          workDetail: work.workDetail,
-          author: work.author,
-          year: e.year,
-          date: e.date,
-          page: used.page ? exportCellText(used.page, row).trim() || null : null,
-          caption: used.caption ? exportCellText(used.caption, row).trim() || null : null,
-          note: null,
-          match: e.member ? e.member.match : "self",
-          fields: { work: used.work?.id ?? null, page: used.page?.id ?? null, caption: used.caption?.id ?? null },
-        },
-      ];
+      const page = used.page ? exportCellText(used.page, row).trim() || null : null,
+        caption = used.caption ? exportCellText(used.caption, row).trim() || null : null;
+      // One line per work the record is linked to: the same photograph in
+      // five books is five appearances, each with its own page and caption.
+      const works = this.works(used.work, row);
+      return works.map((work) => ({
+        id: works.length > 1 && work.key ? `${row.id}:${work.key}` : row.id,
+        manual: false,
+        assetId: e.assetId || null,
+        rowId: row.id,
+        databaseId: row.databaseId,
+        databaseName: row.databaseName,
+        title: row.title,
+        revision: e.revision,
+        work: work.work,
+        workDetail: work.workDetail,
+        author: work.author,
+        // The record's date; the source's year when the record has none.
+        year: e.year ?? work.year,
+        date: e.date ?? (work.year ? String(work.year) : null),
+        page: work.page ?? page,
+        figure: work.figure,
+        caption: work.caption ?? caption,
+        note: work.note,
+        // Kept apart for the circulation: when the work printed it, and when this copy was made.
+        publicationYear: work.year,
+        copyYear: e.year,
+        copyDate: e.date,
+        contentHash: e.member?.contentHash ?? (e.member ? null : anchor.content_hash) ?? hashOf.get(e.assetId) ?? null,
+        match: e.member ? e.member.match : "self",
+        fields: { work: used.work?.id ?? null, page: used.page?.id ?? null, caption: used.caption?.id ?? null },
+      }));
     });
     const hashes = [family.contentHash, ...new Set(family.members.map((m) => m.contentHash))];
     for (const m of this.manual(hashes))
@@ -207,6 +284,10 @@ export class Appearances {
         page: m.page,
         caption: m.caption,
         note: m.note,
+        publicationYear: m.year,
+        copyYear: null,
+        copyDate: null,
+        contentHash: m.contentHash,
         match: null,
       });
     return lines.sort(

@@ -62,6 +62,10 @@ export const RESTORE_EXTRA_TABLES = [
   "image_pair_checks",
   "variant_verdicts",
   "image_appearances",
+  "relation_details",
+  "ai_prompts",
+  "image_crops",
+  "image_origins",
   "image_miniatures",
   "automation_control",
 ] as const;

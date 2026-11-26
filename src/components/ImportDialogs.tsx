@@ -118,6 +118,9 @@ export function CsvImport({
               <select value={kind} data-testid="csv-kind" onChange={(e) => setKind(e.target.value as DatabaseKind)}>
                 <option value="images">{t("Imágenes")}</option>
                 <option value="sources">{t("Fuentes")}</option>
+                <option value="works">{t("Obras fotográficas")}</option>
+                <option value="people">{t("Personas")}</option>
+                <option value="events">{t("Acontecimientos")}</option>
                 <option value="custom">{t("Personalizada")}</option>
               </select>
             </label>

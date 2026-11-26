@@ -15,6 +15,8 @@ const KIND: Record<string, string> = {
   proposals: "propuestas aceptadas",
   cleanup: "Unificar valores",
   locate: "Situar los registros en el mapa",
+  link: "datos del vínculo",
+  ai: "relleno con IA",
 };
 
 export function HistoryButtons({

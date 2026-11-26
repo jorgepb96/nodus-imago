@@ -22,6 +22,7 @@ import {
   databaseToCsv,
   databaseToJson,
   databaseToMatrix,
+  withLinkNoteColumns,
 } from "../shared/databaseExport";
 import { buildXlsx } from "./export/xlsx";
 import { writeBackup, restoreBackup, verifyBackup } from "./export/backup";
@@ -38,6 +39,8 @@ import { Annotations } from "./db/annotations";
 import { CompareBoards } from "./db/compare";
 import { Variants } from "./db/variants";
 import { Appearances } from "./db/appearances";
+import { Works } from "./db/works";
+import { Circulation } from "./db/circulation";
 import { VisualMaps } from "./db/visualMap";
 import { ValueCleanup } from "./db/cleanup";
 import { Authorities } from "./db/authorities";
@@ -51,6 +54,7 @@ import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
 import { preparePlates } from "./export/plates";
+import { collectMethodology } from "./export/methodology";
 import { annotationsW3c, importIiif, importTropy } from "./import/standards";
 import { buildNetwork } from "./db/network";
 import { ChatData } from "./chat/data";
@@ -71,6 +75,7 @@ const CONTENT_WRITES = new Set([
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
+  "setLinkDetails", "setRelationPlace", "imageOrigin", "convertToRelation", "pairRelation", "createWorkFromFamily",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -102,6 +107,8 @@ export class Service {
   boards: CompareBoards;
   variants: Variants;
   appearances: Appearances;
+  works: Works;
+  circulation: Circulation;
   visualMaps: VisualMaps;
   cleanup: ValueCleanup;
   authorities: Authorities;
@@ -194,7 +201,9 @@ export class Service {
       }
     });
     this.queue.fingerprint = (payload, index) => this.variants.fingerprintOne(payload, index);
-    this.appearances = new Appearances(this.repo, this.variants);
+    this.works = new Works(this.repo, this.variants);
+    this.appearances = new Appearances(this.repo, this.variants, this.works);
+    this.circulation = new Circulation(this.repo, this.variants, this.appearances, this.works);
     this.details = new DetailSearch(this.repo, this.engine);
     this.suggestions = new NeighbourSuggestions(this.repo, () => {
       try {
@@ -400,6 +409,10 @@ export class Service {
         return this.repo.unpairRelation(input.columnId);
       case "linkedRecords":
         return this.repo.linkedRecords(input.rowId);
+      case "setLinkDetails":
+        return this.repo.setLinkDetails(input.rowId, input.columnId, input.targetId, input.details);
+      case "setRelationPlace":
+        return this.repo.setRelationPlace(input.columnId, input.place);
       case "setDatabaseKind":
         return this.repo.setKind(input.id, input.kind);
       case "setDatabaseIcon":
@@ -687,7 +700,9 @@ export class Service {
         }
         const format = input.format;
         // Linked values carry their URIs and Getty identifiers in a column of their own.
-        const exported = this.authorities.exportColumns(detail.columns, rows);
+        const authorities = this.authorities.exportColumns(detail.columns, rows);
+        // JSON carries every link's details; tables get a column for captions and notes.
+        const exported = format === "json" ? authorities : withLinkNoteColumns(authorities.columns, authorities.rows);
         const data =
           format === "csv"
             ? databaseToCsv(exported.columns, exported.rows)
@@ -1166,6 +1181,15 @@ export class Service {
         return importTropy(this.repo, this.images, input.file);
       case "iiifImport":
         return importIiif(this.repo, this.images, input);
+      case "_methodologyData": {
+        const { databaseIds } = input as { databaseIds: string[] };
+        // The circulation needs the variant families; a collection without fingerprints has none.
+        const circulation = await this.variants
+          .families({ databaseIds, sensitivity: "balanced" })
+          .then((families) => this.circulation.summary(families))
+          .catch(() => null);
+        return collectMethodology({ repo: this.repo, contract: this.engine.contract(), dimensions: this.engine.dimensions(), circulation }, { databaseIds });
+      }
       case "_platesPrepare":
         return preparePlates(this.repo, input);
       case "detailSearch":
@@ -1206,6 +1230,14 @@ export class Service {
           sensitivity: input.sensitivity,
           rowIds: input.search ? await this.selected(input.search) : undefined,
         });
+      case "circulationSummary":
+        return this.circulation.summary(
+          await this.variants.families({
+            databaseIds: input.databaseIds,
+            sensitivity: input.sensitivity,
+            rowIds: input.search ? await this.selected(input.search) : undefined,
+          }),
+        );
       case "variantsOf":
         return this.variants.of(input.assetId, input.sensitivity);
       case "imageVariants":
@@ -1214,6 +1246,19 @@ export class Service {
         this.variants.setVerdict(input.assetId, input.otherAssetId, input.verdict, input.kind ?? null);
         this.changed();
         return true;
+      case "imageCirculation":
+        return this.circulation.of(input.assetId, input.sensitivity, input.fields);
+      case "imageOrigin":
+        this.variants.setOrigin(input.assetId, input.sourceAssetId);
+        this.changed();
+        return true;
+      case "workOf":
+        return this.works.workOf(input.rowId);
+      case "createWorkFromFamily": {
+        const result = await this.works.fromFamily(input);
+        this.changed();
+        return result;
+      }
       case "imageAppearances":
         return this.appearances.list(input.assetId, input.sensitivity, input.fields);
       case "appearanceSave": {

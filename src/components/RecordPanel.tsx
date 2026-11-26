@@ -230,6 +230,7 @@ export function RecordPanel({
               onOpenRecord={onOpenRecord}
               onCompare={onCompare}
               onCount={setVariantCount}
+              onChanged={onChanged}
             />
           </div>
         )}

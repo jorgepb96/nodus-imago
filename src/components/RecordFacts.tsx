@@ -4,116 +4,180 @@
 // image's EXIF metadata and the record's id. Shared by the record panel and
 // the record preview opened from «Buscar», so both show the same data.
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
-import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
+import { Pencil, Plus, Search, X } from "lucide-react";
+import { relationHasPlace, type DatabaseColumn, type DatabaseDetail, type DatabaseKind } from "../../shared/databases";
+
+const ENTITY_KINDS: DatabaseKind[] = ["sources", "works", "people", "events"];
 import type { Provenance, RecordRow } from "../../shared/imago";
 import { Button } from "./ui";
 import { Cell } from "./Cell";
-import { LinkedRecords } from "./RelationTools";
+import { LinkDetailsForm, LinkedRecords, linkSummary } from "./RelationTools";
 import { BlockOutline } from "./BlockOutline";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
 
+/**
+ * A relation in the record panel: the linked records by title, each with what
+ * its link records (page, figure, caption, note) and a pencil to edit it; a
+ * search that finds as you type, and a new record created from the search
+ * when none matches.
+ */
 function RelationEditor({
   row,
+  detail,
   column,
   perform,
   onChanged,
+  onOpenRecord,
 }: {
   row: RecordRow;
+  detail: DatabaseDetail;
   column: DatabaseColumn;
   perform: Perform;
   onChanged: () => void;
+  onOpenRecord?: (rowId: string) => void;
 }) {
   const [query, setQuery] = useState(""),
     [choices, setChoices] = useState<RecordRow[]>([]),
+    [target, setTarget] = useState<DatabaseDetail | null>(null),
+    [editing, setEditing] = useState<string | null>(null),
     t = useT();
-  const selected: string[] = (() => {
-    try {
-      return JSON.parse(row.cells[column.id] ?? "[]");
-    } catch {
-      return [];
-    }
-  })();
+  const targetId = column.config.relationTargetDatabaseId as string | undefined;
+  useEffect(() => {
+    if (!targetId) return;
+    let cancelled = false;
+    void window.imago
+      .call("detail", { id: targetId })
+      .then((d) => !cancelled && setTarget(d))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [targetId]);
+  const links = row.links?.[column.id] ?? [];
+  const selected = links.map((l) => l.id);
+  const place = relationHasPlace(column, detail.database.kind, target?.database.kind);
+  // Finds as you type, in the related database.
+  useEffect(() => {
+    const text = query.trim();
+    if (!text) return setChoices([]);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void window.imago
+        .call("search", { databaseIds: targetId ? [targetId] : undefined, query: text, mode: "literal", match: "partial", limit: 30 })
+        .then((page) => !cancelled && setChoices(page.rows))
+        .catch(() => !cancelled && setChoices([]));
+    }, 180);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, targetId]);
+  const save = (ids: string[]) =>
+    perform(async () => {
+      await window.imago.call("setCell", { rowId: row.id, columnId: column.id, value: JSON.stringify(ids) });
+      onChanged();
+    });
+  const add = (id: string) => {
+    setQuery("");
+    setChoices([]);
+    return save(column.config.relationCardinality === "one" ? [id] : [...selected.filter((x) => x !== id), id]);
+  };
+  const titleColumn = target?.columns.find((c) => c.type === "title");
+  const text = query.trim();
+  const exact = choices.some((c) => c.title.trim().toLocaleLowerCase() === text.toLocaleLowerCase());
+  const create = () =>
+    target &&
+    titleColumn &&
+    void perform(async () => {
+      const created = await window.imago.call("createRow", { databaseId: target.database.id });
+      await window.imago.call("setCell", { rowId: created.id, columnId: titleColumn.id, value: text });
+      await add(created.id);
+    });
   return (
-    <div className="stack">
-      <div className="row">
-        <input
-          value={query}
-          aria-label={column.name}
-          placeholder={t("Buscar")}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <Button
-          onClick={() =>
-            void perform(async () =>
-              setChoices(
-                (
-                  await window.imago.call("search", {
-                    databaseIds: column.config.relationTargetDatabaseId
-                      ? [column.config.relationTargetDatabaseId]
-                      : undefined,
-                    query,
-                    limit: 100,
-                  })
-                ).rows,
-              ),
-            )
-          }
-        >
-          {t("Buscar")}
-        </Button>
-      </div>
-      {selected
-        .filter((id) => !choices.some((c) => c.id === id))
-        .map((id) => (
-          <div className="row" key={id}>
-            <span className="mono">{id}</span>
-            <Button
-              icon
-              aria-label={t("Eliminar")}
-              onClick={() =>
-                void perform(async () => {
-                  await window.imago.call("setCell", {
-                    rowId: row.id,
-                    columnId: column.id,
-                    value: JSON.stringify(selected.filter((v) => v !== id)),
-                  });
-                  onChanged();
-                })
-              }
-            >
-              <X size={13} />
-            </Button>
-          </div>
-        ))}
-      <div className="relation-choices">
-        {choices.map((c) => (
-          <label className="check-label" key={c.id}>
-            <input
-              type="checkbox"
-              checked={selected.includes(c.id)}
-              onChange={() =>
-                void perform(async () => {
-                  const next = selected.includes(c.id)
-                    ? selected.filter((id) => id !== c.id)
-                    : column.config.relationCardinality === "one"
-                      ? [c.id]
-                      : [...selected, c.id];
-                  await window.imago.call("setCell", {
-                    rowId: row.id,
-                    columnId: column.id,
-                    value: JSON.stringify(next),
-                  });
-                  onChanged();
-                })
-              }
-            />
-            {c.title}
-            <small className="muted">{c.databaseName}</small>
-          </label>
-        ))}
-      </div>
+    <div className="relation-editor" data-testid="relation-editor">
+      {!!links.length && (
+        <ul className="relation-links">
+          {links.map((l) => {
+            const summary = linkSummary(l);
+            return (
+              <li key={l.id} className="relation-link" data-testid="relation-link">
+                <div className="relation-link-row">
+                  <button type="button" className="relation-link-title" onClick={() => onOpenRecord?.(l.id)} title={t("Abrir registro")}>
+                    {l.title}
+                  </button>
+                  <Button
+                    icon
+                    data-testid="relation-link-edit"
+                    aria-label={`${t(place ? "Página, pie y nota de" : "Nota de")} ${l.title}`}
+                    data-tooltip={t(place ? "Página, figura, pie de foto y nota de este vínculo" : "Nota de este vínculo")}
+                    onClick={() => setEditing(editing === l.id ? null : l.id)}
+                  >
+                    <Pencil size={12} />
+                  </Button>
+                  <Button
+                    icon
+                    aria-label={`${t("Quitar")} ${l.title}`}
+                    data-tooltip={t("Quitar el vínculo")}
+                    onClick={() => void save(selected.filter((v) => v !== l.id))}
+                  >
+                    <X size={13} />
+                  </Button>
+                </div>
+                {summary && editing !== l.id && <small className="relation-link-details">{summary}</small>}
+                {editing === l.id && (
+                  <LinkDetailsForm
+                    rowId={row.id}
+                    columnId={column.id}
+                    targetId={l.id}
+                    details={l}
+                    place={place}
+                    perform={perform}
+                    onDone={(saved) => {
+                      setEditing(null);
+                      if (saved) onChanged();
+                    }}
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {(column.config.relationCardinality !== "one" || !links.length || text) && (
+        <label className="relation-search">
+          <Search size={13} />
+          <input
+            value={query}
+            aria-label={column.name}
+            placeholder={target ? t("Añadir de «{db}»…").replace("{db}", target.database.name) : t("Buscar")}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setQuery("");
+            }}
+          />
+        </label>
+      )}
+      {!!text && (
+        <div className="relation-choices">
+          {choices
+            .filter((c) => !selected.includes(c.id) && c.id !== row.id)
+            .slice(0, 8)
+            .map((c) => (
+              <button key={c.id} type="button" className="relation-choice" data-testid="relation-choice" onClick={() => void add(c.id)}>
+                <Plus size={13} />
+                <span>{c.title}</span>
+                {c.databaseName !== target?.database.name && <small className="muted">{c.databaseName}</small>}
+              </button>
+            ))}
+          {!exact && titleColumn && (
+            <button type="button" className="relation-choice is-new" data-testid="relation-create" onClick={create}>
+              <Plus size={13} />
+              <span>{t("Crear «{title}» en «{db}»").replace("{title}", text).replace("{db}", target!.database.name)}</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -157,6 +221,9 @@ export function RecordFacts({
       cancelled = true;
     };
   }, [row.id]);
+  // A source, a photograph as a work, a person or an event: what links to
+  // it (a book's photographs, a work's reproductions) comes first.
+  const entity = ENTITY_KINDS.includes(detail.database.kind ?? "custom");
   // Same order as the table (the database's column order) and the same
   // hidden properties, which stay reachable in a folded list.
   const hiddenSet = new Set(hidden);
@@ -176,9 +243,11 @@ export function RecordFacts({
         {c.type === "relation" ? (
           <RelationEditor
             row={row}
+            detail={detail}
             column={c}
             perform={perform}
             onChanged={onChanged}
+            onOpenRecord={onOpenRecord}
           />
         ) : (
           <Cell
@@ -205,8 +274,7 @@ export function RecordFacts({
   );
   return (
     <>
-      {/* A source's records (a book's photographs) come first. */}
-      {detail.database.kind === "sources" && <LinkedRecords row={row} onOpenRecord={onOpenRecord} />}
+      {entity && <LinkedRecords row={row} onOpenRecord={onOpenRecord} perform={perform} />}
       <h2>{t("Propiedades")}</h2>
       <div className="record-properties" data-tour="record-properties">
         {shownProperties.map(property)}
@@ -223,7 +291,7 @@ export function RecordFacts({
           </div>
         </details>
       )}
-      {detail.database.kind !== "sources" && <LinkedRecords row={row} onOpenRecord={onOpenRecord} />}
+      {!entity && <LinkedRecords row={row} onOpenRecord={onOpenRecord} perform={perform} />}
       {!!provenance.length && (
         <details className="metadata provenance">
           <summary>{t("Procedencia de las propuestas")}</summary>

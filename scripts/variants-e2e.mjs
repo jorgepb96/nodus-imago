@@ -156,6 +156,46 @@ try {
   await poll(async () => (await appear.getByTestId("appearance-row").count()) === 4, "manual appearance deleted");
   checks.push("Works it appears in: date order, page and caption by name, a chosen property, one added and deleted by hand");
 
+  // The family gathered into one photographic work, in a new «Fotografías».
+  await tab.getByTestId("variants-gather").click();
+  const gather = tab.getByTestId("variant-gather-form");
+  assert.equal(await gather.getByLabel("Título de la obra").inputValue(), "A");
+  await gather.getByLabel("Título de la obra").fill("Vista de Toledo");
+  await gather.getByTestId("variant-gather-apply").click();
+  await tab.getByTestId("variant-work").filter({ hasText: "Vista de Toledo" }).waitFor();
+  const worksDb = (await call("listDatabases")).find((d) => d.kind === "works");
+  assert.equal(worksDb.name, "Fotografías");
+  const work = await call("workOf", { rowId: row("A") });
+  assert.equal(work.title, "Vista de Toledo");
+  assert.deepEqual(work.reproductions.sort(), ["A", "B", "C", "D"].map(row).sort(), "every record of the family under the work");
+  assert.equal(await tab.getByTestId("variants-gather").count(), 0, "gathered once");
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: "test-results/variants-work.png" });
+  checks.push("The family gathered into one photographic work in a new «Fotografías» database, every record linked to it");
+
+  // Its circulation: the taking from the work, every use in date order, exported to CSV.
+  const circulation = tab.getByTestId("circulation");
+  await poll(async () => /Vista de Toledo/.test(await circulation.getByTestId("circulation-capture").innerText()), "the taking comes from the work");
+  await poll(async () => (await circulation.getByTestId("circulation-entry").count()) >= 4, "every use listed");
+  const years = await circulation.getByTestId("circulation-entry").locator(".circ-when strong").allInnerTexts();
+  assert.deepEqual(years.map(Number).filter(Boolean), [...years.map(Number).filter(Boolean)].sort((x, y) => x - y), "date order");
+  const csvTarget = path.join(root, "circulacion.csv");
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: file });
+    return true;
+  }, csvTarget);
+  await circulation.getByTestId("circulation-export").click();
+  await poll(async () => !!(await fs.stat(csvTarget).catch(() => null)), "CSV saved");
+  const csvText = await fs.readFile(csvTarget, "utf8");
+  assert.match(csvText, /Momento.*Fecha de la copia.*Obra/);
+  assert.match(csvText, /Toma.*Vista de Toledo/);
+  await circulation.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: "test-results/variants-circulation.png" });
+  const summary = await call("circulationSummary", { databaseIds: [db.database.id], sensitivity: "balanced" });
+  assert.ok(summary.families >= 1);
+  checks.push("Its circulation: the taking from the work, every use in date order, exported to CSV; the collection summed up");
+
   // Two versions to the comparison board.
   await tab.locator(".rv-self input[type=checkbox]").check();
   await tab.getByTestId("variant-card").filter({ hasText: "B" }).first().locator("input[type=checkbox]").check();

@@ -8,6 +8,9 @@ import {
 } from "react";
 import {
   BookOpen,
+  Camera,
+  CalendarDays,
+  Users,
   Database,
   Image as ImageIcon,
   Search,
@@ -72,7 +75,7 @@ import type {
   DatabaseKind,
   DatabaseSummary,
 } from "../shared/databases";
-import { decodeMultiSelect, isAiColumn } from "../shared/databases";
+import { decodeMultiSelect, isAiColumn, linkPlace } from "../shared/databases";
 import type { CsvImportPlanData } from "../shared/databaseCsv";
 import type {
   ImagePlan,
@@ -117,6 +120,7 @@ import { VariantsView } from "./components/VariantsView";
 import { RestorationsView } from "./components/RestorationsView";
 import { SuggestDialog } from "./components/SuggestDialog";
 import { PlatesDialog } from "./components/PlatesDialog";
+import { MethodologyDialog } from "./components/MethodologyDialog";
 import { IiifDialog } from "./components/IiifDialog";
 import { NetworkView } from "./components/NetworkView";
 import { VisualMapView } from "./components/VisualMapView";
@@ -262,6 +266,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
       | "automations"
       | "suggest"
       | "plates"
+      | "methodology"
       | "iiif"
       | "cleanup"
       | "authorities"
@@ -1072,15 +1077,30 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </button>
       );
     }
-    if (c.type === "relation")
+    if (c.type === "relation") {
+      // The linked records by title, with where each link places the record.
+      const links = row.links?.[c.id] ?? [];
       return (
         <button
-          className="text-link"
+          className="cell-relation"
+          data-testid="relation-cell"
+          title={links.map((l) => (linkPlace(l) ? `${l.title} (${linkPlace(l)})` : l.title)).join("\n")}
           onClick={() => void perform(() => open(row))}
         >
-          {t("Relación")} ↗
+          {links.length ? (
+            links.slice(0, 3).map((l) => (
+              <span key={l.id} className="relation-pill">
+                {l.title}
+                {linkPlace(l) && <small>{linkPlace(l)}</small>}
+              </span>
+            ))
+          ) : (
+            <span className="muted">—</span>
+          )}
+          {links.length > 3 && <span className="relation-more">+{links.length - 3}</span>}
         </button>
       );
+    }
     const cell = (
       <Cell
         compact
@@ -2810,6 +2830,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                               >
                                 {t("Exportar anotaciones (W3C)")}
                               </button>
+                              <button data-testid="methodology-open" onClick={() => setModal("methodology")}>
+                                {t("Informe metodológico")}
+                              </button>
                               <button
                                 onClick={() => setModal("deleteDatabase")}
                               >
@@ -3961,6 +3984,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                   {([
                     ["images", ImageIcon, "Imágenes", "Fotografías, grabados o dibujos: título, imágenes, autor, fecha, ubicación, categorías y archivo."],
                     ["sources", BookOpen, "Fuentes", "Libros, revistas, álbumes y documentos: título, tipo, autor, editorial, lugar, año, identificador y cubierta."],
+                    ["works", Camera, "Obras fotográficas", "Cada fotografía una sola vez, con su fotógrafo, fecha de toma y lugar. Sus copias, escaneos y reproducciones se enlazan a ella."],
+                    ["people", Users, "Personas", "Fotógrafos, autores, editores o retratados: nombre, retrato, fechas, papel y Wikidata."],
+                    ["events", CalendarDays, "Acontecimientos", "Guerras, visitas, fiestas o inauguraciones: nombre, imágenes, fecha, lugar y tipo."],
                     ["custom", Settings2, "Personalizada", "Título e imágenes: define tú el resto de las propiedades."],
                   ] as const).map(([kind, Icon, label, hint]) => (
                     <label key={kind} className={"database-kind" + (newKind === kind ? " is-chosen" : "")}>
@@ -4395,6 +4421,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           column={detail.columns.find((c) => c.id === toolColumn)!}
           onClose={() => setModal(null)}
           onChanged={() => void reloadDetail(detail.database.id)}
+        />
+      )}
+      {modal === "methodology" && detail && (
+        <MethodologyDialog
+          detail={detail}
+          details={allDetails.length ? allDetails : [detail]}
+          onClose={() => setModal(null)}
+          onDone={(message) => {
+            notify(message);
+            setModal(null);
+          }}
         />
       )}
       {modal === "plates" && detail && status && (

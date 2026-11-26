@@ -9,9 +9,11 @@ import { validateCommand } from "../../shared/validation";
 import {
   COLUMN_TYPES,
   columnTypeHasOptions,
+  DATABASE_KINDS,
   ROLLUP_FUNCTIONS,
   type DatabaseColumn,
   type DatabaseDetail,
+  type DatabaseKind,
   type DatabaseSummary,
 } from "../../shared/databases";
 import { filterOperators } from "../../shared/viewCriteria";
@@ -382,7 +384,7 @@ export function registerImagoTools(server: McpServer, ctx: ImagoMcpContext, opti
         },
         propertyTypes: COLUMN_TYPES.map((t) => ({ id: t.id, label: t.label, writable: !MCP_READ_ONLY_TYPES.has(t.id) })),
         values: {
-          read: "Records come back as {property name: plain value}: option labels, numbers, booleans, ISO dates, historical dates as {text,start,end,certainty}, people as names, locations as {name,address,latitude,longitude}, relations as record ids, images as {imageId,fileName}.",
+          read: "Records come back as {property name: plain value}: option labels, numbers, booleans, ISO dates, historical dates as {text,start,end,certainty}, people as names, locations as {name,address,latitude,longitude}, relations as record ids (imago_get_record also lists each link's title, page, figure, caption and note), images as {imageId,fileName}.",
           write:
             "Write the same plain values. select/status take a label, multi_select a list of labels (missing ones are created unless createMissingOptions is false), date «YYYY-MM-DD» or {start,end,includeTime}, historical_date free text («c. 1930», «s. XIX», «1925-1930») or {text,start,end}, relation record ids or exact titles, null to clear. Formula, rollup, created/edited times, unique ids and attachments are computed or attached by Imago.",
         },
@@ -529,6 +531,10 @@ export function registerImagoTools(server: McpServer, ctx: ImagoMcpContext, opti
           tags: a.tags,
         })),
         linkedRecords: linked,
+        // What each link records: where the linked record shows this one.
+        links: detail.columns
+          .filter((c) => c.type === "relation" && row.links?.[c.id]?.length)
+          .map((c) => ({ property: c.name, records: row.links![c.id].map(({ databaseId: _db, ...link }) => link) })),
       };
     }),
   );
@@ -876,15 +882,15 @@ export function registerImagoTools(server: McpServer, ctx: ImagoMcpContext, opti
     {
       title: "Create a database",
       description:
-        "Creates a database. kind chooses its starting properties: images (title, images, author, historical date, location, categories…), sources, custom (only a title); without kind it starts with a title and an images property.",
+        "Creates a database. kind chooses its starting properties: images (title, images, author, historical date, location, categories…), sources (books, magazines, albums), works (each photograph once: photographer, date taken, place; its prints and reproductions link to it), people, events, custom (title and images); without kind it starts with a title and an images property.",
       inputSchema: {
         name: z.string().trim().min(1).max(300),
-        kind: z.enum(["images", "sources", "custom"]).optional(),
+        kind: z.enum(DATABASE_KINDS).optional(),
         icon: z.string().max(40).optional().describe("An icon name from Imago's set (optional)."),
       },
       annotations: WRITE,
     },
-    handler("imago_create_database", "write", async (args: { name: string; kind?: "images" | "sources" | "custom"; icon?: string }) => {
+    handler("imago_create_database", "write", async (args: { name: string; kind?: DatabaseKind; icon?: string }) => {
       const detail: DatabaseDetail = await run("createDatabase", { name: args.name, ...(args.kind ? { kind: args.kind } : {}) });
       if (args.icon) await run("setDatabaseIcon", { id: detail.database.id, icon: args.icon });
       const list = await listDatabases();
@@ -902,11 +908,11 @@ export function registerImagoTools(server: McpServer, ctx: ImagoMcpContext, opti
         database: databaseRef,
         name: z.string().trim().min(1).max(300).optional(),
         icon: z.string().max(40).nullable().optional(),
-        kind: z.enum(["images", "sources", "custom"]).nullable().optional(),
+        kind: z.enum(DATABASE_KINDS).nullable().optional(),
       },
       annotations: WRITE,
     },
-    handler("imago_update_database", "write", async (args: { database: string; name?: string; icon?: string | null; kind?: "images" | "sources" | "custom" | null }) => {
+    handler("imago_update_database", "write", async (args: { database: string; name?: string; icon?: string | null; kind?: DatabaseKind | null }) => {
       const detail = await resolveDatabase(args.database),
         id = detail.database.id;
       if (args.name) await run("renameDatabase", { id, name: args.name });
@@ -1094,6 +1100,48 @@ export function registerImagoTools(server: McpServer, ctx: ImagoMcpContext, opti
       await run("reorderColumns", { databaseId: detail.database.id, columnIds: args.properties.map((p) => resolveProperty(detail, p).id) });
       return { order: (await detailOf(detail.database.id, true)).columns.map((c) => c.name) };
     }),
+  );
+
+  server.registerTool(
+    "imago_set_link_details",
+    {
+      title: "Describe a link between two records",
+      description:
+        "Records where a linked record shows this one (page, figure or plate, caption as printed) and a note, on the link of a relation property: a photograph on page 12 of a book. Both records see the same details. Pass null or \"\" to clear a field; omitted fields keep their value. One step of the history.",
+      inputSchema: {
+        recordId: z.string().min(1).max(200),
+        property: propertyRef.describe("A relation property of the record."),
+        linked: z.string().min(1).max(500).describe("The linked record: its id or exact title."),
+        page: z.string().max(200).nullable().optional(),
+        figure: z.string().max(200).nullable().optional(),
+        caption: z.string().max(4000).nullable().optional(),
+        note: z.string().max(4000).nullable().optional(),
+      },
+      annotations: WRITE,
+    },
+    handler(
+      "imago_set_link_details",
+      "write",
+      async (args: { recordId: string; property: string; linked: string; page?: string | null; figure?: string | null; caption?: string | null; note?: string | null }) => {
+        const row = await getRecord(args.recordId),
+          detail = await detailOf(row.databaseId, true),
+          column = resolveProperty(detail, args.property);
+        if (column.type !== "relation") throw new ToolError(`«${column.name}» no es una relación.`);
+        const links = row.links?.[column.id] ?? [];
+        const matches = links.filter((l) => l.id === args.linked || optionKey(l.title) === optionKey(args.linked));
+        if (matches.length !== 1)
+          throw new ToolError(
+            matches.length
+              ? `Varios registros enlazados se titulan «${args.linked}»; usa su id.`
+              : `«${args.linked}» no está enlazado por «${column.name}».`,
+          );
+        const current = matches[0];
+        const next = { page: current.page, figure: current.figure, caption: current.caption, note: current.note };
+        for (const key of ["page", "figure", "caption", "note"] as const) if (args[key] !== undefined) next[key] = args[key];
+        const saved = await run("setLinkDetails", { rowId: row.id, columnId: column.id, targetId: current.id, details: next });
+        return { record: { id: row.id, title: row.title }, property: column.name, linked: { id: current.id, title: current.title }, details: saved };
+      },
+    ),
   );
 
   server.registerTool(

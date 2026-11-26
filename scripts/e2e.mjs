@@ -372,7 +372,15 @@ try {
     .getByRole("button", { name: "Confirmar importación", exact: true })
     .click();
   await page.getByRole("heading", { name: "Tareas", exact: true }).waitFor();
-  await page.locator(".job .badge.completed").waitFor({ timeout: 30000 });
+  // The first import is still listed: wait until this second one has finished too.
+  await page.waitForFunction(
+    () => {
+      const imports = [...document.querySelectorAll(".job")].filter((job) => job.textContent?.includes("Importar imágenes"));
+      return imports.length >= 2 && imports.every((job) => job.querySelector(".badge.completed"));
+    },
+    undefined,
+    { timeout: 30000 },
+  );
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Cerrar", exact: true })

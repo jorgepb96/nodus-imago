@@ -1,7 +1,7 @@
 {
   "name": "nodus-imago",
   "desktopName": "app.nodus.imago.desktop",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Local visual research databases. Research through images.",
   "author": "Jorge Pérez Burgueño",
   "license": "AGPL-3.0-only",
@@ -48,7 +48,8 @@
     "test:backups:e2e": "node scripts/backups-e2e.mjs",
     "test:updates:e2e": "node scripts/update-protocol-e2e.mjs",
     "test:modals:e2e": "node scripts/modals-e2e.mjs",
-    "test:mcp:e2e": "node scripts/mcp-e2e.mjs"
+    "test:mcp:e2e": "node scripts/mcp-e2e.mjs",
+    "test:methodology:e2e": "node scripts/methodology-e2e.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",

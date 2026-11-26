@@ -2,7 +2,7 @@ import { z } from "zod";
 import { DATABASE_VIEWS } from "./savedViews";
 import { backupPreferencesSchema } from "./backups";
 import { updatePreferencesSchema } from "./updates";
-import { isDatabaseColumnType } from "./databases";
+import { DATABASE_KINDS, isDatabaseColumnType } from "./databases";
 import { isDatabaseIconValue } from "./databaseIcons";
 import { FILTER_LABELS } from "./viewCriteria";
 import { externalHttpsUrl } from "./externalLinks";
@@ -426,7 +426,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   mcpTunnelForget: z.undefined(),
   mcpTunnelDiagnostics: z.undefined(),
   listDatabases: z.undefined(),
-  createDatabase: z.object({ name, kind: z.enum(["images", "sources", "custom"]).optional() }).strict(),
+  createDatabase: z.object({ name, kind: z.enum(DATABASE_KINDS).optional() }).strict(),
   convertToRelation: z
     .object({
       id,
@@ -441,7 +441,24 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   pairRelation: z.object({ columnId: id, name: z.string().trim().max(200) }).strict(),
   unpairRelation: z.object({ columnId: id }).strict(),
   linkedRecords: z.object({ rowId: id }).strict(),
-  setDatabaseKind: z.object({ id, kind: z.enum(["images", "sources", "custom"]).nullable() }).strict(),
+  setLinkDetails: z
+    .object({
+      rowId: id,
+      columnId: id,
+      targetId: id,
+      details: z
+        .object({
+          page: z.string().max(200).nullable().optional(),
+          figure: z.string().max(200).nullable().optional(),
+          caption: z.string().max(4000).nullable().optional(),
+          note: z.string().max(4000).nullable().optional(),
+        })
+        .strict()
+        .nullable(),
+    })
+    .strict(),
+  setRelationPlace: z.object({ columnId: id, place: z.boolean() }).strict(),
+  setDatabaseKind: z.object({ id, kind: z.enum(DATABASE_KINDS).nullable() }).strict(),
   setDatabaseIcon: z
     .object({ id, icon: z.string().max(40).refine(isDatabaseIconValue, "Icono desconocido.").nullable() })
     .strict(),
@@ -549,6 +566,15 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   annotationsExport: z.object({ databaseId: id }).strict(),
   tropyImport: z.undefined(),
   iiifImport: z.object({ url: z.string().url().max(2000).refine((u) => u.startsWith("https://")), perCanvas: z.boolean() }).strict(),
+  saveCsv: z.object({ fileName: z.string().trim().min(1).max(200), text: z.string().max(20_000_000) }).strict(),
+  methodologyData: z.object({ databaseIds: z.array(id).min(1).max(100) }).strict(),
+  methodologyPdf: z
+    .object({
+      html: z.string().min(1).max(30_000_000),
+      fileName: z.string().trim().min(1).max(200),
+      annex: z.string().max(30_000_000).nullable(),
+    })
+    .strict(),
   platesExport: z
     .object({
       rowIds: z.array(id).min(1).max(500),
@@ -698,6 +724,15 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       search: searchSchema.optional(),
     })
     .strict(),
+  circulationSummary: z
+    .object({
+      databaseIds: z.array(id).max(50).optional(),
+      sensitivity: z.enum(["strict", "balanced", "broad"]),
+      // The records of the view on screen (data source and filters): only
+      // their images are grouped. Without it, every image in databaseIds.
+      search: searchSchema.optional(),
+    })
+    .strict(),
   variantsOf: z.object({ assetId: id, sensitivity: z.enum(["strict", "balanced", "broad"]).optional() }).strict(),
   imageVariants: z.object({ assetId: id, sensitivity: z.enum(["strict", "balanced", "broad"]).optional() }).strict(),
   variantVerdict: z
@@ -706,6 +741,26 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       otherAssetId: id,
       verdict: z.enum(["same", "different"]).nullable(),
       kind: z.enum(["copy", "crop", "retouch", "reproduction", "other_take"]).nullable().optional(),
+    })
+    .strict(),
+  workOf: z.object({ rowId: id }).strict(),
+  imageCirculation: z
+    .object({
+      assetId: id,
+      sensitivity: z.enum(["strict", "balanced", "broad"]).optional(),
+      fields: z
+        .record(id, z.object({ work: id.nullable().optional(), page: id.nullable().optional(), caption: id.nullable().optional() }).strict())
+        .refine((value) => Object.keys(value).length <= 50, "Demasiadas bases de datos.")
+        .optional(),
+    })
+    .strict(),
+  imageOrigin: z.object({ assetId: id, sourceAssetId: id.nullable() }).strict(),
+  createWorkFromFamily: z
+    .object({
+      assetId: id,
+      sensitivity: z.enum(["strict", "balanced", "broad"]).optional(),
+      databaseId: id.nullable().optional(),
+      title: z.string().trim().max(500).nullable().optional(),
     })
     .strict(),
   imageAppearances: z
@@ -846,7 +901,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       types: z.array(type).max(500),
       headers: z.array(name).max(500),
       nullMarkersAsEmpty: z.boolean().optional(),
-      kind: z.enum(["images", "sources", "custom"]).optional(),
+      kind: z.enum(DATABASE_KINDS).optional(),
     })
     .strict(),
   imagePreview: z

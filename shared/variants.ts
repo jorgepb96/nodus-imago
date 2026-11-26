@@ -46,6 +46,92 @@ export type ImageVariants = {
   members: ImageVariantMember[];
   rejected: ImageVariantMember[];
 };
+/** One file is a crop of another: `inner` is the crop's content hash, `rect` its place in the wider file. */
+export type CropPlacement = { inner: string; rect: { x: number; y: number; w: number; h: number }; kept: number };
+
+/** A use of a photograph in its circulation: a record of its family or a reproduction added by hand. */
+export type CirculationEntry = {
+  /** The appearance's id (a record, a record and one of its works, or a manual one). */
+  id: string;
+  manual: boolean;
+  assetId: string | null;
+  contentHash: string | null;
+  rowId: string | null;
+  title: string | null;
+  databaseName: string | null;
+  revision?: string;
+  work: string | null;
+  workDetail: string | null;
+  page: string | null;
+  figure: string | null;
+  caption: string | null;
+  note: string | null;
+  /** When the work printed it (the source's year, or the year given by hand). */
+  publicationYear: number | null;
+  /** The date of this print or scan (the record's date). */
+  copyDate: string | null;
+  copyYear: number | null;
+  /** How it relates to the image on screen. */
+  match: VariantMember["match"] | "self" | null;
+  kind: VariantKind | null;
+  /** The part of the wider image it keeps, when one is a crop of the other. */
+  crop: { of: "this" | "other"; rect: CropPlacement["rect"]; kept: number } | null;
+  /** The caption differs from the previous use that had one. */
+  captionChanged: boolean;
+  previousCaption: string | null;
+  /** «Procede de»: the entry it was reproduced from, as the researcher said. */
+  parent: string | null;
+  /** An earlier entry whose image this one is a crop of: a likely source. */
+  suggestedParent: string | null;
+  /** Depth in the branches drawn by «Procede de». */
+  depth: number;
+};
+/** Where a photograph went: its taking, every use in date order, and what stands out. */
+export type ImageCirculation = {
+  capture: {
+    date: string | null;
+    year: number | null;
+    photographer: string | null;
+    place: string | null;
+    /** work: from the photographic work; record: from the record on screen. */
+    from: "work" | "record";
+    workId: string | null;
+    workTitle: string | null;
+  };
+  entries: CirculationEntry[];
+  firstPublication: string | null;
+  /** Years between the taking and the first publication. */
+  gapYears: number | null;
+  /** Distinct captions among the uses. */
+  captions: number;
+};
+
+/** The circulation of a collection: the photographs reproduced most, when they were published, and how long after the taking. */
+export type CirculationSummary = {
+  families: number;
+  /** Families with at least one known publication. */
+  published: number;
+  /** The most reproduced photographs: one per family, its uses and publication span. */
+  top: { assetId: string; rowId: string; title: string; revision?: string; uses: number; publications: number; first: number | null; last: number | null }[];
+  /** First known publications by year (one per family). */
+  firstYears: { year: number; count: number }[];
+  /** Years between the taking and the first publication, where both are known. */
+  gap: { median: number | null; min: number | null; max: number | null; n: number };
+  /** Families whose captions differ between uses. */
+  captionsChange: number;
+};
+
+/** The work (a record in a works database) a record is linked to, with every record linked to it. */
+export type WorkLink = {
+  workId: string;
+  title: string;
+  databaseId: string;
+  databaseName: string;
+  /** The relation from the record's database to the works database. */
+  columnId: string;
+  /** The records linked to the work (its prints, scans and reproductions). */
+  reproductions: string[];
+};
 /** Which property gives each part of an appearance, per database (null: detected). */
 export type AppearanceFields = { work?: string | null; page?: string | null; caption?: string | null };
 /** A reproduction of a photograph: a record of its family, or one added by hand. */
@@ -65,6 +151,14 @@ export type ImageAppearance = {
   year: number | null;
   date: string | null;
   page: string | null;
+  /** The figure or plate number, from the link to the work. */
+  figure?: string | null;
+  /** When the work printed it: the source's year, or the year given by hand. */
+  publicationYear?: number | null;
+  /** The date of this print or scan: the record's date. */
+  copyYear?: number | null;
+  copyDate?: string | null;
+  contentHash?: string | null;
   caption: string | null;
   note: string | null;
   /** How the record's image relates to the one on screen ("self": it is that record). */
