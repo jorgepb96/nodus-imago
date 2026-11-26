@@ -10,12 +10,23 @@ const plain = (error: unknown) =>
     ),
   );
 /**
- * «reply was never sent»: the main process went away mid-call because Imago
- * is closing, restarting to install an update or reloading the window. Not a
- * failure to report: the call simply never answers, as the main process does
- * itself while it closes, and no red message is left behind.
+ * «reply was never sent»: the main process went away mid-call. When Imago is
+ * closing, restarting to install an update or reloading the window, that is
+ * not a failure to report: the call simply never answers and no red message is
+ * left behind. At any other time it is an error like any other, so nothing
+ * waits forever on a lost reply.
  */
-const closing = (error: unknown) => /reply was never sent/i.test(String((error as Error)?.message ?? error));
+let shuttingDown = false;
+ipcRenderer.on("imago:closing", () => {
+  shuttingDown = true;
+});
+window.addEventListener("pagehide", () => {
+  shuttingDown = true;
+});
+window.addEventListener("pageshow", () => {
+  shuttingDown = false;
+});
+const closing = (error: unknown) => shuttingDown && /reply was never sent/i.test(String((error as Error)?.message ?? error));
 const api: ImagoApi = {
   call: (command, ...args) =>
     ipcRenderer.invoke("imago:call", command, args[0]).catch((error) => {
