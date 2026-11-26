@@ -283,6 +283,43 @@ export function renderMethodologyHtml(
           .join(""),
     });
 
+  // Visual tagging
+  const tagged = data.visualTags ?? [];
+  if (tagged.length)
+    sections.push({
+      id: "visual-tags",
+      title: t("Etiquetado visual"),
+      eyebrow: t("Iconografía"),
+      lead: t("Los elementos marcados en las imágenes con una región y una etiqueta, cuántas veces aparece cada uno y en cuántas fotografías."),
+      html:
+        `<div class="prose">${p(
+          t("Cada región delimita un elemento de la imagen (una persona, un vehículo, un edificio) y lo nombra con una etiqueta común a toda la base de datos. Se distingue el número de apariciones (regiones) del de fotografías que contienen la etiqueta, y las imágenes revisadas sin ningún elemento de las que aún no se han revisado. Cada región guarda su origen (a mano o propuesta automática), su confianza y si se validó; las cifras solo cuentan las regiones validadas."),
+        )}</div>` +
+        tagged
+          .map((v) => {
+            const sources = v.regions
+              .map((r) => `${t(r.source === "manual" ? "a mano" : "automáticas")} · ${t(r.state === "validated" ? "validadas" : r.state === "pending" ? "pendientes" : "rechazadas")}: ${num(r.n)}`)
+              .join("; ");
+            return `<h3>${esc(v.database)} <small>${esc(v.columnName ?? "")}</small></h3><div class="prose">${p(
+              fill(t("Se revisaron {reviewed} de {images} imágenes ({share}); {empty} de ellas no tenían ningún elemento que etiquetar. Regiones: {sources}."), {
+                reviewed: num(v.reviewed),
+                images: num(v.images),
+                share: pct(v.reviewed, v.images),
+                empty: num(v.reviewedEmpty),
+                sources: sources || "0",
+              }),
+            )}</div>${table(
+              [t("Etiqueta"), t("Apariciones"), t("Fotografías"), t("Imágenes")],
+              v.tags.map((tag) => [esc(tag.label), esc(num(tag.appearances)), esc(num(tag.records)), esc(num(tag.images))]),
+              "compact",
+            )}${fig(
+              bars(v.tags.slice(0, 15).map((tag) => ({ label: tag.label, value: tag.appearances }))),
+              fill(t("Apariciones de cada etiqueta en «{db}»."), { db: v.database }),
+            )}`;
+          })
+          .join(""),
+    });
+
   // 4. Models
   const taskLabel: Record<string, string> = {
     embedding: "Búsqueda semántica (vectores)",
@@ -773,7 +810,7 @@ ${body}
 }
 
 /** Long sections start on a page of their own; short ones follow on. */
-const BREAK_BEFORE = new Set(["corpus", "vocabularies", "models", "ai", "circulation", "agreement", "statistics"]);
+const BREAK_BEFORE = new Set(["corpus", "vocabularies", "visual-tags", "models", "ai", "circulation", "agreement", "statistics"]);
 export const KIND_LABELS: Record<string, string> = {
   images: "Imágenes",
   sources: "Fuentes",
