@@ -22,6 +22,7 @@ import {
   SquareDashedMousePointer,
   Tag,
   Tags,
+  GalleryHorizontalEnd,
   Eye,
   EyeOff,
   CheckCheck,
@@ -33,6 +34,7 @@ import { OptionIcon } from "./DatabaseIcon";
 import { DEFAULT_OPTION_COLOR } from "./OptionEditMenu";
 import { optionIconValue } from "../../shared/databaseIcons";
 import type { VisualTagRegion } from "../../shared/visualTags";
+import { BROWSE_BATCH, useBrowse, ViewerStrip, type BrowseList } from "./ViewerStrip";
 import type { ImageAnnotation, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { DetailSearchPanel, type DetailQuery } from "./DetailSearchPanel";
@@ -93,8 +95,14 @@ export function ImageViewer({
   onOpenRecord,
   onCompare,
   columns,
+  browse,
+  onBrowse,
 }: {
   row: RecordRow;
+  /** The list the record was opened from: its photographs fill the strip under the image. */
+  browse?: BrowseList | null;
+  /** Opens another record of that list in the viewer. */
+  onBrowse?: (rowId: string, index: number) => void;
   /** The database's properties: heritage ones can be marked on the image. */
   columns?: DatabaseColumn[];
   initialIndex?: number;
@@ -109,7 +117,43 @@ export function ImageViewer({
   const dialog = useRef<HTMLDialogElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(Math.min(initialIndex, Math.max(0, row.images.length - 1)));
-  const image = row.images[index];
+  // Another record of the list: its first image, or its last when coming back.
+  const [rowShown, setRowShown] = useState(row.id);
+  const [enterAt, setEnterAt] = useState<"start" | "end">("start");
+  if (rowShown !== row.id) {
+    setRowShown(row.id);
+    setIndex(enterAt === "end" ? Math.max(0, row.images.length - 1) : 0);
+    setEnterAt("start");
+  }
+  const image = row.images[Math.min(index, Math.max(0, row.images.length - 1))];
+  /** The strip of the list's photographs under the image, shown or hidden (remembered). */
+  const [stripShown, setStripShown] = useState(() => {
+    try {
+      return localStorage.getItem("imago.viewerStrip") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleStrip = () => {
+    setStripShown((on) => {
+      try {
+        localStorage.setItem("imago.viewerStrip", on ? "0" : "1");
+      } catch {
+        /* A preference of this window only. */
+      }
+      return !on;
+    });
+  };
+  const { items: stripItems, step: stepList, batch: readBatch } = useBrowse(browse);
+  /** The next (1) or previous (-1) photograph of the list; false at its end. */
+  const stepRecord = async (direction: 1 | -1) => {
+    if (!browse || !onBrowse) return false;
+    const next = await stepList(browse.index, direction);
+    if (!next) return false;
+    setEnterAt(direction === -1 ? "end" : "start");
+    onBrowse(next.row.id, next.index);
+    return true;
+  };
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [view, setView] = useState<View>({ scale: 1, x: 0, y: 0 });
   const [annotating, setAnnotating] = useState(false);
@@ -594,8 +638,15 @@ export function ImageViewer({
       if (event.key === "+" || event.key === "=") zoom(1.25);
       if (event.key === "-") zoom(0.8);
       if (event.key === "0") fit();
-      if (event.key === "ArrowRight" && index < row.images.length - 1) setIndex(index + 1);
-      if (event.key === "ArrowLeft" && index > 0) setIndex(index - 1);
+      // The arrows go through the record's images, then on to the next or previous photograph of the list.
+      if (event.key === "ArrowRight") {
+        if (index < row.images.length - 1) setIndex(index + 1);
+        else void stepRecord(1);
+      }
+      if (event.key === "ArrowLeft") {
+        if (index > 0) setIndex(index - 1);
+        else void stepRecord(-1);
+      }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -883,6 +934,19 @@ export function ImageViewer({
                 <span>{t("Anotaciones")}</span>
               </button>
             </div>
+            {browse && onBrowse && (
+              <button
+                type="button"
+                className={`viewer-annotate ${stripShown ? "is-on" : ""}`}
+                aria-pressed={stripShown}
+                data-testid="viewer-strip-toggle"
+                data-tooltip={t(stripShown ? "Ocultar la tira de fotos" : "Mostrar la tira con las fotos de la lista (← → para pasar)")}
+                onClick={toggleStrip}
+              >
+                <GalleryHorizontalEnd size={16} />
+                {t("Tira")}
+              </button>
+            )}
           </>
         )}
         <span className="viewer-spacer" />
@@ -1368,6 +1432,22 @@ export function ImageViewer({
           )}
         </aside>
       </div>
+      {browse && onBrowse && stripShown && !cropping && (
+        <ViewerStrip
+          browse={browse}
+          items={stripItems}
+          currentRowId={row.id}
+          onOpen={(item) => {
+            setEnterAt("start");
+            onBrowse(item.row.id, item.index);
+          }}
+          onStep={(direction) => void stepRecord(direction)}
+          onMore={(direction) => {
+            const edge = direction === 1 ? (stripItems.at(-1)?.index ?? browse.index) : (stripItems[0]?.index ?? browse.index);
+            void readBatch(Math.floor(edge / BROWSE_BATCH) + direction);
+          }}
+        />
+      )}
     </dialog>
   );
 }

@@ -11593,3 +11593,93 @@ tr:hover .ai-cell-button,
 .toast[popover].error {
   color: #ce4c4c;
 }
+/* The strip of the list's photographs under the viewer. */
+.viewer-strip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid #ffffff14;
+  background: #111113;
+}
+.viewer-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: #a1a1aa;
+}
+.viewer-strip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #d4d4d8;
+}
+.viewer-strip-count {
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+}
+.viewer-strip-head button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  border-radius: 6px;
+  color: #d4d4d8;
+}
+.viewer-strip-head button:hover:not(:disabled) {
+  background: #ffffff14;
+}
+.viewer-strip-head button:disabled {
+  opacity: 0.35;
+}
+.viewer-strip-items {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 2px 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  list-style: none;
+  scroll-behavior: smooth;
+}
+.viewer-strip-item {
+  display: grid;
+  gap: 3px;
+  width: 112px;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #ffffff08;
+  color: #a1a1aa;
+  cursor: pointer;
+}
+.viewer-strip-item:hover {
+  background: #ffffff14;
+}
+.viewer-strip-item.is-current {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: #fff;
+}
+.viewer-strip-item .image-frame {
+  width: 100%;
+  height: 66px;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.viewer-strip-item .image-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.viewer-strip-item span {
+  overflow: hidden;
+  font-size: 10.5px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

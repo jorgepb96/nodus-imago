@@ -123,6 +123,7 @@ import { PlatesDialog } from "./components/PlatesDialog";
 import { MethodologyDialog } from "./components/MethodologyDialog";
 import { VisualTagsCell } from "./components/VisualTagsCell";
 import { Toast } from "./components/Toast";
+import type { BrowseList } from "./components/ViewerStrip";
 import { isVisualTagsColumn } from "../shared/visualTags";
 import { IiifDialog } from "./components/IiifDialog";
 import { NetworkView } from "./components/NetworkView";
@@ -306,6 +307,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
   // Records opened together (a point of the map), shown as a strip in the
   // record panel, and whether the panel fills the window (kept on this device).
   const [recordStrip, setRecordStrip] = useState<{ label: string; items: RecordStripItem[] } | null>(null),
+    /** The list the open record came from: the viewer's strip moves along it. */
+    [recordBrowse, setRecordBrowse] = useState<BrowseList | null>(null),
     [recordFullscreen, setRecordFullscreen] = useState(() => {
       try {
         return localStorage.getItem("imago.recordPanel.fullscreen") === "1";
@@ -865,9 +868,27 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
     setFilters([]);
     setSimilarId(undefined);
   };
-  const open = async (row: RecordRow) => {
-    const d = await api.call("detail", { id: row.databaseId });
-    setRecordDetail(d);
+  /**
+   * Opens a record. Opened from a database view or the search results, the
+   * list on screen (its filters, order and search) goes with it, so the
+   * viewer's strip can move along it; `browse` keeps a list already chosen.
+   */
+  const open = async (row: RecordRow, browse?: BrowseList | null) => {
+    const at = page.rows.findIndex((r) => r.id === row.id);
+    setRecordBrowse(
+      browse !== undefined
+        ? browse
+        : (area === "databases" || area === "search") && at >= 0
+          ? {
+              input: area === "search" ? { ...executed } : { ...viewSearch, sorts },
+              index: offset + at,
+              total: page.total,
+              label: area === "search" ? t("Resultados de la búsqueda") : (detail?.database.name ?? ""),
+            }
+          : null,
+    );
+    // Moving along the list stays in the same database: its properties are known.
+    if (!(browse && recordDetail?.database.id === row.databaseId)) setRecordDetail(await api.call("detail", { id: row.databaseId }));
     setOpenRow(await api.call("getRow", { id: row.id }));
   };
   // The last box ticked or unticked: Shift+click applies the same to every
@@ -4757,6 +4778,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onOptionsChanged={() => void perform(() => reloadDetail(recordDetail.database.id))}
           onSimilar={similar}
           strip={recordStrip}
+          browse={recordBrowse}
+          onBrowse={(rowId, index) =>
+            void perform(async () => {
+              const next = recordBrowse ? { ...recordBrowse, index } : null;
+              await open(await api.call("getRow", { id: rowId }), next);
+            })
+          }
           fullscreen={recordFullscreen}
           onFullscreen={fillRecordPanel}
           citation={

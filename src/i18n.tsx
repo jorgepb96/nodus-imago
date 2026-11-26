@@ -3160,6 +3160,14 @@ const en: Record<string, string> = {
   "validadas": "validated",
   "pendientes": "pending",
   "rechazadas": "rejected",
+  "Tira": "Strip",
+  "Foto anterior": "Previous photo",
+  "Foto siguiente": "Next photo",
+  "Foto anterior (←)": "Previous photo (←)",
+  "Foto siguiente (→)": "Next photo (→)",
+  "Ocultar la tira de fotos": "Hide the photo strip",
+  "Mostrar la tira con las fotos de la lista (← → para pasar)": "Show the strip with the list's photos (← → to move)",
+  "Resultados de la búsqueda": "Search results",
 };
 Object.assign(en, backendEn);
 const patterns = backendPatterns.map(([source, target]) => {

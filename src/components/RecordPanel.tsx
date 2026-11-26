@@ -30,6 +30,7 @@ import type { Perform } from "./Properties";
 import { useT } from "../i18n";
 import { validCrop } from "../../shared/imageRotation";
 import { ImageViewer } from "./ImageViewer";
+import type { BrowseList } from "./ViewerStrip";
 import { renderCitation } from "../../shared/citation";
 export function RecordPanel({
   row,
@@ -47,6 +48,8 @@ export function RecordPanel({
   strip,
   fullscreen = false,
   onFullscreen,
+  browse,
+  onBrowse,
 }: {
   row: RecordRow;
   detail: DatabaseDetail;
@@ -70,6 +73,9 @@ export function RecordPanel({
   /** The panel over the whole window instead of at the side. */
   fullscreen?: boolean;
   onFullscreen?: (on: boolean) => void;
+  /** The list the record was opened from, for the viewer's strip. */
+  browse?: BrowseList | null;
+  onBrowse?: (rowId: string, index: number) => void;
 }) {
   const t = useT(),
     [imageIndex, setImageIndex] = useState(0),
@@ -330,6 +336,8 @@ export function RecordPanel({
               onChanged={onChanged}
               onOpenRecord={onOpenRecord}
               onCompare={onCompare}
+              browse={browse}
+              onBrowse={onBrowse}
             />
           )}
           {image && (
