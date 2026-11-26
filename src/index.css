@@ -11533,3 +11533,22 @@ tr:hover .ai-cell-button,
 .viewer-tag-dictionary select {
   width: 100%;
 }
+
+/* Scrollbars follow the theme everywhere: a thin thumb in the muted text
+   colour over no track, so a dark window never shows a white bar. The image
+   viewer is dark in every mode. Bars styled on their own keep their style. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 42%, transparent) transparent;
+}
+.image-viewer {
+  color-scheme: dark;
+}
+.image-viewer,
+.image-viewer * {
+  scrollbar-color: #ffffff3d transparent;
+}
+.sticky-scrollbar {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
