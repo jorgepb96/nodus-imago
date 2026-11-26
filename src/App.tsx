@@ -121,6 +121,8 @@ import { RestorationsView } from "./components/RestorationsView";
 import { SuggestDialog } from "./components/SuggestDialog";
 import { PlatesDialog } from "./components/PlatesDialog";
 import { MethodologyDialog } from "./components/MethodologyDialog";
+import { VisualTagsCell } from "./components/VisualTagsCell";
+import { isVisualTagsColumn } from "../shared/visualTags";
 import { IiifDialog } from "./components/IiifDialog";
 import { NetworkView } from "./components/NetworkView";
 import { VisualMapView } from "./components/VisualMapView";
@@ -1101,6 +1103,13 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
         </button>
       );
     }
+    // «Etiquetas visuales»: read here, filled from the regions drawn in the viewer.
+    if (isVisualTagsColumn(c))
+      return (
+        <button className="cell-visual-tags" onClick={() => void perform(() => open(row))} aria-label={`${c.name}: ${row.title}`}>
+          <VisualTagsCell column={c} value={row.cells[c.id] ?? null} tags={row.visualTags} compact />
+        </button>
+      );
     const cell = (
       <Cell
         compact

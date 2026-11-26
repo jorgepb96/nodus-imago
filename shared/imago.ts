@@ -142,7 +142,10 @@ export type PropertyFilterOp =
   | "heritage_group"
   | "part_of"
   | "heritage_marked"
-  | "heritage_unlinked";
+  | "heritage_unlinked"
+  /** «Etiquetas visuales»: records whose images were not all reviewed, or reviewed with nothing to tag. */
+  | "visual_unreviewed"
+  | "visual_reviewed_empty";
 export type PropertyFilterGroup = {
   id: string;
   logic: "and" | "or";

@@ -830,4 +830,6 @@ export const OP_LABELS: Record<string, string> = {
   part_of: "forma parte de",
   heritage_marked: "está marcado en la foto",
   heritage_unlinked: "no está enlazado a Wikidata",
+  visual_unreviewed: "está sin revisar",
+  visual_reviewed_empty: "está revisada, sin elementos",
 };
