@@ -487,7 +487,7 @@ export function ImageViewer({
       setView((v) => ({ ...v, x: d.vx + event.clientX - d.x, y: d.vy + event.clientY - d.y }));
     }
   };
-  const onPointerUp = () => {
+  const onPointerUp = (event: ReactPointerEvent) => {
     drag.current = null;
     cropDrag.current = null;
     if (tagDrag.current) {
@@ -498,11 +498,13 @@ export function ImageViewer({
         void saveTag({ id: region.id, x: region.x, y: region.y, w: region.w, h: region.h, optionId: region.optionId });
       return;
     }
-    if (!drawing) return;
-    const x = Math.min(drawing.x0, drawing.x),
-      y = Math.min(drawing.y0, drawing.y),
-      w = Math.abs(drawing.x - drawing.x0),
-      h = Math.abs(drawing.y - drawing.y0);
+    if (!drawing || !natural) return;
+    // Pointer moves can still be waiting for a render when the drag ends.
+    const end = point(event);
+    const x = Math.min(drawing.x0, end.x),
+      y = Math.min(drawing.y0, end.y),
+      w = Math.abs(end.x - drawing.x0),
+      h = Math.abs(end.y - drawing.y0);
     setDrawing(null);
     if (w < 0.01 || h < 0.01) return;
     if (tagging) setTagDraft({ x, y, w, h });

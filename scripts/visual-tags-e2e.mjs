@@ -114,8 +114,8 @@ try {
   await viewer.locator(".viewer-image").waitFor();
   await poll(async () => (await viewer.locator(".viewer-image").boundingBox())?.width > 100, "image shown");
   await viewer.getByTestId("viewer-tagging").click();
-  const image = await viewer.locator(".viewer-image").boundingBox();
   const drag = async (x0, y0, x1, y1) => {
+    const image = await viewer.locator(".viewer-image").boundingBox();
     await page.mouse.move(image.x + image.width * x0, image.y + image.height * y0);
     await page.mouse.down();
     await page.mouse.move(image.x + image.width * x1, image.y + image.height * y1, { steps: 6 });
