@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import type { Repository } from "../db/repository";
 import { Statistics, specColumns } from "../db/statistics";
 import { SavedViews } from "../db/savedViews";
+import { VisualTags } from "../db/visualTags";
 import { calculateAgreement, type AgreementSnapshot } from "../../shared/agreement";
 import { aiPresetOf, AI_PRESETS } from "../../shared/databaseAi";
 import {
@@ -406,6 +407,10 @@ export function collectMethodology(ctx: MethodologyContext, input: { databaseIds
       undone: count(`SELECT count(*) n FROM history WHERE undone=1 AND row_id IN ${inRows}`, ...ids),
     },
     agreement,
+    visualTags: details.flatMap((d) => {
+      const summary = new VisualTags(repo).summary(d.database.id);
+      return summary.columnId ? [{ ...summary, database: d.database.name }] : [];
+    }),
     circulation: ctx.circulation
       ? {
           ...ctx.circulation,

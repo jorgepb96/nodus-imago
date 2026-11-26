@@ -11,6 +11,7 @@ import {
 import { validCoordinates } from "../../shared/places";
 import {
   HERITAGE_OPS,
+  VISUAL_OPS,
   filterKind,
   filterOperators,
   isFilterReady,
@@ -190,6 +191,13 @@ export function compileViewFilters(
     if (op === "relative_date") {
       const [start, end] = relativeDateRange(values[0]);
       return `${expr} BETWEEN ${bind(start)} AND ${bind(end)}`;
+    }
+    if (VISUAL_OPS.includes(op)) {
+      if (!(column.type === "multi_select" && column.config.visualTags)) throw new Error("Esta condición no corresponde al tipo de propiedad.");
+      // Reviewed: every image of the record was looked at; empty: and nothing was tagged.
+      const allReviewed = `EXISTS(SELECT 1 FROM image_assets ia WHERE ia.row_id=r.id) AND NOT EXISTS(SELECT 1 FROM image_assets ia WHERE ia.row_id=r.id AND ia.id NOT IN (SELECT asset_id FROM image_tag_reviews))`;
+      const tagged = `EXISTS(SELECT 1 FROM image_tags it JOIN image_assets ia ON ia.id=it.asset_id WHERE ia.row_id=r.id AND it.state='validated')`;
+      return op === "visual_reviewed_empty" ? `(${allReviewed} AND NOT ${tagged})` : `(NOT ${tagged} AND NOT (${allReviewed}))`;
     }
     if (HERITAGE_OPS.includes(op)) {
       if (!isHeritageColumn(column)) throw new Error("Esta condición no corresponde al tipo de propiedad.");

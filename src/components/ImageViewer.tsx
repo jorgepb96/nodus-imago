@@ -20,9 +20,19 @@ import {
   ScanSearch,
   Square,
   SquareDashedMousePointer,
+  Tag,
+  Tags,
+  Eye,
+  EyeOff,
+  CheckCheck,
   Trash2,
   X,
 } from "lucide-react";
+import { OptionPicker } from "./Cell";
+import { OptionIcon } from "./DatabaseIcon";
+import { DEFAULT_OPTION_COLOR } from "./OptionEditMenu";
+import { optionIconValue } from "../../shared/databaseIcons";
+import type { VisualTagRegion } from "../../shared/visualTags";
 import type { ImageAnnotation, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { DetailSearchPanel, type DetailQuery } from "./DetailSearchPanel";
@@ -126,11 +136,27 @@ export function ImageViewer({
   const [aiZones, setAiZones] = useState<{ x: number; y: number; w: number; h: number }[]>([]);
   const [drawingZone, setDrawingZone] = useState(false);
   const heritageColumns = (columns ?? []).filter((c) => isHeritageColumn(c));
+  /** Select properties that can serve as the tags' dictionary. */
+  const dictionaryChoices = (columns ?? []).filter((c) => ["select", "multi_select", "status"].includes(c.type) && !c.config.visualTags && !isHeritageColumn(c) && c.options.length > 0);
   const [heritageId, setHeritageId] = useState<string | null>(null);
   const heritageColumn = heritageColumns.find((c) => c.id === heritageId) ?? heritageColumns[0] ?? null;
   const heritageElements = useHeritage(heritageColumn?.id);
   const inCell = heritageColumn ? decodeMultiSelect(row.cells[heritageColumn.id] ?? null) : [];
   const heritageOptions = new Set(heritageColumn?.options.map((o) => o.id) ?? []);
+  /** «Etiquetado»: regions drawn on the image, each named with a tag of the database. */
+  const [tagging, setTagging] = useState(false);
+  const [tagRegions, setTagRegions] = useState<VisualTagRegion[]>([]);
+  const [tagColumn, setTagColumn] = useState<DatabaseColumn | null>(null);
+  /** A select property linked as the tags' dictionary: its terms are offered while tagging. */
+  const [tagDictionary, setTagDictionary] = useState<DatabaseColumn | null>(null);
+  const [reviewed, setReviewed] = useState(false);
+  /** A region waiting for its tag: a new one, or one being given another tag (`id`). */
+  const [tagDraft, setTagDraft] = useState<{ id?: string; x: number; y: number; w: number; h: number } | null>(null);
+  const [tagSelected, setTagSelected] = useState<string | null>(null);
+  const tagDrag = useRef<{ id: string; grip: Grip; start: Region; from: { x: number; y: number }; moved: boolean } | null>(null);
+  /** The layers drawn over the image: visual tags and annotations, each shown or hidden. */
+  const [showTags, setShowTags] = useState(true);
+  const [showNotes, setShowNotes] = useState(true);
   /** The crop being edited, as fractions of the whole turned image. */
   const [cropping, setCropping] = useState<Region | null>(null);
   const cropDrag = useRef<{ grip: Grip; start: Region; from: { x: number; y: number } } | null>(null);
@@ -141,6 +167,8 @@ export function ImageViewer({
   const [applying, setApplying] = useState(false);
   const startCrop = () => {
     setAnnotating(false);
+    setTagging(false);
+    setTagDraft(null);
     setSearchMode(false);
     setMarking(null);
     setMarkDraft(null);
@@ -159,6 +187,7 @@ export function ImageViewer({
   const closeRef = useRef(onClose);
   // Escape leaves the crop editor first, then closes the viewer.
   const isCropping = !!cropping;
+  const tagFocus = !!tagDraft || !!tagSelected;
   useEffect(() => {
     closeRef.current = isCropping
       ? () => {
@@ -166,8 +195,13 @@ export function ImageViewer({
           setNatural(null);
           setLoadFailed(false);
         }
-      : onClose;
-  }, [onClose, isCropping]);
+      : tagFocus
+        ? () => {
+            setTagDraft(null);
+            setTagSelected(null);
+          }
+        : onClose;
+  }, [onClose, isCropping, tagFocus]);
 
   useEffect(() => {
     const d = dialog.current!;
@@ -189,12 +223,25 @@ export function ImageViewer({
     if (!imageId) return;
     setAnnotations(await window.imago.call("annotationsList", { assetId: imageId }));
   }, [imageId]);
+  const loadTags = useCallback(async () => {
+    if (!imageId) return;
+    const found = await window.imago.call("visualTagsList", { assetId: imageId });
+    setTagRegions(found.regions);
+    setTagColumn(found.column);
+    setTagDictionary(found.dictionary);
+    setReviewed(found.reviewed);
+  }, [imageId]);
+  useEffect(() => {
+    void loadTags().catch(() => {});
+  }, [loadTags]);
   const [shown, setShown] = useState(imageId);
   if (shown !== imageId) {
     setShown(imageId);
     setNatural(null);
     setDraft(null);
     setSelected(null);
+    setTagDraft(null);
+    setTagSelected(null);
     setCropping(null);
     setLoadFailed(false);
     if (searching?.drawn) setSearching(null);
@@ -225,6 +272,15 @@ export function ImageViewer({
   }, []);
   const visualSearch = !!visual?.ready && visual.indexed > 0;
 
+  /** The stage's size, for what floats over it (the tag picker). */
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setStageSize({ w: el.clientWidth, h: el.clientHeight }));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   /** The whole image in view. */
   const fit = useCallback(() => {
     const box = stage.current?.getBoundingClientRect();
@@ -272,6 +328,29 @@ export function ImageViewer({
       setDrawing({ x0: p.x, y0: p.y, x: p.x, y: p.y });
       return;
     }
+    // Tagging: a selected region moves or resizes by its body or grips; elsewhere a new one is drawn.
+    if (tagging) {
+      const target = event.target as HTMLElement;
+      const regionEl = target.closest("[data-tag-region]") as HTMLElement | null;
+      if (target.closest(".viewer-tag-tools, .tag-picker")) return;
+      if (regionEl) {
+        const id = regionEl.dataset.tagRegion!;
+        const region = tagRegions.find((r) => r.id === id);
+        if (!region) return;
+        setTagSelected(id);
+        setTagDraft(null);
+        const grip = ((target.closest("[data-grip]") as HTMLElement | null)?.dataset.grip as Grip | undefined) ?? "move";
+        event.currentTarget.setPointerCapture(event.pointerId);
+        tagDrag.current = { id, grip, start: { x: region.x, y: region.y, w: region.w, h: region.h }, from: point(event), moved: false };
+        return;
+      }
+      const p = point(event);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setTagSelected(null);
+      setTagDraft(null);
+      setDrawing({ x0: p.x, y0: p.y, x: p.x, y: p.y });
+      return;
+    }
     if ((event.target as HTMLElement).closest(".viewer-region, .viewer-mark")) return;
     if (marking === "point") {
       const p = point(event);
@@ -287,6 +366,14 @@ export function ImageViewer({
     } else drag.current = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
   };
   const onPointerMove = (event: ReactPointerEvent) => {
+    if (tagDrag.current && natural) {
+      const d = tagDrag.current,
+        p = point(event);
+      const next = dragCrop(d.start, d.grip, p.x - d.from.x, p.y - d.from.y, d.from);
+      if (Math.abs(p.x - d.from.x) + Math.abs(p.y - d.from.y) > 0.002) d.moved = true;
+      setTagRegions((all) => all.map((r) => (r.id === d.id ? { ...r, ...next } : r)));
+      return;
+    }
     if (cropDrag.current && natural) {
       const { grip, start, from } = cropDrag.current,
         p = point(event);
@@ -304,6 +391,14 @@ export function ImageViewer({
   const onPointerUp = () => {
     drag.current = null;
     cropDrag.current = null;
+    if (tagDrag.current) {
+      const d = tagDrag.current;
+      tagDrag.current = null;
+      const region = tagRegions.find((r) => r.id === d.id);
+      if (d.moved && region && image)
+        void saveTag({ id: region.id, x: region.x, y: region.y, w: region.w, h: region.h, optionId: region.optionId });
+      return;
+    }
     if (!drawing) return;
     const x = Math.min(drawing.x0, drawing.x),
       y = Math.min(drawing.y0, drawing.y),
@@ -311,11 +406,42 @@ export function ImageViewer({
       h = Math.abs(drawing.y - drawing.y0);
     setDrawing(null);
     if (w < 0.01 || h < 0.01) return;
-    if (searchMode) {
+    if (tagging) setTagDraft({ x, y, w, h });
+    else if (searchMode) {
       if (image) setSearching({ assetId: image.id, x, y, w, h, drawn: true });
     } else if (drawingZone) setAiZones((all) => [...all, { x, y, w, h }].slice(0, 6));
     else if (marking === "rect") setMarkDraft({ kind: "rect", x, y, w, h });
     else setDraft({ x, y, w, h, note: "", tags: [] });
+  };
+  /** Saves a tag region (a new one with a new tag by name, or one moved or retagged) and refreshes the record. */
+  const saveTag = async (input: { id?: string; x: number; y: number; w: number; h: number; optionId?: string; label?: string }) => {
+    if (!image) return;
+    setError(null);
+    const hadColumn = !!tagColumn;
+    try {
+      const saved = await window.imago.call("visualTagSave", { assetId: image.id, ...input });
+      setTagDraft(null);
+      setTagSelected(saved.id);
+      await loadTags();
+      // The property appears the first time: the table and the record learn it.
+      if (!hadColumn || input.label) window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      await loadTags().catch(() => {});
+    }
+  };
+  const removeTag = async (id: string) => {
+    await window.imago.call("visualTagDelete", { id });
+    if (tagSelected === id) setTagSelected(null);
+    await loadTags();
+    onChanged();
+  };
+  const toggleReviewed = async () => {
+    if (!image) return;
+    await window.imago.call("visualTagReview", { assetId: image.id, reviewed: !reviewed });
+    await loadTags();
+    onChanged();
   };
   const save = async () => {
     if (!draft || !image) return;
@@ -446,7 +572,24 @@ export function ImageViewer({
       if (event.key === "a" || event.key === "A") {
         setMarking(null);
         setSearchMode(false);
+        setTagging(false);
+        setTagDraft(null);
         setAnnotating((v) => !v);
+      }
+      if (event.key === "e" || event.key === "E") {
+        setAnnotating(false);
+        setMarking(null);
+        setSearchMode(false);
+        setTagDraft(null);
+        setTagging((v) => !v);
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && tagging && tagSelected) {
+        event.preventDefault();
+        void removeTag(tagSelected);
+      }
+      if (event.key === "Escape" && tagging && (tagDraft || tagSelected)) {
+        setTagDraft(null);
+        setTagSelected(null);
       }
       if (event.key === "+" || event.key === "=") zoom(1.25);
       if (event.key === "-") zoom(0.8);
@@ -468,6 +611,16 @@ export function ImageViewer({
           height: a.h * natural.h * view.scale,
         }
       : { display: "none" };
+  /** Where the tag picker floats: beside the region, on the side with room, inside the stage. */
+  const pickerAt = (r: { x: number; y: number; w: number; h: number }): React.CSSProperties => {
+    const b = box(r) as { left?: number; top?: number; width?: number; height?: number };
+    const stageBox = { width: stageSize.w, height: stageSize.h };
+    if (b.left === undefined || !stageSize.w) return { display: "none" };
+    const width = 260,
+      right = b.left + (b.width ?? 0) + 10;
+    const left = right + width <= stageBox.width - 8 ? right : Math.max(8, b.left - width - 10);
+    return { left, top: Math.min(Math.max(8, b.top ?? 0), Math.max(8, stageBox.height - 340)), width };
+  };
   const pending = drawing
     ? { x: Math.min(drawing.x0, drawing.x), y: Math.min(drawing.y0, drawing.y), w: Math.abs(drawing.x - drawing.x0), h: Math.abs(drawing.y - drawing.y0) }
     : draft && !draft.id
@@ -588,6 +741,8 @@ export function ImageViewer({
                 setMarking(null);
                 setMarkDraft(null);
                 setSearchMode(false);
+                setTagging(false);
+                setTagDraft(null);
                 setAnnotating(!annotating);
               }}
             >
@@ -615,6 +770,8 @@ export function ImageViewer({
                 setMarking(null);
                 setMarkDraft(null);
                 setDrawingZone(false);
+                setTagging(false);
+                setTagDraft(null);
                 setSearchMode(!searchMode);
               }}
             >
@@ -633,6 +790,8 @@ export function ImageViewer({
                   onClick={() => {
                     setAnnotating(false);
                     setSearchMode(false);
+                    setTagging(false);
+                    setTagDraft(null);
                     setDraft(null);
                     setMarkDraft(null);
                     setMarking(marking ? null : "point");
@@ -678,6 +837,52 @@ export function ImageViewer({
                 )}
               </div>
             )}
+            <button
+              type="button"
+              className={`viewer-annotate ${tagging ? "is-on" : ""}`}
+              aria-pressed={tagging}
+              data-testid="viewer-tagging"
+              data-tooltip={t("Arrastra sobre la imagen para marcar un elemento y elige o escribe su etiqueta (tecla E).")}
+              disabled={!image}
+              onClick={() => {
+                setAnnotating(false);
+                setDraft(null);
+                setSearchMode(false);
+                setMarking(null);
+                setMarkDraft(null);
+                setTagDraft(null);
+                setTagSelected(null);
+                setShowTags(true);
+                setTagging(!tagging);
+              }}
+            >
+              <Tags size={16} />
+              {t("Etiquetado")}
+            </button>
+            <div className="viewer-group viewer-layers" role="group" aria-label={t("Capas")}>
+              <button
+                type="button"
+                aria-pressed={showTags}
+                data-testid="viewer-layer-tags"
+                data-tooltip={t(showTags ? "Ocultar las etiquetas" : "Mostrar las etiquetas")}
+                aria-label={t(showTags ? "Ocultar las etiquetas" : "Mostrar las etiquetas")}
+                onClick={() => setShowTags(!showTags)}
+              >
+                {showTags ? <Eye size={14} /> : <EyeOff size={14} />}
+                <span>{t("Etiquetas")}</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={showNotes}
+                data-testid="viewer-layer-notes"
+                data-tooltip={t(showNotes ? "Ocultar las anotaciones" : "Mostrar las anotaciones")}
+                aria-label={t(showNotes ? "Ocultar las anotaciones" : "Mostrar las anotaciones")}
+                onClick={() => setShowNotes(!showNotes)}
+              >
+                {showNotes ? <Eye size={14} /> : <EyeOff size={14} />}
+                <span>{t("Anotaciones")}</span>
+              </button>
+            </div>
           </>
         )}
         <span className="viewer-spacer" />
@@ -689,7 +894,7 @@ export function ImageViewer({
         <div
           ref={stage}
           data-tour="viewer-stage"
-          className={`viewer-stage ${annotating || marking || drawingZone || searchMode ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
+          className={`viewer-stage ${annotating || marking || drawingZone || searchMode || tagging ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
           onWheel={(event) => {
             const r = stage.current!.getBoundingClientRect();
             zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - r.left, event.clientY - r.top);
@@ -697,7 +902,7 @@ export function ImageViewer({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onDoubleClick={() => !annotating && !marking && !cropping && zoom(2)}
+          onDoubleClick={() => !annotating && !marking && !cropping && !tagging && zoom(2)}
         >
           {image && (
             <img
@@ -745,7 +950,7 @@ export function ImageViewer({
               ))}
             </div>
           )}
-          {!cropping && notes.map((a) => (
+          {!cropping && showNotes && notes.map((a) => (
             <button
               key={a.id}
               type="button"
@@ -760,6 +965,7 @@ export function ImageViewer({
             />
           ))}
           {!cropping &&
+            showNotes &&
             shownMarks.map((m) => {
               const e = heritageElements[m.optionId!];
               const icon = heritageColumn && typology(heritageScheme(heritageColumn.config), e?.group ?? null, e?.type ?? null)?.icon;
@@ -793,6 +999,81 @@ export function ImageViewer({
                 </button>
               );
             })}
+          {!cropping &&
+            showTags &&
+            tagRegions.map((r) => {
+              const option = tagColumn?.options.find((o) => o.id === r.optionId);
+              const chosen = tagging && tagSelected === r.id;
+              return (
+                <div
+                  key={r.id}
+                  data-tag-region={r.id}
+                  data-testid="viewer-tag-region"
+                  className={`viewer-tag ${chosen ? "is-selected" : ""} ${tagging ? "is-live" : ""} ${tagDraft?.id === r.id ? "is-retagging" : ""}`}
+                  style={{ ...box(r), "--tag": option?.color ?? DEFAULT_OPTION_COLOR } as unknown as React.CSSProperties}
+                  aria-label={option?.label}
+                >
+                  <span className="viewer-tag-label">
+                    <OptionIcon value={tagColumn ? optionIconValue(tagColumn.config, r.optionId) : null} size={11} />
+                    {option?.label ?? "…"}
+                  </span>
+                  {chosen && GRIPS.map((grip) => <span key={grip} className={`crop-grip is-${grip}`} data-grip={grip} />)}
+                  {chosen && !tagDraft && (
+                    <span className="viewer-tag-tools">
+                      <button
+                        type="button"
+                        aria-label={t("Cambiar la etiqueta")}
+                        data-tooltip={t("Cambiar la etiqueta")}
+                        data-testid="viewer-tag-retag"
+                        onClick={() => setTagDraft({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h })}
+                      >
+                        <Tag size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t("Eliminar la región")}
+                        data-tooltip={t("Eliminar la región (Supr)")}
+                        data-testid="viewer-tag-delete"
+                        onClick={() => void removeTag(r.id)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          {tagDraft && !tagDraft.id && <div className="viewer-tag is-drawing" style={box(tagDraft)} />}
+          {tagDraft && natural && image && (
+            <div
+              className="viewer-tag-picker"
+              style={pickerAt(tagDraft)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onWheel={(e) => e.stopPropagation()}
+            >
+              <OptionPicker
+                column={tagColumn ?? { id: "", databaseId: row.databaseId, name: "", type: "multi_select", position: 0, config: {}, options: [] }}
+                selected={[]}
+                busy={false}
+                onToggle={() => {}}
+                onOptionsChanged={() => {
+                  void loadTags();
+                  window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+                  onChanged();
+                }}
+                floating={{
+                  placeholder: t(tagDraft.id ? "Otra etiqueta…" : "Buscar o crear etiqueta…"),
+                  extra: tagDictionary ? { title: t("Del diccionario «{name}»").replace("{name}", tagDictionary.name), column: tagDictionary } : undefined,
+                  onPick: (optionId) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, optionId }),
+                  onCreate: (label) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, label }),
+                  onClose: () => setTagDraft(null),
+                }}
+              />
+            </div>
+          )}
+          {tagging && !tagRegions.length && !pending && !tagDraft && (
+            <p className="viewer-hint">{t("Arrastra sobre la imagen alrededor de un elemento para etiquetarlo.")}</p>
+          )}
           {markDraft?.kind === "point" && natural && (
             <span className="viewer-mark is-drawing" style={box(markDraft) as React.CSSProperties} />
           )}
@@ -852,6 +1133,110 @@ export function ImageViewer({
             </DetailSearchPanel>
           ) : (
           <>
+          {tagging && image && (
+            <section className="viewer-tagging" data-testid="viewer-tagging">
+              <h2>
+                {t("Etiquetado")} <span>{tagRegions.length}</span>
+              </h2>
+              {dictionaryChoices.length > 0 && (
+                <label className="viewer-tag-dictionary">
+                  {t("Diccionario")}
+                  <select
+                    value={tagDictionary?.id ?? ""}
+                    data-testid="viewer-tag-dictionary"
+                    onChange={(e) =>
+                      void window.imago
+                        .call("visualTagDictionary", { databaseId: row.databaseId, columnId: e.target.value || null })
+                        .then(async () => {
+                          await loadTags();
+                          window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+                        })
+                        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                    }
+                  >
+                    <option value="">{t("Sin diccionario")}</option>
+                    {dictionaryChoices.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.options.length})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {tagRegions.length > 0 && tagColumn && (
+                <div className="viewer-tag-counts" data-testid="viewer-tag-counts">
+                  {Object.entries(
+                    tagRegions.reduce<Record<string, number>>((all, r) => ({ ...all, [r.optionId]: (all[r.optionId] ?? 0) + 1 }), {}),
+                  )
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([optionId, n]) => {
+                      const option = tagColumn.options.find((o) => o.id === optionId);
+                      return (
+                        <span key={optionId} className="chip" style={{ "--chip": option?.color ?? DEFAULT_OPTION_COLOR } as React.CSSProperties}>
+                          <OptionIcon value={optionIconValue(tagColumn.config, optionId)} size={11} />
+                          {option?.label}
+                          {n > 1 && <b className="visual-tags-count">×{n}</b>}
+                        </span>
+                      );
+                    })}
+                </div>
+              )}
+              {!tagRegions.length && (
+                <>
+                  <p className="viewer-empty">
+                    {t("Arrastra sobre la imagen alrededor de cada elemento (una persona, un vehículo, un edificio) y elige o escribe su etiqueta: Intro la crea si no existe.")}
+                  </p>
+                  <button
+                    type="button"
+                    className={`viewer-review ${reviewed ? "is-on" : ""}`}
+                    aria-pressed={reviewed}
+                    data-testid="viewer-tag-review"
+                    onClick={() => void toggleReviewed()}
+                  >
+                    <CheckCheck size={14} />
+                    {t(reviewed ? "Revisada, sin elementos · deshacer" : "Marcar como revisada, sin elementos")}
+                  </button>
+                </>
+              )}
+              {error && tagging && <p className="error">{t(error)}</p>}
+              <ul className="viewer-list">
+                {tagRegions.map((r) => {
+                  const option = tagColumn?.options.find((o) => o.id === r.optionId);
+                  return (
+                    <li key={r.id} className={tagSelected === r.id ? "is-selected" : ""}>
+                      <button
+                        type="button"
+                        className="viewer-item"
+                        onClick={() => {
+                          setTagSelected(r.id);
+                          focus(r);
+                        }}
+                      >
+                        <Crop annotation={{ ...r, color: option?.color ?? DEFAULT_OPTION_COLOR }} imageId={image.id} revision={image.revision} ratio={ratio} />
+                        <span className="viewer-item-text">
+                          <span className="viewer-tag-name" style={{ "--chip": option?.color ?? DEFAULT_OPTION_COLOR } as React.CSSProperties}>
+                            <OptionIcon value={tagColumn ? optionIconValue(tagColumn.config, r.optionId) : null} size={11} /> {option?.label}
+                          </span>
+                          {r.source !== "manual" && <small>{t("Propuesta automática")}</small>}
+                        </span>
+                      </button>
+                      <span className="viewer-item-actions">
+                        <button type="button" aria-label={t("Cambiar la etiqueta")} data-tooltip={t("Cambiar la etiqueta")} onClick={() => {
+                          setTagSelected(r.id);
+                          setTagDraft({ id: r.id, x: r.x, y: r.y, w: r.w, h: r.h });
+                        }}>
+                          <Tag size={13} />
+                        </button>
+                        <button type="button" aria-label={t("Eliminar la región")} data-tooltip={t("Eliminar la región")} onClick={() => void removeTag(r.id)}>
+                          <Trash2 size={13} />
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
           {heritageColumn && image && heritagePanel === "suggest" ? (
             <HeritageSuggestPanel
               column={heritageColumn}

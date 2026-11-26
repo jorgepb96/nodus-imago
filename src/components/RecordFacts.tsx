@@ -12,6 +12,8 @@ import type { Provenance, RecordRow } from "../../shared/imago";
 import { Button } from "./ui";
 import { Cell } from "./Cell";
 import { LinkDetailsForm, LinkedRecords, linkSummary } from "./RelationTools";
+import { VisualTagsCell } from "./VisualTagsCell";
+import { isVisualTagsColumn } from "../../shared/visualTags";
 import { BlockOutline } from "./BlockOutline";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
@@ -249,6 +251,8 @@ export function RecordFacts({
             onChanged={onChanged}
             onOpenRecord={onOpenRecord}
           />
+        ) : isVisualTagsColumn(c) ? (
+          <VisualTagsCell column={c} value={row.cells[c.id] ?? null} tags={row.visualTags} />
         ) : (
           <Cell
             column={c}

@@ -142,7 +142,10 @@ export type PropertyFilterOp =
   | "heritage_group"
   | "part_of"
   | "heritage_marked"
-  | "heritage_unlinked";
+  | "heritage_unlinked"
+  /** «Etiquetas visuales»: records whose images were not all reviewed, or reviewed with nothing to tag. */
+  | "visual_unreviewed"
+  | "visual_reviewed_empty";
 export type PropertyFilterGroup = {
   id: string;
   logic: "and" | "or";
@@ -703,6 +706,31 @@ export type Commands = {
   };
   /** «Procede de»: the image one was reproduced from; null clears it. */
   imageOrigin: { input: { assetId: string; sourceAssetId: string | null }; result: boolean };
+  /** An image's visual tag regions, whether it was reviewed, and the database's «Etiquetas visuales». */
+  visualTagsList: {
+    input: { assetId: string };
+    result: {
+      regions: import("./visualTags").VisualTagRegion[];
+      reviewed: boolean;
+      column: import("./databases").DatabaseColumn | null;
+      /** The select property linked as the tags' dictionary, if any. */
+      dictionary: import("./databases").DatabaseColumn | null;
+    };
+  };
+  /** Saves a region with a tag (an existing one, or a new one by name). */
+  visualTagSave: {
+    input: { id?: string; assetId: string; x: number; y: number; w: number; h: number; optionId?: string | null; label?: string | null };
+    result: import("./visualTags").VisualTagRegion;
+  };
+  visualTagDelete: { input: { id: string }; result: boolean };
+  /** Links a select property as the tags' dictionary, or unlinks it. */
+  visualTagDictionary: { input: { databaseId: string; columnId: string | null }; result: boolean };
+  /** Marks an image as reviewed (also with nothing to tag) or not. */
+  visualTagReview: { input: { assetId: string; reviewed: boolean }; result: boolean };
+  visualTagsSummary: {
+    input: { databaseId: string };
+    result: import("./visualTags").VisualTagsSummary;
+  };
   /** The work a record is linked to (in a works database), or null. */
   workOf: { input: { rowId: string }; result: import("./variants").WorkLink | null };
   /** Gathers an image's family into one work, created when the record has none. */

@@ -7,6 +7,7 @@
 import { cleanLinkDetails, decodeCheckbox, decodeMultiSelect, decodeNumber, linkPlace } from './databases';
 import type { DatabaseColumn, DatabaseRow, RelationLink } from './databases';
 import { decodeHistoricalDate } from './historicalDate';
+import { visualTagsText } from './visualTags';
 import {
   decodeDatabaseButton,
   decodeDatabaseDate,
@@ -24,6 +25,8 @@ export function exportCellText(col: DatabaseColumn, row: DatabaseRow): string {
     case 'status':
       return col.options.find((o) => o.id === raw)?.label ?? '';
     case 'multi_select':
+      // «Etiquetas visuales»: each tag with its appearances (Persona ×5).
+      if (col.config.visualTags) return visualTagsText(col, row.visualTags, decodeMultiSelect(raw));
       return decodeMultiSelect(raw)
         .map((id) => col.options.find((o) => o.id === id)?.label ?? '')
         .filter(Boolean)
@@ -116,6 +119,8 @@ export function exportCellValue(col: DatabaseColumn, row: DatabaseRow): unknown 
     case 'status':
       return col.options.find((o) => o.id === raw)?.label ?? null;
     case 'multi_select':
+      if (col.config.visualTags)
+        return decodeMultiSelect(raw).map((id) => ({ label: col.options.find((o) => o.id === id)?.label ?? id, count: row.visualTags?.counts[id] ?? 1 }));
       return decodeMultiSelect(raw).map((id) => col.options.find((o) => o.id === id)?.label ?? id);
     case 'attachment':
     case 'files':

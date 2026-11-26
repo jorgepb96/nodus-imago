@@ -34,8 +34,32 @@ export interface ReleaseNote {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: "0.9.0",
-    date: "2026-11-25",
+    date: "2026-11-26",
     highlights: [
+      {
+        scope: "visual",
+        category: "new",
+        es: "Etiquetado visual (botón «Etiquetado» del visor, tecla E): arrastra alrededor de un elemento y elige o escribe su etiqueta en el buscador que aparece junto a la región; Intro crea las nuevas. Las regiones se mueven, se redimensionan, cambian de etiqueta y se borran, y llevan el color, el icono y el nombre de su etiqueta.",
+        en: "Visual tagging (the viewer's «Etiquetado» button, key E): drag around an element and choose or type its tag in the search that appears beside the region; Enter creates new ones. Regions move, resize, change tag and are deleted, and carry their tag's colour, icon and name.",
+      },
+      {
+        scope: "visual",
+        category: "new",
+        es: "La propiedad «Etiquetas visuales» se crea sola y muestra cada etiqueta con sus apariciones (Persona ×5); se filtra, se ordena y se exporta, distingue las imágenes sin revisar de las revisadas sin elementos y puede tomar los términos de una propiedad existente como diccionario.",
+        en: "The «Etiquetas visuales» property creates itself and shows each tag with its appearances (Persona ×5); it filters, sorts and exports, tells unreviewed images from those reviewed with nothing to tag, and can take the terms of an existing property as a dictionary.",
+      },
+      {
+        scope: "analysis",
+        category: "new",
+        es: "Las estadísticas de las etiquetas visuales cuentan fotografías o apariciones, se cruzan con otras propiedades y siguen los filtros de la vista; el informe metodológico incluye el etiquetado.",
+        en: "Visual tag statistics count photographs or appearances, cross with other properties and follow the view's filters; the methodology report includes the tagging.",
+      },
+      {
+        scope: "general",
+        category: "enhancement",
+        es: "Las capas de etiquetas y de anotaciones del visor se muestran u ocultan por separado, y las barras de desplazamiento siguen el tema (oscuras en modo oscuro y en el visor).",
+        en: "The viewer's tag and annotation layers show or hide separately, and scrollbars follow the theme (dark in dark mode and in the viewer).",
+      },
       {
         scope: "catalogue",
         category: "new",

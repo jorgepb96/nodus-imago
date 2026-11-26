@@ -49,7 +49,8 @@
     "test:updates:e2e": "node scripts/update-protocol-e2e.mjs",
     "test:modals:e2e": "node scripts/modals-e2e.mjs",
     "test:mcp:e2e": "node scripts/mcp-e2e.mjs",
-    "test:methodology:e2e": "node scripts/methodology-e2e.mjs"
+    "test:methodology:e2e": "node scripts/methodology-e2e.mjs",
+    "test:visual-tags:e2e": "node scripts/visual-tags-e2e.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",

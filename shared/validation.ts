@@ -138,7 +138,7 @@ const limit = z.number().int().min(2).max(60).optional();
 const heritageLevel = z.enum(["element", "type", "group"]).optional();
 const includeParts = z.boolean().optional();
 export const statSpec = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart, heritageLevel, includeParts }).strict(),
+  z.object({ kind: z.literal("frequency"), columnId: id, limit, chart, heritageLevel, includeParts, count: z.enum(["records", "appearances"]).optional() }).strict(),
   z
     .object({
       kind: z.literal("crosstab"),
@@ -744,6 +744,23 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   workOf: z.object({ rowId: id }).strict(),
+  visualTagsList: z.object({ assetId: id }).strict(),
+  visualTagSave: z
+    .object({
+      id: id.optional(),
+      assetId: id,
+      x: z.number().min(0).max(1),
+      y: z.number().min(0).max(1),
+      w: z.number().min(0).max(1),
+      h: z.number().min(0).max(1),
+      optionId: id.nullable().optional(),
+      label: z.string().trim().max(200).nullable().optional(),
+    })
+    .strict(),
+  visualTagDelete: z.object({ id }).strict(),
+  visualTagReview: z.object({ assetId: id, reviewed: z.boolean() }).strict(),
+  visualTagsSummary: z.object({ databaseId: id }).strict(),
+  visualTagDictionary: z.object({ databaseId: id, columnId: id.nullable() }).strict(),
   imageCirculation: z
     .object({
       assetId: id,

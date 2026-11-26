@@ -100,6 +100,12 @@ export function mcpCellValue(
     case "status":
       return raw ? (column.options.find((o) => o.id === raw)?.label ?? null) : null;
     case "multi_select":
+      // «Etiquetas visuales»: each tag with its appearances in the record's images.
+      if (column.config.visualTags)
+        return decodeMultiSelect(raw).flatMap((id) => {
+          const label = column.options.find((o) => o.id === id)?.label;
+          return label ? [{ tag: label, appearances: row.visualTags?.counts[id] ?? 1 }] : [];
+        });
       return decodeMultiSelect(raw)
         .map((id) => column.options.find((o) => o.id === id)?.label)
         .filter((label): label is string => !!label);

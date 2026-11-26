@@ -11271,3 +11271,305 @@ tr:hover .ai-cell-button,
     grid-template-columns: 1fr;
   }
 }
+/* Visual tags: boxes like a detector's, without fill and with the tag's
+   colour, icon and name on a tab over the top edge, unlike annotations
+   (tinted zones without a label). */
+.viewer-tag {
+  position: absolute;
+  border: 2px solid var(--tag, #6366f1);
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px #0007, inset 0 0 0 1px #0004;
+  pointer-events: none;
+}
+.viewer-tag.is-live {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.viewer-tag.is-live:hover {
+  background: color-mix(in srgb, var(--tag, #6366f1) 14%, transparent);
+}
+.viewer-tag.is-selected {
+  z-index: 3;
+  cursor: move;
+  border-width: 3px;
+  box-shadow: 0 0 0 1px #000a, 0 0 0 9999px #00000052;
+}
+.viewer-tag.is-retagging {
+  border-style: dashed;
+}
+.viewer-tag.is-drawing {
+  border: 2px dashed #fff;
+  pointer-events: none;
+}
+.viewer-tag-label {
+  position: absolute;
+  left: -2px;
+  bottom: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 240px;
+  padding: 1px 7px 2px 5px;
+  overflow: hidden;
+  border-radius: 4px 4px 0 0;
+  background: var(--tag, #6366f1);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px #0006;
+  pointer-events: none;
+}
+.viewer-tag-label svg {
+  flex: none;
+}
+.viewer-tag .crop-grip {
+  pointer-events: auto;
+}
+.viewer-tag-tools {
+  position: absolute;
+  right: -2px;
+  bottom: 100%;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px 6px 0 0;
+  background: #111113e6;
+}
+.viewer-tag-tools button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+}
+.viewer-tag-tools button:hover {
+  background: #ffffff22;
+}
+/* The tag picker floats beside the region it names. */
+.viewer-tag-picker {
+  position: absolute;
+  z-index: 6;
+}
+.option-menu.tag-picker {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 330px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text, inherit);
+  box-shadow: 0 12px 32px #0006;
+}
+.tag-picker .option-search {
+  width: 100%;
+}
+.tag-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.tag-picker .option-row {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+.tag-picker .option-row.is-active,
+.tag-picker .option-row:hover {
+  background: var(--accent-soft);
+}
+.tag-picker-choice {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.tag-picker-choice i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.tag-picker-choice .option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-picker-create {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px dashed var(--accent-line, var(--line));
+  border-radius: 6px;
+  background: none;
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.tag-picker-create.is-active,
+.tag-picker-create:hover {
+  background: var(--accent-soft);
+}
+.tag-picker kbd {
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.viewer-layers {
+  gap: 4px;
+}
+.viewer-layers button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.viewer-layers button svg {
+  flex: none;
+}
+.viewer-layers button[aria-pressed="false"] {
+  opacity: 0.5;
+}
+.viewer-layers button[aria-pressed="false"] span {
+  text-decoration: line-through;
+}
+.viewer-tagging {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.viewer-tag-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.viewer-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.viewer-review.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.viewer-tag-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--chip, inherit);
+}
+/* «Etiquetas visuales» in the table and the record. */
+.cell-visual-tags {
+  display: block;
+  max-width: 100%;
+  min-height: 24px;
+  overflow: hidden;
+  padding: 2px 0;
+  text-align: left;
+}
+.visual-tags-cell.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.visual-tags-cell.is-compact {
+  flex-wrap: nowrap;
+}
+.visual-tags-count {
+  margin-left: 2px;
+  font-weight: 700;
+}
+.visual-tags-cell.is-empty {
+  font-size: 11.5px;
+}
+.tag-picker-group {
+  margin: 6px 4px 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tag-picker .option-row.is-dictionary .option-label {
+  color: var(--muted);
+}
+.tag-picker .option-row.is-dictionary.is-active .option-label,
+.tag-picker .option-row.is-dictionary:hover .option-label {
+  color: inherit;
+}
+.viewer-tag-dictionary {
+  display: grid;
+  gap: 4px;
+  font-size: 11.5px;
+  color: #a1a1aa;
+}
+.viewer-tag-dictionary select {
+  width: 100%;
+}
+
+/* Scrollbars follow the theme everywhere: a thin thumb in the muted text
+   colour over no track, so a dark window never shows a white bar. The image
+   viewer is dark in every mode. Bars styled on their own keep their style. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 42%, transparent) transparent;
+}
+.image-viewer {
+  color-scheme: dark;
+}
+.image-viewer,
+.image-viewer * {
+  scrollbar-color: #ffffff3d transparent;
+}
+.sticky-scrollbar {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
+/* Selected, the tag's tab moves clear of the corner grip. */
+.viewer-tag.is-selected .viewer-tag-label {
+  left: 12px;
+}
+.visual-tags-count {
+  margin-left: 3px;
+}

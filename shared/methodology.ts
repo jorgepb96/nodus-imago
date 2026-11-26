@@ -5,6 +5,7 @@
 import type { DatabaseKind } from "./databases";
 import type { StatResult, StatSpec } from "./statistics";
 import type { CirculationSummary } from "./variants";
+import type { VisualTagsSummary } from "./visualTags";
 
 export type MethodologyOption = {
   label: string;
@@ -144,6 +145,8 @@ export type MethodologyData = {
     undone: number;
   };
   agreement: MethodologyAgreement[];
+  /** Visual tagging of each database that has «Etiquetas visuales». */
+  visualTags: (VisualTagsSummary & { database: string })[];
   /** The circulation of the photographs (variant families at balanced sensitivity), with how many sources the researcher set. */
   circulation: (CirculationSummary & { origins: number }) | null;
   variants: {

@@ -16,6 +16,7 @@ import {
   yearCoverage,
   yearOf,
   yearSpan,
+  type FrequencyResult,
   type SavedStatistic,
   type StatResult,
   type StatSpec,
@@ -153,8 +154,10 @@ export class Statistics {
           : categoryValues(columns[c], v.raw, v.display);
       });
     switch (spec.kind) {
-      case "frequency":
-        return frequency(labels(0), spec.limit ?? 20);
+      case "frequency": {
+        const result = frequency(labels(0), spec.limit ?? 20);
+        return columns[0].config.visualTags ? this.visualFrequency(result, columns[0], ids, spec.count ?? "records") : result;
+      }
       case "crosstab":
         return crosstab(labels(0), labels(1), spec.limit ?? 12);
       case "cooccurrence":
@@ -176,6 +179,51 @@ export class Statistics {
           spec.bins ?? 12,
         );
     }
+  }
+
+  /**
+   * Adds to a frequency of «Etiquetas visuales» each tag's appearances and
+   * the records not reviewed or reviewed with nothing to tag; counted by
+   * appearances, the categories follow them.
+   */
+  private visualFrequency(result: FrequencyResult, column: DatabaseColumn, ids: string[], by: "records" | "appearances"): FrequencyResult {
+    const label = new Map(column.options.map((o) => [o.id, o.label]));
+    const appearances: Record<string, number> = {};
+    let unreviewed = 0,
+      reviewedEmpty = 0;
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500),
+        marks = chunk.map(() => "?").join(",");
+      for (const r of this.repo.db
+        .prepare(
+          `SELECT t.option_id id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id WHERE a.row_id IN (${marks}) AND t.state='validated' GROUP BY t.option_id`,
+        )
+        .all(...chunk) as { id: string; n: number }[]) {
+        const name = label.get(r.id);
+        if (name) appearances[name] = (appearances[name] ?? 0) + r.n;
+      }
+      for (const row of this.repo.hydrate(chunk))
+        if (row.visualTags?.review === "unreviewed") unreviewed++;
+        else if (row.visualTags?.review === "empty") reviewedEmpty++;
+    }
+    const total = Object.values(appearances).reduce((a, b) => a + b, 0);
+    // Records per tag, from every record (not only the categories shown).
+    const records: Record<string, number> = {};
+    for (const values of this.values(ids, [column])[0])
+      for (const l of new Set(categoryValues(column, values.raw, values.display))) records[l] = (records[l] ?? 0) + 1;
+    if (by === "appearances") {
+      const limit = result.categories.length + (result.other ? 1 : 0) || 20;
+      const sorted = Object.entries(appearances).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es"));
+      const top = sorted.slice(0, Math.max(limit, result.categories.length));
+      const shown = top.reduce((n, [, v]) => n + v, 0);
+      return {
+        ...result,
+        categories: top.map(([l, v]) => ({ label: l, count: v, share: total ? Math.round((v / total) * 10000) / 10000 : 0 })),
+        other: total - shown,
+        visual: { appearances, records, total, unreviewed, reviewedEmpty, by },
+      };
+    }
+    return { ...result, visual: { appearances, records, total, unreviewed, reviewedEmpty, by } };
   }
 
   /** Properties that can place records in time, best first. */

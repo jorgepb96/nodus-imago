@@ -359,7 +359,12 @@ export const backendEn: Record<string, string> = {
   "Esta agregación no se aplica a un dato del vínculo.": "This aggregation does not apply to a field of the link.",
   "Elige una base de datos de obras fotográficas.": "Choose a database of photographic works.",
   "Una imagen no puede proceder de sí misma.": "An image cannot come from itself.",
-  "Esa imagen ya procede de esta: se formaría un círculo.": "That image already comes from this one: it would make a loop."
+  "Esa imagen ya procede de esta: se formaría un círculo.": "That image already comes from this one: it would make a loop.",
+  "Las etiquetas visuales se asignan dibujando regiones sobre la imagen.": "Visual tags are assigned by drawing regions on the image.",
+  "La región ya no existe.": "The region no longer exists.",
+  "Elige o escribe una etiqueta.": "Choose or type a tag.",
+  "La etiqueta no pertenece a esta base de datos.": "The tag does not belong to this database.",
+  "Elige una propiedad de selección de esta base de datos.": "Choose a select property of this database."
 };
 
 /** Messages with variable parts: "{n}" matches any text and is carried over. */

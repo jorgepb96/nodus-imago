@@ -36,9 +36,13 @@ export const FILTER_LABELS: Record<PropertyFilterOp, string> = {
   part_of: "Es o forma parte de",
   heritage_marked: "Está marcado en la foto",
   heritage_unlinked: "Tiene elementos sin Wikidata",
+  visual_unreviewed: "Sin revisar",
+  visual_reviewed_empty: "Revisada, sin elementos",
 };
 /** Conditions that only heritage properties have. */
 export const HERITAGE_OPS: PropertyFilterOp[] = ["heritage_type", "heritage_group", "part_of", "heritage_marked", "heritage_unlinked"];
+/** Conditions that only «Etiquetas visuales» has: how far its images were reviewed. */
+export const VISUAL_OPS: PropertyFilterOp[] = ["visual_unreviewed", "visual_reviewed_empty"];
 export const RELATIVE_DATES = [
   ["today", "Hoy"],
   ["yesterday", "Ayer"],
@@ -141,6 +145,7 @@ export function filterOperators(column: DatabaseColumn): PropertyFilterOp[] {
         "none",
         ...empty,
         ...(isHeritageColumn(column) ? HERITAGE_OPS : []),
+        ...(column.type === "multi_select" && column.config.visualTags ? VISUAL_OPS : []),
       ];
     case "files":
       return [...empty, "equals", "gt", "gte", "lt", "lte", "between"];
@@ -183,6 +188,8 @@ export function filterNeedsValue(op: PropertyFilterOp) {
     "no_coordinates",
     "heritage_marked",
     "heritage_unlinked",
+    "visual_unreviewed",
+    "visual_reviewed_empty",
   ].includes(op);
 }
 export function isFilterReady(filter: PropertyFilter) {

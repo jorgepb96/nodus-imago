@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS relation_details(a TEXT NOT NULL REFERENCES db_rows(i
 CREATE INDEX IF NOT EXISTS relation_details_b ON relation_details(b);
 CREATE TABLE IF NOT EXISTS image_crops(pair TEXT PRIMARY KEY,placement TEXT);
 CREATE TABLE IF NOT EXISTS image_origins(content_hash TEXT PRIMARY KEY,source_hash TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS image_tags(id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES image_assets(id) ON DELETE CASCADE,option_id TEXT NOT NULL,x REAL NOT NULL,y REAL NOT NULL,w REAL NOT NULL,h REAL NOT NULL,source TEXT NOT NULL DEFAULT 'manual',model TEXT,confidence REAL,state TEXT NOT NULL DEFAULT 'validated',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS image_tags_asset ON image_tags(asset_id);
+CREATE INDEX IF NOT EXISTS image_tags_option ON image_tags(option_id);
+CREATE TABLE IF NOT EXISTS image_tag_reviews(asset_id TEXT PRIMARY KEY REFERENCES image_assets(id) ON DELETE CASCADE,reviewed_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ai_prompts(hash TEXT PRIMARY KEY,text TEXT NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS search_documents(row_id TEXT PRIMARY KEY REFERENCES db_rows(id) ON DELETE CASCADE,database_id TEXT NOT NULL,body TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(row_id UNINDEXED,database_id UNINDEXED,body,tokenize='unicode61 remove_diacritics 2');
