@@ -30,7 +30,7 @@ import type { Perform } from "./Properties";
 import { useT } from "../i18n";
 import { validCrop } from "../../shared/imageRotation";
 import { ImageViewer } from "./ImageViewer";
-import type { BrowseList } from "./ViewerStrip";
+import type { BrowseItem, BrowseList } from "./ViewerStrip";
 import { renderCitation } from "../../shared/citation";
 export function RecordPanel({
   row,
@@ -75,7 +75,7 @@ export function RecordPanel({
   onFullscreen?: (on: boolean) => void;
   /** The list the record was opened from, for the viewer's strip. */
   browse?: BrowseList | null;
-  onBrowse?: (rowId: string, index: number) => void;
+  onBrowse?: (item: BrowseItem) => void;
 }) {
   const t = useT(),
     [imageIndex, setImageIndex] = useState(0),

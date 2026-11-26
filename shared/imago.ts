@@ -720,7 +720,7 @@ export type Commands = {
   /** Saves a region with a tag (an existing one, or a new one by name). */
   visualTagSave: {
     input: { id?: string; assetId: string; x: number; y: number; w: number; h: number; optionId?: string | null; label?: string | null };
-    result: import("./visualTags").VisualTagRegion;
+    result: import("./visualTags").VisualTagRegion & { column?: import("./databases").DatabaseColumn | null };
   };
   visualTagDelete: { input: { id: string }; result: boolean };
   /** Links a select property as the tags' dictionary, or unlinks it. */
