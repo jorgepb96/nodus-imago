@@ -335,6 +335,25 @@ export function StatisticsView({
                 <>
                   {columnSelect(t("Propiedad"), spec.columnId, columns.filter(categorical), (id) => setSpec({ columnId: id }))}
                   {limitSelect(spec.limit, [10, 20, 30, 50])}
+                  {columns.find((c) => c.id === spec.columnId)?.config.visualTags && (
+                    <div className="stat-field">
+                      <span>{t("Contar")}</span>
+                      <div className="segmented" role="group" aria-label={t("Qué se cuenta")} data-testid="stats-visual-count">
+                        {(["records", "appearances"] as const).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            aria-pressed={(spec.count ?? "records") === m}
+                            className={(spec.count ?? "records") === m ? "active" : ""}
+                            onClick={() => setSpec({ count: m })}
+                            title={t(m === "records" ? "Registros (fotografías) que tienen cada etiqueta" : "Regiones dibujadas con cada etiqueta, todas las veces que aparece")}
+                          >
+                            {t(m === "records" ? "Fotografías" : "Apariciones")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {spec.kind === "crosstab" && (
@@ -574,26 +593,54 @@ function ResultView({
       return (
         <>
           <Tiles
-            items={[
-              [t("Registros analizados"), n(result.records)],
-              [t("Valores distintos"), n(result.distinct)],
-              [t("Sin valor"), `${n(result.empty)} (${pct(result.records ? result.empty / result.records : 0)})`],
-            ]}
+            items={
+              result.visual
+                ? [
+                    [t("Registros analizados"), n(result.records)],
+                    [t("Apariciones"), n(result.visual.total)],
+                    [t("Sin revisar"), n(result.visual.unreviewed)],
+                    [t("Revisadas, sin elementos"), n(result.visual.reviewedEmpty)],
+                  ]
+                : [
+                    [t("Registros analizados"), n(result.records)],
+                    [t("Valores distintos"), n(result.distinct)],
+                    [t("Sin valor"), `${n(result.empty)} (${pct(result.records ? result.empty / result.records : 0)})`],
+                  ]
+            }
           />
           {result.categories.length ? (
             <BarList
               items={[
-                ...result.categories.map((c) => ({ label: c.label, value: c.count, note: pct(c.share) })),
+                ...result.categories.map((c) => ({
+                  label: c.label,
+                  value: c.count,
+                  // Visual tags: the other measure beside each bar.
+                  note: result.visual
+                    ? result.visual.by === "appearances"
+                      ? `${pct(c.share)} · ${t("en {n} fotos").replace("{n}", n(recordsOf(result, c.label)))}`
+                      : `${pct(c.share)} · ${t("{n} apariciones").replace("{n}", n(result.visual.appearances[c.label] ?? 0))}`
+                    : pct(c.share),
+                })),
                 ...(result.other ? [{ label: t("Otros"), value: result.other }] : []),
               ]}
             />
           ) : (
             <p className="muted">{t("Ningún registro tiene valor en esta propiedad.")}</p>
           )}
-          {result.multi && (
+          {result.visual ? (
             <p className="stat-note">
-              {t("Un registro puede tener varias etiquetas: los porcentajes son de registros y pueden sumar más de 100 %.")}
+              {t(
+                result.visual.by === "appearances"
+                  ? "Cada barra cuenta las regiones dibujadas con la etiqueta; los porcentajes son del total de apariciones."
+                  : "Cada barra cuenta los registros que tienen la etiqueta; un registro con varias cuenta en todas, así que los porcentajes pueden sumar más de 100 %.",
+              )}
             </p>
+          ) : (
+            result.multi && (
+              <p className="stat-note">
+                {t("Un registro puede tener varias etiquetas: los porcentajes son de registros y pueden sumar más de 100 %.")}
+              </p>
+            )
           )}
         </>
       );
@@ -782,10 +829,26 @@ function ResultView({
   }
 }
 
+/** How many records hold a tag, whatever a visual frequency counts. */
+function recordsOf(result: Extract<StatResult, { kind: "frequency" }>, label: string): number {
+  return result.visual?.records?.[label] ?? (result.visual?.by === "records" ? (result.categories.find((c) => c.label === label)?.count ?? 0) : 0);
+}
+
 /** The figures behind a result, for the table view and the clipboard. */
 function resultTable(result: StatResult, t: (s: string) => string): { head: string[]; rows: string[][] } {
   switch (result.kind) {
     case "frequency":
+      if (result.visual) {
+        const visual = result.visual;
+        return {
+          head: [t("Etiqueta"), t("Fotografías"), t("Apariciones"), t("Porcentaje")],
+          rows: [
+            ...result.categories.map((c) => [c.label, String(recordsOf(result, c.label)), String(visual.appearances[c.label] ?? 0), pct(c.share)]),
+            [t("Sin revisar"), String(visual.unreviewed), "", ""],
+            [t("Revisadas, sin elementos"), String(visual.reviewedEmpty), "", ""],
+          ],
+        };
+      }
       return {
         head: [t("Valor"), t("Registros"), t("Porcentaje")],
         rows: result.categories.map((c) => [c.label, String(c.count), pct(c.share)]),

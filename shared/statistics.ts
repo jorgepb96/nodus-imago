@@ -10,7 +10,14 @@ export type StatChart = "bar" | "column" | "line" | "heatmap" | "table";
 /** Heritage properties: count elements, their types or their groups; parts in their wholes. */
 export type HeritageStatOptions = { heritageLevel?: "element" | "type" | "group"; includeParts?: boolean };
 export type StatSpec = (
-  | { kind: "frequency"; columnId: string; limit?: number; chart?: StatChart }
+  | {
+      kind: "frequency";
+      columnId: string;
+      limit?: number;
+      chart?: StatChart;
+      /** «Etiquetas visuales»: count records that hold each tag, or its appearances (regions). */
+      count?: "records" | "appearances";
+    }
   | {
       kind: "crosstab";
       rowColumnId: string;
@@ -53,6 +60,19 @@ export type FrequencyResult = {
   categories: Category[];
   other: number;
   multi: boolean;
+  /**
+   * «Etiquetas visuales»: each tag's appearances (regions) by label, their
+   * total, and the records not reviewed or reviewed with nothing to tag.
+   */
+  visual?: {
+    appearances: Record<string, number>;
+    /** Records holding each tag (also when the bars count appearances). */
+    records: Record<string, number>;
+    total: number;
+    unreviewed: number;
+    reviewedEmpty: number;
+    by: "records" | "appearances";
+  };
 };
 export type ChiSquare = {
   statistic: number;
