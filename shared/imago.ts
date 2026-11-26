@@ -709,7 +709,13 @@ export type Commands = {
   /** An image's visual tag regions, whether it was reviewed, and the database's «Etiquetas visuales». */
   visualTagsList: {
     input: { assetId: string };
-    result: { regions: import("./visualTags").VisualTagRegion[]; reviewed: boolean; column: import("./databases").DatabaseColumn | null };
+    result: {
+      regions: import("./visualTags").VisualTagRegion[];
+      reviewed: boolean;
+      column: import("./databases").DatabaseColumn | null;
+      /** The select property linked as the tags' dictionary, if any. */
+      dictionary: import("./databases").DatabaseColumn | null;
+    };
   };
   /** Saves a region with a tag (an existing one, or a new one by name). */
   visualTagSave: {
@@ -717,6 +723,8 @@ export type Commands = {
     result: import("./visualTags").VisualTagRegion;
   };
   visualTagDelete: { input: { id: string }; result: boolean };
+  /** Links a select property as the tags' dictionary, or unlinks it. */
+  visualTagDictionary: { input: { databaseId: string; columnId: string | null }; result: boolean };
   /** Marks an image as reviewed (also with nothing to tag) or not. */
   visualTagReview: { input: { assetId: string; reviewed: boolean }; result: boolean };
   visualTagsSummary: {

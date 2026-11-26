@@ -636,11 +636,13 @@ export class Repository {
     const c = this.column(id);
     // Only how the options look changed (their order, their icons): nothing
     // to recompute.
-    const { optionSort: sortBefore, optionIcons: iconsBefore, ...kept } = c.config;
-    const { optionSort: sortAfter, optionIcons: iconsAfter, ...next } = config ?? c.config;
+    const { optionSort: sortBefore, optionIcons: iconsBefore, visualTagsDictionary: dictionaryBefore, ...kept } = c.config;
+    const { optionSort: sortAfter, optionIcons: iconsAfter, visualTagsDictionary: dictionaryAfter, ...next } = config ?? c.config;
     const layoutOnly =
       !!config &&
-      (sortBefore !== sortAfter || JSON.stringify(iconsBefore ?? {}) !== JSON.stringify(iconsAfter ?? {})) &&
+      (sortBefore !== sortAfter ||
+        JSON.stringify(iconsBefore ?? {}) !== JSON.stringify(iconsAfter ?? {}) ||
+        (dictionaryBefore ?? null) !== (dictionaryAfter ?? null)) &&
       (name == null || name === c.name) &&
       JSON.stringify(kept) === JSON.stringify(next);
     if (c.type === "rollup" && config)

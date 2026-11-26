@@ -760,6 +760,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   visualTagDelete: z.object({ id }).strict(),
   visualTagReview: z.object({ assetId: id, reviewed: z.boolean() }).strict(),
   visualTagsSummary: z.object({ databaseId: id }).strict(),
+  visualTagDictionary: z.object({ databaseId: id, columnId: id.nullable() }).strict(),
   imageCirculation: z
     .object({
       assetId: id,

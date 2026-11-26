@@ -372,7 +372,14 @@ export function OptionPicker({
   busy: boolean;
   onToggle: (id: string) => void;
   onOptionsChanged?: () => void;
-  floating?: { onPick: (id: string) => void; onCreate: (label: string) => void; onClose: () => void; placeholder?: string };
+  floating?: {
+    onPick: (id: string) => void;
+    onCreate: (label: string) => void;
+    onClose: () => void;
+    placeholder?: string;
+    /** A dictionary: another select property whose terms are offered too (picked by their own id). */
+    extra?: { title: string; column: DatabaseColumn };
+  };
 }) {
   const t = useT(),
     isFloating = !!floating,
@@ -546,7 +553,14 @@ export function OptionPicker({
   // Floating: Enter picks the exact match, or the one moved to with the
   // arrows, and creates the tag when none matches exactly.
   const typed = query.trim();
-  const exact = column.options.find((o) => fold(o.label) === fold(typed));
+  // The dictionary's terms not yet among the options, matching the search.
+  const extraColumn = floating?.extra?.column ?? null;
+  const ownLabels = new Set(column.options.map((o) => fold(o.label)));
+  const extraList = extraColumn
+    ? sortOptions(extraColumn.options, extraColumn.config.optionSort ?? "manual").filter((o) => !ownLabels.has(fold(o.label)) && (!needle || fold(o.label).includes(needle)))
+    : [];
+  const choices = [...ordered, ...extraList];
+  const exact = choices.find((o) => fold(o.label) === fold(typed));
   // The highlighted row: an option (0…) or «Create …» (-1).
   const canCreate = !!typed && !exact;
   const onFloatingKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -557,19 +571,19 @@ export function OptionPicker({
       floating.onClose();
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActive((i) => Math.min(ordered.length - 1, i + 1));
+      setActive((i) => Math.min(choices.length - 1, i + 1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActive((i) => Math.max(canCreate ? -1 : 0, i - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
       if (active === -1 && canCreate) floating.onCreate(typed);
-      else if (ordered[active]) floating.onPick(ordered[active].id);
+      else if (choices[active]) floating.onPick(choices[active].id);
       else if (canCreate) floating.onCreate(typed);
     }
   };
   // Typing highlights the exact match, else «Create …», else the first option.
-  const exactIndex = exact ? ordered.findIndex((o) => o.id === exact.id) : -1;
+  const exactIndex = exact ? choices.findIndex((o) => o.id === exact.id) : -1;
   useEffect(() => setActive(exactIndex >= 0 ? exactIndex : typed ? -1 : 0), [typed, exactIndex]);
   return (
     <>
@@ -612,6 +626,23 @@ export function OptionPicker({
               )}
             </div>
           ))}
+          {extraList.length > 0 && extraColumn && (
+            <>
+              <p className="tag-picker-group">{floating.extra!.title}</p>
+              {extraList.slice(0, 300).map((o, j) => {
+                const i = ordered.length + j;
+                return (
+                  <div key={o.id} className={`option-row is-dictionary${i === active ? " is-active" : ""}`} data-testid="tag-picker-term">
+                    <button type="button" className="tag-picker-choice" onMouseEnter={() => setActive(i)} onClick={() => floating.onPick(o.id)}>
+                      <i style={{ background: o.color ?? DEFAULT_OPTION_COLOR }} />
+                      <OptionIcon value={optionIconValue(extraColumn.config, o.id)} size={11} />
+                      <span className="option-label">{o.label}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
         {typed && !exact && (
           <button

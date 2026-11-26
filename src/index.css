@@ -11509,3 +11509,27 @@ tr:hover .ai-cell-button,
 .visual-tags-cell.is-empty {
   font-size: 11.5px;
 }
+.tag-picker-group {
+  margin: 6px 4px 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tag-picker .option-row.is-dictionary .option-label {
+  color: var(--muted);
+}
+.tag-picker .option-row.is-dictionary.is-active .option-label,
+.tag-picker .option-row.is-dictionary:hover .option-label {
+  color: inherit;
+}
+.viewer-tag-dictionary {
+  display: grid;
+  gap: 4px;
+  font-size: 11.5px;
+  color: #a1a1aa;
+}
+.viewer-tag-dictionary select {
+  width: 100%;
+}

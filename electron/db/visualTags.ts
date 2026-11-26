@@ -103,12 +103,45 @@ export class VisualTags {
     })();
   }
 
-  /** The option for a region: the one chosen (it must be a tag of this database), or a new one by name. */
+  /** The property whose options are offered as tags, if one is linked. */
+  dictionary(databaseId: string): DatabaseColumn | null {
+    const id = this.column(databaseId)?.config.visualTagsDictionary;
+    return (id && this.repo.detail(databaseId).columns.find((c) => c.id === id && ["select", "multi_select", "status"].includes(c.type))) || null;
+  }
+  /** Links a select property of the database as the tags' dictionary (null unlinks it). */
+  setDictionary(databaseId: string, columnId: string | null) {
+    if (columnId) {
+      const source = this.repo.detail(databaseId).columns.find((c) => c.id === columnId);
+      if (!source || !["select", "multi_select", "status"].includes(source.type) || source.config.visualTags)
+        throw new Error("Elige una propiedad de selección de esta base de datos.");
+    }
+    const column = this.column(databaseId, !!columnId);
+    if (!column) return;
+    this.repo.updateColumn(column.id, undefined, { ...column.config, visualTagsDictionary: columnId });
+  }
+  /**
+   * The option for a region: a tag of this database; a term of the linked
+   * dictionary, copied as a tag (name, colour and icon) the first time; or a
+   * new tag by name.
+   */
   private option(databaseId: string, optionId: string | null, label: string | null): string | null {
     if (optionId) {
       const column = this.column(databaseId);
-      if (!column?.options.some((o) => o.id === optionId)) throw new Error("La etiqueta no pertenece a esta base de datos.");
-      return optionId;
+      if (column?.options.some((o) => o.id === optionId)) return optionId;
+      const dictionary = this.dictionary(databaseId);
+      const term = dictionary?.options.find((o) => o.id === optionId);
+      if (!term || !dictionary) throw new Error("La etiqueta no pertenece a esta base de datos.");
+      const tags = this.column(databaseId, true)!;
+      const same = tags.options.find((o) => o.label.toLocaleLowerCase() === term.label.toLocaleLowerCase());
+      if (same) return same.id;
+      this.repo.saveOptions(tags.id, [...tags.options.map((o) => ({ id: o.id, label: o.label, color: o.color })), { label: term.label, color: term.color }]);
+      const created = this.repo.column(tags.id).options.find((o) => o.label === term.label)!;
+      const icon = dictionary.config.optionIcons?.[term.id];
+      if (icon) {
+        const current = this.repo.column(tags.id);
+        this.repo.updateColumn(tags.id, undefined, { ...current.config, optionIcons: { ...(current.config.optionIcons ?? {}), [created.id]: icon } });
+      }
+      return created.id;
     }
     const name = label?.replace(/\s+/g, " ").trim();
     if (!name) return null;

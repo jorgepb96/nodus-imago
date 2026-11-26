@@ -76,7 +76,7 @@ const CONTENT_WRITES = new Set([
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
-  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "convertToRelation", "pairRelation", "createWorkFromFamily",
+  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "visualTagDictionary", "convertToRelation", "pairRelation", "createWorkFromFamily",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -1257,7 +1257,12 @@ export class Service {
         return true;
       case "visualTagsList": {
         const asset = this.repo.asset(input.assetId) as { database_id: string };
-        return { regions: this.visualTags.list(input.assetId), reviewed: this.visualTags.reviewed(input.assetId), column: this.visualTags.column(asset.database_id) };
+        return {
+          regions: this.visualTags.list(input.assetId),
+          reviewed: this.visualTags.reviewed(input.assetId),
+          column: this.visualTags.column(asset.database_id),
+          dictionary: this.visualTags.dictionary(asset.database_id),
+        };
       }
       case "visualTagSave": {
         const saved = this.visualTags.save(input);
@@ -1270,6 +1275,10 @@ export class Service {
         return true;
       case "visualTagReview":
         this.visualTags.setReviewed(input.assetId, input.reviewed);
+        this.changed();
+        return true;
+      case "visualTagDictionary":
+        this.visualTags.setDictionary(input.databaseId, input.columnId);
         this.changed();
         return true;
       case "visualTagsSummary":

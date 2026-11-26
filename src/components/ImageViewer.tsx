@@ -136,6 +136,8 @@ export function ImageViewer({
   const [aiZones, setAiZones] = useState<{ x: number; y: number; w: number; h: number }[]>([]);
   const [drawingZone, setDrawingZone] = useState(false);
   const heritageColumns = (columns ?? []).filter((c) => isHeritageColumn(c));
+  /** Select properties that can serve as the tags' dictionary. */
+  const dictionaryChoices = (columns ?? []).filter((c) => ["select", "multi_select", "status"].includes(c.type) && !c.config.visualTags && !isHeritageColumn(c) && c.options.length > 0);
   const [heritageId, setHeritageId] = useState<string | null>(null);
   const heritageColumn = heritageColumns.find((c) => c.id === heritageId) ?? heritageColumns[0] ?? null;
   const heritageElements = useHeritage(heritageColumn?.id);
@@ -145,6 +147,8 @@ export function ImageViewer({
   const [tagging, setTagging] = useState(false);
   const [tagRegions, setTagRegions] = useState<VisualTagRegion[]>([]);
   const [tagColumn, setTagColumn] = useState<DatabaseColumn | null>(null);
+  /** A select property linked as the tags' dictionary: its terms are offered while tagging. */
+  const [tagDictionary, setTagDictionary] = useState<DatabaseColumn | null>(null);
   const [reviewed, setReviewed] = useState(false);
   /** A region waiting for its tag: a new one, or one being given another tag (`id`). */
   const [tagDraft, setTagDraft] = useState<{ id?: string; x: number; y: number; w: number; h: number } | null>(null);
@@ -224,6 +228,7 @@ export function ImageViewer({
     const found = await window.imago.call("visualTagsList", { assetId: imageId });
     setTagRegions(found.regions);
     setTagColumn(found.column);
+    setTagDictionary(found.dictionary);
     setReviewed(found.reviewed);
   }, [imageId]);
   useEffect(() => {
@@ -1058,6 +1063,7 @@ export function ImageViewer({
                 }}
                 floating={{
                   placeholder: t(tagDraft.id ? "Otra etiqueta…" : "Buscar o crear etiqueta…"),
+                  extra: tagDictionary ? { title: t("Del diccionario «{name}»").replace("{name}", tagDictionary.name), column: tagDictionary } : undefined,
                   onPick: (optionId) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, optionId }),
                   onCreate: (label) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, label }),
                   onClose: () => setTagDraft(null),
@@ -1132,6 +1138,31 @@ export function ImageViewer({
               <h2>
                 {t("Etiquetado")} <span>{tagRegions.length}</span>
               </h2>
+              {dictionaryChoices.length > 0 && (
+                <label className="viewer-tag-dictionary">
+                  {t("Diccionario")}
+                  <select
+                    value={tagDictionary?.id ?? ""}
+                    data-testid="viewer-tag-dictionary"
+                    onChange={(e) =>
+                      void window.imago
+                        .call("visualTagDictionary", { databaseId: row.databaseId, columnId: e.target.value || null })
+                        .then(async () => {
+                          await loadTags();
+                          window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+                        })
+                        .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+                    }
+                  >
+                    <option value="">{t("Sin diccionario")}</option>
+                    {dictionaryChoices.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.options.length})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {tagRegions.length > 0 && tagColumn && (
                 <div className="viewer-tag-counts" data-testid="viewer-tag-counts">
                   {Object.entries(
