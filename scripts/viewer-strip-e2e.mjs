@@ -100,11 +100,33 @@ try {
   assert.match(await page.getByTestId("record-panel").innerText(), new RegExp(title(3)));
   checks.push("→ opens the next record with a photograph (Postal 002, without one, is passed over) and the record panel follows");
 
-  // A photograph of the strip opens its record.
+  // The strip can switch with a record refresh still waiting on IPC.
+  const target = rows.find((r) => r.title === title(12));
+  await app.evaluate(({ ipcMain }, rowId) => {
+    const handler = ipcMain._invokeHandlers.get("imago:call");
+    let release;
+    const hold = new Promise((resolve) => { release = resolve; });
+    ipcMain.removeHandler("imago:call");
+    ipcMain.handle("imago:call", async (event, command, ...args) => {
+      if (command === "getRow" && args[0]?.id === rowId) await hold;
+      return handler(event, command, ...args);
+    });
+    globalThis.releaseStripRefresh = release;
+  }, target.id);
   await strip.getByTestId("viewer-strip-item").filter({ hasText: title(12) }).click();
   await poll(async () => (await current(viewer)) === title(12), "strip click to Postal 012");
+  const image = viewer.locator(".viewer-image");
+  await image.waitFor({ state: "visible" });
+  assert.equal(await image.getAttribute("alt"), title(12));
+  await strip.getByTestId("viewer-strip-item").filter({ hasText: title(11) }).click();
+  await app.evaluate(() => globalThis.releaseStripRefresh());
+  await poll(async () => (await current(viewer)) === title(11), "rapid strip click to Postal 011");
+  await image.waitFor({ state: "visible" });
+  assert.equal(await image.getAttribute("alt"), title(11));
+  await strip.getByTestId("viewer-strip-item").filter({ hasText: title(12) }).click();
+  await poll(async () => (await current(viewer)) === title(12), "return to Postal 012");
   assert.equal(await strip.getByTestId("viewer-strip-count").innerText(), `12 / ${TOTAL}`);
-  checks.push("A click on the strip opens that record");
+  checks.push("A click on the strip switches the displayed photo before the record refresh returns");
 
   // At the end of what was read, → reads the next batch of the list.
   await page.keyboard.press("ArrowRight");

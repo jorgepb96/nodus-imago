@@ -873,8 +873,20 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
    * list on screen (its filters, order and search) goes with it, so the
    * viewer's strip can move along it; `browse` keeps a list already chosen.
    */
-  const open = async (row: RecordRow, browse?: BrowseList | null) => {
+  const recordOpenRequest = useRef(0);
+  const open = async (row: RecordRow, browse?: BrowseList) => {
+    const request = ++recordOpenRequest.current;
     const at = page.rows.findIndex((r) => r.id === row.id);
+    const knownDetail = browse
+      ? (recordDetail?.database.id === row.databaseId ? recordDetail : allDetails.find((d) => d.database.id === row.databaseId))
+      : undefined;
+    const nextDetail = knownDetail ?? await api.call("detail", { id: row.databaseId });
+    // Search results are already hydrated. The open-row effect refreshes
+    // the displayed record in the background after a strip navigation.
+    const nextRow = browse ? row : await api.call("getRow", { id: row.id });
+    if (request !== recordOpenRequest.current) return;
+    setRecordDetail(nextDetail);
+    setOpenRow(nextRow);
     setRecordBrowse(
       browse !== undefined
         ? browse
@@ -887,9 +899,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
             }
           : null,
     );
-    // Moving along the list stays in the same database: its properties are known.
-    if (!(browse && recordDetail?.database.id === row.databaseId)) setRecordDetail(await api.call("detail", { id: row.databaseId }));
-    setOpenRow(await api.call("getRow", { id: row.id }));
   };
   // The last box ticked or unticked: Shift+click applies the same to every
   // record between it and the one clicked, as in a file manager.
@@ -4770,6 +4779,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
               : readColumnPrefs(recordDetail.database.id).hidden
           }
           onClose={() => {
+            ++recordOpenRequest.current;
             setOpenRow(null);
             setRecordStrip(null);
           }}
@@ -4778,12 +4788,10 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
           onSimilar={similar}
           strip={recordStrip}
           browse={recordBrowse}
-          onBrowse={(rowId, index) =>
-            void perform(async () => {
-              const next = recordBrowse ? { ...recordBrowse, index } : null;
-              await open(await api.call("getRow", { id: rowId }), next);
-            })
-          }
+          onBrowse={({ row, index }) => {
+            if (recordBrowse) void open(row, { ...recordBrowse, index })
+              .catch((error) => notify(error instanceof Error ? error.message : String(error), true));
+          }}
           fullscreen={recordFullscreen}
           onFullscreen={fillRecordPanel}
           citation={

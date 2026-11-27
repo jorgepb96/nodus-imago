@@ -33,6 +33,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.2",
+    date: "2026-11-27",
+    highlights: [
+      {
+        scope: "visual",
+        category: "fix",
+        es: "Las etiquetas, los términos del diccionario y las opciones de color se leen al resaltarlos en el visor. Al elegir una etiqueta, aparece en la imagen mientras se guarda.",
+        en: "Highlighted tags, dictionary terms, and colour options stay readable in the viewer. A selected tag appears on the image while it saves.",
+      },
+      {
+        scope: "visual",
+        category: "fix",
+        es: "El visor cambia de foto desde la tira inferior mientras se actualiza la ficha en segundo plano y precarga las fotos cercanas.",
+        en: "The viewer switches photos from the strip while the record refreshes in the background and preloads nearby photos.",
+      },
+    ],
+  },
+  {
     version: "0.9.1",
     date: "2026-11-26",
     highlights: [

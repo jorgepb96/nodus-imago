@@ -25,6 +25,44 @@ const poll = async (predicate, what = "condition") => {
   }
 };
 const idle = () => poll(async () => !(await call("jobs")).some((j) => ["queued", "running"].includes(j.state)), "jobs");
+const checkContrast = async (label) => {
+  const ratios = await label.evaluate((node) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext("2d");
+    const paint = (colour) => {
+      ctx.fillStyle = colour;
+      ctx.fillRect(0, 0, 1, 1);
+    };
+    const luminance = () => {
+      const [r, g, b] = Array.from(ctx.getImageData(0, 0, 1, 1).data.slice(0, 3), (value) => {
+        const srgb = value / 255;
+        return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+      });
+      return r * 0.2126 + g * 0.7152 + b * 0.0722;
+    };
+    const root = document.documentElement;
+    const wasDark = root.classList.contains("dark");
+    try {
+      return [false, true].map((dark) => {
+        root.classList.toggle("dark", dark);
+        ctx.clearRect(0, 0, 1, 1);
+        const backgrounds = [];
+        for (let element = node; !element.matches(".image-viewer"); element = element.parentElement) {
+          backgrounds.unshift(getComputedStyle(element).backgroundColor);
+        }
+        backgrounds.forEach(paint);
+        const background = luminance();
+        paint(getComputedStyle(node).color);
+        const text = luminance();
+        return (Math.max(text, background) + 0.05) / (Math.min(text, background) + 0.05);
+      });
+    } finally {
+      root.classList.toggle("dark", wasDark);
+    }
+  });
+  assert.ok(ratios.every((ratio) => ratio >= 4.5), `Label must be readable in light and dark mode (${ratios})`);
+};
 try {
   await fs.mkdir("test-results", { recursive: true });
   app = await electron.launch(
@@ -76,8 +114,8 @@ try {
   await viewer.locator(".viewer-image").waitFor();
   await poll(async () => (await viewer.locator(".viewer-image").boundingBox())?.width > 100, "image shown");
   await viewer.getByTestId("viewer-tagging").click();
-  const image = await viewer.locator(".viewer-image").boundingBox();
   const drag = async (x0, y0, x1, y1) => {
+    const image = await viewer.locator(".viewer-image").boundingBox();
     await page.mouse.move(image.x + image.width * x0, image.y + image.height * y0);
     await page.mouse.down();
     await page.mouse.move(image.x + image.width * x1, image.y + image.height * y1, { steps: 6 });
@@ -90,24 +128,58 @@ try {
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-testid")), "tag-picker-input", "the search is focused");
   await page.keyboard.type("Toro");
   await page.keyboard.press("Enter");
-  await viewer.getByTestId("viewer-tag-region").filter({ hasText: "Toro" }).waitFor();
+  await viewer.locator("[data-tag-region]").filter({ hasText: "Toro" }).waitFor();
   // The same tag again, picked from the list.
   await drag(0.5, 0.3, 0.7, 0.7);
   await picker.waitFor();
   await page.keyboard.type("to");
-  await picker.getByTestId("tag-picker-option").filter({ hasText: "Toro" }).click();
-  await poll(async () => (await viewer.getByTestId("viewer-tag-region").count()) === 2, "second region");
+  const toro = picker.getByTestId("tag-picker-option").filter({ hasText: "Toro" });
+  await toro.getByRole("button", { name: "Toro", exact: true }).hover();
+  await checkContrast(toro.locator(".option-label"));
+  await toro.getByRole("button", { name: "Editar opción Toro" }).click();
+  const blue = picker.getByRole("button", { name: "Azul", exact: true });
+  await blue.hover();
+  await checkContrast(blue.locator(".option-edit-label"));
+  await page.screenshot({ path: "test-results/visual-tags-colour-hover.png" });
+  await page.keyboard.press("Escape");
+  await blue.waitFor({ state: "hidden" });
+  // Hold the real save so an immediate region cannot be mistaken for a fast database response.
+  await app.evaluate(({ ipcMain }) => {
+    const handler = ipcMain._invokeHandlers.get("imago:call");
+    let release;
+    const hold = new Promise((resolve) => { release = resolve; });
+    ipcMain.removeHandler("imago:call");
+    ipcMain.handle("imago:call", async (event, command, ...args) => {
+      if (command === "visualTagSave") await hold;
+      return handler(event, command, ...args);
+    });
+    globalThis.releaseTagSave = release;
+  });
+  await toro.getByRole("button", { name: "Toro", exact: true }).click();
+  await picker.waitFor({ state: "hidden" });
+  await viewer.locator('.viewer-tag[aria-busy="true"]').filter({ hasText: "Toro" }).waitFor();
+  assert.equal(await viewer.locator("[data-tag-region]").count(), 1);
+  await app.evaluate(() => globalThis.releaseTagSave());
+  await poll(async () => (await viewer.locator("[data-tag-region]").count()) === 2, "second region saved");
+  checks.push("Existing tag appears on click while the database save is held; tag and colour highlights are readable in either theme");
   // A dictionary: «Tema»; its terms appear under the tags and one becomes a tag.
   await viewer.getByTestId("viewer-tag-dictionary").selectOption(db.columns.find((c) => c.name === "Tema").id);
   await drag(0.75, 0.1, 0.95, 0.4);
   await picker.waitFor();
   await page.keyboard.type("fies");
-  await picker.getByTestId("tag-picker-term").filter({ hasText: "Fiesta" }).waitFor();
+  const fiesta = picker.getByTestId("tag-picker-term").filter({ hasText: "Fiesta" });
+  await fiesta.waitFor();
+  await fiesta.getByRole("button").hover();
+  await checkContrast(fiesta.locator(".option-label"));
+  await page.screenshot({ path: "test-results/visual-tags-dictionary-hover.png" });
+  await picker.getByTestId("tag-picker-input").hover();
+  await page.keyboard.press("ArrowUp");
   // «Crear "fies"» comes first; the arrow goes down to the dictionary's term.
   assert.match(await picker.getByTestId("tag-picker-create").innerText(), /fies/);
   await page.keyboard.press("ArrowDown");
+  await checkContrast(fiesta.locator(".option-label"));
   await page.keyboard.press("Enter");
-  await viewer.getByTestId("viewer-tag-region").filter({ hasText: "Fiesta" }).waitFor();
+  await viewer.locator("[data-tag-region]").filter({ hasText: "Fiesta" }).waitFor();
   await page.waitForTimeout(250);
   await page.screenshot({ path: "test-results/visual-tags-viewer.png" });
   const visual = (await call("detail", { id: db.database.id })).columns.find((c) => c.config.visualTags);

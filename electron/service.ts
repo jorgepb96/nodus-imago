@@ -1266,8 +1266,12 @@ export class Service {
       }
       case "visualTagSave": {
         const saved = this.visualTags.save(input);
+        // A new label or a dictionary term may have created a column or option.
+        const column = saved.optionId === input.optionId
+          ? undefined
+          : this.visualTags.column((this.repo.asset(input.assetId) as { database_id: string }).database_id);
         this.changed();
-        return saved;
+        return { ...saved, column };
       }
       case "visualTagDelete":
         this.visualTags.delete(input.id);

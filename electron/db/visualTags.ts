@@ -50,9 +50,10 @@ export class VisualTags {
 
   /** The database's «Etiquetas visuales», made (after the other properties) when asked to. */
   column(databaseId: string, create = false): DatabaseColumn | null {
-    const found = this.repo.detail(databaseId).columns.find((c) => c.type === "multi_select" && c.config.visualTags);
+    const { columns } = this.repo.detail(databaseId);
+    const found = columns.find((c) => c.type === "multi_select" && c.config.visualTags);
     if (found || !create) return found ?? null;
-    const taken = new Set(this.repo.detail(databaseId).columns.map((c) => c.name.toLocaleLowerCase()));
+    const taken = new Set(columns.map((c) => c.name.toLocaleLowerCase()));
     const name = taken.has(VISUAL_TAGS_NAME.toLocaleLowerCase()) ? `${VISUAL_TAGS_NAME} (Imago)` : VISUAL_TAGS_NAME;
     return this.repo.addColumn(databaseId, name, "multi_select", { visualTags: true });
   }
@@ -99,7 +100,9 @@ export class VisualTags {
           .run(id, input.assetId, optionId, x, y, w, h, at, at);
       this.markReviewed(input.assetId, true);
       this.repo.syncVisualTags(asset.row_id);
-      return this.list(input.assetId).find((r) => r.id === id) ?? decode({ ...(this.repo.db.prepare("SELECT * FROM image_tags WHERE id=?").get(id) as Row) });
+      const saved = this.repo.db.prepare("SELECT * FROM image_tags WHERE id=?").get(id) as Row;
+      const shown = saved.state !== "rejected" ? toShown(saved, view) : null;
+      return decode(shown ? { ...saved, ...shown } : saved);
     })();
   }
 
@@ -125,38 +128,33 @@ export class VisualTags {
    * new tag by name.
    */
   private option(databaseId: string, optionId: string | null, label: string | null): string | null {
+    const column = this.column(databaseId);
     if (optionId) {
-      const column = this.column(databaseId);
       if (column?.options.some((o) => o.id === optionId)) return optionId;
       const dictionary = this.dictionary(databaseId);
       const term = dictionary?.options.find((o) => o.id === optionId);
-      if (!term || !dictionary) throw new Error("La etiqueta no pertenece a esta base de datos.");
-      const tags = this.column(databaseId, true)!;
-      const same = tags.options.find((o) => o.label.toLocaleLowerCase() === term.label.toLocaleLowerCase());
-      if (same) return same.id;
-      // A term without a colour gets one of the palette, so tags are told apart on the image.
-      this.repo.saveOptions(tags.id, [
-        ...tags.options.map((o) => ({ id: o.id, label: o.label, color: o.color })),
-        { label: term.label, color: term.color ?? importedOptionColor(tags.options.length) },
-      ]);
-      const created = this.repo.column(tags.id).options.find((o) => o.label === term.label)!;
-      const icon = dictionary.config.optionIcons?.[term.id];
-      if (icon) {
-        const current = this.repo.column(tags.id);
-        this.repo.updateColumn(tags.id, undefined, { ...current.config, optionIcons: { ...(current.config.optionIcons ?? {}), [created.id]: icon } });
-      }
-      return created.id;
+      if (!term || !dictionary || !column) throw new Error("La etiqueta no pertenece a esta base de datos.");
+      return this.appendOption(column, term.label, term.color, dictionary.config.optionIcons?.[term.id]);
     }
-    const name = label?.replace(/\s+/g, " ").trim();
+    const name = label?.replace(/\s+/g, " ").trim().slice(0, 200);
     if (!name) return null;
-    const column = this.column(databaseId, true)!;
-    const existing = column.options.find((o) => o.label.toLocaleLowerCase() === name.toLocaleLowerCase());
+    return this.appendOption(column ?? this.column(databaseId, true)!, name, null);
+  }
+
+  private appendOption(column: DatabaseColumn, label: string, color: string | null, icon?: string) {
+    const name = label.normalize("NFKC").trim().toLowerCase();
+    const existing = column.options.find((o) => o.label.normalize("NFKC").trim().toLowerCase() === name);
     if (existing) return existing.id;
-    this.repo.saveOptions(column.id, [
-      ...column.options.map((o) => ({ id: o.id, label: o.label, color: o.color })),
-      { label: name.slice(0, 200), color: importedOptionColor(column.options.length) },
-    ]);
-    return this.repo.column(column.id).options.find((o) => o.label === name.slice(0, 200))!.id;
+    const id = uuid(),
+      at = now(),
+      position = (column.options.at(-1)?.position ?? -1) + 1;
+    // Existing options and their cells are unchanged. The region save below
+    // synchronizes the affected row, including its derived values and search text.
+    this.repo.db
+      .prepare("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)")
+      .run(id, column.databaseId, column.id, label.trim(), color ?? importedOptionColor(column.options.length), position, at, at);
+    if (icon) this.repo.updateColumn(column.id, undefined, { ...column.config, optionIcons: { ...column.config.optionIcons, [id]: icon } });
+    return id;
   }
 
   delete(id: string) {

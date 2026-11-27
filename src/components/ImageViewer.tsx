@@ -33,9 +33,10 @@ import { OptionPicker } from "./Cell";
 import { OptionIcon } from "./DatabaseIcon";
 import { DEFAULT_OPTION_COLOR } from "./OptionEditMenu";
 import { optionIconValue } from "../../shared/databaseIcons";
+import { importedOptionColor } from "../../shared/databaseCsv";
 import type { VisualTagRegion } from "../../shared/visualTags";
-import { BROWSE_BATCH, useBrowse, ViewerStrip, type BrowseList } from "./ViewerStrip";
-import type { ImageAnnotation, RecordRow } from "../../shared/imago";
+import { BROWSE_BATCH, useBrowse, ViewerStrip, type BrowseItem, type BrowseList } from "./ViewerStrip";
+import type { Commands, ImageAnnotation, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { DetailSearchPanel, type DetailQuery } from "./DetailSearchPanel";
 import { Spinner } from "./ui";
@@ -50,8 +51,10 @@ import { HeritagePropagatePanel } from "./HeritagePropagatePanel";
 
 type View = { scale: number; x: number; y: number };
 type Draft = { id?: string; x: number; y: number; w: number; h: number; note: string; tags: string[] };
+type TagDraft = Region & { id?: string };
+type TagPreview = { draft: TagDraft; label: string; color: string | null; icon: string | null };
 const COLORS = ["#f59e0b", "#22c55e", "#3b82f6", "#ec4899", "#8b5cf6", "#ef4444"];
-const src = (id: string, revision?: string, variant: "preview" | "full" = "preview") =>
+const src = (id: string, revision?: string, variant: "thumb" | "preview" | "full" = "preview") =>
   `imago://asset/${id}/${variant}${revision ? "?v=" + encodeURIComponent(revision) : ""}`;
 /** Which part of the crop frame a drag moves. */
 type Grip = "move" | "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se" | "new";
@@ -102,7 +105,7 @@ export function ImageViewer({
   /** The list the record was opened from: its photographs fill the strip under the image. */
   browse?: BrowseList | null;
   /** Opens another record of that list in the viewer. */
-  onBrowse?: (rowId: string, index: number) => void;
+  onBrowse?: (item: BrowseItem) => void;
   /** The database's properties: heritage ones can be marked on the image. */
   columns?: DatabaseColumn[];
   initialIndex?: number;
@@ -145,13 +148,16 @@ export function ImageViewer({
     });
   };
   const { items: stripItems, step: stepList, batch: readBatch } = useBrowse(browse);
+  const browseRequest = useRef(0);
+  useLayoutEffect(() => () => { ++browseRequest.current; }, [browse?.input]);
   /** The next (1) or previous (-1) photograph of the list; false at its end. */
   const stepRecord = async (direction: 1 | -1) => {
     if (!browse || !onBrowse) return false;
+    const request = ++browseRequest.current;
     const next = await stepList(browse.index, direction);
-    if (!next) return false;
+    if (!next || request !== browseRequest.current) return false;
     setEnterAt(direction === -1 ? "end" : "start");
-    onBrowse(next.row.id, next.index);
+    onBrowse(next);
     return true;
   };
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
@@ -190,12 +196,17 @@ export function ImageViewer({
   /** «Etiquetado»: regions drawn on the image, each named with a tag of the database. */
   const [tagging, setTagging] = useState(false);
   const [tagRegions, setTagRegions] = useState<VisualTagRegion[]>([]);
-  const [tagColumn, setTagColumn] = useState<DatabaseColumn | null>(null);
+  const [loadedTagColumn, setTagColumn] = useState<DatabaseColumn | null>(null);
+  const tagColumn = loadedTagColumn?.databaseId === row.databaseId ? loadedTagColumn : null;
   /** A select property linked as the tags' dictionary: its terms are offered while tagging. */
-  const [tagDictionary, setTagDictionary] = useState<DatabaseColumn | null>(null);
+  const [loadedTagDictionary, setTagDictionary] = useState<DatabaseColumn | null>(null);
+  const tagDictionary = loadedTagDictionary?.databaseId === row.databaseId ? loadedTagDictionary : null;
   const [reviewed, setReviewed] = useState(false);
   /** A region waiting for its tag: a new one, or one being given another tag (`id`). */
-  const [tagDraft, setTagDraft] = useState<{ id?: string; x: number; y: number; w: number; h: number } | null>(null);
+  const [tagDraft, setTagDraft] = useState<TagDraft | null>(null);
+  const [tagPreviews, setTagPreviews] = useState<Record<string, TagPreview>>({});
+  const savingTags = useRef(new Set<string>());
+  const tagPreview = image && tagPreviews[image.id];
   const [tagSelected, setTagSelected] = useState<string | null>(null);
   const tagDrag = useRef<{ id: string; grip: Grip; start: Region; from: { x: number; y: number }; moved: boolean } | null>(null);
   /** The layers drawn over the image: visual tags and annotations, each shown or hidden. */
@@ -263,13 +274,22 @@ export function ImageViewer({
   // Keyed by the image id: the record is refreshed after each saved
   // annotation, and that must not reset the view of the same image.
   const imageId = image?.id;
+  const activeImage = useRef<string | undefined>(imageId);
+  useLayoutEffect(() => {
+    activeImage.current = imageId;
+    return () => { activeImage.current = undefined; };
+  }, [imageId]);
   const load = useCallback(async () => {
     if (!imageId) return;
-    setAnnotations(await window.imago.call("annotationsList", { assetId: imageId }));
+    const annotations = await window.imago.call("annotationsList", { assetId: imageId });
+    if (activeImage.current === imageId) setAnnotations(annotations);
   }, [imageId]);
+  const tagLoad = useRef(0);
   const loadTags = useCallback(async () => {
-    if (!imageId) return;
+    if (!imageId || activeImage.current !== imageId) return;
+    const request = ++tagLoad.current;
     const found = await window.imago.call("visualTagsList", { assetId: imageId });
+    if (activeImage.current !== imageId || request !== tagLoad.current) return;
     setTagRegions(found.regions);
     setTagColumn(found.column);
     setTagDictionary(found.dictionary);
@@ -283,9 +303,13 @@ export function ImageViewer({
     setShown(imageId);
     setNatural(null);
     setDraft(null);
+    setDrawing(null);
+    setAnnotations([]);
     setSelected(null);
     setTagDraft(null);
     setTagSelected(null);
+    setTagRegions([]);
+    setReviewed(false);
     setCropping(null);
     setLoadFailed(false);
     if (searching?.drawn) setSearching(null);
@@ -297,6 +321,37 @@ export function ImageViewer({
   // demand: ask for it in the background so «Recortar» opens at once
   // instead of waiting behind imports or indexing.
   const imageRevision = image?.revision;
+  const imageSrc = imageId ? src(imageId, imageRevision, cropping ? "full" : "preview") : undefined;
+  const thumbSrc = imageId && !cropping ? src(imageId, imageRevision, "thumb") : undefined;
+  const [loadedThumb, setLoadedThumb] = useState<string>();
+  const imageElement = useRef<HTMLImageElement>(null);
+  useLayoutEffect(() => {
+    const element = imageElement.current;
+    if (element?.complete && element.naturalWidth) {
+      setLoadFailed(false);
+      setNatural({ w: element.naturalWidth, h: element.naturalHeight });
+    }
+  }, [imageSrc]);
+  const stripIndex = browse?.index ?? -1;
+  const previousImages = stripItems.filter((item) => item.index < stripIndex).at(-1)?.row.images;
+  const previousImage = row.images[index - 1] ?? previousImages?.at(-1);
+  const nextImage = row.images[index + 1] ?? stripItems.find((item) => item.index > stripIndex)?.row.images[0];
+  const previousSrc = previousImage && src(previousImage.id, previousImage.revision);
+  const nextSrc = nextImage && src(nextImage.id, nextImage.revision);
+  const warmPreviews = useRef(new Map<string, HTMLImageElement>());
+  useEffect(() => {
+    const urls = [previousSrc, imageSrc, nextSrc];
+    const cache = warmPreviews.current;
+    for (const url of cache.keys()) if (!urls.includes(url)) cache.delete(url);
+    for (const url of [previousSrc, nextSrc]) {
+      if (!url || cache.has(url)) continue;
+      const preload = new Image();
+      preload.fetchPriority = "low";
+      preload.src = url;
+      cache.set(url, preload);
+      void preload.decode().catch(() => {});
+    }
+  }, [previousSrc, imageSrc, nextSrc]);
   useEffect(() => {
     if (!imageId) return;
     const timer = window.setTimeout(() => {
@@ -376,7 +431,7 @@ export function ImageViewer({
     if (tagging) {
       const target = event.target as HTMLElement;
       const regionEl = target.closest("[data-tag-region]") as HTMLElement | null;
-      if (target.closest(".viewer-tag-tools, .tag-picker")) return;
+      if (target.closest(".viewer-tag-tools, .tag-picker") || (image && savingTags.current.has(image.id))) return;
       if (regionEl) {
         const id = regionEl.dataset.tagRegion!;
         const region = tagRegions.find((r) => r.id === id);
@@ -432,7 +487,7 @@ export function ImageViewer({
       setView((v) => ({ ...v, x: d.vx + event.clientX - d.x, y: d.vy + event.clientY - d.y }));
     }
   };
-  const onPointerUp = () => {
+  const onPointerUp = (event: ReactPointerEvent) => {
     drag.current = null;
     cropDrag.current = null;
     if (tagDrag.current) {
@@ -443,11 +498,13 @@ export function ImageViewer({
         void saveTag({ id: region.id, x: region.x, y: region.y, w: region.w, h: region.h, optionId: region.optionId });
       return;
     }
-    if (!drawing) return;
-    const x = Math.min(drawing.x0, drawing.x),
-      y = Math.min(drawing.y0, drawing.y),
-      w = Math.abs(drawing.x - drawing.x0),
-      h = Math.abs(drawing.y - drawing.y0);
+    if (!drawing || !natural) return;
+    // Pointer moves can still be waiting for a render when the drag ends.
+    const end = point(event);
+    const x = Math.min(drawing.x0, end.x),
+      y = Math.min(drawing.y0, end.y),
+      w = Math.abs(end.x - drawing.x0),
+      h = Math.abs(end.y - drawing.y0);
     setDrawing(null);
     if (w < 0.01 || h < 0.01) return;
     if (tagging) setTagDraft({ x, y, w, h });
@@ -458,22 +515,58 @@ export function ImageViewer({
     else setDraft({ x, y, w, h, note: "", tags: [] });
   };
   /** Saves a tag region (a new one with a new tag by name, or one moved or retagged) and refreshes the record. */
-  const saveTag = async (input: { id?: string; x: number; y: number; w: number; h: number; optionId?: string; label?: string }) => {
-    if (!image) return;
+  const saveTag = async (input: Omit<Commands["visualTagSave"]["input"], "assetId">, preview?: TagPreview) => {
+    if (!image || savingTags.current.has(image.id)) return;
+    const assetId = image.id;
+    savingTags.current.add(assetId);
     setError(null);
-    const hadColumn = !!tagColumn;
-    try {
-      const saved = await window.imago.call("visualTagSave", { assetId: image.id, ...input });
+    if (preview) {
+      setTagPreviews((all) => ({ ...all, [assetId]: preview }));
       setTagDraft(null);
-      setTagSelected(saved.id);
-      await loadTags();
-      // The property appears the first time: the table and the record learn it.
-      if (!hadColumn || input.label) window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+      setTagSelected(null);
+    }
+    try {
+      const { column, ...saved } = await window.imago.call("visualTagSave", { ...input, assetId });
+      if (activeImage.current === assetId) {
+        setTagRegions((all) => all.some((r) => r.id === saved.id) ? all.map((r) => r.id === saved.id ? saved : r) : [...all, saved]);
+        if (column) setTagColumn(column);
+        setTagSelected(saved.id);
+        setReviewed(true);
+      } else if (column) {
+        setTagColumn((current) => current?.databaseId === column.databaseId ? column : current);
+      }
+      // The table and record also need to know about a new property or option.
+      if (column) window.dispatchEvent(new CustomEvent("imago:reload-detail"));
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      await loadTags().catch(() => {});
+      if (activeImage.current === assetId) {
+        setError(e instanceof Error ? e.message : String(e));
+        if (preview) {
+          setTagDraft(preview.draft);
+          setTagSelected(preview.draft.id ?? null);
+        } else {
+          await loadTags().catch(() => {});
+        }
+      }
+    } finally {
+      savingTags.current.delete(assetId);
+      if (preview) setTagPreviews(({ [assetId]: _, ...rest }) => rest);
     }
+  };
+  const pickTag = (choice: { optionId: string } | { label: string }) => {
+    if (!tagDraft) return;
+    const optionId = "optionId" in choice ? choice.optionId : null;
+    const own = tagColumn?.options.find((o) => o.id === optionId);
+    const option = own ?? tagDictionary?.options.find((o) => o.id === optionId);
+    const column = own ? tagColumn : tagDictionary;
+    const label = option?.label ?? ("label" in choice ? choice.label.replace(/\s+/g, " ").trim() : null);
+    if (!label) return;
+    void saveTag({ ...tagDraft, ...choice }, {
+      draft: tagDraft,
+      label,
+      color: own ? own.color : option?.color ?? importedOptionColor(tagColumn?.options.length ?? 0),
+      icon: option && column ? optionIconValue(column.config, option.id) : null,
+    });
   };
   const removeTag = async (id: string) => {
     await window.imago.call("visualTagDelete", { id });
@@ -972,9 +1065,10 @@ export function ImageViewer({
           >
             {image && (
               <img
-                key={image.id}
+                key={imageSrc}
+                ref={imageElement}
                 className="viewer-image"
-                src={src(image.id, image.revision, cropping ? "full" : "preview")}
+                src={imageSrc}
                 alt={row.title}
                 draggable={false}
                 onLoad={(event) => {
@@ -989,7 +1083,17 @@ export function ImageViewer({
                 }
               />
             )}
-            {image && !natural && (
+            {!natural && !loadFailed && thumbSrc && (
+              <img
+                key={thumbSrc}
+                className="viewer-image-placeholder"
+                src={thumbSrc}
+                alt=""
+                draggable={false}
+                onLoad={() => setLoadedThumb(thumbSrc)}
+              />
+            )}
+            {image && !natural && (loadFailed || !thumbSrc || loadedThumb !== thumbSrc) && (
               <div className="viewer-loading" role="status" data-testid="viewer-loading">
                 {loadFailed ? (
                   <>
@@ -1068,6 +1172,7 @@ export function ImageViewer({
             {!cropping &&
               showTags &&
               tagRegions.map((r) => {
+                if (tagPreview?.draft.id === r.id) return null;
                 const option = tagColumn?.options.find((o) => o.id === r.optionId);
                 const chosen = tagging && tagSelected === r.id;
                 return (
@@ -1109,6 +1214,16 @@ export function ImageViewer({
                   </div>
                 );
               })}
+            {!cropping && showTags && tagPreview && (
+              <div
+                className="viewer-tag"
+                data-testid="viewer-tag-region"
+                aria-busy="true"
+                style={{ ...box(tagPreview.draft), "--tag": tagPreview.color ?? DEFAULT_OPTION_COLOR } as unknown as React.CSSProperties}
+              >
+                <span className="viewer-tag-label"><OptionIcon value={tagPreview.icon} size={11} />{tagPreview.label}</span>
+              </div>
+            )}
             {tagDraft && !tagDraft.id && <div className="viewer-tag is-drawing" style={box(tagDraft)} />}
             {tagDraft && natural && image && (
               <div
@@ -1130,14 +1245,14 @@ export function ImageViewer({
                   floating={{
                     placeholder: t(tagDraft.id ? "Otra etiqueta…" : "Buscar o crear etiqueta…"),
                     extra: tagDictionary ? { title: t("Del diccionario «{name}»").replace("{name}", tagDictionary.name), column: tagDictionary } : undefined,
-                    onPick: (optionId) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, optionId }),
-                    onCreate: (label) => void saveTag({ id: tagDraft.id, x: tagDraft.x, y: tagDraft.y, w: tagDraft.w, h: tagDraft.h, label }),
+                    onPick: (optionId) => pickTag({ optionId }),
+                    onCreate: (label) => pickTag({ label }),
                     onClose: () => setTagDraft(null),
                   }}
                 />
               </div>
             )}
-            {tagging && !tagRegions.length && !pending && !tagDraft && (
+            {tagging && !tagRegions.length && !pending && !tagDraft && !tagPreview && (
               <p className="viewer-hint">{t("Arrastra sobre la imagen alrededor de un elemento para etiquetarlo.")}</p>
             )}
             {markDraft?.kind === "point" && natural && (
@@ -1170,8 +1285,9 @@ export function ImageViewer({
             items={stripItems}
             currentRowId={row.id}
             onOpen={(item) => {
+              ++browseRequest.current;
               setEnterAt("start");
-              onBrowse(item.row.id, item.index);
+              onBrowse(item);
             }}
             onStep={(direction) => void stepRecord(direction)}
             onMore={(direction) => {

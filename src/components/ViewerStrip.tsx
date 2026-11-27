@@ -11,7 +11,7 @@ import { Thumbnail } from "./ui";
 
 /** The list a record was opened from, and where it is in it. */
 export type BrowseList = { input: SearchInput; index: number; total: number; label: string };
-type Item = { row: RecordRow; index: number };
+export type BrowseItem = { row: RecordRow; index: number };
 const BATCH = 100;
 export const BROWSE_BATCH = BATCH;
 
@@ -39,16 +39,18 @@ export function useBrowse(browse: BrowseList | null | undefined) {
       if (done) return Promise.resolve(done);
       const running = pending.current.get(n);
       if (running) return running;
+      const batches = cache.current;
+      const requests = pending.current;
       const request = window.imago
         .call("search", { ...browse.input, offset: n * BATCH, limit: BATCH })
         .then((page) => {
-          cache.current.set(n, page.rows);
-          pending.current.delete(n);
-          setVersion((v) => v + 1);
+          batches.set(n, page.rows);
+          requests.delete(n);
+          if (cache.current === batches) setVersion((v) => v + 1);
           return page.rows;
         })
         .catch(() => {
-          pending.current.delete(n);
+          requests.delete(n);
           return [] as RecordRow[];
         });
       pending.current.set(n, request);
@@ -68,10 +70,16 @@ export function useBrowse(browse: BrowseList | null | undefined) {
   }, [browse, index, batch]);
   /** The next (1) or previous (-1) record with an image from `from`, or null at the end of the list. */
   const step = useCallback(
-    async (from: number, direction: 1 | -1): Promise<Item | null> => {
+    async (from: number, direction: 1 | -1): Promise<BrowseItem | null> => {
       if (!browse) return null;
+      let currentBatch = -1;
+      let rows: RecordRow[] = [];
       for (let i = from + direction, tries = 0; i >= 0 && i < browse.total && tries < 2000; i += direction, tries++) {
-        const rows = await batch(Math.floor(i / BATCH));
+        const n = Math.floor(i / BATCH);
+        if (n !== currentBatch) {
+          currentBatch = n;
+          rows = cache.current.get(n) ?? await batch(n);
+        }
         const row = rows[i % BATCH];
         if (row?.images.length) return { row, index: i };
       }
@@ -80,7 +88,7 @@ export function useBrowse(browse: BrowseList | null | undefined) {
     [browse, batch],
   );
   // Everything read so far, in list order: the strip draws it.
-  const items: Item[] = [];
+  const items: BrowseItem[] = [];
   void version;
   for (const n of [...cache.current.keys()].sort((a, b) => a - b))
     cache.current.get(n)!.forEach((row, i) => row.images.length && items.push({ row, index: n * BATCH + i }));
@@ -96,9 +104,9 @@ export function ViewerStrip({
   onMore,
 }: {
   browse: BrowseList;
-  items: Item[];
+  items: BrowseItem[];
   currentRowId: string;
-  onOpen: (item: Item) => void;
+  onOpen: (item: BrowseItem) => void;
   /** The next (1) or previous (-1) photograph of the list, as the arrow keys. */
   onStep: (direction: 1 | -1) => void;
   /** Read the next (1) or previous (-1) batch: the strip reached an end. */
