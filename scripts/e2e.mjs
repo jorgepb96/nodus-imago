@@ -47,6 +47,18 @@ const launchOptions = process.env.IMAGO_E2E_EXECUTABLE
     };
 let app;
 const errors = [];
+// The app rewrites the Dock icon asynchronously; on a slow runner the file can
+// still hold the previous theme when the test looks at it. Wait for the write
+// that matters instead of guessing how long it takes.
+async function waitForDockIcon(page, file, differsFrom = null, timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const bytes = await fs.readFile(file).catch(() => null);
+    if (bytes && (!differsFrom || !bytes.equals(differsFrom))) return bytes;
+    if (Date.now() > deadline) return bytes;
+    await page.waitForTimeout(100);
+  }
+}
 async function assertSquareDockIcon(bytes) {
   const { data, info } = await sharp(bytes)
     .ensureAlpha()
@@ -492,8 +504,8 @@ try {
   );
   let lightIcon = null;
   if (process.platform === "darwin") {
-    await page.waitForTimeout(400);
-    lightIcon = await fs.readFile(appIconFile);
+    lightIcon = await waitForDockIcon(page, appIconFile);
+    assert.ok(lightIcon, "The macOS app icon is written for the light theme");
     assert.equal((await sharp(lightIcon).metadata()).width, 512);
     await assertSquareDockIcon(lightIcon);
   }
@@ -503,8 +515,8 @@ try {
     document.documentElement.classList.contains("dark"),
   );
   if (process.platform === "darwin") {
-    await page.waitForTimeout(500);
-    const darkIcon = await fs.readFile(appIconFile);
+    const darkIcon = await waitForDockIcon(page, appIconFile, lightIcon);
+    assert.ok(darkIcon, "The macOS app icon is written for the dark theme");
     assert.equal((await sharp(darkIcon).metadata()).width, 512);
     assert.notDeepEqual(darkIcon, lightIcon);
     await assertSquareDockIcon(darkIcon);
