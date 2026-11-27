@@ -1,8 +1,10 @@
 name: Stable release
 # Pushing a v-prefixed tag that matches package.json builds, signs and
 # publishes the release; it can also be started by hand for an existing tag.
-# Nothing is published unless the quality gate (the pull-request CI, run on
-# the tagged commit) passes and every package builds and passes its checks.
+# Nothing is published unless the tagged code passed the pull-request CI and
+# every package builds and passes its checks. The quality gate (that CI, run
+# on the tagged commit, without macOS Intel) only runs when no pull request
+# already validated exactly the same code.
 on:
   push:
     tags:
@@ -19,13 +21,57 @@ concurrency:
   group: imago-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 jobs:
+  # A version merged from a pull request whose branch was up to date with
+  # main has the same files as the pull request's last commit, and CI
+  # already passed on it: running it again would only delay the release.
+  # Validated only when the tag is that merge, main was already in the
+  # branch, the trees are identical and CI succeeded on that commit.
+  pr-validated:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      validated: ${{ steps.check.outputs.validated }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IMAGO_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          validated=false
+          if head=$(git rev-parse -q --verify "$IMAGO_RELEASE_TAG^2^{commit}"); then
+            base=$(git rev-parse "$IMAGO_RELEASE_TAG^1^{commit}")
+            if git merge-base --is-ancestor "$base" "$head" &&
+              [[ "$(git rev-parse "$IMAGO_RELEASE_TAG^{tree}")" == "$(git rev-parse "$head^{tree}")" ]]; then
+              passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event pull_request --commit "$head" --status success --json databaseId --jq length)
+              if [[ "$passed" -gt 0 ]]; then validated=true; fi
+            fi
+          fi
+          echo "validated=$validated" >> "$GITHUB_OUTPUT"
+          if [[ "$validated" == true ]]; then
+            echo "CI already passed on $head, whose files are identical to $IMAGO_RELEASE_TAG: the quality gate is skipped."
+          else
+            echo "No pull request validated these exact files: the quality gate runs."
+          fi
   # As in Nodus Research (release-build.yml «quality-gate»): the same CI as
-  # pull requests, on the tagged commit. It runs beside the packages, and
-  # publication waits for both.
+  # pull requests, on the tagged commit, when no pull request validated it.
+  # It runs beside the packages, and publication waits for both. macOS Intel
+  # is left to release-macos-intel.yml, which tests it before appending it.
   quality-gate:
+    needs: pr-validated
+    if: needs.pr-validated.outputs.validated != 'true'
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ inputs.tag || github.ref_name }}
+      skip_mac_intel: true
   packages:
     environment: release-signing
     timeout-minutes: 90
@@ -175,7 +221,13 @@ jobs:
             release/latest*.yml
             release/beta*.yml
   publish:
-    needs: [quality-gate, packages]
+    needs: [pr-validated, quality-gate, packages]
+    # The gate either passed or was skipped because a pull request had
+    # already validated these exact files.
+    if: >-
+      !cancelled() && needs.packages.result == 'success' &&
+      (needs.quality-gate.result == 'success' ||
+      (needs.quality-gate.result == 'skipped' && needs.pr-validated.outputs.validated == 'true'))
     runs-on: ubuntu-22.04
     environment: release-signing
     permissions:

@@ -95,6 +95,21 @@ jobs:
         run: npm run verify
       - if: steps.release.outputs.skip != 'true'
         run: npm run test:desktop:all
+      # The release's quality gate leaves Intel out, so the real CPU
+      # inference audit from CI runs here, on a clean profile, before signing.
+      - name: Build an unsigned native application for the inference audit
+        if: steps.release.outputs.skip != 'true'
+        run: npx electron-builder --dir --config build/electron-builder.cjs --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Clean profile, actual downloads and real CPU inference
+        if: steps.release.outputs.skip != 'true'
+        run: node scripts/native-ai-ci.mjs
+        env:
+          IMAGO_TEST_PACKAGED_AI: 1
+      - name: Remove the unsigned audit build
+        if: steps.release.outputs.skip != 'true'
+        run: rm -rf release
       - name: Import macOS signing certificate and notary key
         if: steps.release.outputs.skip != 'true'
         shell: bash

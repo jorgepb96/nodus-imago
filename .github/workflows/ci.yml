@@ -12,6 +12,13 @@ on:
         description: Commit or tag to validate
         type: string
         required: true
+      skip_mac_intel:
+        # A release leaves Intel to release-macos-intel.yml, which runs these
+        # same checks on Intel before appending its files, so the slower
+        # Intel runner never holds back the other platforms.
+        description: Leave out the macOS Intel jobs
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -23,12 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: macos-latest, target: mac, arch: arm64 }
-          - { os: macos-15-intel, target: mac, arch: x64 }
-          - { os: windows-latest, target: win, arch: x64 }
-          - { os: ubuntu-22.04, target: linux, arch: x64 }
-          - { os: ubuntu-24.04-arm, target: linux, arch: arm64 }
+        include: ${{ fromJSON(inputs.skip_mac_intel && '[{"os":"macos-latest","target":"mac","arch":"arm64"},{"os":"windows-latest","target":"win","arch":"x64"},{"os":"ubuntu-22.04","target":"linux","arch":"x64"},{"os":"ubuntu-24.04-arm","target":"linux","arch":"arm64"}]' || '[{"os":"macos-latest","target":"mac","arch":"arm64"},{"os":"macos-15-intel","target":"mac","arch":"x64"},{"os":"windows-latest","target":"win","arch":"x64"},{"os":"ubuntu-22.04","target":"linux","arch":"x64"},{"os":"ubuntu-24.04-arm","target":"linux","arch":"arm64"}]') }}
     runs-on: ${{ matrix.os }}
     env:
       IMAGO_DISABLE_UPDATES: "1"
@@ -97,14 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          [
-            macos-latest,
-            macos-15-intel,
-            windows-latest,
-            ubuntu-22.04,
-            ubuntu-24.04-arm,
-          ]
+        os: ${{ fromJSON(inputs.skip_mac_intel && '["macos-latest","windows-latest","ubuntu-22.04","ubuntu-24.04-arm"]' || '["macos-latest","macos-15-intel","windows-latest","ubuntu-22.04","ubuntu-24.04-arm"]') }}
     runs-on: ${{ matrix.os }}
     env:
       ONNXRUNTIME_NODE_INSTALL: skip
