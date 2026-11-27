@@ -49,7 +49,7 @@ import { metres } from "../shared/viewpoints";
 import { Gazetteer } from "./geo/gazetteer";
 import { isCommonsImageRequest, isMapTileRequest } from "./geo/mapRequests";
 import { externalHttpsUrl } from "../shared/externalLinks";
-import { PROVIDERS, remoteProvider } from "../shared/aiConfig";
+import { PROVIDERS, remoteProvider, type ModelChoice, type VisionCatalogModel } from "../shared/aiConfig";
 import { closestAspect, restorationRequest } from "../shared/restoration";
 import { DesktopBackups } from "./export/desktopBackups";
 import { Updates } from "./updates";
@@ -998,6 +998,19 @@ app.whenReady().then(async () => {
           settings.remoteEnabled,
           new AbortController().signal,
         );
+      }
+      if (command === "visualTagModels" || command === "visualTagSuggest") {
+        const choice = (safe as { choice: ModelChoice } | undefined)?.choice;
+        if (choice?.provider === "local") return call(command, safe);
+        const settings = await call("_settings");
+        const remote = providers.visionCatalog(settings.apiProfiles, settings.remoteEnabled, AbortSignal.timeout(35_000));
+        if (command === "visualTagModels") {
+          const [local, connected]: [VisionCatalogModel[], VisionCatalogModel[]] = await Promise.all([call(command), remote.catch(() => [])]);
+          return [...local, ...connected];
+        }
+        if (!choice || !(await remote).some((model) => model.choice.provider === choice.provider && model.choice.model === choice.model))
+          throw new Error("Elige un modelo que admita imágenes.");
+        return call(command, safe);
       }
       if (internalFileRequest(command)) {
         const filters =

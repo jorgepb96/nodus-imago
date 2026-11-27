@@ -48,6 +48,8 @@ Every image has a record with the fields you choose: text, dates, places, people
 
 An AI model describes images, tags them with your own vocabulary or transcribes backs, stamps and inscriptions, one record or thousands. You choose the model and the instructions, see each result appear in its cell, and undo what you do not want; batch automations wait as proposals until you approve them. Models can run on your computer or with the provider you choose.
 
+In the image viewer, use **Tags** to mark regions with multiple labels from a dictionary and filter the photo strip to images still awaiting review for that dictionary. A local vision model can suggest boxes and labels for you to adjust and approve. Selecting an external model sends the photo and active dictionary to that provider when you request suggestions. Full `.imago` backups preserve saved tags, annotations, and heritage marks with their positions.
+
 ![AI models chosen by task, all running locally](docs/screenshots/readme-settings.png)
 
 ### 3. Identify heritage and find it by sight

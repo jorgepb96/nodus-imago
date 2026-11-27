@@ -1001,6 +1001,7 @@ export class Engine {
     zone: { x: number; y: number; w: number; h: number } | null,
     prompt: string,
     signal: AbortSignal,
+    regions = false,
   ): Promise<string> {
     const asset = this.repo.asset(assetId) as { original_path: string; metadata_json: string; content_hash: string };
     if ((await hashFile(asset.original_path)) !== asset.content_hash) throw new Error("El original cambió.");
@@ -1024,7 +1025,7 @@ export class Engine {
           asset.original_path,
           (file) =>
             model.backend === "llama"
-              ? this.llama.describe(choice.model, file, prompt, signal, "json")
+              ? this.llama.describe(choice.model, file, prompt, signal, regions ? "regions" : "json")
               : this.host.request(
                   {
                     task: "vision",
@@ -1033,6 +1034,7 @@ export class Engine {
                     threads: settings.profile === "light" ? 1 : 2,
                     image: file,
                     prompt,
+                    ...(regions ? { maxTokens: 1536 } : {}),
                   },
                   signal,
                 ),
@@ -1054,6 +1056,7 @@ export class Engine {
         prompt,
         system: aiColumnSystem(settings.language),
         images: [{ base64: buffer.toString("base64"), mediaType: "image/jpeg" }],
+        ...(regions ? { maxTokens: 3072 } : {}),
       },
       signal,
     );

@@ -7,6 +7,7 @@ import { ZipArchive } from "archiver";
 import Database from "better-sqlite3";
 import { z } from "zod";
 import { Repository } from "../db/repository";
+import { scopeLegacyVisualTags } from "../db/schema";
 import { Archive } from "../import/archive";
 import { hashFile } from "../import/images";
 import { ensureDiskSpace } from "../storage/disk";
@@ -67,6 +68,7 @@ export const RESTORE_EXTRA_TABLES = [
   "image_crops",
   "image_origins",
   "image_tags",
+  "image_tag_options",
   "image_tag_reviews",
   "image_miniatures",
   "automation_control",
@@ -94,6 +96,24 @@ const manifestSchema = z
     ),
   })
   .strict();
+
+const columnsOf = (db: Database.Database, table: string) =>
+  (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+
+/** A legacy region stored its label in the same row. Current regions need their label links. */
+function checkVisualTagLinks(snapshot: Database.Database) {
+  const columns = columnsOf(snapshot, "image_tags");
+  if (!columns.length || columns.includes("option_id")) return;
+  const links = columnsOf(snapshot, "image_tag_options");
+  if (
+    !["region_id", "option_id", "position"].every((name) => links.includes(name)) ||
+    snapshot.prepare(
+      `SELECT 1 FROM image_tags t
+       WHERE NOT EXISTS(SELECT 1 FROM image_tag_options link WHERE link.region_id=t.id) LIMIT 1`,
+    ).get()
+  )
+    throw new Error("La copia contiene regiones de etiquetado sin sus etiquetas.");
+}
 
 export async function writeBackup(
   repo: Repository,
@@ -287,6 +307,7 @@ export async function restoreBackup(
         ?.version !== 1
     )
       throw new Error("Versión de copia no compatible.");
+    checkVisualTagLinks(snapshot);
     const relocated = new Map<string, string>();
     const staged = new Map<string, string>();
     for (const item of manifest.files) {
@@ -414,8 +435,6 @@ export async function restoreBackup(
       }
       // Relations among these are checked when the restore commits.
       repo.db.pragma("defer_foreign_keys = ON");
-      const columnsOf = (db: Database.Database, table: string) =>
-        (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
       for (const table of RESTORE_EXTRA_TABLES) {
         repo.db.prepare(`DELETE FROM ${table}`).run();
         if (!snapshot!.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)) continue;
@@ -440,6 +459,13 @@ export async function restoreBackup(
           insert.run(...shared.map((c) => r[c]));
         }
       }
+      if (columnsOf(snapshot!, "image_tags").includes("option_id")) {
+        const insert = repo.db.prepare("INSERT INTO image_tag_options(region_id,option_id,position) VALUES(?,?,0)");
+        for (const region of snapshot!.prepare("SELECT id,option_id FROM image_tags").iterate() as Iterable<{ id: string; option_id: string }>)
+          insert.run(region.id, region.option_id);
+      }
+      if (!columnsOf(snapshot!, "db_select_options").includes("visual_tag_dictionary_id"))
+        scopeLegacyVisualTags(repo.db);
       const saved = snapshot!
         .prepare("SELECT value FROM settings WHERE key='preferences'")
         .get() as { value: string } | undefined;
@@ -547,11 +573,13 @@ export async function verifyBackup(repo: Repository, file: string) {
         /CREATE\s+VIRTUAL/i.test(exists.sql)
       )
         throw Error("Tabla de copia inválida: " + table);
-      const columns = (
-        repo.db.prepare(`PRAGMA table_info(${table})`).all() as any[]
-      ).map((c) => c.name);
+      const stored = new Set(columnsOf(db, table));
+      const columns = columnsOf(repo.db, table).filter((column) =>
+        table !== "db_select_options" || column !== "visual_tag_dictionary_id" || stored.has(column),
+      );
       db.prepare(`SELECT ${columns.join(",")} FROM ${table} LIMIT 0`).all();
     }
+    checkVisualTagLinks(db);
     const preferences = db.prepare("SELECT value FROM settings WHERE key='preferences'").get() as {value: string} | undefined;
     if (preferences) settingsSchema.parse({...repo.getSettings(), ...JSON.parse(preferences.value)});
     const map = new Map(manifest.files.map((f) => [f.source, f.hash]));

@@ -98,7 +98,7 @@ def run(request):
     prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
     inputs = processor(text=prompt, images=[Image.open(request["image"]).convert("RGB")], return_tensors="pt").to(request["device"])
     with torch.inference_mode():
-        output = model.generate(**inputs, max_new_tokens=384, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=min(1536, request.get("maxTokens", 384)), do_sample=False)
     return processor.batch_decode(output[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)[0].strip()
 
 for line in sys.stdin:

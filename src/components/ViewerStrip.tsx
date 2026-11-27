@@ -3,7 +3,7 @@
 // results), around the one on screen. The list is read in batches as the
 // researcher moves along it, so a long working session goes through the whole
 // filter; records without images are passed over.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { RecordRow, SearchInput } from "../../shared/imago";
 import { useT } from "../i18n";
@@ -11,53 +11,64 @@ import { Thumbnail } from "./ui";
 
 /** The list a record was opened from, and where it is in it. */
 export type BrowseList = { input: SearchInput; index: number; total: number; label: string };
-export type BrowseItem = { row: RecordRow; index: number };
+export type BrowseItem = { row: RecordRow; index: number; imageIndex?: number };
+export type PendingBrowse = { databaseId: string; dictionaryId: string | null; revision: number };
 const BATCH = 100;
-export const BROWSE_BATCH = BATCH;
+const inDirection = (item: BrowseItem, from: number, direction: 1 | -1, imageIndex?: number) =>
+  (item.index - from) * direction > 0 || (item.index === from &&
+    item.imageIndex !== undefined && imageIndex !== undefined && (item.imageIndex - imageIndex) * direction > 0);
 
 /**
  * The records of a browse list, read in batches around the current one; and
  * the next or previous record with an image, reading further batches when
  * needed.
  */
-export function useBrowse(browse: BrowseList | null | undefined) {
-  const cache = useRef(new Map<number, RecordRow[]>()),
-    pending = useRef(new Map<number, Promise<RecordRow[]>>()),
-    [version, setVersion] = useState(0);
-  const key = browse ? JSON.stringify(browse.input) : "";
-  const [shownKey, setShownKey] = useState(key);
-  if (shownKey !== key) {
-    // Another list: what was read belongs to the old one.
-    setShownKey(key);
-    cache.current = new Map();
-    pending.current = new Map();
-  }
+export function useBrowse(browse: BrowseList | null | undefined, scope: PendingBrowse | null) {
+  const key = browse ? JSON.stringify([browse.input, scope]) : "";
+  type Page = BrowseItem[] | null;
+  const requests = useMemo(() => {
+    return { key, running: new Map<number, Promise<Page>>() };
+  }, [key]);
+  const [cache, setCache] = useState(() => ({ requests, pages: new Map<number, Page>() }));
+  if (cache.requests !== requests) setCache({ requests, pages: new Map() });
+  const { pages } = cache;
+  const active = useRef<typeof requests | null>(null);
+  useLayoutEffect(() => {
+    active.current = requests;
+    return () => { active.current = null; };
+  }, [requests]);
   const batch = useCallback(
-    (n: number): Promise<RecordRow[]> => {
-      if (!browse || n < 0 || n * BATCH >= browse.total) return Promise.resolve([]);
-      const done = cache.current.get(n);
-      if (done) return Promise.resolve(done);
-      const running = pending.current.get(n);
+    (n: number, retry = false): Promise<Page> => {
+      if (active.current !== requests || !browse || n < 0 || n * BATCH >= browse.total) return Promise.resolve(null);
+      const done = pages.get(n);
+      if (done !== undefined && !(retry && done === null)) return Promise.resolve(done);
+      const running = requests.running.get(n);
       if (running) return running;
-      const batches = cache.current;
-      const requests = pending.current;
+      const remember = (items: Page) => {
+        if (active.current === requests) setCache((current) => current.requests === requests
+          ? { requests, pages: new Map(current.pages).set(n, items) } : current);
+        return items;
+      };
       const request = window.imago
         .call("search", { ...browse.input, offset: n * BATCH, limit: BATCH })
-        .then((page) => {
-          batches.set(n, page.rows);
-          requests.delete(n);
-          if (cache.current === batches) setVersion((v) => v + 1);
-          return page.rows;
+        .then(async (page) => {
+          const pendingIds = scope && page.rows.length ? new Set(await window.imago.call("visualTagPending", {
+            databaseId: scope.databaseId, dictionaryId: scope.dictionaryId, rowIds: page.rows.map((row) => row.id),
+          })) : null;
+          const items = page.rows.flatMap((row, i): BrowseItem[] => {
+            const index = n * BATCH + i;
+            if (!scope) return row.images.length ? [{ row, index }] : [];
+            return row.images.flatMap((asset, imageIndex) => pendingIds?.has(asset.id) ? [{ row, index, imageIndex }] : []);
+          });
+          return remember(items);
         })
-        .catch(() => {
-          requests.delete(n);
-          return [] as RecordRow[];
-        });
-      pending.current.set(n, request);
+        .catch(() => scope ? remember(null) : null)
+        .finally(() => requests.running.delete(n));
+      requests.running.set(n, request);
       return request;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [key, browse?.total],
+    [requests, pages, browse?.total],
   );
   // The current batch is read, and the next or previous one near its edges.
   const index = browse?.index ?? 0;
@@ -70,45 +81,69 @@ export function useBrowse(browse: BrowseList | null | undefined) {
   }, [browse, index, batch]);
   /** The next (1) or previous (-1) record with an image from `from`, or null at the end of the list. */
   const step = useCallback(
-    async (from: number, direction: 1 | -1): Promise<BrowseItem | null> => {
+    async (from: number, direction: 1 | -1, imageIndex?: number): Promise<BrowseItem | null> => {
       if (!browse) return null;
-      let currentBatch = -1;
-      let rows: RecordRow[] = [];
-      for (let i = from + direction, tries = 0; i >= 0 && i < browse.total && tries < 2000; i += direction, tries++) {
-        const n = Math.floor(i / BATCH);
-        if (n !== currentBatch) {
-          currentBatch = n;
-          rows = cache.current.get(n) ?? await batch(n);
-        }
-        const row = rows[i % BATCH];
-        if (row?.images.length) return { row, index: i };
+      for (let n = Math.floor(from / BATCH); n >= 0 && n * BATCH < browse.total; n += direction) {
+        const items = await batch(n);
+        if (!items || active.current !== requests) return null;
+        const choices = direction === 1 ? items : [...items].reverse();
+        const next = choices.find((item) => inDirection(item, from, direction, imageIndex));
+        if (next) return next;
       }
       return null;
     },
-    [browse, batch],
+    [browse, batch, requests],
   );
   // Everything read so far, in list order: the strip draws it.
   const items: BrowseItem[] = [];
-  void version;
-  for (const n of [...cache.current.keys()].sort((a, b) => a - b))
-    cache.current.get(n)!.forEach((row, i) => row.images.length && items.push({ row, index: n * BATCH + i }));
-  return { items, step, batch };
+  const current = Math.floor(index / BATCH);
+  const ready = !!pages.get(current);
+  let first = current, last = current;
+  while (pages.get(first - 1)) first--;
+  while (pages.get(last + 1)) last++;
+  for (let n = first; n <= last; n++) items.push(...(pages.get(n) ?? []));
+  const before = ready && first > 0;
+  const after = ready && !!browse && (last + 1) * BATCH < browse.total;
+  const more = (direction: 1 | -1) => void batch(direction === 1 ? last + 1 : first - 1);
+  const canStep = (direction: 1 | -1, imageIndex?: number) =>
+    (direction === 1 ? after : before) || items.some((item) => inDirection(item, index, direction, imageIndex));
+  const failedBatches = (ready ? [first - 1, last + 1] : [current]).filter((n) => pages.get(n) === null);
+  const retry = failedBatches.length ? () => {
+    for (const n of failedBatches) void batch(n, true);
+  } : undefined;
+  return { items, step, more, before, after, ready, canStep, retry };
 }
 
 export function ViewerStrip({
   browse,
   items,
   currentRowId,
+  currentAssetId,
+  pendingOnly,
+  onPendingChange,
+  before,
+  after,
+  ready,
+  onRetry,
   onOpen,
   onStep,
+  canStep,
   onMore,
 }: {
   browse: BrowseList;
   items: BrowseItem[];
   currentRowId: string;
+  currentAssetId: string | undefined;
+  pendingOnly: boolean;
+  onPendingChange: (enabled: boolean) => void;
+  before: boolean;
+  after: boolean;
+  ready: boolean;
+  onRetry: (() => void) | undefined;
   onOpen: (item: BrowseItem) => void;
   /** The next (1) or previous (-1) photograph of the list, as the arrow keys. */
   onStep: (direction: 1 | -1) => void;
+  canStep: (direction: 1 | -1) => boolean;
   /** Read the next (1) or previous (-1) batch: the strip reached an end. */
   onMore: (direction: 1 | -1) => void;
 }) {
@@ -118,21 +153,29 @@ export function ViewerStrip({
   useLayoutEffect(() => {
     const node = list.current?.querySelector<HTMLElement>(".viewer-strip-item.is-current");
     node?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
-  }, [currentRowId, items.length]);
-  const first = items[0]?.index ?? 0,
-    last = items.at(-1)?.index ?? 0;
+  }, [currentRowId, currentAssetId, items.length]);
+  useEffect(() => {
+    if (!pendingOnly || !ready || items.length >= 8) return;
+    if (before) onMore(-1);
+    if (after) onMore(1);
+  }, [pendingOnly, ready, items.length, before, after, onMore]);
   return (
     <nav className="viewer-strip" aria-label={browse.label} data-testid="viewer-strip">
       <div className="viewer-strip-head">
         <span className="viewer-strip-label">{browse.label}</span>
         <span className="viewer-strip-count" data-testid="viewer-strip-count">
-          {(browse.index + 1).toLocaleString()} / {browse.total.toLocaleString()}
+          {pendingOnly ? items.length === 1 ? t("1 pendiente en la tira") : t("{n} pendientes en la tira").replace("{n}", items.length.toLocaleString())
+            : <>{(browse.index + 1).toLocaleString()} / {browse.total.toLocaleString()}</>}
         </span>
+        <label className="viewer-strip-pending">
+          <input type="checkbox" role="switch" checked={pendingOnly} onChange={(event) => onPendingChange(event.target.checked)} />
+          {t("Solo pendientes")}
+        </label>
         <button
           type="button"
           aria-label={t("Foto anterior")}
           data-tooltip={t("Foto anterior (←)")}
-          disabled={browse.index <= 0}
+          disabled={pendingOnly ? !canStep(-1) : browse.index <= 0}
           onClick={() => onStep(-1)}
         >
           <ChevronLeft size={15} />
@@ -142,7 +185,7 @@ export function ViewerStrip({
           aria-label={t("Foto siguiente")}
           data-tooltip={t("Foto siguiente (→)")}
           data-testid="viewer-strip-next"
-          disabled={browse.index >= browse.total - 1}
+          disabled={pendingOnly ? !canStep(1) : browse.index >= browse.total - 1}
           onClick={() => onStep(1)}
         >
           <ChevronRight size={15} />
@@ -154,26 +197,39 @@ export function ViewerStrip({
         onScroll={(e) => {
           // Near either end, the next batch of the list.
           const el = e.currentTarget;
-          if (el.scrollLeft + el.clientWidth > el.scrollWidth - 400 && last < browse.total - 1) onMore(1);
-          if (el.scrollLeft < 400 && first > 0) onMore(-1);
+          if (el.scrollLeft + el.clientWidth > el.scrollWidth - 400 && after) onMore(1);
+          if (el.scrollLeft < 400 && before) onMore(-1);
         }}
       >
-        {items.map((item) => (
-          <li key={item.row.id}>
-            <button
-              type="button"
-              className={"viewer-strip-item" + (item.row.id === currentRowId ? " is-current" : "")}
-              aria-current={item.row.id === currentRowId ? "true" : undefined}
-              aria-label={item.row.title}
-              data-tooltip={item.row.title}
-              data-testid="viewer-strip-item"
-              onClick={() => onOpen(item)}
-            >
-              <Thumbnail id={item.row.images[0]?.id} revision={item.row.images[0]?.revision} alt={item.row.title} />
-              <span>{item.row.title}</span>
-            </button>
+        {pendingOnly && (onRetry || items.length === 0) && (
+          <li className="viewer-strip-empty">
+            <span role="status">{t(onRetry ? "No se pudieron cargar las fotos pendientes." : !ready || before || after
+              ? "Buscando fotos pendientes…" : "No quedan fotos pendientes en esta lista.")}</span>
+            {onRetry && <button type="button" onClick={onRetry}>{t("Reintentar")}</button>}
           </li>
-        ))}
+        )}
+        {items.map((item) => {
+          const asset = item.row.images[item.imageIndex ?? 0];
+          const active = item.imageIndex === undefined ? item.row.id === currentRowId : asset?.id === currentAssetId;
+          const label = item.imageIndex === undefined || item.row.images.length === 1
+            ? item.row.title : `${item.row.title} · ${asset?.fileName ?? item.imageIndex + 1}`;
+          return (
+            <li key={item.imageIndex === undefined ? item.row.id : asset.id}>
+              <button
+                type="button"
+                className={"viewer-strip-item" + (active ? " is-current" : "")}
+                aria-current={active ? "true" : undefined}
+                aria-label={label}
+                data-tooltip={label}
+                data-testid="viewer-strip-item"
+                onClick={() => onOpen(item)}
+              >
+                <Thumbnail id={asset?.id} revision={asset?.revision} alt={label} />
+                <span>{label}</span>
+              </button>
+            </li>
+          );
+        })}
       </ol>
     </nav>
   );

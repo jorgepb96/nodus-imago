@@ -196,7 +196,8 @@ export class Statistics {
         marks = chunk.map(() => "?").join(",");
       for (const r of this.repo.db
         .prepare(
-          `SELECT t.option_id id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id WHERE a.row_id IN (${marks}) AND t.state='validated' GROUP BY t.option_id`,
+          `SELECT o.option_id id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id
+           JOIN image_tag_options o ON o.region_id=t.id WHERE a.row_id IN (${marks}) AND t.state='validated' GROUP BY o.option_id`,
         )
         .all(...chunk) as { id: string; n: number }[]) {
         const name = label.get(r.id);

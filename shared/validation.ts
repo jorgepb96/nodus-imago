@@ -749,18 +749,36 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({
       id: id.optional(),
       assetId: id,
+      dictionaryId: id.nullable().optional(),
       x: z.number().min(0).max(1),
       y: z.number().min(0).max(1),
       w: z.number().min(0).max(1),
       h: z.number().min(0).max(1),
+      tags: z.array(z.union([
+        z.object({ optionId: id }).strict(),
+        z.object({ label: z.string().trim().min(1).max(200) }).strict(),
+      ])).min(1).max(200).optional(),
       optionId: id.nullable().optional(),
       label: z.string().trim().max(200).nullable().optional(),
     })
     .strict(),
   visualTagDelete: z.object({ id }).strict(),
-  visualTagReview: z.object({ assetId: id, reviewed: z.boolean() }).strict(),
+  visualTagReview: z.object({ assetId: id, reviewed: z.boolean(), dictionaryId: id.nullable().optional() }).strict(),
+  visualTagPending: z.object({ databaseId: id, dictionaryId: id.nullable(), rowIds: z.array(id).max(100) }).strict(),
+  visualTagUndo: z.object({ assetId: id, dictionaryId: id.nullable() }).strict(),
   visualTagsSummary: z.object({ databaseId: id }).strict(),
   visualTagDictionary: z.object({ databaseId: id, columnId: id.nullable() }).strict(),
+  visualTagModels: z.undefined(),
+  visualTagSuggest: z.object({ assetId: id, dictionaryId: id, choice }).strict(),
+  visualTagApplySuggestions: z.object({
+    assetId: id, dictionaryId: id, choice, imageVersion: z.string().min(1).max(400),
+    regions: z.array(z.object({
+      x: z.number().min(0).max(1), y: z.number().min(0).max(1),
+      w: z.number().min(0.004).max(1), h: z.number().min(0.004).max(1),
+      optionIds: z.array(id).min(1).max(200),
+      choice: choice.optional(),
+    }).strict()).min(1).max(2000),
+  }).strict(),
   imageCirculation: z
     .object({
       assetId: id,

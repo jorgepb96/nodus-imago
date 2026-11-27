@@ -33,6 +33,42 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.4",
+    date: "2026-11-27",
+    highlights: [
+      {
+        scope: "ai",
+        category: "new",
+        es: "Pide sugerencias de etiquetas a un modelo de visión local o externo. Puedes ajustar los recuadros, elegir qué etiquetas guardar y repetir el análisis conservando tus decisiones.",
+        en: "Ask a local or external vision model for tag suggestions. Adjust the boxes, choose which tags to save, and run the analysis again to find more suggestions while keeping your decisions.",
+      },
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "Cada diccionario conserva sus propias zonas y su estado de revisión. Añade varias etiquetas a una zona, con un color por etiqueta, y encuentra las etiquetas aplicadas en orden alfabético.",
+        en: "Each dictionary keeps its own regions and review status. Add several tags to one region, with one colour per tag, and find applied tags in alphabetical order.",
+      },
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "Filtra la tira para recorrer solo las fotos pendientes del diccionario activo. Deshaz cambios de etiquetado con ⌘Z o Ctrl+Z y consulta el número de zonas etiquetadas en la ficha.",
+        en: "Filter the strip to go through only photos awaiting review in the active dictionary. Undo tagging changes with ⌘Z or Ctrl+Z and see how many regions are tagged on the record photo.",
+      },
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "El visor reúne las anotaciones, las etiquetas y el patrimonio en pestañas. El menú Capas agrupa los controles de visibilidad y las teclas A, B, P y E activan o desactivan las herramientas.",
+        en: "The viewer has tabs for annotations, tags, and heritage. The Layers menu groups visibility controls, and the A, B, P, and E shortcuts toggle the viewer tools.",
+      },
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "Las copias de seguridad conservan las etiquetas de cada zona y su posición, así como las anotaciones y los puntos o recuadros de patrimonio.",
+        en: "Backups preserve each region’s tags and position, along with annotations and heritage points or boxes.",
+      },
+    ],
+  },
+  {
     version: "0.9.3",
     date: "2026-11-27",
     highlights: [

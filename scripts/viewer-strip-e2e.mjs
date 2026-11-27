@@ -78,6 +78,11 @@ try {
     });
   }
   await idle();
+  for (const n of [11, 160]) {
+    const row = rows.find((r) => r.title === title(n));
+    const { images } = await call("getRow", { id: row.id });
+    await call("visualTagReview", { assetId: images[0].id, reviewed: true, dictionaryId: null });
+  }
   await page.reload();
   await page.locator(".sidebar-databases>button").filter({ hasText: "Postales" }).click();
   await page.locator("tbody tr").getByRole("button", { name: "Abrir registro", exact: true }).first().click();
@@ -137,12 +142,33 @@ try {
   await poll(async () => (await current(viewer)) === title(12), "← back to Postal 012");
   checks.push("→ past the last photograph read loads the next batch (Postal 160 of 230) and ← comes back");
 
+  const pendingOnly = strip.getByRole("switch", { name: "Solo pendientes" });
+  await pendingOnly.check();
+  const hiddenReviewed = (n) => strip.getByTestId("viewer-strip-item").filter({ hasText: title(n) });
+  await poll(async () => (await current(viewer)) === title(12), "pending strip loaded");
+  assert.equal(await hiddenReviewed(11).count(), 0);
+  assert.equal(await hiddenReviewed(160).count(), 0);
+  await pendingOnly.press("ArrowLeft");
+  await poll(async () => (await current(viewer)) === title(10), "filtered arrow skips reviewed Postal 011");
+  await pendingOnly.press("ArrowRight");
+  await poll(async () => (await current(viewer)) === title(12), "filtered arrow returns to Postal 012");
+  await pendingOnly.uncheck();
+  await hiddenReviewed(11).waitFor();
+  checks.push("Solo pendientes hides reviewed photographs and lets the arrows skip them");
+
   await page.waitForTimeout(400);
   await page.screenshot({ path: "test-results/viewer-strip.png" });
 
-  // The header button hides the strip, and the choice is kept for the next opening.
-  await viewer.getByTestId("viewer-strip-toggle").click();
+  // Capas hides the strip, and the choice is kept for the next opening.
+  const layers = viewer.getByTestId("viewer-layers");
+  const layerMenu = viewer.getByRole("dialog", { name: "Capas", exact: true });
+  const stripToggle = layerMenu.getByTestId("viewer-strip-toggle");
+  await layers.click();
+  await stripToggle.click();
   assert.equal(await viewer.getByTestId("viewer-strip").count(), 0);
+  assert.equal(await stripToggle.getAttribute("aria-pressed"), "false");
+  await page.keyboard.press("Escape");
+  await layerMenu.waitFor({ state: "hidden" });
   await page.keyboard.press("ArrowRight");
   await poll(async () => /160/.test(await page.getByTestId("record-panel").innerText()), "→ without the strip");
   await page.keyboard.press("Escape");
@@ -150,9 +176,11 @@ try {
   await page.getByTestId("record-image-open").click();
   await viewer.locator(".viewer-image").waitFor();
   assert.equal(await viewer.getByTestId("viewer-strip").count(), 0, "the strip stays hidden");
-  await viewer.getByTestId("viewer-strip-toggle").click();
+  await layers.click();
+  await stripToggle.click();
   await strip.waitFor();
-  checks.push("The header button hides and shows the strip; → still works without it; the choice is kept");
+  assert.equal(await stripToggle.getAttribute("aria-pressed"), "true");
+  checks.push("Capas hides and shows the strip, the arrow still works without it, and the choice is kept");
 
   assert.deepEqual(errors, []);
   await fs.writeFile("test-results/viewer-strip-e2e.json", JSON.stringify({ status: "passed", checks, errors }, null, 2));

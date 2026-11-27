@@ -38,6 +38,7 @@ export type ProviderModel = {
 };
 /** An image model of a provider with a saved key, for AI restoration. */
 export type ImageCatalogModel = { provider: ApiProvider; model: string; name?: string };
+export type VisionCatalogModel = { choice: ModelChoice; name: string; remote: boolean };
 export function isLoopbackUrl(value: string) {
   try {
     const u = new URL(value);

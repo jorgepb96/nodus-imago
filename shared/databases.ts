@@ -226,7 +226,7 @@ export interface DatabaseColumnConfig {
   relationLinkDetails?: boolean;
   /** multi_select: the «Etiquetas visuales» of the database, filled from the regions drawn on its images. */
   visualTags?: boolean;
-  /** «Etiquetas visuales»: a select property of the database whose options are offered as tags (a dictionary). */
+  /** «Etiquetas visuales»: the active dictionary in the image viewer. Null selects the standalone tags. */
   visualTagsDictionary?: string | null;
   /** rollup columns: aggregate a property across the rows a relation column links to. */
   rollupRelationColumnId?: string; // a 'relation' (db_row) column on THIS database

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import {
   X,
   ChevronLeft,
@@ -20,6 +20,7 @@ import {
   RotateCw,
   Crop,
   ImageOff,
+  Tag,
 } from "lucide-react";
 import type { DatabaseDetail } from "../../shared/databases";
 import type { RecordRow } from "../../shared/imago";
@@ -87,7 +88,9 @@ export function RecordPanel({
     [targets, setTargets] = useState<RecordRow[]>([]),
     // «Ficha» or «Variantes y apariciones»; it stays while moving between records.
     [tab, setTab] = useState<"record" | "variants">("record"),
-    [variantCount, setVariantCount] = useState<number | null>(null);
+    [variantCount, setVariantCount] = useState<number | null>(null),
+    [taggedCount, setTaggedCount] = useState<{ assetId: string; count: number } | null>(null);
+  const taggedDescriptionId = useId();
   const dialog = useRef<HTMLDialogElement>(null),
     closeRef = useRef(onClose);
   useEffect(() => {
@@ -152,7 +155,20 @@ export function RecordPanel({
       cancelled = true;
     };
   }, [imageId]);
-  const regions = image ? (row.annotations ?? []).filter((a) => a.assetId === image.id).length : 0;
+  const annotatedRegions = imageId ? (row.annotations ?? []).filter((a) => a.assetId === imageId).length : 0;
+  const dictionaryId = detail.columns.find((column) => column.config.visualTags)?.config.visualTagsDictionary;
+  useEffect(() => {
+    setTaggedCount(null);
+    if (!imageId || viewer) return;
+    let cancelled = false;
+    void window.imago.call("visualTagsList", { assetId: imageId })
+      .then(({ regions }) => {
+        if (!cancelled) setTaggedCount({ assetId: imageId, count: regions.filter((region) => region.state === "validated").length });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [imageId, image?.revision, dictionaryId, row.visualTags, viewer]);
+  const taggedRegions = taggedCount && taggedCount.assetId === imageId ? taggedCount.count : 0;
   /** A quarter turn kept with the image; its annotations turn with it. */
   const rotate = (id: string, direction: "left" | "right") =>
     void perform(async () => {
@@ -247,6 +263,7 @@ export function RecordPanel({
               className="record-image-open"
               disabled={!image?.width}
               aria-label={t("Ampliar y anotar")}
+              aria-describedby={taggedRegions > 0 ? taggedDescriptionId : undefined}
               data-testid="record-image-open"
               data-tour="record-image-open"
               onClick={() => setViewer("view")}
@@ -257,10 +274,23 @@ export function RecordPanel({
                 large
                 alt={row.title}
               />
-              {regions > 0 && (
-                <span className="record-image-regions" data-tooltip={t("Zonas anotadas en esta imagen")}>
-                  <SquareDashedMousePointer size={12} />
-                  {regions}
+              {(annotatedRegions > 0 || taggedRegions > 0) && (
+                <span className="record-image-badges">
+                  {annotatedRegions > 0 && (
+                    <span className="record-image-regions" data-tooltip={t("Zonas anotadas en esta imagen")}>
+                      <SquareDashedMousePointer size={12} aria-hidden />
+                      {annotatedRegions}
+                    </span>
+                  )}
+                  {taggedRegions > 0 && (
+                    <span className="record-image-regions is-tagged" data-tooltip={t("Zonas etiquetadas en esta imagen")} data-testid="record-image-tagged-regions">
+                      <Tag size={12} aria-hidden />
+                      {taggedRegions}
+                      <span id={taggedDescriptionId} hidden>
+                        {t(taggedRegions === 1 ? "1 zona etiquetada en esta imagen" : "{n} zonas etiquetadas en esta imagen").replace("{n}", String(taggedRegions))}
+                      </span>
+                    </span>
+                  )}
                 </span>
               )}
             </button>

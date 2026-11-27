@@ -290,10 +290,10 @@ export function renderMethodologyHtml(
       id: "visual-tags",
       title: t("Etiquetado visual"),
       eyebrow: t("Iconografía"),
-      lead: t("Los elementos marcados en las imágenes con una región y una etiqueta, cuántas veces aparece cada uno y en cuántas fotografías."),
+      lead: t("Cuántas regiones llevan cada etiqueta y en cuántas fotografías aparece."),
       html:
         `<div class="prose">${p(
-          t("Cada región delimita un elemento de la imagen (una persona, un vehículo, un edificio) y lo nombra con una etiqueta común a toda la base de datos. Se distingue el número de apariciones (regiones) del de fotografías que contienen la etiqueta, y las imágenes revisadas sin ningún elemento de las que aún no se han revisado. Cada región guarda su origen (a mano o propuesta automática), su confianza y si se validó; las cifras solo cuentan las regiones validadas."),
+          t("Cada región delimita un elemento de la imagen y puede llevar varias etiquetas. Para cada etiqueta se cuentan las regiones validadas que la llevan y las fotografías en las que aparece. Las imágenes revisadas sin elementos se registran por separado de las que aún no se han revisado. Cada región guarda su origen, su confianza y su estado de validación."),
         )}</div>` +
         tagged
           .map((v) => {
