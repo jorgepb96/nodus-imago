@@ -111,7 +111,7 @@ test("a linked dictionary's terms become tags with their colour and icon", () =>
     assert.throws(() => tags.setDictionary(db, column.id), /selección/);
   }));
 
-test("removing a tag removes its regions; renaming it shows everywhere", () =>
+test("renaming a tag shows everywhere and deleting it recalculates once", (t) =>
   withPhotos(({ repo, tags, db, rows, assets }) => {
     tags.save({ assetId: assets[0], ...box, label: "Toro" });
     tags.save({ assetId: assets[1], ...box, label: "Toro" });
@@ -120,14 +120,28 @@ test("removing a tag removes its regions; renaming it shows everywhere", () =>
     const toro = column.options.find((o) => o.label === "Toro")!;
     repo.saveOptions(column.id, column.options.map((o) => ({ id: o.id, label: o.id === toro.id ? "Toro bravo" : o.label, color: o.color })));
     assert.equal(exportCellText(repo.column(column.id), repo.getRow(rows[1])), "Toro bravo, Carro");
+    const formula = repo.addColumn(db, "Temas", "formula", {
+      formula: { kind: "concat", parts: [{ kind: "text", value: "Temas: " }, { kind: "column", columnId: column.id }] },
+    });
+    assert.equal(repo.getRow(rows[1]).cells[formula.id], "Temas: Toro bravo, Carro");
+    assert.equal(repo.literal({ query: "bravo" }).total, 2);
+    const recompute = t.mock.method(repo, "recompute");
+    // The regions are authoritative even if a record's cached cell is missing.
+    repo.rawCell(rows[0], column.id, null, "multi_select");
+    repo.db.prepare("UPDATE db_rows SET updated_at='2026-01-01' WHERE id=?").run(rows[2]);
     repo.saveOptions(
       column.id,
       repo.column(column.id).options.filter((o) => o.id !== toro.id).map((o) => ({ id: o.id, label: o.label, color: o.color })),
       { dropFromCells: true },
     );
+    assert.equal(recompute.mock.callCount(), 1);
     assert.equal(tags.list(assets[0]).length, 0);
     assert.equal(tags.list(assets[1]).length, 1);
     assert.equal(repo.getRow(rows[0]).cells[column.id] ?? null, null);
+    assert.equal(repo.getRow(rows[1]).cells[formula.id], "Temas: Carro");
+    assert.equal(repo.getRow(rows[2]).updatedAt, "2026-01-01");
+    assert.equal(repo.literal({ query: "bravo" }).total, 0);
+    assert.equal(repo.literal({ query: "carro" }).total, 1);
   }));
 
 test("statistics count photographs or appearances, over the records a filter keeps (a book's bulls)", () =>

@@ -33,6 +33,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.3",
+    date: "2026-11-27",
+    highlights: [
+      {
+        scope: "catalogue",
+        category: "fix",
+        es: "Eliminar etiquetas es más rápido. El diálogo muestra «Eliminando…» mientras se completa el borrado.",
+        en: "Deleting tags is faster. The confirmation dialog shows a busy indicator until deletion finishes.",
+      },
+    ],
+  },
+  {
     version: "0.9.2",
     date: "2026-11-27",
     highlights: [
