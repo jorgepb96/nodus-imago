@@ -165,19 +165,28 @@ async function restoreAppIcon() {
   await persistAppIcon(image);
 }
 
-async function persistAppIcon(
+// Writes run one after another, each through its own temporary file: two
+// quick theme changes sharing one temporary file could truncate it after the
+// first rename, leaving the saved icon empty for a moment.
+let appIconWrites: Promise<void> = Promise.resolve();
+let appIconWrite = 0;
+function persistAppIcon(
   image: ReturnType<typeof nativeImage.createFromBuffer>,
 ) {
-  const file = appIconPath(),
-    temporary = `${file}.${process.pid}.tmp`;
-  try {
-    await fs.mkdir(app.getPath("userData"), { recursive: true });
-    await fs.writeFile(temporary, image.toPNG());
-    await fs.rename(temporary, file);
-  } catch (error) {
-    await fs.rm(temporary, { force: true }).catch(() => {});
-    console.warn("[app-icon] No se pudo guardar el icono:", error);
-  }
+  const png = image.toPNG();
+  appIconWrites = appIconWrites.then(async () => {
+    const file = appIconPath(),
+      temporary = `${file}.${process.pid}.${++appIconWrite}.tmp`;
+    try {
+      await fs.mkdir(app.getPath("userData"), { recursive: true });
+      await fs.writeFile(temporary, png);
+      await fs.rename(temporary, file);
+    } catch (error) {
+      await fs.rm(temporary, { force: true }).catch(() => {});
+      console.warn("[app-icon] No se pudo guardar el icono:", error);
+    }
+  });
+  return appIconWrites;
 }
 
 function internalFileRequest(command: string) {
