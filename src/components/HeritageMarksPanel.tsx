@@ -61,12 +61,9 @@ export function HeritageMarksPanel({
 
   return (
     <section className="heritage-marks" data-testid="heritage-marks">
-      <h2>
-        {t("Patrimonio en esta foto")} <span>{inCell.length}</span>
-        <button type="button" className="heritage-suggest-open" onClick={onSuggest} data-testid="heritage-suggest-open">
-          <Sparkles size={13} /> {t("Sugerir con IA")}
-        </button>
-      </h2>
+      <button type="button" className="heritage-suggest-open" onClick={onSuggest} data-testid="heritage-suggest-open">
+        <Sparkles size={13} /> {t("Sugerir con IA")}
+      </button>
       {draft && (
         <div className="heritage-chooser" data-testid="heritage-chooser">
           <p>

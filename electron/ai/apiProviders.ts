@@ -8,6 +8,7 @@ import {
   type ImageCatalogModel,
   type ModelChoice,
   type ProviderModel,
+  type VisionCatalogModel,
 } from "../../shared/aiConfig";
 import {
   anthropicVisionContent,
@@ -31,6 +32,7 @@ export type CompletionRequest = {
   system: string;
   images: VisionImagePart[];
   minIntervalMs?: number;
+  maxTokens?: number;
   /** Stream the answer: pieces of text reach the caller as they arrive. */
   stream?: boolean;
 };
@@ -235,7 +237,7 @@ export class ApiProviders {
             "/messages",
             {
               model: input.choice.model,
-              max_tokens: 1000,
+              max_tokens: input.maxTokens ?? 1000,
               system: input.system,
               messages: [
                 {
@@ -260,8 +262,8 @@ export class ApiProviders {
                 },
               ],
               ...(provider === "openai"
-                ? { max_completion_tokens: 1000 }
-                : { max_tokens: 1000 }),
+                ? { max_completion_tokens: input.maxTokens ?? 1000 }
+                : { max_tokens: input.maxTokens ?? 1000 }),
               stream: false,
             },
             signal,
@@ -640,6 +642,78 @@ export class ApiProviders {
       ? models.sort((a, b) => (a.group === b.group ? a.id.localeCompare(b.id) : (a.group ?? "").localeCompare(b.group ?? "")))
       : models.sort((a, b) => a.id.localeCompare(b.id));
   }
+  private visionCache: { signature: string; at: number; models: VisionCatalogModel[] } | null = null;
+  /** Vision models served by the user's configured providers, with favourites first when present. */
+  async visionCatalog(
+    profiles: Partial<Record<ApiProvider, ApiProfile>>,
+    remoteEnabled: boolean,
+    signal: AbortSignal,
+  ): Promise<VisionCatalogModel[]> {
+    const endpoints = (Object.keys(PROVIDERS) as ApiProvider[]).flatMap((provider) => {
+      const key = !!this.secrets.get(provider);
+      try {
+        const base = providerBase(provider, profiles);
+        const remote = !isLoopbackUrl(base);
+        if (remote ? !remoteEnabled || !key : !key && !profiles[provider] && provider !== "ollama" && provider !== "lmstudio") return [];
+        return [{ provider, base, remote, key }];
+      } catch {
+        return [];
+      }
+    });
+    const signature = JSON.stringify([endpoints, profiles, remoteEnabled]);
+    if (this.visionCache?.signature === signature && Date.now() - this.visionCache.at < 120_000)
+      return this.visionCache.models;
+    const catalogs = await Promise.all(endpoints.map(async ({ provider, base, remote }) => {
+      try {
+        const models = await this.list(provider, profiles, remoteEnabled, signal);
+        const confirmed = await this.localVisionInfo(provider, base, models, signal);
+        return confirmed.filter((model) => model.vision === true).map((model) => ({
+          choice: { provider, model: model.id }, name: model.name || model.id, remote,
+        }));
+      } catch {
+        return [];
+      }
+    }));
+    const all = catalogs.flat();
+    const favorites = all.filter(({ choice }) => profiles[choice.provider]?.models.includes(choice.model));
+    const models = favorites.length ? favorites : all;
+    this.visionCache = { signature, at: Date.now(), models };
+    return models;
+  }
+
+  private async localVisionInfo(provider: ApiProvider, base: string, models: ProviderModel[], signal: AbortSignal) {
+    if (provider !== "ollama" && provider !== "lmstudio") return models;
+    const native = base.replace(/\/v1$/, "");
+    const expected = providerBase(provider, {}).replace(/\/v1$/, "");
+    const limits = { bytes: 8 * 2 ** 20, timeoutMs: 8_000 };
+    const details = new Map<string, boolean>();
+    if (provider === "lmstudio") {
+      try {
+        const answer = await this.request(provider, native, "/api/v1/models", null, signal, expected, limits);
+        for (const model of Array.isArray(answer.models) ? answer.models : []) {
+          if (model.type !== "llm" || typeof model.capabilities?.vision !== "boolean") continue;
+          if (typeof model.key === "string") details.set(model.key, model.capabilities.vision);
+          for (const instance of Array.isArray(model.loaded_instances) ? model.loaded_instances : [])
+            if (typeof instance.id === "string") details.set(instance.id, model.capabilities.vision);
+        }
+      } catch {
+        signal.throwIfAborted();
+      }
+    } else {
+      const unknown = models.filter((model) => model.vision === undefined);
+      for (let i = 0; i < unknown.length; i += 6)
+        await Promise.all(unknown.slice(i, i + 6).map(async ({ id }) => {
+          try {
+            const answer = await this.request(provider, native, "/api/show", { model: id }, signal, expected, limits);
+            if (Array.isArray(answer.capabilities))
+              details.set(id, answer.capabilities.includes("vision") && answer.capabilities.includes("completion"));
+          } catch {
+            signal.throwIfAborted();
+          }
+        }));
+    }
+    return models.map((model) => ({ ...model, vision: model.vision ?? details.get(model.id) }));
+  }
   /** A public catalogue (OpenRouter's), read without any key. */
   private async publicCatalog(url: string, signal: AbortSignal, limits: { bytes: number; timeoutMs: number }) {
     let response: Response;
@@ -704,24 +778,45 @@ function catalogModel(provider: ApiProvider, m: any): ProviderModel | null {
       id,
       ...(typeof m.displayName === "string" ? { name: m.displayName } : {}),
       contextLength: contextOf(m.inputTokenLimit),
+      vision: declaredVision(m) ?? (methods.includes("generateContent") &&
+        (/^gemini-(?:\d+(?:\.\d+)?-(?:flash|pro)|(?:flash|pro)-latest)/i.test(id) || /^gemma-3-(?:4|12|27)b-it$/i.test(id)) &&
+        !/(?:^|-)(?:image|tts|audio|live|robotics|computer-use)(?:-|$)/i.test(id)),
       // Imagen answers through «predict», which Imago does not use.
       imageOutput: /image/i.test(id) && !/^imagen/i.test(id) && methods.includes("generateContent"),
     };
   }
   if (typeof m?.id !== "string" || !m.id.trim()) return null;
-  const input: string[] | undefined = m.architecture?.input_modalities,
-    output: string[] | undefined = m.architecture?.output_modalities;
-  const vision = Array.isArray(input) ? input.includes("image") : typeof m.capabilities?.vision === "boolean" ? m.capabilities.vision : undefined;
+  const output: string[] | undefined = m.architecture?.output_modalities ?? m.output_modalities;
+  const vision = declaredVision(m) ?? documentedVision(provider, m.id);
   return {
     id: m.id,
     ...(typeof m.name === "string" ? { name: m.name } : typeof m.display_name === "string" ? { name: m.display_name } : {}),
     ...(provider === "openrouter" ? { group: m.id.includes("/") ? m.id.split("/")[0] : "other" } : {}),
     contextLength: contextOf(m.context_length, m.top_provider?.context_length, m.context_window, m.max_context_length, m.max_model_len, m.max_input_tokens),
-    vision,
+    vision: Array.isArray(output) && !output.includes("text") ? false : vision,
     // An edit needs an image in and an image out; OpenAI edits with its image models.
     imageOutput:
       provider === "openai"
         ? /^(gpt-image|chatgpt-image)/.test(m.id)
         : Array.isArray(output) && output.includes("image") && vision !== false,
   };
+}
+
+function declaredVision(model: any): boolean | undefined {
+  const input = model.architecture?.input_modalities ?? model.input_modalities ?? model.inputModalities;
+  if (Array.isArray(input)) return input.some((type) => typeof type === "string" && type.toLowerCase() === "image");
+  if (typeof model.capabilities?.image_input?.supported === "boolean") return model.capabilities.image_input.supported;
+  if (typeof model.capabilities?.vision === "boolean") return model.capabilities.vision;
+  if (Array.isArray(model.capabilities)) return model.capabilities.includes("vision");
+}
+
+// Some official listings omit modal capabilities. Recognize documented model families from those listings.
+function documentedVision(provider: ApiProvider, id: string): boolean | undefined {
+  if (provider === "openai") {
+    return !/(?:audio|realtime|transcribe|tts|codex|search)/.test(id) &&
+      (/^(?:gpt-5(?:[.-]|$)|gpt-4\.1(?:-|$)|gpt-4o(?:-|$)|gpt-4-turbo(?:-\d|$)|o[134](?:-\d|-pro|$)|o4-mini(?:-|$)|chatgpt-4o-latest$)/.test(id));
+  }
+  if (provider === "anthropic") return /^claude-(?:3-|(?:opus|sonnet|haiku)-[4-9](?:-|$))/.test(id);
+  if (provider === "groq")
+    return /^(?:qwen\/qwen3\.(?:6|8)-27b|meta-models\/muse-spark-open|meta-llama\/llama-4-(?:scout|maverick)-.+)$/.test(id);
 }

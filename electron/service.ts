@@ -51,6 +51,7 @@ import { Gazetteer } from "./geo/gazetteer";
 import { decodeMultiSelect, encodeMultiSelect } from "../shared/databases";
 import { buildAiCellPrompt, buildAiRowContext } from "../shared/databaseAi";
 import { heritageSuggestPrompt, knownForRecord, matchSuggestion, parseSuggestions } from "../shared/heritage";
+import { parseVisualTagSuggestions, visualTagSuggestionPrompt, type VisualTagChoice } from "../shared/visualTags";
 import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
@@ -76,7 +77,7 @@ const CONTENT_WRITES = new Set([
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
-  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "visualTagDictionary", "convertToRelation", "pairRelation", "createWorkFromFamily",
+  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "visualTagUndo", "visualTagDictionary", "visualTagApplySuggestions", "convertToRelation", "pairRelation", "createWorkFromFamily",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -777,7 +778,9 @@ export class Service {
         })();
         this.storageTask = task;
         try {
-          return await task;
+          const restored = await task;
+          this.visualTags.clearUndo();
+          return restored;
         } finally {
           this.storageTask = null;
           if (ownLock) {
@@ -1255,21 +1258,15 @@ export class Service {
         this.variants.setOrigin(input.assetId, input.sourceAssetId);
         this.changed();
         return true;
-      case "visualTagsList": {
-        const asset = this.repo.asset(input.assetId) as { database_id: string };
-        return {
-          regions: this.visualTags.list(input.assetId),
-          reviewed: this.visualTags.reviewed(input.assetId),
-          column: this.visualTags.column(asset.database_id),
-          dictionary: this.visualTags.dictionary(asset.database_id),
-        };
-      }
+      case "visualTagsList":
+        return this.visualTags.selection(input.assetId);
       case "visualTagSave": {
         const saved = this.visualTags.save(input);
         // A new label or a dictionary term may have created a column or option.
-        const column = saved.optionId === input.optionId
-          ? undefined
-          : this.visualTags.column((this.repo.asset(input.assetId) as { database_id: string }).database_id);
+        const suppliedIds = input.tags?.flatMap((tag: VisualTagChoice) => "optionId" in tag ? [tag.optionId] : []) ?? (input.optionId ? [input.optionId] : []);
+        const column = (input.tags || input.optionId || input.label) && saved.optionIds.some((id) => !suppliedIds.includes(id))
+          ? this.visualTags.column((this.repo.asset(input.assetId) as { database_id: string }).database_id)
+          : undefined;
         this.changed();
         return { ...saved, column };
       }
@@ -1278,15 +1275,45 @@ export class Service {
         this.changed();
         return true;
       case "visualTagReview":
-        this.visualTags.setReviewed(input.assetId, input.reviewed);
+        this.visualTags.setReviewed(input.assetId, input.reviewed, input.dictionaryId);
         this.changed();
         return true;
+      case "visualTagPending":
+        return this.visualTags.pendingImages(input.databaseId, input.dictionaryId, input.rowIds);
+      case "visualTagUndo": {
+        const action = this.visualTags.undo(input.assetId, input.dictionaryId);
+        if (action) this.changed();
+        return action;
+      }
       case "visualTagDictionary":
         this.visualTags.setDictionary(input.databaseId, input.columnId);
         this.changed();
         return true;
       case "visualTagsSummary":
         return this.visualTags.summary(input.databaseId);
+      case "visualTagModels": {
+        const models = this.models.list();
+        const runtimeReady = models.some((model) => model.id === "llama-runtime" && model.verified);
+        return models.filter((model) => model.task === "vision" && model.available !== false && model.verified &&
+          (this.models.get(model.id).backend !== "llama" || runtimeReady))
+          .map((model) => ({ choice: { provider: "local", model: model.id }, name: model.label, remote: false }));
+      }
+      case "visualTagSuggest": {
+        const { dictionary, imageVersion } = this.visualTags.suggestionTarget(input.assetId, input.dictionaryId);
+        if (input.choice.provider === "local" && this.models.get(input.choice.model).task !== "vision")
+          throw new Error("Elige un modelo que admita imágenes.");
+        const raw = await this.engine.askImage(
+          input.choice, input.assetId, null, visualTagSuggestionPrompt(dictionary.options), AbortSignal.timeout(180_000), true,
+        );
+        if (this.visualTags.suggestionTarget(input.assetId, input.dictionaryId).imageVersion !== imageVersion)
+          throw new Error("La imagen o el diccionario han cambiado. Vuelve a generar las sugerencias.");
+        return { imageVersion, regions: parseVisualTagSuggestions(raw, dictionary.options) };
+      }
+      case "visualTagApplySuggestions": {
+        const added = this.visualTags.applySuggestions(input);
+        if (added) this.changed();
+        return added;
+      }
       case "workOf":
         return this.works.workOf(input.rowId);
       case "createWorkFromFamily": {

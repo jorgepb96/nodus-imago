@@ -219,8 +219,8 @@ export class LlamaSession {
   }
 }
 
-/** text: free prose; json: array of strings; value: {"value": string}. */
-export type LlamaMode = "text" | "json" | "value";
+/** Structured modes constrain the output to the shape needed by the caller. */
+export type LlamaMode = "text" | "json" | "value" | "regions";
 
 type Slot = {
   key: string;
@@ -328,11 +328,11 @@ export class LlamaPool {
       "--image-max-tokens",
       "280",
       "-n",
-      "512",
+      slot.mode === "regions" ? "2048" : "512",
       "--temp",
-      "0",
+      slot.mode === "regions" ? "0.2" : "0",
       "-c",
-      "4096",
+      slot.mode === "regions" ? "8192" : "4096",
       "-t",
       threads,
       "--log-verbosity",
@@ -352,6 +352,27 @@ export class LlamaPool {
           type: "object",
           properties: { value: { type: "string" } },
           required: ["value"],
+        }),
+      );
+    else if (slot.mode === "regions")
+      args.push(
+        "--json-schema",
+        JSON.stringify({
+          type: "object",
+          properties: {
+            regions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  box: { type: "array", items: { type: "integer" }, minItems: 4, maxItems: 4 },
+                  tags: { type: "array", items: { type: "integer" }, minItems: 1 },
+                },
+                required: ["box", "tags"],
+              },
+            },
+          },
+          required: ["regions"],
         }),
       );
     const session = new LlamaSession(executable, args);

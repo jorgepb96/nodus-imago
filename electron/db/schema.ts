@@ -1,3 +1,35 @@
+import type Database from "better-sqlite3";
+
+export const visualTagReviewsSchema = `
+CREATE TABLE IF NOT EXISTS image_tag_reviews(
+  asset_id TEXT NOT NULL REFERENCES image_assets(id) ON DELETE CASCADE,
+  reviewed_at TEXT NOT NULL,
+  dictionary_id TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY(asset_id,dictionary_id)
+);
+`;
+
+/** Older collections only saved the last selected dictionary for each database. */
+export function scopeLegacyVisualTags(db: Database.Database) {
+  const dictionaries = `
+    SELECT visual.id visual_id,visual.database_id,dictionary.id dictionary_id
+    FROM db_columns visual
+    JOIN db_columns dictionary ON dictionary.id=json_extract(visual.config_json,'$.visualTagsDictionary')
+      AND dictionary.database_id=visual.database_id
+    WHERE visual.type='multi_select' AND json_extract(visual.config_json,'$.visualTags')=1
+      AND dictionary.type IN ('select','multi_select','status')
+      AND coalesce(json_extract(dictionary.config_json,'$.visualTags'),0)=0
+      AND (dictionary.type<>'multi_select' OR coalesce(json_extract(dictionary.config_json,'$.heritage'),0)=0)
+  `;
+  db.exec(`
+    UPDATE db_select_options SET visual_tag_dictionary_id=d.dictionary_id
+    FROM (${dictionaries}) d WHERE column_id=d.visual_id;
+    UPDATE image_tag_reviews SET dictionary_id=d.dictionary_id
+    FROM image_assets a JOIN (${dictionaries}) d ON a.database_id=d.database_id
+    WHERE asset_id=a.id;
+  `);
+}
+
 // EAV tables adapted from Nodus migrations 51–53, with file-backed image assets.
 export const schema = `
 PRAGMA foreign_keys=ON;
@@ -6,7 +38,7 @@ INSERT INTO imago_schema SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM imago_schema);
 CREATE TABLE IF NOT EXISTS db_databases(id TEXT PRIMARY KEY,short_id TEXT UNIQUE NOT NULL,name TEXT NOT NULL,icon TEXT,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS db_columns(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,name TEXT NOT NULL,type TEXT NOT NULL,position INTEGER NOT NULL,config_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS columns_database ON db_columns(database_id,position);
-CREATE TABLE IF NOT EXISTS db_select_options(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,label TEXT NOT NULL,color TEXT,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS db_select_options(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,column_id TEXT NOT NULL REFERENCES db_columns(id) ON DELETE CASCADE,label TEXT NOT NULL,color TEXT,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,visual_tag_dictionary_id TEXT);
 CREATE INDEX IF NOT EXISTS options_column ON db_select_options(column_id,position);
 CREATE TABLE IF NOT EXISTS db_rows(id TEXT PRIMARY KEY,database_id TEXT NOT NULL REFERENCES db_databases(id) ON DELETE CASCADE,position INTEGER NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS rows_database ON db_rows(database_id,position,id);
@@ -23,10 +55,11 @@ CREATE TABLE IF NOT EXISTS relation_details(a TEXT NOT NULL REFERENCES db_rows(i
 CREATE INDEX IF NOT EXISTS relation_details_b ON relation_details(b);
 CREATE TABLE IF NOT EXISTS image_crops(pair TEXT PRIMARY KEY,placement TEXT);
 CREATE TABLE IF NOT EXISTS image_origins(content_hash TEXT PRIMARY KEY,source_hash TEXT NOT NULL,updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS image_tags(id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES image_assets(id) ON DELETE CASCADE,option_id TEXT NOT NULL,x REAL NOT NULL,y REAL NOT NULL,w REAL NOT NULL,h REAL NOT NULL,source TEXT NOT NULL DEFAULT 'manual',model TEXT,confidence REAL,state TEXT NOT NULL DEFAULT 'validated',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS image_tags(id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES image_assets(id) ON DELETE CASCADE,x REAL NOT NULL,y REAL NOT NULL,w REAL NOT NULL,h REAL NOT NULL,source TEXT NOT NULL DEFAULT 'manual',model TEXT,confidence REAL,state TEXT NOT NULL DEFAULT 'validated',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS image_tags_asset ON image_tags(asset_id);
-CREATE INDEX IF NOT EXISTS image_tags_option ON image_tags(option_id);
-CREATE TABLE IF NOT EXISTS image_tag_reviews(asset_id TEXT PRIMARY KEY REFERENCES image_assets(id) ON DELETE CASCADE,reviewed_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS image_tag_options(region_id TEXT NOT NULL REFERENCES image_tags(id) ON DELETE CASCADE,option_id TEXT NOT NULL,position INTEGER NOT NULL,PRIMARY KEY(region_id,option_id));
+CREATE INDEX IF NOT EXISTS image_tag_options_option ON image_tag_options(option_id);
+${visualTagReviewsSchema}
 CREATE TABLE IF NOT EXISTS ai_prompts(hash TEXT PRIMARY KEY,text TEXT NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS search_documents(row_id TEXT PRIMARY KEY REFERENCES db_rows(id) ON DELETE CASCADE,database_id TEXT NOT NULL,body TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(row_id UNINDEXED,database_id UNINDEXED,body,tokenize='unicode61 remove_diacritics 2');

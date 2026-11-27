@@ -158,7 +158,7 @@ export async function importNodus(repo: Repository, file: string) {
         .prepare("SELECT * FROM db_select_options")
         .all() as any[])
         repo.db
-          .prepare("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)")
+          .prepare("INSERT INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)")
           .run(
             o.id,
             columns.find((c) => c.id === o.column_id).database_id,

@@ -109,6 +109,32 @@ test("remote API gate blocks all network attempts, URL credentials and nonlocal 
   );
   assert.equal(providerBase("ollama", {}), "http://127.0.0.1:11434/v1");
 });
+test("the visual-tag model catalogue prefers vision favourites and falls back to compatible models", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-vision-catalogue-"));
+  try {
+    const secrets = new Secrets(root, encryption);
+    secrets.set("gemini", "fixture-key");
+    const providers = new ApiProviders(secrets, async (url) => {
+      if (String(url).includes("generativelanguage.googleapis.com")) return Response.json({ models: [
+        { name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] },
+        { name: "models/gemini-2.5-pro", supportedGenerationMethods: ["generateContent"] },
+        { name: "models/gemini-2.5-flash-preview-tts", supportedGenerationMethods: ["generateContent"] },
+        { name: "models/gemini-embedding-001", supportedGenerationMethods: ["embedContent"] },
+      ] });
+      return new Response("{}", { status: 404 });
+    });
+    const signal = new AbortController().signal;
+    const models = async (favorites: string[], remoteEnabled: boolean) => (await providers.visionCatalog(
+      { gemini: { baseUrl: "", models: favorites } }, remoteEnabled, signal,
+    )).map((model) => model.choice.model);
+    assert.deepEqual(await models([], true), ["gemini-2.5-flash", "gemini-2.5-pro"]);
+    assert.deepEqual(await models(["gemini-2.5-pro", "gemini-embedding-001"], true), ["gemini-2.5-pro"]);
+    assert.deepEqual(await models(["gemini-embedding-001"], true), ["gemini-2.5-flash", "gemini-2.5-pro"]);
+    assert.deepEqual(await models([], false), []);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 test("Nodus-compatible API vision messages use encrypted credentials and retain source images", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-api-"));
   try {

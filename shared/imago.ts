@@ -706,30 +706,47 @@ export type Commands = {
   };
   /** «Procede de»: the image one was reproduced from; null clears it. */
   imageOrigin: { input: { assetId: string; sourceAssetId: string | null }; result: boolean };
-  /** An image's visual tag regions, whether it was reviewed, and the database's «Etiquetas visuales». */
+  /** An image's regions and review in the active dictionary, and the database's «Etiquetas visuales». */
   visualTagsList: {
     input: { assetId: string };
     result: {
       regions: import("./visualTags").VisualTagRegion[];
       reviewed: boolean;
+      canUndo: boolean;
       column: import("./databases").DatabaseColumn | null;
+      /** Applied options in the active tagging criterion. */
+      optionIds: string[];
       /** The select property linked as the tags' dictionary, if any. */
       dictionary: import("./databases").DatabaseColumn | null;
     };
   };
-  /** Saves a region with a tag (an existing one, or a new one by name). */
+  /** Saves a region. Tags can be existing options or new names, in display order. */
   visualTagSave: {
-    input: { id?: string; assetId: string; x: number; y: number; w: number; h: number; optionId?: string | null; label?: string | null };
+    input: {
+      id?: string; assetId: string; dictionaryId?: string | null; x: number; y: number; w: number; h: number;
+      tags?: import("./visualTags").VisualTagChoice[]; optionId?: string | null; label?: string | null;
+    };
     result: import("./visualTags").VisualTagRegion & { column?: import("./databases").DatabaseColumn | null };
   };
   visualTagDelete: { input: { id: string }; result: boolean };
-  /** Links a select property as the tags' dictionary, or unlinks it. */
+  /** Activates a tagging dictionary. Null selects the standalone tags. */
   visualTagDictionary: { input: { databaseId: string; columnId: string | null }; result: boolean };
   /** Marks an image as reviewed (also with nothing to tag) or not. */
-  visualTagReview: { input: { assetId: string; reviewed: boolean }; result: boolean };
+  visualTagReview: { input: { assetId: string; reviewed: boolean; dictionaryId?: string | null }; result: boolean };
+  visualTagPending: { input: { databaseId: string; dictionaryId: string | null; rowIds: string[] }; result: string[] };
+  visualTagUndo: { input: { assetId: string; dictionaryId: string | null }; result: { kind: "region" | "review" | "suggestions" } | null };
   visualTagsSummary: {
     input: { databaseId: string };
     result: import("./visualTags").VisualTagsSummary;
+  };
+  visualTagModels: { input: void; result: import("./aiConfig").VisionCatalogModel[] };
+  visualTagSuggest: {
+    input: { assetId: string; dictionaryId: string; choice: ModelChoice };
+    result: { imageVersion: string; regions: import("./visualTags").VisualTagSuggestion[] };
+  };
+  visualTagApplySuggestions: {
+    input: { assetId: string; dictionaryId: string; choice: ModelChoice; imageVersion: string; regions: (import("./visualTags").VisualTagSuggestion & { choice?: ModelChoice })[] };
+    result: number;
   };
   /** The work a record is linked to (in a works database), or null. */
   workOf: { input: { rowId: string }; result: import("./variants").WorkLink | null };

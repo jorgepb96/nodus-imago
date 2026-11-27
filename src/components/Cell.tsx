@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { GripVertical, Info, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
+import { Check, GripVertical, Info, Loader2, MoreHorizontal, Trash2, X } from "lucide-react";
 import {
   decodeMultiSelect,
   encodeMultiSelect,
@@ -7,7 +7,7 @@ import {
 } from "../../shared/databases";
 import { decodeDatabaseDate } from "../../shared/databaseProperties";
 import type { DatabaseColumn, DatabaseSelectOption } from "../../shared/databases";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { MarkdownView } from "./MarkdownView";
 import { RichTextEditor } from "./RichTextEditor";
 import { LocationCell } from "./LocationCell";
@@ -375,18 +375,25 @@ export function OptionPicker({
   floating?: {
     onPick: (id: string) => void;
     onCreate: (label: string) => void;
+    onRemove: (key: string) => void;
+    onSave: () => void;
     onClose: () => void;
+    tags: { key: string; label: string; color: string }[];
+    error?: string | null;
     placeholder?: string;
+    optionIds: readonly string[];
     /** A dictionary: another select property whose terms are offered too (picked by their own id). */
     extra?: { title: string; column: DatabaseColumn };
   };
 }) {
   const t = useT(),
+    language = useLanguage(),
     isFloating = !!floating,
     [open, setOpen] = useState(isFloating),
-    [active, setActive] = useState(0),
+    [highlight, setHighlight] = useState<number | null>(null),
     [query, setQuery] = useState(""),
     picker = useRef<HTMLDetailsElement>(null),
+    floatingSearch = useRef<HTMLInputElement>(null),
     menu = useRef<HTMLDivElement>(null);
   // Option editing: the «···» menu of one option, the deletion waiting for
   // confirmation, the option being dragged and where it would land.
@@ -534,8 +541,11 @@ export function OptionPicker({
     });
   };
   const needle = fold(query.trim());
+  const floatingIds = floating && new Set(floating.optionIds);
+  const floatingOptions = floatingIds ? column.options.filter((o) => floatingIds.has(o.id)) : [];
   const matches = open
-    ? shown(column.options).filter((o) => !needle || fold(o.label).includes(needle))
+    ? (floating ? sortOptions(floatingOptions, "name-asc", language) : shown(column.options))
+      .filter((o) => !needle || fold(o.label).includes(needle))
     : [];
   // An editable list keeps its own order, the one its options are dragged
   // into, and is drawn whole however long it is (the cell's chips already show
@@ -543,7 +553,7 @@ export function OptionPicker({
   // selected ones come first and a long list is drawn in part.
   const reorderable = editable && !needle;
   const limit = reorderable ? Infinity : OPTION_RENDER_LIMIT;
-  const ordered = reorderable
+  const ordered = floating || reorderable
     ? matches
     : [
         ...matches.filter((o) => selected.includes(o.id)),
@@ -552,117 +562,167 @@ export function OptionPicker({
   const editingOption = editing ? column.options.find((o) => o.id === editing) : undefined;
   // Floating: Enter picks the exact match, or the one moved to with the
   // arrows, and creates the tag when none matches exactly.
-  const typed = query.trim();
+  const typed = query.trim().replace(/\s+/g, " ");
   // The dictionary's terms not yet among the options, matching the search.
-  const extraColumn = floating?.extra?.column ?? null;
-  const ownLabels = new Set(column.options.map((o) => fold(o.label)));
+  const extra = floating?.extra;
+  const extraColumn = extra?.column;
+  const ownLabels = new Set(floatingOptions.map((o) => fold(o.label)));
   const extraList = extraColumn
     ? sortOptions(extraColumn.options, extraColumn.config.optionSort ?? "manual").filter((o) => !ownLabels.has(fold(o.label)) && (!needle || fold(o.label).includes(needle)))
     : [];
   const choices = [...ordered, ...extraList];
-  const exact = choices.find((o) => fold(o.label) === fold(typed));
+  const exactIndex = choices.findIndex((o) => fold(o.label) === fold(typed));
   // The highlighted row: an option (0…) or «Create …» (-1).
-  const canCreate = !!typed && !exact;
+  const canCreate = !!typed && exactIndex === -1 && !floating?.tags.some((tag) => fold(tag.label) === fold(typed));
+  const active = highlight ?? exactIndex;
+  const pickFloating = (choice: { id: string } | { label: string }) => {
+    if ("id" in choice) floating?.onPick(choice.id);
+    else floating?.onCreate(choice.label);
+    setQuery("");
+    setHighlight(null);
+    floatingSearch.current?.focus();
+  };
   const onFloatingKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!floating) return;
-    if (event.key === "Escape") {
+    if (!floating || event.nativeEvent.isComposing) return;
+    if (event.key === "ArrowDown") {
       event.preventDefault();
-      event.stopPropagation();
-      floating.onClose();
-    } else if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActive((i) => Math.min(choices.length - 1, i + 1));
+      setHighlight((i) => Math.min(choices.length - 1, (i ?? exactIndex) + 1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActive((i) => Math.max(canCreate ? -1 : 0, i - 1));
+      setHighlight((i) => Math.max(canCreate ? -1 : 0, (i ?? exactIndex) - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      if (active === -1 && canCreate) floating.onCreate(typed);
-      else if (choices[active]) floating.onPick(choices[active].id);
-      else if (canCreate) floating.onCreate(typed);
+      if (choices[active]) pickFloating({ id: choices[active].id });
+      else if (canCreate) pickFloating({ label: typed });
     }
   };
-  // Typing highlights the exact match, else «Create …», else the first option.
-  const exactIndex = exact ? choices.findIndex((o) => o.id === exact.id) : -1;
-  useEffect(() => setActive(exactIndex >= 0 ? exactIndex : typed ? -1 : 0), [typed, exactIndex]);
+  const appliedTagsTitle = t("Etiquetas aplicadas");
   return (
     <>
     {floating ? (
-      <div className="option-menu tag-picker" ref={menu} data-testid="tag-picker" role="dialog" aria-label={t("Etiqueta de la región")}>
+      <div
+        className="option-menu tag-picker"
+        ref={menu}
+        data-testid="tag-picker"
+        role="dialog"
+        aria-label={t("Etiquetas de la región")}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Escape" && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            floating.onClose();
+          }
+        }}
+      >
         <input
+          ref={floatingSearch}
           className="option-search"
           type="search"
           autoFocus
           aria-label={t("Buscar o crear etiqueta")}
           placeholder={floating.placeholder ?? t("Buscar o crear etiqueta…")}
+          maxLength={200}
           value={query}
           data-testid="tag-picker-input"
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setHighlight(null);
+          }}
           onKeyDown={onFloatingKey}
         />
-        {editError && <p className="annotation-error" role="alert">{t(editError)}</p>}
-        {typed && !exact && (
+        {(editError || floating.error) && <p className="annotation-error" role="alert">{t(editError || floating.error || "")}</p>}
+        {floating.tags.length > 0 && (
+          <div className="tag-picker-selection" role="group" aria-label={t("Etiquetas de la región")}>
+            {floating.tags.map((tag) => (
+              <button
+                key={tag.key}
+                type="button"
+                className="chip"
+                style={{ "--chip": tag.color } as React.CSSProperties}
+                aria-label={t("Quitar «{tag}»").replace("{tag}", tag.label)}
+                onClick={() => {
+                  floating.onRemove(tag.key);
+                  floatingSearch.current?.focus();
+                }}
+              >
+                <span>{tag.label}</span><X size={12} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        )}
+        {canCreate && (
           <button
             type="button"
             className={`tag-picker-create${active === -1 ? " is-active" : ""}`}
             data-testid="tag-picker-create"
-            onClick={() => floating.onCreate(typed)}
+            onClick={() => pickFloating({ label: typed })}
           >
             {t("Crear «{tag}»").replace("{tag}", typed)} <kbd>↵</kbd>
           </button>
         )}
         <div className="tag-picker-list">
-          {ordered.slice(0, 200).map((o, i) => (
-            <div key={o.id} className={`option-row${editable ? " is-editable" : ""}${i === active ? " is-active" : ""}`} data-testid="tag-picker-option">
-              <button type="button" className="tag-picker-choice" onMouseEnter={() => setActive(i)} onClick={() => floating.onPick(o.id)}>
-                <i style={{ background: o.color ?? DEFAULT_OPTION_COLOR }} />
-                {iconOf(o.id)}
-                <span className="option-label">{o.label}</span>
-              </button>
-              {editable && (
-                <button
-                  type="button"
-                  className={`option-more${editing === o.id ? " is-open" : ""}`}
-                  aria-label={`${t("Editar opción")} ${o.label}`}
-                  aria-expanded={editing === o.id}
-                  onClick={(e) => {
-                    editAnchor.current = e.currentTarget;
-                    setEditError(null);
-                    setEditing(editing === o.id ? null : o.id);
-                  }}
-                >
-                  <MoreHorizontal size={15} />
-                </button>
-              )}
+          {ordered.length > 0 && (
+            <div className="tag-picker-items" role="group" aria-label={appliedTagsTitle}>
+              <p className="tag-picker-group">{appliedTagsTitle}</p>
+              {ordered.slice(0, OPTION_RENDER_LIMIT).map((o, i) => (
+                <div key={o.id} className={`option-row${editable ? " is-editable" : ""}${i === active ? " is-active" : ""}`} data-testid="tag-picker-option">
+                  <button type="button" className="tag-picker-choice" aria-pressed={selected.includes(o.id)} onMouseEnter={() => setHighlight(i)} onClick={() => pickFloating({ id: o.id })}>
+                    <i style={{ background: o.color ?? DEFAULT_OPTION_COLOR }} />
+                    {iconOf(o.id)}
+                    <span className="option-label">{o.label}</span>
+                    {selected.includes(o.id) && <Check className="tag-picker-check" size={14} aria-hidden="true" />}
+                  </button>
+                  {editable && (
+                    <button
+                      type="button"
+                      className={`option-more${editing === o.id ? " is-open" : ""}`}
+                      aria-label={`${t("Editar opción")} ${o.label}`}
+                      aria-expanded={editing === o.id}
+                      onClick={(e) => {
+                        editAnchor.current = e.currentTarget;
+                        setEditError(null);
+                        setEditing(editing === o.id ? null : o.id);
+                      }}
+                    >
+                      <MoreHorizontal size={15} />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-          {extraList.length > 0 && extraColumn && (
-            <>
-              <p className="tag-picker-group">{floating.extra!.title}</p>
+          )}
+          {extraList.length > 0 && extra && (
+            <div className="tag-picker-items" role="group" aria-label={extra.title}>
+              <p className="tag-picker-group">{extra.title}</p>
               {extraList.slice(0, 300).map((o, j) => {
                 const i = ordered.length + j;
                 return (
                   <div key={o.id} className={`option-row is-dictionary${i === active ? " is-active" : ""}`} data-testid="tag-picker-term">
-                    <button type="button" className="tag-picker-choice" onMouseEnter={() => setActive(i)} onClick={() => floating.onPick(o.id)}>
+                    <button type="button" className="tag-picker-choice" aria-pressed={selected.includes(o.id)} onMouseEnter={() => setHighlight(i)} onClick={() => pickFloating({ id: o.id })}>
                       <i style={{ background: o.color ?? DEFAULT_OPTION_COLOR }} />
-                      <OptionIcon value={optionIconValue(extraColumn.config, o.id)} size={11} />
+                      <OptionIcon value={optionIconValue(extra.column.config, o.id)} size={11} />
                       <span className="option-label">{o.label}</span>
+                      {selected.includes(o.id) && <Check className="tag-picker-check" size={14} aria-hidden="true" />}
                     </button>
                   </div>
                 );
               })}
-            </>
+            </div>
           )}
         </div>
-        {!typed && !column.options.length && <p className="muted">{t("Escribe el nombre de la primera etiqueta y pulsa Intro.")}</p>}
+        {!typed && !floating.tags.length && !floatingOptions.length && !extraList.length && <p className="muted">{t("Escribe el nombre de la primera etiqueta y pulsa Intro.")}</p>}
+        <div className="tag-picker-actions">
+          <Button type="button" onClick={floating.onClose}>{t("Cancelar")}</Button>
+          <Button type="button" primary disabled={!floating.tags.length} onClick={floating.onSave} data-testid="tag-picker-save">
+            {t("Guardar")}
+          </Button>
+        </div>
         {editingOption && (
           <OptionEditMenu
             anchor={editAnchor as React.RefObject<HTMLElement>}
             option={editingOption}
             icon={optionIconValue(column.config, editingOption.id)}
             onIcon={(icon) => enqueue(() => saveIcon(editingOption.id, icon))}
-            sort={sort}
-            onSort={chooseSort}
             onClose={() => setEditing(null)}
             onRename={(label) => patch(editingOption.id, { label })}
             onColor={(color) => patch(editingOption.id, { color })}
@@ -822,8 +882,7 @@ export function OptionPicker({
               option={editingOption}
               icon={optionIconValue(column.config, editingOption.id)}
               onIcon={(icon) => enqueue(() => saveIcon(editingOption.id, icon))}
-              sort={sort}
-              onSort={chooseSort}
+              order={{ sort, onSort: chooseSort }}
               onClose={() => setEditing(null)}
               onRename={(label) => patch(editingOption.id, { label })}
               onColor={(color) => patch(editingOption.id, { color })}

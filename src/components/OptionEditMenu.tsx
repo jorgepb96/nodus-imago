@@ -28,10 +28,10 @@ export const OPTION_PALETTE: { label: string; color: string | null }[] = [
 export type OptionSort = NonNullable<DatabaseColumnConfig["optionSort"]>;
 
 /** The options in the order a column shows them: by hand or by name. */
-export function sortOptions<T extends { label: string; position: number }>(options: T[], sort: OptionSort = "manual"): T[] {
+export function sortOptions<T extends { label: string; position: number }>(options: T[], sort: OptionSort = "manual", locale?: string): T[] {
   const list = [...options].sort((a, b) => a.position - b.position);
   if (sort === "manual") return list;
-  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
   list.sort((a, b) => collator.compare(a.label, b.label));
   return sort === "name-desc" ? list.reverse() : list;
 }
@@ -50,8 +50,7 @@ export function OptionEditMenu({
   option,
   icon,
   onIcon,
-  sort,
-  onSort,
+  order,
   onRename,
   onColor,
   onDelete,
@@ -63,8 +62,7 @@ export function OptionEditMenu({
   icon: string | null;
   onIcon: (icon: string | null) => Promise<void>;
   /** The order of the whole list, chosen here too. */
-  sort: OptionSort;
-  onSort: (sort: OptionSort) => Promise<void>;
+  order?: { sort: OptionSort; onSort: (sort: OptionSort) => Promise<void> };
   onRename: (label: string) => Promise<void>;
   onColor: (color: string | null) => Promise<void>;
   onDelete: () => void;
@@ -155,20 +153,24 @@ export function OptionEditMenu({
           <DatabaseIconPicker value={icon} onChange={(next) => void attempt(() => onIcon(next))} />
         </CriteriaPopover>
       )}
-      <div className="option-edit-heading">{t("Ordenar")}</div>
-      {SORTS.map(({ id, label, icon: Icon }) => (
-        <button
-          type="button"
-          key={id}
-          className="option-edit-item"
-          aria-pressed={sort === id}
-          onClick={() => sort !== id && void attempt(() => onSort(id))}
-        >
-          <Icon size={15} />
-          <span className="option-edit-label">{t(label)}</span>
-          {sort === id && <Check size={15} />}
-        </button>
-      ))}
+      {order && (
+        <>
+          <div className="option-edit-heading">{t("Ordenar")}</div>
+          {SORTS.map(({ id, label, icon: Icon }) => (
+            <button
+              type="button"
+              key={id}
+              className="option-edit-item"
+              aria-pressed={order.sort === id}
+              onClick={() => order.sort !== id && void attempt(() => order.onSort(id))}
+            >
+              <Icon size={15} />
+              <span className="option-edit-label">{t(label)}</span>
+              {order.sort === id && <Check size={15} />}
+            </button>
+          ))}
+        </>
+      )}
       <div className="option-edit-heading">{t("Colores")}</div>
       {OPTION_PALETTE.map((p) => (
         <button

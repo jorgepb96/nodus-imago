@@ -5,7 +5,7 @@ import { createHash, randomUUID as uuid } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { schema } from "./schema";
+import { schema, scopeLegacyVisualTags, visualTagReviewsSchema } from "./schema";
 import {
   columnTypeHasOptions,
   decodeMultiSelect,
@@ -107,6 +107,23 @@ export class Repository {
     )
       throw new Error("Esquema Imago incompatible.");
     this.db.exec(schema);
+    if (!(this.db.prepare("PRAGMA table_info(db_select_options)").all() as { name: string }[]).some((c) => c.name === "visual_tag_dictionary_id"))
+      this.db.transaction(() => {
+        this.db.exec(`
+          ALTER TABLE db_select_options ADD COLUMN visual_tag_dictionary_id TEXT;
+          ALTER TABLE image_tag_reviews RENAME TO image_tag_reviews_legacy;
+          ${visualTagReviewsSchema}
+          INSERT INTO image_tag_reviews(asset_id,reviewed_at) SELECT asset_id,reviewed_at FROM image_tag_reviews_legacy;
+          DROP TABLE image_tag_reviews_legacy;
+        `);
+        scopeLegacyVisualTags(this.db);
+      })();
+    if ((this.db.prepare("PRAGMA table_info(image_tags)").all() as { name: string }[]).some((c) => c.name === "option_id"))
+      this.db.transaction(() => this.db.exec(`
+        INSERT INTO image_tag_options(region_id,option_id,position) SELECT id,option_id,0 FROM image_tags;
+        DROP INDEX IF EXISTS image_tags_option;
+        ALTER TABLE image_tags DROP COLUMN option_id;
+      `))();
     // Collections indexed before stale tracking existed gain the column.
     if (
       !(
@@ -682,7 +699,8 @@ export class Repository {
       // The twin of a two-way relation stays, as a one-way relation.
       if (c.type === "relation" && c.config.relationInverseColumnId) this.unpairRelation(id);
       // «Etiquetas visuales» gone: so are the regions of its tags.
-      if (c.config.visualTags) this.db.prepare("DELETE FROM image_tags WHERE option_id IN (SELECT id FROM db_select_options WHERE column_id=?)").run(id);
+      if (c.config.visualTags)
+        this.db.prepare("DELETE FROM image_tags WHERE id IN (SELECT t.region_id FROM image_tag_options t JOIN db_select_options o ON o.id=t.option_id WHERE o.column_id=?)").run(id);
       this.db.prepare("DELETE FROM history WHERE column_id=?").run(id);
       this.db.prepare("DELETE FROM db_columns WHERE id=?").run(id);
       this.pruneEquivalences([id]);
@@ -794,7 +812,7 @@ export class Repository {
         this.db.prepare("DELETE FROM db_select_options WHERE column_id=?").run(id);
       }
       const insert = this.db.prepare(
-        "INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
       );
       const start = keepOptions ? column.options.length : 0;
       if (!keepOptions && optionTypes(type))
@@ -1002,7 +1020,7 @@ export class Repository {
       for (const o of column.options) {
         const optionId = map.get(o.id)!;
         this.db
-          .prepare("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)")
+          .prepare("INSERT INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)")
           .run(optionId, column.databaseId, copyId, o.label, o.color, o.position, at, at);
       }
       const cells = this.db
@@ -1088,9 +1106,15 @@ export class Repository {
     const column = this.column(columnId);
     if (!columnTypeHasOptions(column.type))
       throw new Error("Esta propiedad no tiene opciones.");
-    const labels = input.map((o) =>
+    const visualTags = column.type === "multi_select" && column.config.visualTags;
+    const dictionaries = new Map(visualTags
+      ? (this.db.prepare("SELECT id,visual_tag_dictionary_id dictionaryId FROM db_select_options WHERE column_id=?")
+        .all(columnId) as { id: string; dictionaryId: string | null }[]).map(({ id, dictionaryId }) => [id, dictionaryId] as const)
+      : []);
+    const labels = input.map((o) => JSON.stringify([
+      (o.id && dictionaries.get(o.id)) || null,
       o.label.normalize("NFKC").trim().toLowerCase(),
-    );
+    ]));
     if (new Set(labels).size !== labels.length)
       throw new Error("Hay opciones duplicadas.");
     const current = new Map(column.options.map((o) => [o.id, o]));
@@ -1103,7 +1127,6 @@ export class Repository {
     const removed = column.options.filter((o) => !retainedIds.has(o.id));
     const gone = new Set(removed.map((o) => o.id));
     const labelsChanged = input.some((o) => !o.id || current.get(o.id)?.label !== o.label.trim());
-    const visualTags = column.type === "multi_select" && column.config.visualTags;
     const holding = (value: string) =>
       column.type === "multi_select"
         ? decodeMultiSelect(value).some((id) => gone.has(id))
@@ -1142,7 +1165,7 @@ export class Repository {
       this.db
         .prepare("DELETE FROM db_select_options WHERE column_id=?")
         .run(columnId);
-      const insert = this.statement("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)");
+      const insert = this.statement("INSERT INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at,visual_tag_dictionary_id) VALUES(?,?,?,?,?,?,?,?,?)");
       input.forEach((o, i) =>
         insert.run(
           o.id ?? uuid(),
@@ -1153,6 +1176,7 @@ export class Repository {
           i,
           now(),
           now(),
+          (o.id && dictionaries.get(o.id)) || null,
         ),
       );
       if (visualTags && gone.size) {
@@ -1466,13 +1490,14 @@ export class Repository {
     if (tagged.size) {
       for (const r of this.db
         .prepare(
-          `SELECT a.row_id,t.option_id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id WHERE a.row_id IN (${p}) AND t.state='validated' GROUP BY a.row_id,t.option_id`,
+          `SELECT a.row_id,o.option_id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id
+           JOIN image_tag_options o ON o.region_id=t.id WHERE a.row_id IN (${p}) AND t.state='validated' GROUP BY a.row_id,o.option_id`,
         )
         .all(...ids) as { row_id: string; option_id: string; n: number }[])
         (visualCounts.get(r.row_id) ?? visualCounts.set(r.row_id, {}).get(r.row_id)!)[r.option_id] = r.n;
       for (const r of this.db
         .prepare(
-          `SELECT a.row_id,count(*) images,count(v.asset_id) reviewed FROM image_assets a LEFT JOIN image_tag_reviews v ON v.asset_id=a.id WHERE a.row_id IN (${p}) GROUP BY a.row_id`,
+          `SELECT a.row_id,count(*) images,sum(EXISTS(SELECT 1 FROM image_tag_reviews v WHERE v.asset_id=a.id)) reviewed FROM image_assets a WHERE a.row_id IN (${p}) GROUP BY a.row_id`,
         )
         .all(...ids) as { row_id: string; images: number; reviewed: number }[])
         visualReviewed.set(r.row_id, r);
@@ -1939,7 +1964,7 @@ export class Repository {
           "INSERT INTO db_rows VALUES(?,?,?,?,?)",
         ),
         optionInsert = this.db.prepare(
-          "INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)",
+          "INSERT INTO db_select_options(id,database_id,column_id,label,color,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
         );
       for (let position = 0; position < rows.length; position++) {
         const values = rows[position],
@@ -2270,10 +2295,11 @@ export class Repository {
   private syncVisualTagCell(rowId: string, columnId: string, databaseId: string) {
     const ids = (
       this.statement(
-        `SELECT t.option_id id FROM image_tags t JOIN image_assets a ON a.id=t.asset_id
-         JOIN db_select_options o ON o.id=t.option_id AND o.column_id=?
+        `SELECT o.id FROM image_tags t JOIN image_assets a ON a.id=t.asset_id
+         JOIN image_tag_options link ON link.region_id=t.id
+         JOIN db_select_options o ON o.id=link.option_id AND o.column_id=?
          WHERE a.database_id=? AND a.row_id=? AND t.state='validated'
-         GROUP BY t.option_id ORDER BY count(*) DESC,min(o.position)`,
+         GROUP BY o.id ORDER BY count(*) DESC,min(o.position)`,
       )
         .all(columnId, databaseId, rowId) as { id: string }[]
     ).map((r) => r.id);
@@ -2286,11 +2312,22 @@ export class Repository {
   }
   private removeVisualTagOptions(column: DatabaseColumn, removed: string[], affected: Set<string>, reordered: boolean) {
     const deleted = this.statement(
-      `DELETE FROM image_tags WHERE option_id IN (SELECT value FROM json_each(?))
-       AND EXISTS(SELECT 1 FROM image_assets a WHERE a.id=image_tags.asset_id AND a.database_id=?)
-       RETURNING (SELECT row_id FROM image_assets WHERE id=image_tags.asset_id) row_id`,
-    ).all(JSON.stringify(removed), column.databaseId) as { row_id: string }[];
-    for (const { row_id } of deleted) affected.add(row_id);
+      `DELETE FROM image_tag_options WHERE option_id IN (SELECT value FROM json_each(?))
+       AND region_id IN (SELECT t.id FROM image_tags t JOIN image_assets a ON a.id=t.asset_id WHERE a.database_id=?)
+       RETURNING region_id`,
+    ).pluck().all(JSON.stringify(removed), column.databaseId) as string[];
+    if (deleted.length) {
+      const regions = JSON.stringify(deleted);
+      const rowIds = this.statement(
+        `SELECT DISTINCT a.row_id FROM image_tags t JOIN image_assets a ON a.id=t.asset_id
+         WHERE t.id IN (SELECT value FROM json_each(?))`,
+      ).pluck().all(regions) as string[];
+      for (const id of rowIds) affected.add(id);
+      this.statement(
+        `DELETE FROM image_tags WHERE id IN (SELECT value FROM json_each(?))
+         AND NOT EXISTS(SELECT 1 FROM image_tag_options WHERE region_id=image_tags.id)`,
+      ).run(regions);
+    }
     // Changing the relative order can also change the order of tags tied in frequency.
     const rows = reordered
       ? this.db.prepare("SELECT id FROM db_rows WHERE database_id=?").pluck().all(column.databaseId) as string[]
