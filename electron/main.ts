@@ -57,6 +57,7 @@ import { Announcements } from "./announcements";
 import { autoUpdater } from "electron-updater";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { asLanguage, type Language } from "../shared/language";
 /** Wikimedia asks automated clients to name themselves and a way to find them. */
 const WIKIMEDIA_USER_AGENT = "NodusImago/0.1 (https://github.com/jorgepb96/nodus-imago)";
 
@@ -111,9 +112,9 @@ const pending = new Map<
   { resolve: (v: any) => void; reject: (e: Error) => void }
 >();
 /** Interface language, for the labels Wikidata answers with. */
-async function interfaceLanguage(): Promise<"es" | "en"> {
+async function interfaceLanguage(): Promise<Language> {
   const status = (await call("status")) as { settings: { language: string } };
-  return status.settings.language === "en" ? "en" : "es";
+  return asLanguage(status.settings.language);
 }
 function call(command: string, input?: unknown): Promise<any> {
   const id = ++nextId;
@@ -164,19 +165,28 @@ async function restoreAppIcon() {
   await persistAppIcon(image);
 }
 
-async function persistAppIcon(
+// Writes run one after another, each through its own temporary file: two
+// quick theme changes sharing one temporary file could truncate it after the
+// first rename, leaving the saved icon empty for a moment.
+let appIconWrites: Promise<void> = Promise.resolve();
+let appIconWrite = 0;
+function persistAppIcon(
   image: ReturnType<typeof nativeImage.createFromBuffer>,
 ) {
-  const file = appIconPath(),
-    temporary = `${file}.${process.pid}.tmp`;
-  try {
-    await fs.mkdir(app.getPath("userData"), { recursive: true });
-    await fs.writeFile(temporary, image.toPNG());
-    await fs.rename(temporary, file);
-  } catch (error) {
-    await fs.rm(temporary, { force: true }).catch(() => {});
-    console.warn("[app-icon] No se pudo guardar el icono:", error);
-  }
+  const png = image.toPNG();
+  appIconWrites = appIconWrites.then(async () => {
+    const file = appIconPath(),
+      temporary = `${file}.${process.pid}.${++appIconWrite}.tmp`;
+    try {
+      await fs.mkdir(app.getPath("userData"), { recursive: true });
+      await fs.writeFile(temporary, png);
+      await fs.rename(temporary, file);
+    } catch (error) {
+      await fs.rm(temporary, { force: true }).catch(() => {});
+      console.warn("[app-icon] No se pudo guardar el icono:", error);
+    }
+  });
+  return appIconWrites;
 }
 
 function internalFileRequest(command: string) {
@@ -999,7 +1009,7 @@ app.whenReady().then(async () => {
           new AbortController().signal,
         );
       }
-      if (command === "visualTagModels" || command === "visualTagSuggest") {
+      if (command === "visualTagModels" || command === "visualTagSuggest" || command === "heritageSuggest") {
         const choice = (safe as { choice: ModelChoice } | undefined)?.choice;
         if (choice?.provider === "local") return call(command, safe);
         const settings = await call("_settings");

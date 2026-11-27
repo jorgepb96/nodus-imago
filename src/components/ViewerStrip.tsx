@@ -4,7 +4,7 @@
 // researcher moves along it, so a long working session goes through the whole
 // filter; records without images are passed over.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { RecordRow, SearchInput } from "../../shared/imago";
 import { useT } from "../i18n";
 import { Thumbnail } from "./ui";
@@ -162,34 +162,41 @@ export function ViewerStrip({
   return (
     <nav className="viewer-strip" aria-label={browse.label} data-testid="viewer-strip">
       <div className="viewer-strip-head">
-        <span className="viewer-strip-label">{browse.label}</span>
-        <span className="viewer-strip-count" data-testid="viewer-strip-count">
-          {pendingOnly ? items.length === 1 ? t("1 pendiente en la tira") : t("{n} pendientes en la tira").replace("{n}", items.length.toLocaleString())
-            : <>{(browse.index + 1).toLocaleString()} / {browse.total.toLocaleString()}</>}
-        </span>
-        <label className="viewer-strip-pending">
+        <div className="viewer-strip-position">
+          <span className="viewer-strip-label">{browse.label}</span>
+          <span className="viewer-strip-count" data-testid="viewer-strip-count">
+            {pendingOnly ? items.length === 1 ? t("1 foto sin revisar") : t("{n} fotos sin revisar").replace("{n}", items.length.toLocaleString())
+              : <>{(browse.index + 1).toLocaleString()} / {browse.total.toLocaleString()}</>}
+          </span>
+        </div>
+        <div className="viewer-strip-navigation">
+          <button
+            type="button"
+            aria-label={t("Foto anterior")}
+            aria-keyshortcuts="ArrowLeft"
+            data-tooltip={t("Foto anterior (←)")}
+            disabled={pendingOnly ? !canStep(-1) : browse.index <= 0}
+            onClick={() => onStep(-1)}
+          >
+            <ArrowLeft size={15} aria-hidden="true" />
+          </button>
+          <span>{t("Usa las flechas del teclado")}</span>
+          <button
+            type="button"
+            aria-label={t("Foto siguiente")}
+            aria-keyshortcuts="ArrowRight"
+            data-tooltip={t("Foto siguiente (→)")}
+            data-testid="viewer-strip-next"
+            disabled={pendingOnly ? !canStep(1) : browse.index >= browse.total - 1}
+            onClick={() => onStep(1)}
+          >
+            <ArrowRight size={15} aria-hidden="true" />
+          </button>
+        </div>
+        <label className="viewer-strip-pending" data-tooltip={t("Muestra las fotos que no tienen etiquetas validadas ni se han marcado como revisadas. Se aplica al diccionario activo.")}>
           <input type="checkbox" role="switch" checked={pendingOnly} onChange={(event) => onPendingChange(event.target.checked)} />
-          {t("Solo pendientes")}
+          {t("Solo fotos sin revisar en Etiquetas")}
         </label>
-        <button
-          type="button"
-          aria-label={t("Foto anterior")}
-          data-tooltip={t("Foto anterior (←)")}
-          disabled={pendingOnly ? !canStep(-1) : browse.index <= 0}
-          onClick={() => onStep(-1)}
-        >
-          <ChevronLeft size={15} />
-        </button>
-        <button
-          type="button"
-          aria-label={t("Foto siguiente")}
-          data-tooltip={t("Foto siguiente (→)")}
-          data-testid="viewer-strip-next"
-          disabled={pendingOnly ? !canStep(1) : browse.index >= browse.total - 1}
-          onClick={() => onStep(1)}
-        >
-          <ChevronRight size={15} />
-        </button>
       </div>
       <ol
         ref={list}
@@ -203,8 +210,8 @@ export function ViewerStrip({
       >
         {pendingOnly && (onRetry || items.length === 0) && (
           <li className="viewer-strip-empty">
-            <span role="status">{t(onRetry ? "No se pudieron cargar las fotos pendientes." : !ready || before || after
-              ? "Buscando fotos pendientes…" : "No quedan fotos pendientes en esta lista.")}</span>
+            <span role="status">{t(onRetry ? "No se pudieron cargar las fotos sin revisar." : !ready || before || after
+              ? "Buscando fotos sin revisar…" : "No quedan fotos sin revisar en esta lista.")}</span>
             {onRetry && <button type="button" onClick={onRetry}>{t("Reintentar")}</button>}
           </li>
         )}

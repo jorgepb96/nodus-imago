@@ -19,8 +19,11 @@ import {
   ancestors,
   emptyElement,
   heritageCategories,
+  heritageDictionaryOptions,
   heritageQuery,
+  heritageRegionPrompt,
   isHeritageColumn,
+  parseHeritageRegions,
   rankCandidates,
   resolvedPosition,
   typeFromInstances,
@@ -41,6 +44,46 @@ const link = (id: string, label: string, extra: Partial<AuthorityLink> = {}): Au
   ...extra,
 });
 const element = (optionId: string, change: Partial<HeritageElement> = {}): HeritageElement => ({ ...emptyElement(optionId), ...change });
+
+test("heritage regions require dictionary references until suggestions outside the dictionary are enabled", () => {
+  const dictionary = [{ id: "tower", label: "Torre Eiffel - París" }];
+  const output = JSON.stringify({ elements: [
+    { entry: 1, name: "An unchecked name", place: "Rome", confidence: "high", box: [100, 200, 800, 700] },
+    { entry: null, name: "Pont Neuf", place: "París, Francia", confidence: "low", box: [0, 0, 1001, 1000] },
+    { entry: 99, name: "Foreign dictionary entry", box: null },
+  ] });
+  const known = { optionId: "tower", name: "Torre Eiffel - París", place: null, confidence: "high", box: { x: 0.2, y: 0.1, w: 0.5, h: 0.7 } };
+  assert.deepEqual(parseHeritageRegions(output, dictionary, false), [known]);
+  assert.deepEqual(parseHeritageRegions(output, dictionary, true), [
+    known, { optionId: null, name: "Pont Neuf", place: "París", confidence: "low", box: null },
+  ]);
+  assert.match(heritageRegionPrompt(dictionary, false, false), /Only return elements from the dictionary/);
+  assert.match(heritageRegionPrompt(dictionary, true, false), /recognisable named heritage outside the dictionary/);
+});
+
+test("the viewer reuses heritage, and linked select vocabularies retain their separate identity", async () => {
+  await withCatalogue(({ repo, heritage, databaseId, columnId }) => {
+    const own = repo.column(columnId);
+    assert.equal(heritage.selectDictionary(databaseId, null).id, columnId);
+    assert.deepEqual(heritage.selectDictionary(databaseId, columnId), own);
+    const source = repo.addColumn(databaseId, "Lugares", "multi_select");
+    repo.saveOptions(source.id, [{ label: "Torre Eiffel", color: null }]);
+    const optionId = repo.column(source.id).options[0].id;
+    const selected = heritage.selectDictionary(databaseId, source.id);
+    assert.equal(heritage.selectDictionary(databaseId, source.id).id, selected.id);
+    assert.ok(isHeritageColumn(selected));
+    assert.ok(!isHeritageColumn(repo.column(source.id)));
+    assert.deepEqual(heritageDictionaryOptions(selected, repo.detail(databaseId).columns).map((o) => o.id), [optionId]);
+    assert.deepEqual(repo.column(columnId), own);
+    const identified = heritage.addElement(selected.id, "Torre Eiffel", link("Q243", "Torre Eiffel"));
+    assert.equal(heritage.addElement(selected.id, "Eiffel Tower", link("Q243", "Eiffel Tower")), identified);
+    const fresh = repo.importCsv("Sin patrimonio", ["Título", "Lugares"], ["title", "multi_select"], [["París", "Torre Eiffel"]]);
+    const freshSource = fresh.columns.find((column) => column.name === "Lugares")!;
+    const blank = heritage.selectDictionary(fresh.database.id, null);
+    assert.equal(heritage.selectDictionary(fresh.database.id, freshSource.id).id, blank.id);
+    assert.equal(repo.detail(fresh.database.id).columns.filter(isHeritageColumn).length, 1);
+  });
+});
 
 test("names become searches, candidates are ranked and Wikidata classes give a typology", () => {
   assert.deepEqual(heritageQuery("Catedral - Villaverde"), {

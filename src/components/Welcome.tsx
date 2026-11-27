@@ -17,6 +17,7 @@ import {
 import type { ModelPreparation } from "../../shared/modelPreparation";
 import { SLIDES } from "../welcomeSlides";
 import { useT } from "../i18n";
+import type { Language } from "../../shared/language";
 import { ImagoMark } from "./ImagoMark";
 
 /** Bump when the introduction changes enough to show it again. */
@@ -31,8 +32,8 @@ export function Welcome({
   onLanguage,
   onFinish,
 }: {
-  language: "es" | "en";
-  onLanguage: (language: "es" | "en") => Promise<void>;
+  language: Language;
+  onLanguage: (language: Language) => Promise<void>;
   /** `tour`: start the guided tour; `models` in `choice`: open model settings. */
   onFinish: (result: { tour: boolean; choice: Choice | null }) => void;
 }) {
@@ -86,13 +87,14 @@ export function Welcome({
         <main className="welcome-language-card">
           <ImagoMark size={64} />
           <p className="welcome-brand">NODUS IMAGO</p>
-          <h1 id="welcome-language-title">Elige tu idioma · Choose your language</h1>
-          <p>Puedes cambiarlo cuando quieras en Ajustes. · You can change it at any time in Settings.</p>
+          <h1 id="welcome-language-title">Elige tu idioma · Choose your language · Choisissez votre langue</h1>
+          <p>Puedes cambiarlo cuando quieras en Ajustes. · You can change it at any time in Settings. · Vous pouvez la changer à tout moment dans Réglages.</p>
           <div className="welcome-languages">
             {(
               [
                 ["es", "Español", "linear-gradient(#aa151b 0 25%, #f1bf00 25% 75%, #aa151b 75%)"],
                 ["en", "English", "linear-gradient(135deg, #19335f 0 45%, #f5f5f5 45% 55%, #b31942 55%)"],
+                ["fr", "Français", "linear-gradient(90deg, #002395 0 33.3%, #f5f5f5 33.3% 66.6%, #ed2939 66.6%)"],
               ] as const
             ).map(([code, label, flag]) => (
               <button

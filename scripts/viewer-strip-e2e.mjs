@@ -142,7 +142,7 @@ try {
   await poll(async () => (await current(viewer)) === title(12), "← back to Postal 012");
   checks.push("→ past the last photograph read loads the next batch (Postal 160 of 230) and ← comes back");
 
-  const pendingOnly = strip.getByRole("switch", { name: "Solo pendientes" });
+  const pendingOnly = strip.getByRole("switch", { name: "Solo fotos sin revisar en Etiquetas" });
   await pendingOnly.check();
   const hiddenReviewed = (n) => strip.getByTestId("viewer-strip-item").filter({ hasText: title(n) });
   await poll(async () => (await current(viewer)) === title(12), "pending strip loaded");
@@ -154,7 +154,7 @@ try {
   await poll(async () => (await current(viewer)) === title(12), "filtered arrow returns to Postal 012");
   await pendingOnly.uncheck();
   await hiddenReviewed(11).waitFor();
-  checks.push("Solo pendientes hides reviewed photographs and lets the arrows skip them");
+  checks.push("The unreviewed-photos switch hides photos already reviewed in Tags and lets the arrows skip them");
 
   await page.waitForTimeout(400);
   await page.screenshot({ path: "test-results/viewer-strip.png" });

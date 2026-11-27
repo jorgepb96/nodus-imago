@@ -11,6 +11,26 @@ import { cleanVisionText, jsonCandidates, unwrapToolCall } from "./visionOutput"
 
 export const VISUAL_TAGS_NAME = "Etiquetas visuales";
 export const MAX_VISUAL_TAG_SUGGESTIONS = 100;
+export const VISUAL_TAG_SYSTEM = "Analyze the supplied image. Apply the supplied dictionary and return the requested JSON object with a regions array.";
+export const VISUAL_TAG_SCHEMA = {
+  type: "object",
+  properties: {
+    regions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          box: { type: "array", items: { type: "integer" }, description: "Four coordinates in [ymin, xmin, ymax, xmax] order on a 0 to 1000 scale." },
+          tags: { type: "array", items: { type: "integer" }, description: "Numbers from the supplied dictionary." },
+        },
+        required: ["box", "tags"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["regions"],
+  additionalProperties: false,
+};
 export type VisualTagSource = "manual" | "ai";
 export type VisualTagState = "pending" | "validated" | "rejected";
 export type VisualTagChoice = { optionId: string } | { label: string };
@@ -27,7 +47,7 @@ export type VisualTagReviewItem = {
   newTags: string[];
 };
 
-function regionOverlap(a: Region, b: Region) {
+export function regionOverlap(a: Region, b: Region) {
   const w = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
   const h = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
   const intersection = w * h;
@@ -76,6 +96,7 @@ export function visualTagSuggestionPrompt(options: Pick<DatabaseColumn["options"
     "Return a JSON object with a regions array. Each region has a box array [ymin, xmin, ymax, xmax], with integer coordinates on a 0 to 1000 scale relative to the entire image, and a tags array of dictionary numbers.",
     "Draw the tightest box around each visible instance. Put multiple labels for the same instance in the same tags array and use separate boxes for distinct instances of the same label.",
     "When a label describes the entire photograph, use the whole image as its box. Use only dictionary numbers and skip labels you cannot see. Return an empty regions array when nothing matches. Output only JSON.",
+    'Example JSON: {"regions":[{"box":[100,200,450,500],"tags":[1]}]}',
     "Dictionary (number and label): " + JSON.stringify(options.map(({ label }, i) => [i + 1, label])),
   ].join("\n");
 }
@@ -106,6 +127,8 @@ export function parseVisualTagSuggestions(raw: string, options: Pick<DatabaseCol
       optionIds: [...new Set([...(previous?.optionIds ?? []), ...optionIds])],
     });
   }
+  if (result.regions.length && !regions.size)
+    throw new Error("El modelo no devolvió sugerencias en el formato esperado.");
   return [...regions.values()];
 }
 export type VisualTagRegion = {

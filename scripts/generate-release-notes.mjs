@@ -29,9 +29,9 @@ export async function generateReleaseNotes(version) {
   const { RELEASE_NOTES, releaseNoteMarkdown } = await loadReleaseNotes();
   const note = RELEASE_NOTES.find((n) => n.version === requested.split("-")[0]);
   if (!note) throw new Error(`Release ${requested} has no notes in shared/releaseNotes.ts`);
-  // Every note is written in both interface languages.
+  // Every note is written in every interface language.
   for (const highlight of note.highlights)
-    for (const language of ["es", "en"])
+    for (const language of ["es", "en", "fr"])
       if (!highlight[language]?.trim()) throw new Error(`Release ${requested} has no ${language} text`);
   return releaseNoteMarkdown({ ...note, version: requested });
 }

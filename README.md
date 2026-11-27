@@ -16,6 +16,8 @@ Nodus Imago is an open-source desktop application for historians, art historians
 
 Everything stays on your computer. There is no account and no server. AI features can run locally, and external providers are used only if you turn them on. Imago is part of the [Nodus](https://github.com/jorgepb96/nodus) family and works on its own.
 
+The interface is available in Spanish, English and French; you can change the language at any time in Settings.
+
 ## Install Nodus Imago
 
 Download the installer for your computer and open it. There is no server to configure and no account is required to begin.

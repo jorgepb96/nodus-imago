@@ -1,290 +1,233 @@
-// Heritage elements suggested by a vision model for the photograph shown:
-// the whole image and/or zones drawn on it. Names the property already has
-// are matched to it; new ones are looked up in Wikidata (only the names, only
-// when asked). The researcher adds one, several or all of them; a zone can
-// stay as the element's mark. Nothing is saved before that.
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, ExternalLink, Loader2, Sparkles, Square, Trash2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ExternalLink, Loader2, Sparkles, Square, Trash2 } from "lucide-react";
 import type { DatabaseColumn } from "../../shared/databases";
-import type { ModelChoice } from "../../shared/aiConfig";
-import type { HeritageCandidate, HeritageSuggestion } from "../../shared/heritage";
-import { heritageScheme, typeFromInstances, typology } from "../../shared/heritage";
-import { formatNumber, useLanguage, useT } from "../i18n";
+import type { ImageAnnotation } from "../../shared/imago";
+import type { Region } from "../../shared/imageRotation";
+import { foldText, type HeritageCandidate, type HeritageRegionSuggestion } from "../../shared/heritage";
+import { regionOverlap } from "../../shared/visualTags";
+import { useT } from "../i18n";
 import { refreshHeritage } from "../heritageStore";
-import { HeritageIcon } from "./HeritageIcon";
+import { Button } from "./ui";
+import { useVisionModels, VisionModelPicker } from "./VisionModelPicker";
+import { VisionProposalBoxes, type ProposalGeometry } from "./VisionProposalBoxes";
 
-type Box = { x: number; y: number; w: number; h: number };
-type Item = HeritageSuggestion & {
-  key: string;
-  zone: Box | null;
-  zoneIndex: number | null;
-  candidates: HeritageCandidate[];
-  chosen: number;
-  selected: boolean;
-};
+type Item = HeritageRegionSuggestion & { id: number; checked: boolean; candidates?: HeritageCandidate[]; chosen?: number };
+const sameElement = (a: HeritageRegionSuggestion, b: HeritageRegionSuggestion) =>
+  a.optionId || b.optionId ? a.optionId === b.optionId : foldText(`${a.name} ${a.place ?? ""}`) === foldText(`${b.name} ${b.place ?? ""}`);
 
 export function HeritageSuggestPanel({
-  column,
-  rowId,
-  assetId,
-  inCell,
-  zones,
-  drawing,
-  onDraw,
-  onRemoveZone,
-  onBack,
-  onAdded,
+  column, assetId, dictionarySize, inCell, marks, active, model, onModelChange, allowNew, onAllowNewChange,
+  zones, drawing, onDraw, onRemoveZone, onAdded, onPreview, thumbnail, ...geometry
 }: {
   column: DatabaseColumn;
-  rowId: string;
   assetId: string;
+  dictionarySize: number;
   inCell: string[];
-  /** Zones drawn on the image for the model. */
-  zones: Box[];
+  marks: ImageAnnotation[];
+  active: boolean;
+  model: string;
+  onModelChange: (model: string) => void;
+  allowNew: boolean;
+  onAllowNewChange: (allow: boolean) => void;
+  zones: Region[];
   drawing: boolean;
   onDraw: (on: boolean) => void;
   onRemoveZone: (index: number) => void;
-  onBack: () => void;
   onAdded: () => Promise<void> | void;
-}) {
-  const t = useT(),
-    language = useLanguage();
-  const scheme = heritageScheme(column.config);
+  onPreview: (region: Region) => void;
+  thumbnail: (region: Region) => ReactNode;
+} & ProposalGeometry) {
+  const t = useT();
+  const catalogue = useVisionModels(active, model);
   const [whole, setWhole] = useState(true);
-  const [models, setModels] = useState<{ label: string; choice: ModelChoice }[]>([]);
-  const [model, setModel] = useState(0);
-  const [items, setItems] = useState<Item[] | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [review, setReview] = useState<{ imageVersion: string; items: Item[]; searched: number } | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [busy, setBusy] = useState<"suggest" | "save" | "lookup" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [marks, setMarks] = useState(true);
-  const labels = useMemo(() => new Map(column.options.map((o) => [o.id, o.label])), [column.options]);
-
-  // The models chosen in Settings to classify and to describe images.
-  useEffect(() => {
-    void window.imago
-      .call("status")
-      .then((status) => {
-        const list = [
-          { label: t("Modelo de clasificación"), choice: status.settings.classificationModel },
-          { label: t("Modelo de descripción"), choice: status.settings.descriptionModel },
-        ].filter((m, i, all) => m.choice?.model && all.findIndex((x) => x.choice.model === m.choice.model && x.choice.provider === m.choice.provider) === i);
-        setModels(list);
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [added, setAdded] = useState<number | null>(null);
+  const [saveMarks, setSaveMarks] = useState(true);
+  const items = review?.items.filter((item) => allowNew || item.optionId) ?? [];
+  const chosen = items.filter((item) => item.checked);
+  const update = (id: number, change: Partial<Item>) => {
+    setReview((current) => current && { ...current, items: current.items.map((item) => item.id === id ? { ...item, ...change } : item) });
+  };
+  const feedback = error ?? catalogue.error;
 
   const analyze = async () => {
-    const choice = models[model]?.choice;
-    if (!choice) return;
-    setBusy(t("El modelo está mirando la imagen…"));
+    const choice = catalogue.selected?.choice;
+    if (!choice || busy || (!whole && !zones.length) || (!dictionarySize && !allowNew)) return;
+    onDraw(false);
+    setBusy("suggest");
     setError(null);
-    setItems(null);
+    setAdded(null);
     try {
-      const answer = await window.imago.call("heritageSuggest", { assetId, columnId: column.id, whole, zones, choice });
-      const found: Item[] = answer.targets.flatMap((target) => {
-        // The zone comes back as a copy: found by its position, not by identity.
-        const zoneIndex = target.zone ? zones.findIndex((z) => z.x === target.zone!.x && z.y === target.zone!.y) : null;
-        return target.suggestions.map((s, i) => ({
-          ...s,
-          key: `${zoneIndex ?? "all"}-${i}-${s.name}`,
-          zone: target.zone,
-          zoneIndex,
-          candidates: [],
-          chosen: 0,
-          // What the model itself doubts is shown unticked.
-          selected: !!s.optionId && !inCell.includes(s.optionId) && s.confidence !== "low",
-        }));
+      const answer = await window.imago.call("heritageSuggest", { assetId, columnId: column.id, whole, zones, choice, allowNew });
+      const results: Item[] = [];
+      const previous = review?.imageVersion === answer.imageVersion ? review.items : [];
+      const consumed = new Set<number>();
+      let nextId = Math.max(0, ...previous.map((item) => item.id));
+      const suggestions = answer.targets.flatMap((target) => target.suggestions)
+        .sort((a, b) => Number(!a.box) - Number(!b.box));
+      for (const suggestion of suggestions) {
+        const box = suggestion.box;
+        if (results.some((item) => sameElement(item, suggestion) &&
+          (!box || !item.box || regionOverlap(item.box, box) >= 0.65))) continue;
+        if (suggestion.optionId && inCell.includes(suggestion.optionId) &&
+          (!box || marks.some((mark) => mark.optionId === suggestion.optionId && mark.kind !== "point" && regionOverlap(mark, box) >= 0.8))) continue;
+        const prior = previous.find((item) => !consumed.has(item.id) && sameElement(item, suggestion) &&
+          (!box || !item.box || regionOverlap(item.box, box) >= 0.6));
+        if (prior) consumed.add(prior.id);
+        results.push(prior ?? { ...suggestion, id: ++nextId, checked: !!suggestion.optionId && suggestion.confidence !== "low" });
+      }
+      results.sort((a, b) => Number(!a.box) - Number(!b.box));
+      setReview({ imageVersion: answer.imageVersion, searched: answer.known, items: results.slice(0, 100) });
+      setSelected(results.find((item) => item.box)?.id ?? null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const lookup = async (item: Item) => {
+    setBusy("lookup");
+    setError(null);
+    try {
+      const [answer] = await window.imago.call("heritageCandidates", {
+        items: [{ optionId: String(item.id), label: item.place ? `${item.name} - ${item.place}` : item.name }],
       });
-      // The same element named for the whole image and for a zone appears once, with its zone.
-      const unique = new Map<string, Item>();
-      for (const item of found) {
-        const id = item.optionId ?? `${item.name}|${item.place ?? ""}`.toLocaleLowerCase();
-        const seen = unique.get(id);
-        if (!seen || (!seen.zone && item.zone)) unique.set(id, item);
-      }
-      let list = [...unique.values()];
-      // New names: their Wikidata candidates (only the names are sent).
-      const fresh = list.filter((i) => !i.optionId);
-      if (fresh.length) {
-        setBusy(t("Buscando en Wikidata los elementos nuevos…"));
-        for (let i = 0; i < fresh.length; i += 10) {
-          const chunk = fresh.slice(i, i + 10);
-          const candidates = await window.imago.call("heritageCandidates", {
-            items: chunk.map((item) => ({ optionId: item.key.replace(/[^\w-]/g, "").slice(0, 150) || "x", label: item.place ? `${item.name} - ${item.place}` : item.name })),
-          });
-          chunk.forEach((item, j) => {
-            item.candidates = candidates[j]?.candidates ?? [];
-            item.selected = item.candidates[0]?.confidence === "high";
-          });
-        }
-        list = list.map((item) => fresh.find((f) => f.key === item.key) ?? item);
-      }
-      setItems(list);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (answer?.error) setError(answer.error);
+      update(item.id, { candidates: answer?.candidates ?? [], chosen: -1 });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(null);
     }
   };
 
-  const add = async (which: Item[]) => {
-    setBusy(t("Añadiendo…"));
+  const apply = async () => {
+    if (!review || !chosen.length || busy) return;
+    setBusy("save");
     setError(null);
     try {
-      for (const item of which) {
-        const link = item.candidates[item.chosen]?.link ?? null;
-        const optionId =
-          item.optionId ??
-          (await window.imago.call("heritageAddElement", {
-            columnId: column.id,
-            label: item.place ? `${item.name} - ${item.place}` : item.name,
-            link,
-          }));
-        await window.imago.call("heritageAddToRows", {
-          columnId: column.id,
-          optionId,
-          items: [{ rowId, ...(marks && item.zone ? { assetId, box: item.zone } : {}) }],
-        });
-      }
-      window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+      const count = await window.imago.call("heritageApplySuggestions", {
+        columnId: column.id, assetId, imageVersion: review.imageVersion, allowNew,
+        items: chosen.map(({ optionId, name, place, box, candidates, chosen: candidate }) => ({
+          optionId, name, place, box: saveMarks ? box : null, link: candidates?.[candidate ?? -1]?.link ?? null,
+        })),
+      });
+      const saved = new Set(chosen.map((item) => item.id));
+      setReview({ ...review, items: review.items.filter((item) => !saved.has(item.id)) });
+      setAdded(count);
       refreshHeritage(column.id);
-      setItems((all) => all?.filter((i) => !which.includes(i)) ?? null);
       await onAdded();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(null);
     }
   };
-
-  const selectable = (items ?? []).filter((i) => !(i.optionId && inCell.includes(i.optionId)));
-  const chosen = selectable.filter((i) => i.selected);
-  const set = (key: string, change: Partial<Item>) => setItems((all) => all?.map((i) => (i.key === key ? { ...i, ...change } : i)) ?? null);
 
   return (
-    <section className="heritage-suggest" data-testid="heritage-suggest">
-      <button type="button" className="detail-back" onClick={onBack}>
-        <ArrowLeft size={14} />
-        {t("Volver al patrimonio de la foto")}
-      </button>
-      <h2>
-        <Sparkles size={15} /> {t("Sugerir con IA")}
-      </h2>
-      <div className="heritage-suggest-scope">
+    <div className="viewer-tag-suggestions" data-testid="heritage-suggest">
+      <VisionModelPicker catalogue={catalogue} disabled={!!busy} onChange={onModelChange} />
+      <Button type="button" disabled={!!busy || !catalogue.selected || (!whole && !zones.length) || (!allowNew && !dictionarySize)}
+        onClick={() => void analyze()} data-testid="heritage-suggest-run">
+        {busy === "suggest" ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
+        {t(busy === "suggest" ? "Analizando imagen…" : review ? "Volver a sugerir" : "Sugerir patrimonio")}
+      </Button>
+      <label className="check-label">
+        <input type="checkbox" checked={allowNew} disabled={!!busy} onChange={(event) => onAllowNewChange(event.target.checked)} />
+        {t("Sugerir elementos fuera del diccionario")}
+      </label>
+      {!catalogue.loading && !catalogue.options.length && !catalogue.error && <p className="viewer-empty">{t("No hay modelos de visión disponibles. Comprueba los modelos instalados o tus proveedores de IA en Ajustes.")}</p>}
+      {!dictionarySize && !allowNew && <p className="viewer-empty">{t("Añade elementos al diccionario o permite sugerencias fuera de él.")}</p>}
+      {catalogue.selected?.remote && <small className="muted">{t("Al sugerir, se envían la imagen, el diccionario y el contexto de la ficha al proveedor del modelo.")}</small>}
+      <div className="heritage-suggest-zones">
         <label className="check-label">
-          <input type="checkbox" checked={whole} onChange={(e) => setWhole(e.target.checked)} />
+          <input type="checkbox" checked={whole} disabled={!!busy} onChange={(event) => setWhole(event.target.checked)} />
           {t("Imagen completa")}
         </label>
-        <div className="heritage-suggest-zones">
-          {zones.map((_, i) => (
-            <span key={i} className="heritage-zone-chip">
-              <Square size={11} /> {t("Zona")} {i + 1}
-              <button type="button" aria-label={t("Quitar la zona")} onClick={() => onRemoveZone(i)}>
-                <Trash2 size={11} />
-              </button>
-            </span>
-          ))}
-          <button type="button" className={`heritage-zone-draw ${drawing ? "is-on" : ""}`} aria-pressed={drawing} onClick={() => onDraw(!drawing)}>
-            <Square size={12} /> {t(drawing ? "Arrastra sobre la imagen…" : "Dibujar zona")}
-          </button>
-        </div>
-        <label>
-          {t("Modelo")}
-          <select value={model} onChange={(e) => setModel(Number(e.target.value))} disabled={!models.length}>
-            {models.map((m, i) => (
-              <option key={i} value={i}>
-                {m.label} · {m.choice.provider === "local" ? t("local") : m.choice.provider} · {m.choice.model}
-              </option>
-            ))}
-          </select>
-        </label>
-        {models[model]?.choice.provider !== "local" && models.length > 0 && (
-          <p className="hint">{t("Este modelo es de un proveedor externo: la imagen o la zona se envían a su servicio.")}</p>
-        )}
-        <button
-          type="button"
-          className="viewer-annotate is-on"
-          disabled={!!busy || (!whole && !zones.length) || !models.length}
-          onClick={() => void analyze()}
-          data-testid="heritage-suggest-run"
-        >
-          {busy ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
-          {t("Analizar")}
+        {zones.map((_, i) => (
+          <span className="heritage-zone-chip" key={i}>
+            <Square size={11} /> {t("Zona")} {i + 1}
+            <button type="button" aria-label={t("Quitar la zona")} disabled={!!busy} onClick={() => onRemoveZone(i)}><Trash2 size={11} /></button>
+          </span>
+        ))}
+        <button type="button" className={`heritage-zone-draw${drawing ? " is-on" : ""}`} aria-pressed={drawing}
+          disabled={!!busy || zones.length >= 6} onClick={() => onDraw(!drawing)}>
+          <Square size={12} /> {t(drawing ? "Arrastra sobre la imagen…" : "Dibujar zona")}
         </button>
       </div>
-      {busy && <p className="detail-status" role="status">{busy}</p>}
-      {error && <p className="annotation-error">{t(error)}</p>}
-      {items && !items.length && !busy && <p className="viewer-empty">{t("El modelo no ha reconocido ningún elemento concreto. Prueba con zonas más ajustadas o con otro modelo.")}</p>}
-      {items && items.length > 0 && (
+      {feedback && <p className="annotation-error" role="alert">{t(feedback)}</p>}
+      {review && review.searched < dictionarySize && <small className="muted">{t("Entradas consultadas del diccionario")} {review.searched}/{dictionarySize}</small>}
+      {added !== null && <p className="viewer-empty" role="status">{t("Elementos añadidos: {n}").replace("{n}", String(added))}</p>}
+      {review && !items.length && added === null && <p className="viewer-empty">{t("No hay propuestas nuevas para esta foto.")}</p>}
+      {!!items.length && (
         <>
-          <ul className="heritage-suggest-list">
-            {items.map((item) => {
-              const already = !!item.optionId && inCell.includes(item.optionId);
-              const c = item.candidates[item.chosen];
-              const typed = c && typeFromInstances(c.link.instances);
-              const info = typed && typology(scheme, typed.group, typed.type, language);
-              return (
-                <li key={item.key} className={already ? "is-done" : ""}>
+          <label className="check-label">
+            <input type="checkbox" checked={items.length === chosen.length} disabled={!!busy} onChange={(event) => {
+              const checked = event.target.checked;
+              const shown = new Set(items.map((item) => item.id));
+              setReview((current) => current && { ...current, items: current.items.map((item) => shown.has(item.id) ? { ...item, checked } : item) });
+            }} />
+            {t("Seleccionar todas")}
+          </label>
+          <ul className="viewer-tag-proposals">
+            {items.map((item) => (
+              <li className={item.id === selected ? "is-active" : ""} key={item.id}>
+                {item.box && (
+                  <button type="button" className="viewer-tag-proposal-crop" aria-label={t("Ver en la imagen")} onClick={() => {
+                    setSelected(item.id);
+                    onPreview(item.box!);
+                  }}>{thumbnail(item.box)}</button>
+                )}
+                <div className="viewer-tag-proposal-choices">
                   <label className="check-label">
-                    <input type="checkbox" disabled={already} checked={already || item.selected} onChange={(e) => set(item.key, { selected: e.target.checked })} />
-                    <span className="heritage-suggest-name">
-                      <strong>{item.optionId ? labels.get(item.optionId) : item.place ? `${item.name} - ${item.place}` : item.name}</strong>
-                      <small>
-                        {[
-                          item.zoneIndex !== null ? `${t("Zona")} ${item.zoneIndex + 1}` : t("Imagen completa"),
-                          t(item.confidence === "high" ? "el modelo está seguro" : item.confidence === "low" ? "el modelo duda" : "probable"),
-                          already ? t("ya está en la foto") : item.optionId ? t("ya está en tu lista") : t("nuevo"),
-                        ].join(" · ")}
-                      </small>
-                    </span>
+                    <input type="checkbox" checked={item.checked} disabled={!!busy} onChange={(event) => update(item.id, { checked: event.target.checked })} />
+                    <span>{item.place ? `${item.name} - ${item.place}` : item.name}</span>
+                    {!item.optionId && <small>{t("Nuevo")}</small>}
                   </label>
+                  <small className="muted">{t(item.confidence === "high" ? "el modelo está seguro" : item.confidence === "low" ? "el modelo duda" : "probable")}</small>
                   {!item.optionId && (
-                    <div className="heritage-suggest-wikidata">
-                      {c ? (
-                        <>
-                          {info && <HeritageIcon name={info.icon} size={12} />}
-                          <span>
-                            {c.link.label} <small>({c.link.id}{c.link.description ? ` · ${c.link.description}` : ""})</small>
-                          </span>
-                          <span className={`heritage-confidence ${c.confidence}`}>{t(c.confidence === "high" ? "Alta" : c.confidence === "medium" ? "Media" : "Baja")}</span>
-                          {item.candidates.length > 1 && (
-                            <select aria-label={t("Otro candidato")} value={item.chosen} onChange={(e) => set(item.key, { chosen: Number(e.target.value) })}>
-                              {item.candidates.map((x, i) => (
-                                <option key={x.link.id} value={i}>
-                                  {x.link.label} ({x.link.id})
-                                </option>
-                              ))}
-                              <option value={item.candidates.length}>{t("Sin enlace a Wikidata")}</option>
-                            </select>
-                          )}
-                          <button type="button" aria-label={t("Abrir en el navegador")} onClick={() => void window.imago.call("openExternalLink", { url: c.link.uri })}>
-                            <ExternalLink size={12} />
-                          </button>
-                        </>
-                      ) : (
-                        <small className="muted">{t("Sin candidatos en Wikidata: se creará sin enlace.")}</small>
-                      )}
+                    <div className="heritage-suggestion-link">
+                      {item.candidates ? (
+                        item.candidates.length ? <>
+                          <select aria-label={t("Otro candidato")} disabled={!!busy} value={item.chosen ?? -1}
+                            onChange={(event) => update(item.id, { chosen: Number(event.target.value) })}>
+                            <option value={-1}>{t("Sin enlace a Wikidata")}</option>
+                            {item.candidates.map((candidate, index) => <option key={candidate.link.id} value={index}>{candidate.link.label} ({candidate.link.id})</option>)}
+                          </select>
+                          {(item.chosen ?? -1) >= 0 && <button type="button" aria-label={t("Abrir en el navegador")}
+                            onClick={() => void window.imago.call("openExternalLink", { url: item.candidates![item.chosen!].link.uri })}><ExternalLink size={12} /></button>}
+                        </> : <small className="muted">{t("Sin candidatos en Wikidata: se creará sin enlace.")}</small>
+                      ) : <button type="button" className="heritage-zone-draw" disabled={!!busy} onClick={() => void lookup(item)}>{t("Buscar en Wikidata")}</button>}
                     </div>
                   )}
-                </li>
-              );
-            })}
+                </div>
+              </li>
+            ))}
           </ul>
-          <label className="check-label">
-            <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} />
-            {t("Guardar cada zona como marca del elemento")}
-          </label>
-          <div className="heritage-suggest-actions">
-            <button type="button" className="viewer-annotate is-on" disabled={!!busy || !chosen.length} onClick={() => void add(chosen)}>
-              <Check size={14} /> {t("Añadir seleccionados")} ({formatNumber(chosen.length, 0)})
-            </button>
-            <button type="button" className="viewer-annotate" disabled={!!busy || !selectable.length} onClick={() => void add(selectable)}>
-              {t("Añadir todos")} ({formatNumber(selectable.length, 0)})
-            </button>
-          </div>
+          {items.some((item) => item.box) && (
+            <>
+              {geometry.showBoxes && <small className="muted">{t("Arrastra el recuadro sugerido o sus bordes para ajustarlo.")}</small>}
+              <label className="check-label">
+                <input type="checkbox" checked={saveMarks} disabled={!!busy} onChange={(event) => setSaveMarks(event.target.checked)} />
+                {t("Guardar cada zona como marca del elemento")}
+              </label>
+            </>
+          )}
+          <Button type="button" primary disabled={!chosen.length || !!busy} onClick={() => void apply()} data-testid="heritage-suggest-apply">
+            {busy === "save" && <Loader2 size={14} className="spin" />}
+            {t("Añadir seleccionados")} ({chosen.length})
+          </Button>
         </>
       )}
-    </section>
+      {active && (
+        <VisionProposalBoxes {...geometry} busy={!!busy} testId="viewer-heritage-proposal-box"
+          boxes={items.flatMap((item) => item.box ? [{ id: item.id, region: item.box }] : [])}
+          selected={selected} onSelect={setSelected} onChange={(id, box) => update(id, { box })} />
+      )}
+    </div>
   );
 }

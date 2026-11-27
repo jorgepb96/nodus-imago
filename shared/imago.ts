@@ -11,6 +11,7 @@ import type { ApiProfile, ApiProvider, ModelChoice } from "./aiConfig";
 import type { GazetteerPlace } from "./places";
 import type { DatabaseLocationValue } from "./databaseProperties";
 import type { ModelPreparation } from "./modelPreparation";
+import type { Language } from "./language";
 import type {
   AgreementInput,
   AgreementResult,
@@ -68,6 +69,8 @@ export type ImageAsset = {
   missing: boolean;
   metadata: Record<string, unknown>;
   description: string | null;
+  /** Validated tag regions visible in the current view and active dictionary. */
+  validatedTagRegions?: number;
 };
 /** A region of an image, in fractions of its width and height (0–1). */
 export type ImageAnnotation = {
@@ -291,7 +294,7 @@ export type Settings = {
   mode: "light" | "dark" | "system";
   theme: string;
   accent: string;
-  language: "es" | "en";
+  language: Language;
   profile: "light" | "balanced" | "advanced";
   dimensions: 256 | 512 | 768;
   python: string;
@@ -612,6 +615,7 @@ export type Commands = {
     result: { id: string; applied: number; createdAt: string; revertedAt: string | null };
   };
   heritageAddElement: { input: { columnId: string; label: string; link: import("./authority").AuthorityLink | null }; result: string };
+  heritageSelectDictionary: { input: { databaseId: string; sourceId: string | null }; result: import("./databases").DatabaseColumn };
   /** A vision model's suggestions for the whole image and/or zones of it. */
   heritageSuggest: {
     input: {
@@ -620,11 +624,20 @@ export type Commands = {
       whole: boolean;
       zones: { x: number; y: number; w: number; h: number }[];
       choice: import("./aiConfig").ModelChoice;
+      allowNew?: boolean;
     };
     result: {
-      targets: { zone: { x: number; y: number; w: number; h: number } | null; suggestions: import("./heritage").HeritageSuggestion[] }[];
+      targets: { zone: { x: number; y: number; w: number; h: number } | null; suggestions: import("./heritage").HeritageRegionSuggestion[] }[];
       known: number;
+      imageVersion: string;
     };
+  };
+  heritageApplySuggestions: {
+    input: {
+      assetId: string; columnId: string; imageVersion: string; allowNew: boolean;
+      items: { optionId: string | null; name: string; place: string | null; box: import("./imageRotation").Region | null; link: import("./authority").AuthorityLink | null }[];
+    };
+    result: number;
   };
   /** Which of these records already show the element. */
   heritageRowsWith: { input: { columnId: string; optionId: string; rowIds: string[] }; result: string[] };

@@ -21,6 +21,7 @@ import {
   type ChatTurnResult,
 } from "../../shared/chat";
 import { runCalc } from "./sandbox";
+import { asLanguage, type Language } from "../../shared/language";
 
 type Call = (command: string, input?: unknown) => Promise<any>;
 
@@ -57,7 +58,7 @@ export class ChatRunner {
 
   private async turn(request: ChatTurnRequest, signal: AbortSignal): Promise<ChatTurnResult> {
     const settings = await this.call("_settings");
-    const language: "es" | "en" = settings.language === "en" ? "en" : "es";
+    const language: Language = asLanguage(settings.language);
     const conversation: ChatConversation = await this.call("chatGet", { id: request.conversationId });
     const messages = [...conversation.messages];
     let question = request.question.trim();

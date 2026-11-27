@@ -3,6 +3,9 @@
 // period it refers to (first and last year) and how certain it is. Filters,
 // the timeline, statistics and the chat read the period; the table shows
 // the text. Pure, so the interpretation is unit-tested.
+// The parser also reads French ("vers 1930", "années 50", "XIXe siècle").
+
+import type { Language } from "./language";
 
 export type Certainty = "exact" | "approx" | "inferred" | "uncertain";
 export type HistoricalDate = {
@@ -42,9 +45,10 @@ const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCas
 const YEAR = "(1[0-9]{3}|20[0-9]{2}|21[0-9]{2})";
 /** How many years either side "circa" covers. */
 const CIRCA = 5;
-const NULLISH = /^(-+|—|–|s\.?\s?[df]\.?|s\/[df]|sin fecha|n\.?\s?d\.?|no date|undated|desconocida?|unknown|\?+)$/;
+const NULLISH = /^(-+|—|–|s\.?\s?[df]\.?|s\/[df]|sin fecha|n\.?\s?d\.?|no date|undated|desconocida?|unknown|sans date|inconnue?|\?+)$/;
 const WORDS: Record<string, number> = {
   diez: 10, veinte: 20, treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90,
+  dix: 10, vingt: 20, trente: 30, quarante: 40, cinquante: 50, soixante: 60, "soixante-dix": 70, "quatre-vingt": 80, "quatre-vingts": 80, "quatre-vingt-dix": 90,
   twenties: 20, thirties: 30, forties: 40, fifties: 50, sixties: 60, seventies: 70, eighties: 80, nineties: 90,
 };
 
@@ -52,7 +56,9 @@ const WORDS: Record<string, number> = {
 function centuryOf(text: string): number | null {
   const m =
     /\b(?:s\.|sig\.|siglo|sec\.|century)\s*([ivxlc]{1,6}|\d{1,2})\b/.exec(text) ??
-    /\b([ivxlc]{1,6}|\d{1,2})(?:st|nd|rd|th)?\s+(?:century|siglo)\b/.exec(text);
+    /\b([ivxlc]{1,6}|\d{1,2})(?:st|nd|rd|th)?\s+(?:century|siglo)\b/.exec(text) ??
+    /\b([ivxlc]{1,6}|\d{1,2})(?:er|re|e|eme)\s+(?:siecle|s\.)(?!\w)/.exec(text) ??
+    /\bsiecle\s+([ivxlc]{1,6}|\d{1,2})\b/.exec(text);
   if (!m) return null;
   const c = /\d/.test(m[1]) ? Number(m[1]) : roman(m[1].toUpperCase());
   return c >= 1 && c <= 22 ? c : null;
@@ -74,39 +80,39 @@ export function parseHistoricalDate(input: string): Omit<HistoricalDate, "text">
   };
 
   // Before / after: "ant. 1936", "antes de 1936", "a. q. 1936", "post. 1920", "after 1920".
-  const before = new RegExp(`\\b(?:ant\\.?|antes de|a\\.?\\s?q\\.?|ante quem|before|pre)\\s*${YEAR}\\b`).exec(text);
+  const before = new RegExp(`\\b(?:ant\\.?|antes de|a\\.?\\s?q\\.?|ante quem|before|pre|avant(?: de)?|jusqu'(?:en|a)|jusque)\\s*${YEAR}\\b`).exec(text);
   if (before) {
     approx();
     return { start: null, end: Number(before[1]), certainty };
   }
-  const after = new RegExp(`\\b(?:post\\.?|despues de|p\\.?\\s?q\\.?|post quem|after)\\s*${YEAR}\\b`).exec(text);
+  const after = new RegExp(`\\b(?:post\\.?|despues de|p\\.?\\s?q\\.?|post quem|after|apres|a partir de|depuis)\\s*${YEAR}\\b`).exec(text);
   if (after) {
     approx();
     return { start: Number(after[1]), end: null, certainty };
   }
 
   // Ranges: "1930-1935", "1930–35", "entre 1930 y 1935", "1930 a 1935".
-  const range = new RegExp(`${YEAR}\\s*(?:-|–|—|/|a|y|al|to|and)\\s*(\\d{2,4})\\b`).exec(text);
+  const range = new RegExp(`${YEAR}\\s*(?:-|–|—|/|a|y|al|to|and|et|au)\\s*(\\d{2,4})\\b`).exec(text);
   if (range) {
     const start = Number(range[1]);
     let end = Number(range[2]);
     if (range[2].length === 2) end = Math.floor(start / 100) * 100 + end;
     if (end >= start && end - start <= 200) {
-      if (/\b(?:c\.?|ca\.?|circa|h\.|hacia|aprox)/.test(text)) approx();
+      if (/\b(?:c\.?|ca\.?|circa|h\.|hacia|aprox|vers|env)/.test(text)) approx();
       return { start, end, certainty };
     }
   }
 
   // Decades: "años 50", "años cincuenta", "década de 1950", "1950s", "the fifties".
   const decade =
-    new RegExp(`\\b(?:decada de(?: los)?|anos|años)\\s*${YEAR}\\b`).exec(text) ??
+    new RegExp(`\\b(?:decada de(?: los)?|anos|años|annees)\\s*${YEAR}\\b`).exec(text) ??
     /\b(1[0-9]{2}0|20[0-9]0)'?s\b/.exec(text);
   if (decade) {
     approx();
     const d = Number(decade[1]);
     return { start: d, end: d + 9, certainty };
   }
-  const shortDecade = /\b(?:anos|años|decada de los)\s*('?\d0|diez|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa)\b/.exec(text) ??
+  const shortDecade = /\b(?:anos|años|decada de los|annees)\s*('?\d0|diez|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|dix|vingt|trente|quarante|cinquante|soixante-dix|soixante|quatre-vingt-dix|quatre-vingts?)\b/.exec(text) ??
     /\b(?:the\s+)?(twenties|thirties|forties|fifties|sixties|seventies|eighties|nineties)\b/.exec(text);
   if (shortDecade) {
     approx();
@@ -122,11 +128,11 @@ export function parseHistoricalDate(input: string): Omit<HistoricalDate, "text">
     const first = (century - 1) * 100 + 1,
       last = century * 100;
     const part = (from: number, to: number) => ({ start: first + from, end: first + to, certainty });
-    if (/primera mitad|first half/.test(text)) return part(0, 49);
-    if (/segunda mitad|second half/.test(text)) return part(50, 99);
-    if (/principios|comienzos|inicios|early/.test(text)) return part(0, 32);
-    if (/mediados|mid/.test(text)) return part(33, 65);
-    if (/finales|fines|late/.test(text)) return part(66, 99);
+    if (/primera mitad|first half|premiere moitie/.test(text)) return part(0, 49);
+    if (/segunda mitad|second half|seconde moitie|deuxieme moitie/.test(text)) return part(50, 99);
+    if (/principios|comienzos|inicios|early|debut/.test(text)) return part(0, 32);
+    if (/mediados|mid|milieu/.test(text)) return part(33, 65);
+    if (/finales|fines|late|\bfin\b/.test(text)) return part(66, 99);
     return { start: first, end: last, certainty };
   }
 
@@ -134,7 +140,7 @@ export function parseHistoricalDate(input: string): Omit<HistoricalDate, "text">
   const single = new RegExp(`(?:^|[^\\d])${YEAR}(?!\\d)`).exec(text);
   if (single) {
     const year = Number(single[1]);
-    if (/(?:^|\s)(?:c\.?|ca\.?|circa|h\.|hacia|aprox\.?|aproximadamente|around|about)\s*\d|~\s*\d/.test(text)) {
+    if (/(?:^|\s)(?:c\.?|ca\.?|circa|h\.|hacia|aprox\.?|aproximadamente|around|about|vers|env\.?|environ)\s*\d|~\s*\d/.test(text)) {
       approx();
       return { start: year - CIRCA, end: year + CIRCA, certainty };
     }
@@ -196,14 +202,14 @@ export function representativeYear(value: Pick<HistoricalDate, "start" | "end"> 
   if (start != null && end != null) return Math.round((start + end) / 2);
   return start ?? end ?? null;
 }
-/** "1925–1935", "1930", "hasta 1936", "desde 1920". */
-export function periodLabel(value: Pick<HistoricalDate, "start" | "end"> | null, language: "es" | "en" = "es"): string {
+/** "1925–1935", "1930", "hasta 1936", "desde 1920" ("jusqu'en 1936", "à partir de 1920"). */
+export function periodLabel(value: Pick<HistoricalDate, "start" | "end"> | null, language: Language = "es"): string {
   if (!value || (value.start == null && value.end == null)) return "";
   if (value.start != null && value.end != null)
     return value.start === value.end ? String(value.start) : `${value.start}–${value.end}`;
   return value.start != null
-    ? `${language === "en" ? "from" : "desde"} ${value.start}`
-    : `${language === "en" ? "until" : "hasta"} ${value.end}`;
+    ? `${language === "en" ? "from" : language === "fr" ? "à partir de" : "desde"} ${value.start}`
+    : `${language === "en" ? "until" : language === "fr" ? "jusqu'en" : "hasta"} ${value.end}`;
 }
 /** Whether a period shares at least one year with [from, to]. Open ends reach forever. */
 export function overlaps(value: Pick<HistoricalDate, "start" | "end">, from: number, to: number): boolean {
@@ -219,6 +225,6 @@ export function historicalDateCoverage(values: string[]): number {
 export function looksHistoricalDate(values: string[]): boolean {
   const real = values.map((v) => v.trim()).filter(Boolean);
   if (real.length < 3) return false;
-  const marked = real.filter((v) => /\b(c\.|ca\.|circa|h\.|hacia|ant\.|post\.|s\.\s?[ivxlc]+|siglo|decada|década|años|anos)|\[\d{4}\]|\d{4}\?|\d{4}\s*[-–]\s*\d{2,4}|\d{4}s\b/i.test(v)).length;
+  const marked = real.filter((v) => /\b(c\.|ca\.|circa|h\.|hacia|ant\.|post\.|s\.\s?[ivxlc]+|siglo|decada|década|años|anos|vers|env\.|siècle|siecle|années|annees)|\[\d{4}\]|\d{4}\?|\d{4}\s*[-–]\s*\d{2,4}|\d{4}s\b/i.test(v)).length;
   return historicalDateCoverage(real) >= 0.8 && marked / real.length >= 0.05;
 }

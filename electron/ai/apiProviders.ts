@@ -24,6 +24,8 @@ import {
 } from "../../shared/embeddingApi";
 import { splitSse, sseData, streamDelta } from "../../shared/chat";
 import { IMAGE_API, SUGGESTED_IMAGE_MODELS } from "../../shared/restoration";
+import { VISUAL_TAG_SCHEMA } from "../../shared/visualTags";
+import { HERITAGE_SUGGEST_SCHEMA } from "../../shared/heritage";
 export type CompletionRequest = {
   choice: ModelChoice;
   profiles: Partial<Record<ApiProvider, ApiProfile>>;
@@ -33,6 +35,9 @@ export type CompletionRequest = {
   images: VisionImagePart[];
   minIntervalMs?: number;
   maxTokens?: number;
+  /** Use the provider's format and reasoning controls for dictionary regions. */
+  visualTags?: boolean;
+  heritage?: boolean;
   /** Stream the answer: pieces of text reach the caller as they arrive. */
   stream?: boolean;
 };
@@ -212,10 +217,60 @@ export class ApiProviders {
       throw new ApiFailure(
         "Las APIs remotas están desactivadas. No se ha enviado ningún dato.",
       );
+    const model = input.choice.model;
+    const anthropic = provider === "anthropic";
+    const structured = input.visualTags || input.heritage;
+    const catalogue = structured ? this.visionCache?.catalogues.get(provider) : undefined;
+    const capability = catalogue?.base === base ? catalogue.models.find((entry) => entry.id === model) : undefined;
+    const options = structured
+      ? structuredVisionOptions(provider, model, capability, !!PROVIDERS[provider].baseUrl && base === providerBase(provider, {}), !!input.heritage)
+      : {};
+    const outputLimit = capability?.maxOutputTokens ?? Infinity;
+    const maxTokens = structured ? Math.min(6144, outputLimit) : input.maxTokens ?? 1000;
+    const retryTokens = Math.min(12288, outputLimit);
+    const user = {
+      role: "user",
+      content: anthropic ? anthropicVisionContent(input.prompt, input.images) : openAiVisionContent(input.prompt, input.images),
+    };
+    const request = async (tokens: number) => {
+      await this.waitForCompletion(provider, input.minIntervalMs, signal);
+      return this.request(
+        provider,
+        base,
+        anthropic ? "/messages" : "/chat/completions",
+        anthropic
+          ? { model, max_tokens: tokens, system: input.system, messages: [user], ...options }
+          : {
+              model,
+              messages: [{ role: "system", content: input.system }, user],
+              ...(provider === "openai" ? { max_completion_tokens: tokens } : { max_tokens: tokens }),
+              stream: false,
+              ...options,
+            },
+        signal,
+      );
+    };
+    let result = await request(maxTokens);
+    if (structured && hitOutputLimit(result, anthropic)) {
+      if (retryTokens > maxTokens) result = await request(retryTokens);
+      if (hitOutputLimit(result, anthropic))
+        throw new Error(input.heritage
+          ? "El modelo alcanzó el límite de salida al sugerir patrimonio."
+          : "El modelo alcanzó el límite de salida al generar las etiquetas.");
+    }
+    const text = anthropic
+      ? result.content?.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n")
+      : result.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || (structured && !text.trim()))
+      throw new Error("El proveedor no devolvió una respuesta de texto.");
+    return text;
+  }
+  private async waitForCompletion(provider: ApiProvider, minIntervalMs: number | undefined, signal: AbortSignal) {
+    if (signal.aborted) throw new Error("Solicitud cancelada.");
     const start = Math.max(Date.now(), this.nextRequest.get(provider) ?? 0);
     this.nextRequest.set(
       provider,
-      start + Math.min(60000, Math.max(0, input.minIntervalMs ?? 0)),
+      start + Math.min(60000, Math.max(0, minIntervalMs ?? 0)),
     );
     if (start > Date.now())
       await new Promise<void>((resolve, reject) => {
@@ -229,55 +284,6 @@ export class ApiProviders {
         }, start - Date.now());
         signal.addEventListener("abort", abort, { once: true });
       });
-    const result =
-      provider === "anthropic"
-        ? await this.request(
-            provider,
-            base,
-            "/messages",
-            {
-              model: input.choice.model,
-              max_tokens: input.maxTokens ?? 1000,
-              system: input.system,
-              messages: [
-                {
-                  role: "user",
-                  content: anthropicVisionContent(input.prompt, input.images),
-                },
-              ],
-            },
-            signal,
-          )
-        : await this.request(
-            provider,
-            base,
-            "/chat/completions",
-            {
-              model: input.choice.model,
-              messages: [
-                { role: "system", content: input.system },
-                {
-                  role: "user",
-                  content: openAiVisionContent(input.prompt, input.images),
-                },
-              ],
-              ...(provider === "openai"
-                ? { max_completion_tokens: input.maxTokens ?? 1000 }
-                : { max_tokens: input.maxTokens ?? 1000 }),
-              stream: false,
-            },
-            signal,
-          );
-    const text =
-      provider === "anthropic"
-        ? result.content
-            ?.filter((p: any) => p.type === "text")
-            .map((p: any) => p.text)
-            .join("\n")
-        : result.choices?.[0]?.message?.content;
-    if (typeof text !== "string")
-      throw new Error("El proveedor no devolvió una respuesta de texto.");
-    return text;
   }
   /**
    * A chat answer, streamed. `onText` receives each piece of text as it
@@ -642,7 +648,12 @@ export class ApiProviders {
       ? models.sort((a, b) => (a.group === b.group ? a.id.localeCompare(b.id) : (a.group ?? "").localeCompare(b.group ?? "")))
       : models.sort((a, b) => a.id.localeCompare(b.id));
   }
-  private visionCache: { signature: string; at: number; models: VisionCatalogModel[] } | null = null;
+  private visionCache: {
+    signature: string;
+    at: number;
+    models: VisionCatalogModel[];
+    catalogues: Map<ApiProvider, { base: string; models: ProviderModel[] }>;
+  } | null = null;
   /** Vision models served by the user's configured providers, with favourites first when present. */
   async visionCatalog(
     profiles: Partial<Record<ApiProvider, ApiProfile>>,
@@ -663,10 +674,12 @@ export class ApiProviders {
     const signature = JSON.stringify([endpoints, profiles, remoteEnabled]);
     if (this.visionCache?.signature === signature && Date.now() - this.visionCache.at < 120_000)
       return this.visionCache.models;
+    const catalogues = new Map<ApiProvider, { base: string; models: ProviderModel[] }>();
     const catalogs = await Promise.all(endpoints.map(async ({ provider, base, remote }) => {
       try {
         const models = await this.list(provider, profiles, remoteEnabled, signal);
         const confirmed = await this.localVisionInfo(provider, base, models, signal);
+        catalogues.set(provider, { base, models: confirmed });
         return confirmed.filter((model) => model.vision === true).map((model) => ({
           choice: { provider, model: model.id }, name: model.name || model.id, remote,
         }));
@@ -677,7 +690,7 @@ export class ApiProviders {
     const all = catalogs.flat();
     const favorites = all.filter(({ choice }) => profiles[choice.provider]?.models.includes(choice.model));
     const models = favorites.length ? favorites : all;
-    this.visionCache = { signature, at: Date.now(), models };
+    this.visionCache = { signature, at: Date.now(), models, catalogues };
     return models;
   }
 
@@ -768,6 +781,45 @@ export class ApiProviders {
 
 const contextOf = (...values: unknown[]) =>
   values.find((v): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1024);
+const outputLimitOf = (...values: unknown[]) =>
+  values.find((v): v is number => typeof v === "number" && Number.isSafeInteger(v) && v > 0);
+
+function hitOutputLimit(result: any, anthropic: boolean) {
+  const reason = anthropic ? result.stop_reason : result.choices?.[0]?.finish_reason;
+  return reason === "length" || (typeof reason === "string" && reason.toLowerCase() === "max_tokens");
+}
+
+function structuredVisionOptions(provider: ApiProvider, model: string, capability: ProviderModel | undefined, official: boolean, heritage: boolean) {
+  const nativeGemini = official && provider === "gemini" && /^gemini-(?:2\.0|2\.5|[3-9])(?:[.-]|$)/i.test(model);
+  const nativeOpenAiReasoning = official && provider === "openai" && /^(?:gpt-[56](?:[.-]|$)|o(?:1|3|4)(?:[.-]|$))/i.test(model);
+  const nativeClaudeEffort = official && provider === "anthropic" &&
+    /^claude-(?:(?:sonnet|opus)-4-[6-9](?:-|$)|(?:haiku|sonnet|opus|fable)-5(?:-|$))/i.test(model);
+  const nativeSchema = nativeGemini || nativeOpenAiReasoning || nativeClaudeEffort ||
+    (official && provider === "openai" && /^gpt-(?:4\.1(?:-|$)|4o(?:-mini|-2024-(?:08|11)|$))/i.test(model)) ||
+    (official && provider === "anthropic" && /^claude-(?:haiku|sonnet|opus)-4-5(?:-|$)/i.test(model));
+  const format = capability?.structuredOutput ?? (nativeSchema ? "schema" : undefined);
+  const medium = capability?.mediumReasoning ?? (nativeOpenAiReasoning || nativeClaudeEffort || (nativeGemini && !/^gemini-2\.0/i.test(model)));
+  const schema = heritage ? HERITAGE_SUGGEST_SCHEMA : VISUAL_TAG_SCHEMA;
+  if (provider === "anthropic")
+    return format === "schema" || medium
+      ? { output_config: {
+          ...(format === "schema" ? { format: { type: "json_schema", schema } } : {}),
+          ...(medium ? { effort: "medium" } : {}),
+        } }
+      : {};
+  if (provider === "deepseek" && official)
+    return { response_format: { type: "json_object" }, reasoning_effort: "high" };
+  const responseFormat = format === "schema"
+    ? { type: "json_schema", json_schema: { name: heritage ? "heritage_elements" : "visual_tags", strict: true, schema } }
+    : format === "json" ? { type: "json_object" } : undefined;
+  const reasoning = provider === "openrouter" ? { reasoning: { effort: "medium" } } : { reasoning_effort: "medium" };
+  return {
+    ...(responseFormat ? { response_format: responseFormat } : {}),
+    ...(medium ? reasoning : {}),
+    ...(provider === "openrouter" && (responseFormat || medium) ? { provider: { require_parameters: true } } : {}),
+  };
+}
+
 /** One row of a provider's /models answer, as a catalogue model. */
 function catalogModel(provider: ApiProvider, m: any): ProviderModel | null {
   if (provider === "gemini") {
@@ -778,6 +830,7 @@ function catalogModel(provider: ApiProvider, m: any): ProviderModel | null {
       id,
       ...(typeof m.displayName === "string" ? { name: m.displayName } : {}),
       contextLength: contextOf(m.inputTokenLimit),
+      maxOutputTokens: outputLimitOf(m.outputTokenLimit),
       vision: declaredVision(m) ?? (methods.includes("generateContent") &&
         (/^gemini-(?:\d+(?:\.\d+)?-(?:flash|pro)|(?:flash|pro)-latest)/i.test(id) || /^gemma-3-(?:4|12|27)b-it$/i.test(id)) &&
         !/(?:^|-)(?:image|tts|audio|live|robotics|computer-use)(?:-|$)/i.test(id)),
@@ -788,11 +841,20 @@ function catalogModel(provider: ApiProvider, m: any): ProviderModel | null {
   if (typeof m?.id !== "string" || !m.id.trim()) return null;
   const output: string[] | undefined = m.architecture?.output_modalities ?? m.output_modalities;
   const vision = declaredVision(m) ?? documentedVision(provider, m.id);
+  const parameters = Array.isArray(m.supported_parameters) ? m.supported_parameters : [];
+  const efforts = m.reasoning?.supported_efforts;
+  const structuredOutput = parameters.includes("structured_outputs") || m.capabilities?.structured_outputs?.supported === true
+    ? "schema" : parameters.includes("response_format") ? "json" : undefined;
   return {
     id: m.id,
     ...(typeof m.name === "string" ? { name: m.name } : typeof m.display_name === "string" ? { name: m.display_name } : {}),
     ...(provider === "openrouter" ? { group: m.id.includes("/") ? m.id.split("/")[0] : "other" } : {}),
     contextLength: contextOf(m.context_length, m.top_provider?.context_length, m.context_window, m.max_context_length, m.max_model_len, m.max_input_tokens),
+    maxOutputTokens: outputLimitOf(m.max_output_tokens, m.max_completion_tokens, m.top_provider?.max_completion_tokens),
+    ...(structuredOutput ? { structuredOutput } : {}),
+    ...(provider === "openrouter" && efforts === null
+      ? { mediumReasoning: true }
+      : Array.isArray(efforts) ? { mediumReasoning: efforts.includes("medium") } : {}),
     vision: Array.isArray(output) && !output.includes("text") ? false : vision,
     // An edit needs an image in and an image out; OpenAI edits with its image models.
     imageOutput:
@@ -814,7 +876,7 @@ function declaredVision(model: any): boolean | undefined {
 function documentedVision(provider: ApiProvider, id: string): boolean | undefined {
   if (provider === "openai") {
     return !/(?:audio|realtime|transcribe|tts|codex|search)/.test(id) &&
-      (/^(?:gpt-5(?:[.-]|$)|gpt-4\.1(?:-|$)|gpt-4o(?:-|$)|gpt-4-turbo(?:-\d|$)|o[134](?:-\d|-pro|$)|o4-mini(?:-|$)|chatgpt-4o-latest$)/.test(id));
+      (/^(?:gpt-[56](?:[.-]|$)|gpt-4\.1(?:-|$)|gpt-4o(?:-|$)|gpt-4-turbo(?:-\d|$)|o[134](?:-\d|-pro|$)|o4-mini(?:-|$)|chatgpt-4o-latest$)/.test(id));
   }
   if (provider === "anthropic") return /^claude-(?:3-|(?:opus|sonnet|haiku)-[4-9](?:-|$))/.test(id);
   if (provider === "groq")

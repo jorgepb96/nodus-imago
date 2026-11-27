@@ -6,6 +6,7 @@ import { DATABASE_KINDS, isDatabaseColumnType } from "./databases";
 import { isDatabaseIconValue } from "./databaseIcons";
 import { FILTER_LABELS } from "./viewCriteria";
 import { externalHttpsUrl } from "./externalLinks";
+import { LANGUAGES } from "./language";
 import type { PropertyFilterGroup, PropertyFilterOp } from "./imago";
 const id = z.string().min(1).max(200);
 const authorityLink = z
@@ -245,7 +246,7 @@ export const settingsSchema = z
     mode: z.enum(["light", "dark", "system"]),
     theme: z.string().max(100),
     accent: z.string().regex(/^#[0-9a-f]{6}$/i),
-    language: z.enum(["es", "en"]),
+    language: z.enum(LANGUAGES),
     profile: z.enum(["light", "balanced", "advanced"]),
     dimensions: z.union([z.literal(256), z.literal(512), z.literal(768)]),
     python: z.string().min(1).max(2000),
@@ -650,15 +651,25 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     })
     .strict(),
   heritageAddElement: z.object({ columnId: id, label: z.string().trim().min(1).max(500), link: authorityLink.nullable() }).strict(),
+  heritageSelectDictionary: z.object({ databaseId: id, sourceId: id.nullable() }).strict(),
   heritageSuggest: z
     .object({
       assetId: id,
       columnId: id,
       whole: z.boolean(),
       zones: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0).max(1), h: z.number().min(0).max(1) }).strict()).max(6),
-      choice: z.object({ provider: z.string().min(1).max(40), model: z.string().min(1).max(300) }).strict(),
+      choice,
+      allowNew: z.boolean().optional(),
     })
     .strict(),
+  heritageApplySuggestions: z.object({
+    assetId: id, columnId: id, imageVersion: z.string().length(64), allowNew: z.boolean(),
+    items: z.array(z.object({
+      optionId: id.nullable(), name: z.string().trim().min(1).max(500), place: z.string().trim().max(120).nullable(),
+      box: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0.005).max(1), h: z.number().min(0.005).max(1) }).strict().nullable(),
+      link: authorityLink.nullable(),
+    }).strict()).min(1).max(100),
+  }).strict(),
   heritageRowsWith: z.object({ columnId: id, optionId: id, rowIds: z.array(id).max(500) }).strict(),
   heritageAddToRows: z
     .object({

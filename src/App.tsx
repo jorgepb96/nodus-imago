@@ -92,6 +92,7 @@ import type {
   StandardImport,
 } from "../shared/imago";
 import { LanguageContext, uiLocale, useT } from "./i18n";
+import { LANGUAGE_NAMES, type Language } from "../shared/language";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { applyTheme, switchTheme } from "./theme/apply";
 import { applyAppIcon } from "./theme/appIcon";
@@ -185,7 +186,7 @@ function matchesTitle(title: string, filter: string) {
   return !filter.trim() || fold(title).includes(fold(filter.trim()));
 }
 export default function App() {
-  const [language, setLanguage] = useState<"es" | "en">("es");
+  const [language, setLanguage] = useState<Language>("es");
   // Numbers and dates follow the interface language, not the system's.
   useEffect(() => {
     document.documentElement.lang = language;
@@ -203,7 +204,7 @@ function formatDay(value: string) {
   const date = new Date(`${day}T00:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(uiLocale());
 }
-function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
+function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
   const t = useT(),
     api = window.imago;
   const [area, setArea] = useState<
@@ -3153,11 +3154,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: "es" | "en") => void }) {
                         data-tour="selection-analyze"
                         onClick={() => {
                           setAnalysisColumns([]);
-                          setAnalysisLanguage(
-                            status?.settings.language === "en"
-                              ? "English"
-                              : "Español",
-                          );
+                          setAnalysisLanguage(LANGUAGE_NAMES[status?.settings.language ?? "es"]);
                           setModal("analyze");
                         }}
                       >

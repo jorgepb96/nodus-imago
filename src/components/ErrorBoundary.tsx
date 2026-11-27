@@ -4,6 +4,7 @@
 // (it lives in the main process, not in this window).
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { translate } from "../i18n";
+import { asLanguage } from "../../shared/language";
 
 type State = { error: Error | null };
 
@@ -21,7 +22,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
-    const language = document.documentElement.lang === "en" ? "en" : "es",
+    const language = asLanguage(document.documentElement.lang),
       t = (text: string) => translate(text, language);
     return (
       <div className="app-crash" role="alert" data-testid="app-crash">

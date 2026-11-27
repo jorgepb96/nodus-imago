@@ -9,7 +9,7 @@ import "leaflet/dist/leaflet.css";
 import { ExternalLink, Landmark, X } from "lucide-react";
 import type { DatabaseColumn, DatabaseDetail } from "../../shared/databases";
 import type { HeritageMapElement, MapRecord, PropertyFilter, PropertyFilterGroup, ViewSort } from "../../shared/imago";
-import { heritageScheme, typology } from "../../shared/heritage";
+import { heritageLabel, heritageScheme, typology } from "../../shared/heritage";
 import { formatNumber, useLanguage, useT } from "../i18n";
 import { Button, Spinner, Thumbnail } from "./ui";
 import { HeritageIcon } from "./HeritageIcon";
@@ -170,7 +170,7 @@ export function HeritageMap({
                 }
               >
                 <HeritageIcon name={g?.icon ?? "Landmark"} size={13} />
-                {g ? (language === "en" ? g.labelEn || g.label : g.label) : t("Sin tipología")}
+                {g ? (heritageLabel(g, language)) : t("Sin tipología")}
                 <small>{count}</small>
               </button>
             );

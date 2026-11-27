@@ -176,7 +176,7 @@ export function AddPropertyMenu({
               onClick={() => createFromTemplate(template)}
             >
               {template.id === "camera-type" ? <Camera size={15} /> : <Aperture size={15} />}
-              <span>{template.name[language === "es" ? "es" : "en"]}</span>
+              <span>{template.name[language === "es" || language === "fr" ? language : "en"]}</span>
               {busy === template.id && <Loader2 size={13} className="spin column-menu-end" />}
             </button>
           ))}

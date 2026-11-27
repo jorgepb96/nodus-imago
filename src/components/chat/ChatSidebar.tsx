@@ -50,7 +50,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ChatConversationSummary, ChatFolder } from "../../../shared/chat";
-import { useT } from "../../i18n";
+import { uiLocale, useT } from "../../i18n";
 
 export const FOLDER_COLORS = ["#737373", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899"];
 export const FOLDER_ICONS: Record<string, LucideIcon> = {
@@ -81,7 +81,7 @@ export function useRelativeTime() {
     if (hours < 24) return t("hace {n} h").replace("{n}", String(hours));
     const days = Math.round(hours / 24);
     if (days < 7) return t("hace {n} d").replace("{n}", String(days));
-    return new Date(iso).toLocaleDateString(document.documentElement.lang === "en" ? "en-GB" : "es-ES");
+    return new Date(iso).toLocaleDateString(uiLocale());
   };
 }
 

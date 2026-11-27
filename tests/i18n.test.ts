@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { translate } from "../src/i18n";
+import { dictionaries, translate } from "../src/i18n";
+import { backendPatterns } from "../src/i18n.backend";
+import { frPatterns } from "../src/i18n.fr";
 
 function files(directory: string, pattern: RegExp): string[] {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -72,8 +74,8 @@ test("no interface text is written outside t()", () => {
   const allowed = new Set([
     "Español",
     "Nodus Imago",
-    "Elige tu idioma · Choose your language",
-    "Puedes cambiarlo cuando quieras en Ajustes. · You can change it at any time in Settings.",
+    "Elige tu idioma · Choose your language · Choisissez votre langue",
+    "Puedes cambiarlo cuando quieras en Ajustes. · You can change it at any time in Settings. · Vous pouvez la changer à tout moment dans Réglages.",
   ]);
   const found: string[] = [];
   for (const file of files("src", /\.tsx$/)) {
@@ -195,4 +197,21 @@ test("messages with variable parts are translated by pattern", () => {
   );
   assert.equal(translate("Indexación automática", "es"), "Indexación automática");
   assert.equal(translate("Indexación automática", "en"), "Automatic indexing");
+});
+
+test("every English text and message pattern also has French", () => {
+  assert.deepEqual(Object.keys(dictionaries.en).filter((text) => !dictionaries.fr[text]), []);
+  const holes = (text: string) => (text.match(/\{[^{}\s]{1,20}\}/g) ?? []).sort().join(" ");
+  assert.deepEqual(
+    Object.entries(dictionaries.fr).filter(([source, target]) => holes(source) !== holes(target)).map(([source]) => source),
+    [],
+    "French keeps every placeholder",
+  );
+  const french = new Map(frPatterns);
+  assert.deepEqual(backendPatterns.map(([source]) => source).filter((source) => !french.has(source)), []);
+  assert.equal(translate("Indexación automática", "fr"), "Indexation automatique");
+  assert.equal(
+    translate("La opción «Sevilla» está en uso. Reasigna sus registros antes de eliminarla.", "fr").includes("Sevilla"),
+    true,
+  );
 });

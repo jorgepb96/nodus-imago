@@ -54,7 +54,9 @@ async function waitForDockIcon(page, file, differsFrom = null, timeout = 15000) 
   const deadline = Date.now() + timeout;
   for (;;) {
     const bytes = await fs.readFile(file).catch(() => null);
-    if (bytes && (!differsFrom || !bytes.equals(differsFrom))) return bytes;
+    // Only a complete PNG counts: the app may still be replacing the file.
+    const png = bytes && (await sharp(bytes).metadata().then(() => true, () => false));
+    if (png && (!differsFrom || !bytes.equals(differsFrom))) return bytes;
     if (Date.now() > deadline) return bytes;
     await page.waitForTimeout(100);
   }

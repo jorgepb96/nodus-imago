@@ -6,7 +6,7 @@ import path from "node:path";
 import { createCipheriv, createDecipheriv } from "node:crypto";
 import sharp from "sharp";
 import { Secrets } from "../electron/secrets/store";
-import { ApiProviders, ApiFailure } from "../electron/ai/apiProviders";
+import { ApiProviders, ApiFailure, type CompletionRequest } from "../electron/ai/apiProviders";
 import { Repository } from "../electron/db/repository";
 import { Models } from "../electron/ai/models";
 import { Engine } from "../electron/ai/engine";
@@ -135,6 +135,85 @@ test("the visual-tag model catalogue prefers vision favourites and falls back to
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+test("visual tagging uses the catalogue format and effort, and retries a truncated answer once within the model limit", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-visual-completion-"));
+  try {
+    const secrets = new Secrets(root, encryption);
+    secrets.set("openrouter", "fixture-key");
+    const requests: any[] = [];
+    let answers: { choices: { finish_reason: string; message: { content: string | null } }[] }[] = [];
+    const providers = new ApiProviders(secrets, async (url, options) => {
+      if (String(url).endsWith("/models")) return Response.json({ data: [
+        { id: "author/structured", input_modalities: ["image"], supported_parameters: ["structured_outputs"],
+          reasoning: { supported_efforts: ["medium", "high"] }, top_provider: { max_completion_tokens: 9000 } },
+        { id: "author/native", input_modalities: ["image"], reasoning: { supported_efforts: ["high", "low"] } },
+      ] });
+      requests.push(JSON.parse(options!.body as string));
+      return Response.json(answers.shift());
+    });
+    const input: CompletionRequest = {
+      choice: { provider: "openrouter", model: "author/structured" },
+      profiles: {}, remoteEnabled: true, prompt: "Return JSON", system: "Detect regions",
+      images: [{ base64: "AAAA", mediaType: "image/jpeg" }], visualTags: true,
+    };
+    const signal = new AbortController().signal;
+    await providers.visionCatalog(input.profiles, true, signal);
+    const answer = (finish_reason: string, content: string | null) => ({ choices: [{ finish_reason, message: { content } }] });
+    const empty = '{"regions":[]}';
+    answers = [answer("length", null), answer("stop", empty)];
+    assert.equal(await providers.complete(input, signal), empty);
+    assert.deepEqual(requests.map((r) => r.max_tokens), [6144, 9000]);
+    assert.deepEqual(requests[1], { ...requests[0], max_tokens: 9000 });
+    assert.deepEqual(requests[0].reasoning, { effort: "medium" });
+    assert.deepEqual(requests[0].provider, { require_parameters: true });
+    assert.equal(requests[0].response_format.type, "json_schema");
+    assert.deepEqual(requests[0].response_format.json_schema.schema.required, ["regions"]);
+
+    answers = [answer("length", empty), answer("length", "")];
+    await assert.rejects(providers.complete(input, signal), /límite de salida/);
+    assert.deepEqual(requests.slice(2).map((r) => r.max_tokens), [6144, 9000]);
+
+    answers = [answer("stop", "  ")];
+    await assert.rejects(providers.complete({
+      ...input, choice: { provider: "openrouter", model: "author/native" },
+    }, signal), /no devolvió una respuesta de texto/);
+    assert.equal(requests.length, 5);
+    assert.equal(requests[4].reasoning, undefined);
+    assert.equal(requests[4].response_format, undefined);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("visual tagging uses DeepSeek JSON mode and native high effort", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-deepseek-tags-"));
+  try {
+    const secrets = new Secrets(root, encryption);
+    secrets.set("deepseek", "fixture-key");
+    const requests: any[] = [];
+    const providers = new ApiProviders(secrets, async (url, options) => {
+      assert.equal(url, "https://api.deepseek.com/chat/completions");
+      requests.push(JSON.parse(options!.body as string));
+      return Response.json({ choices: [{ finish_reason: "stop", message: { content: '{"regions":[]}' } }] });
+    });
+    const input: CompletionRequest = {
+      choice: { provider: "deepseek", model: "deepseek-flash" }, profiles: {},
+      remoteEnabled: true, prompt: "Return JSON", system: "Detect regions", images: [],
+    };
+    const signal = new AbortController().signal;
+    await providers.complete(input, signal);
+    await providers.complete({ ...input, visualTags: true }, signal);
+    assert.equal(requests[0].max_tokens, 1000);
+    assert.equal(requests[0].reasoning_effort, undefined);
+    assert.equal(requests[0].response_format, undefined);
+    assert.equal(requests[1].max_tokens, 6144);
+    assert.equal(requests[1].reasoning_effort, "high");
+    assert.deepEqual(requests[1].response_format, { type: "json_object" });
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("Nodus-compatible API vision messages use encrypted credentials and retain source images", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "imago-api-"));
   try {

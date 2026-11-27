@@ -16,7 +16,7 @@ import {
   type ChatMode,
 } from "../../shared/chat";
 
-type Language = "es" | "en";
+import type { Language } from "../../shared/language";
 export type ChatDataset = {
   name: string;
   columns: { name: string; type: string }[];
@@ -75,6 +75,28 @@ const COPY = {
     others: "others",
     certainty: "certainty",
     middle: "middle year of the period",
+  },
+  fr: {
+    records: "Fiches",
+    images: "Images",
+    withImages: "fiches avec images",
+    filled: "renseignées",
+    distinct: "valeurs distinctes",
+    top: "les plus fréquentes",
+    length: "longueur moyenne",
+    chars: "caractères",
+    yes: "oui",
+    no: "non",
+    years: "années",
+    perDecade: "fiches par décennie",
+    mean: "moyenne",
+    median: "médiane",
+    sum: "somme",
+    min: "min.",
+    max: "max.",
+    others: "autres",
+    certainty: "certitude",
+    middle: "année centrale de la période",
   },
 };
 

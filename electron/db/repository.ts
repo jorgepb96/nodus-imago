@@ -1480,14 +1480,21 @@ export class Repository {
       .all(...ids) as (RelationLink & { row_id: string; column_id: string })[];
     // Visual tags: appearances of each tag (validated regions) and whether
     // every image was reviewed, for databases with «Etiquetas visuales».
-    const tagged = new Set(
-      (this.db.prepare("SELECT DISTINCT database_id FROM db_columns WHERE type='multi_select' AND json_extract(config_json,'$.visualTags')=1").all() as { database_id: string }[]).map(
-        (r) => r.database_id,
-      ),
-    );
+    const tagScopes = new Map<string, string | null>();
+    for (const column of this.db.prepare(
+      `SELECT c.database_id databaseId, d.id dictionaryId FROM db_columns c
+       LEFT JOIN db_columns d ON d.id=json_extract(c.config_json,'$.visualTagsDictionary')
+         AND d.database_id=c.database_id AND d.type IN ('select','multi_select','status')
+         AND coalesce(json_extract(d.config_json,'$.visualTags'),0)=0
+         AND (d.type<>'multi_select' OR coalesce(json_extract(d.config_json,'$.heritage'),0)=0)
+       WHERE c.type='multi_select' AND json_extract(c.config_json,'$.visualTags')=1
+       ORDER BY c.position,c.id`,
+    ).all() as { databaseId: string; dictionaryId: string | null }[]) {
+      if (!tagScopes.has(column.databaseId)) tagScopes.set(column.databaseId, column.dictionaryId);
+    }
     const visualCounts = new Map<string, Record<string, number>>(),
       visualReviewed = new Map<string, { images: number; reviewed: number }>();
-    if (tagged.size) {
+    if (tagScopes.size) {
       for (const r of this.db
         .prepare(
           `SELECT a.row_id,o.option_id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id
@@ -1521,6 +1528,22 @@ export class Repository {
       .all(...ids) as (Omit<ImageAnnotation, "tags"> & { tags_json: string })[];
     const annotationsByRow = new Map<string, ImageAnnotation[]>(),
       views = new Map(assets.map((a) => [a.id as string, assetView(a.metadata_json)]));
+    const validatedRegionsByAsset = new Map<string, number>();
+    const rowsWithTags = [...visualCounts.keys()];
+    if (rowsWithTags.length) {
+      // Count a region once even when it has several labels. Like the viewer,
+      // only count the active dictionary and the part of the image in view.
+      for (const region of this.db.prepare(
+        `SELECT DISTINCT t.id,a.database_id databaseId,a.id assetId,t.x,t.y,t.w,t.h,o.visual_tag_dictionary_id dictionaryId
+         FROM image_assets a JOIN image_tags t ON t.asset_id=a.id
+         JOIN image_tag_options l ON l.region_id=t.id JOIN db_select_options o ON o.id=l.option_id
+         WHERE a.row_id IN (${marks(rowsWithTags)}) AND t.state='validated'`,
+      ).all(...rowsWithTags) as { databaseId: string; assetId: string; dictionaryId: string | null; x: number; y: number; w: number; h: number }[]) {
+        const view = views.get(region.assetId);
+        if (view && tagScopes.get(region.databaseId) === region.dictionaryId && toShown(region, view))
+          validatedRegionsByAsset.set(region.assetId, (validatedRegionsByAsset.get(region.assetId) ?? 0) + 1);
+      }
+    }
     // Stored in the original's frame; listed as the image is shown, without
     // the ones a crop leaves out.
     for (const { tags_json, ...a } of annotations) {
@@ -1544,7 +1567,7 @@ export class Repository {
       row.cells = cellsByRow.get(row.id) ?? {};
       row.annotations = annotationsByRow.get(row.id) ?? [];
       row.links = linksByRow.get(row.id) ?? {};
-      if (tagged.has(row.databaseId)) {
+      if (tagScopes.has(row.databaseId)) {
         const counts = visualCounts.get(row.id) ?? {},
           seen = visualReviewed.get(row.id);
         row.visualTags = {
@@ -1568,6 +1591,7 @@ export class Repository {
             ...a,
             metadata,
             revision: assetRevision(metadata),
+            validatedTagRegions: validatedRegionsByAsset.get(a.id) ?? 0,
             missing: false,
           };
         });

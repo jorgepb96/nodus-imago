@@ -148,21 +148,27 @@ try {
 
   const searchTool = viewer.getByTestId("viewer-search");
   await poll(async () => !(await searchTool.isDisabled()), "search tool enabled");
+  const modifier = process.platform === "darwin" ? "Meta" : "Control";
+  const modifierLabel = process.platform === "darwin" ? "Comando" : "Ctrl";
   for (const [testId, key] of [["viewer-annotate", "A"], ["viewer-search", "B"], ["viewer-heritage", "P"], ["viewer-tagging", "E"]]) {
     const control = viewer.getByTestId(testId);
-    assert.equal(await control.getAttribute("aria-keyshortcuts"), key);
-    assert.ok((await control.getAttribute("data-tooltip")).endsWith(`(${key})`));
+    assert.equal(await control.getAttribute("aria-keyshortcuts"), `${modifier}+${key}`);
+    assert.ok((await control.getAttribute("data-tooltip")).endsWith(`(Atajo ${modifierLabel} + ${key})`));
+    await page.keyboard.press(key.toLowerCase());
+    assert.equal(await control.getAttribute("aria-pressed"), "false", "a letter alone leaves the tool unchanged");
+    await page.keyboard.down(modifier);
     await page.keyboard.down(key.toLowerCase());
     await page.keyboard.down(key.toLowerCase());
     await page.keyboard.up(key.toLowerCase());
+    await page.keyboard.up(modifier);
     assert.equal(await control.getAttribute("aria-pressed"), "true", "holding the key activates the tool once");
     await control.click();
     assert.equal(await control.getAttribute("aria-pressed"), "false");
     await control.click();
-    await page.keyboard.press(key.toLowerCase());
+    await page.keyboard.press(`${modifier}+${key.toLowerCase()}`);
     assert.equal(await control.getAttribute("aria-pressed"), "false");
   }
-  checks.push("A, B, P and E toggle the same controls as clicks and are shown in tooltips");
+  checks.push("Command or Ctrl plus A, B, P and E match the toolbar controls and their tooltips");
   await viewer.getByTestId("viewer-tagging").click();
   await viewer.getByRole("tabpanel", { name: "Etiquetas", exact: true }).waitFor();
   const drag = async (x0, y0, x1, y1) => {
@@ -387,6 +393,7 @@ try {
 
   // Use a local provider fixture for the real model picker, image request and approval.
   const visionRequests = [];
+  const visionBudgets = [];
   visionServer = createServer(async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     if (req.url === "/v1/models") {
@@ -402,6 +409,11 @@ try {
       const parts = [];
       for await (const part of req) parts.push(part);
       const request = JSON.parse(Buffer.concat(parts).toString());
+      visionBudgets.push(request.max_tokens);
+      if (visionBudgets.length === 1) {
+        res.end(JSON.stringify({ choices: [{ finish_reason: "length", message: { content: null } }] }));
+        return;
+      }
       const content = request.messages.find((message) => message.role === "user").content;
       const prompt = content.find((part) => part.type === "text").text;
       const labels = JSON.parse(prompt.split("\n").at(-1).replace("Dictionary (number and label): ", ""));
@@ -422,8 +434,9 @@ try {
   await call("updateSettings", { apiProfiles: { custom: { baseUrl, models: ["vision-fixture"] } } });
   await picker.getByRole("button", { name: "Cancelar", exact: true }).click();
   await chooseDictionary("Tema");
+  await annotationTab.click();
+  await tagTab.click();
   const suggestions = viewer.getByTestId("viewer-tag-suggestions");
-  await suggestions.getByRole("button", { name: "Sugerir con IA", exact: true }).click();
   await suggestions.getByRole("button", { name: "Modelo de visión", exact: true }).click();
   const modelSearch = page.getByRole("combobox", { name: "Buscar: Modelo de visión" });
   await modelSearch.fill("text");
@@ -459,6 +472,7 @@ try {
   await ganado.uncheck();
   await suggest.click();
   await poll(async () => visionRequests.length === 2 && !(await suggest.isDisabled()), "vision suggestion rerun");
+  assert.deepEqual(visionBudgets, [6144, 12288, 6144]);
   assert.ok(visionRequests.every(({ image, model }) => model === "vision-fixture" && image.startsWith("data:image/jpeg;base64,")));
   assert.deepEqual(await proposal.boundingBox(), resized);
   assert.equal(await ganado.isChecked(), false);
@@ -472,6 +486,18 @@ try {
   assert.equal(await viewer.locator('[data-tag-region][aria-label*="Ganado"]').count(), 0);
   const undo = viewer.getByTestId("viewer-tag-undo");
   await poll(async () => undo.isEnabled(), "undo available after applying suggestions");
+  const tagPanel = viewer.getByTestId("viewer-tag-panel");
+  const [dictionaryBox, undoBox, countsBox, listBox, aiBox] = await Promise.all([
+    tagPanel.getByTestId("viewer-tag-dictionary").boundingBox(), undo.boundingBox(),
+    tagPanel.getByTestId("viewer-tag-counts").boundingBox(), tagPanel.locator(".viewer-list").boundingBox(),
+    suggestions.boundingBox(),
+  ]);
+  assert.ok(dictionaryBox && undoBox && countsBox && listBox && aiBox);
+  assert.ok(Math.abs(dictionaryBox.y - undoBox.y) < 1 && undoBox.x >= dictionaryBox.x + dictionaryBox.width);
+  assert.ok(dictionaryBox.y + dictionaryBox.height < countsBox.y && countsBox.y < listBox.y && listBox.y + listBox.height < aiBox.y);
+  assert.equal(await undo.textContent(), "");
+  assert.match(await undo.getAttribute("aria-label"), /Deshacer/);
+  checks.push("Tags follow the dictionary, with icon-only Undo aligned beside the selector");
   await ganado.press("Control+z");
   await saved.waitFor({ state: "hidden" });
   await poll(async () => suggestions.getByRole("checkbox", { name: "Bosque", exact: true }).isChecked(), "undone suggestion is ready to review");
