@@ -6,6 +6,7 @@
 //
 // The layout is adapted from Nodus Research's professional report
 // (shared/professionalReport.ts), © Jorge Pérez Burgueño. AGPL-3.0-only.
+import { LANGUAGE_LOCALES } from "./language";
 import { COLUMN_TYPES, ROLLUP_FUNCTIONS } from "./databases";
 import { TASK_LABELS } from "./restoration";
 import type {
@@ -45,7 +46,7 @@ export function renderMethodologyHtml(
   t: Translate,
   options: { title?: string; logoSvg?: string } = {},
 ): string {
-  const locale = data.language === "en" ? "en-GB" : "es-ES";
+  const locale = LANGUAGE_LOCALES[data.language] ?? "es-ES";
   const num = (n: number) => n.toLocaleString(locale);
   const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 1000) / 10} %` : "—");
   const dec = (n: number | null, digits = 3) => (n === null ? "—" : n.toLocaleString(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }));

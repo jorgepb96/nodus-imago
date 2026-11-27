@@ -43,6 +43,7 @@ import { McpSettings } from "./McpSettings";
 import { ModelPicker } from "./ModelPicker";
 import { askIndexQuality } from "./IndexQualityDialog";
 import { jobTitle } from "../../shared/jobTitles";
+import { LANGUAGES, LANGUAGE_NAMES, type Language } from "../../shared/language";
 export function Jobs({
   jobs,
   perform,
@@ -528,11 +529,14 @@ export function Settings({
               <select
                 value={s.language}
                 onChange={(e) =>
-                  update({ language: e.target.value as "es" | "en" })
+                  update({ language: e.target.value as Language })
                 }
               >
-                <option value="es">Español</option>
-                <option value="en">English</option>
+                {LANGUAGES.map((code) => (
+                  <option key={code} value={code}>
+                    {LANGUAGE_NAMES[code]}
+                  </option>
+                ))}
               </select>
             </label>
             <div className="setting-row">

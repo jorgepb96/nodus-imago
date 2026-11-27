@@ -20,6 +20,7 @@ import { filterOperators } from "../../shared/viewCriteria";
 import { importedOptionColor } from "../../shared/databaseCsv";
 import type { CalcOutcome } from "../../shared/chat";
 import type { ImagePlan, Page, RecordRow, SearchInput } from "../../shared/imago";
+import { asLanguage, LANGUAGE_NAMES } from "../../shared/language";
 import {
   MCP_READ_ONLY_TYPES,
   mcpCellValue,
@@ -1325,7 +1326,7 @@ export function registerImagoTools(server: McpServer, ctx: ImagoMcpContext, opti
       const jobId = await run("analyze", {
         ...(args.recordIds?.length ? { rowIds: args.recordIds } : { databaseId: detail.database.id }),
         columnIds: args.properties.map((p) => resolveProperty(detail, p).id),
-        language: settings.language === "en" ? "English" : "Español",
+        language: LANGUAGE_NAMES[asLanguage(settings.language)],
         detailed: false,
         ...(args.overwrite ? { overwrite: true } : {}),
       });

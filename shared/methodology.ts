@@ -2,6 +2,7 @@
 // another researcher can reproduce it or judge it. The collection gathers the
 // facts (electron/export/methodology.ts); this file describes them and turns
 // them into a printable document (shared/methodologyHtml.ts).
+import type { Language } from "./language";
 import type { DatabaseKind } from "./databases";
 import type { StatResult, StatSpec } from "./statistics";
 import type { CirculationSummary } from "./variants";
@@ -122,7 +123,7 @@ export type MethodologyStatistic = {
 export type MethodologyData = {
   format: "nodus.imago.methodology/1";
   generatedAt: string;
-  language: "es" | "en";
+  language: Language;
   accent: string;
   environment: { app: string; platform: string; arch: string; electron: string; chromium: string };
   databases: MethodologyDatabase[];

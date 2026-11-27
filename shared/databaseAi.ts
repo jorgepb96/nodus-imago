@@ -101,7 +101,7 @@ type PresetCopy = {
   answerIn: (language: string) => string;
 };
 
-const PRESET_COPY: { es: PresetCopy; en: PresetCopy } = {
+const PRESET_COPY: { es: PresetCopy; en: PresetCopy; fr: PresetCopy } = {
   es: {
     output: {
       value: 'Formato de respuesta: SOLO un objeto JSON {"value": "..."} cuyo valor es el texto final de la celda. No escribas razonamientos, notas ni nada fuera del JSON.',
@@ -140,10 +140,29 @@ const PRESET_COPY: { es: PresetCopy; en: PresetCopy } = {
     definitions: 'What each tag means (choose the one that best fits these definitions)',
     answerIn: (language) => `Write the answer in ${language}.`,
   },
+  fr: {
+    output: {
+      value: 'Format de réponse : UNIQUEMENT un objet JSON {"value": "..."} dont la valeur est le texte final de la cellule. N\'écrivez ni raisonnement, ni notes, ni rien en dehors du JSON.',
+      list: 'Format de réponse : UNIQUEMENT un tableau JSON de chaînes, par exemple ["portrait", "intérieur"]. N\'écrivez ni raisonnement, ni notes, ni rien en dehors du JSON.',
+    },
+    describe:
+      'Rédigez une brève description de l\'image en deux ou trois phrases complètes, en prose fluide. Commencez par le sujet principal (qui ou quoi apparaît et ce qui se passe), puis ajoutez le détail visuel le plus significatif : le cadre, la lumière ou la composition. Ne décrivez que ce qui se voit ; n\'inventez ni noms, ni dates, ni lieux, et lorsque quelque chose est incertain, dites-le naturellement ("semble", "peut-être"). N\'utilisez ni listes, ni tirets, ni puces, ni titres, ni gras.',
+    describe_detailed:
+      'Rédigez une description détaillée de l\'image en prose, organisée en deux ou trois paragraphes bien construits. Le premier présente le sujet principal et la scène dans son ensemble ; le deuxième passe en revue les éléments pertinents (personnes, objets, espace et relations entre eux) selon un ordre visuel clair, du principal au secondaire ; le dernier, s\'il apporte quelque chose, commente la technique, la composition, la lumière ou l\'état de conservation. Ne décrivez que ce qui est observable ; n\'inventez ni identités, ni dates, ni lieux, et signalez naturellement ce qui est douteux ("semble", "peut-être"). N\'utilisez ni listes, ni tirets, ni puces, ni titres, ni gras : uniquement des paragraphes séparés par une ligne vide.',
+    tagsFree: (max) => `Proposez ${max === null ? "toutes les étiquettes pertinentes" : max === 1 ? "une seule étiquette" : `jusqu'à ${max} étiquettes`} décrivant le contenu visible de l'image : sujet, objets, type d'espace, époque apparente ou technique lorsqu'ils sont évidents. Chaque étiquette comporte un ou deux mots, en minuscules sauf pour les noms propres, sans répétitions ni synonymes.`,
+    tagsFixed: (labels, max) => `Choisissez ${max === 1 ? "l'étiquette qui correspond le mieux" : "les étiquettes qui correspondent clairement"} à l'image${max === null || max === 1 ? "" : `, au maximum ${max}`}, UNIQUEMENT dans cette liste exacte et avec la même graphie : ${labels}. Si aucune ne correspond, renvoyez [].`,
+    transcribe:
+      'Transcrivez littéralement tout le texte visible dans l\'image : inscriptions, cachets, signatures, notes manuscrites et légendes imprimées. Conservez la langue, l\'orthographe, les abréviations et les retours à la ligne d\'origine ; ne traduisez ni ne corrigez. Écrivez [illisible] pour ce qui ne se lit pas et séparez les textes distincts par une ligne vide. S\'il n\'y a pas de texte, renvoyez {"value": ""}.',
+    title: 'Proposez un titre bref et descriptif pour l\'image, de quatre à dix mots, qui nomme son sujet principal. Sans guillemets ni point final, et sans inventer de noms, de dates ni de lieux qui ne se lisent pas dans l\'image.',
+    extra: 'Indications supplémentaires de l\'utilisateur',
+    criteria: 'Critères généraux de classification (suivez-les toujours)',
+    definitions: 'Ce que signifie chaque étiquette (choisissez celle qui correspond le mieux à ces définitions)',
+    answerIn: (language) => `Rédigez la réponse en ${language}.`,
+  },
 };
 
 function presetCopy(language: string): PresetCopy {
-  return language === 'es' ? PRESET_COPY.es : PRESET_COPY.en;
+  return language === 'es' ? PRESET_COPY.es : language === 'fr' ? PRESET_COPY.fr : PRESET_COPY.en;
 }
 
 /** The task text of a built-in preset, as the user reads it in Properties. */
@@ -169,7 +188,7 @@ export function aiPresetTask(
 
 /**
  * The instruction and expected output shape for an AI property, written in the
- * interface language (Spanish or English; other languages use the English
+ * interface language (Spanish, English or French; other languages use the English
  * wording and ask for the answer in their own language).
  */
 export function aiPresetInstruction(

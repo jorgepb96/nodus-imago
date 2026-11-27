@@ -26,6 +26,8 @@ import {
   type ModelChoice,
 } from "../../shared/aiConfig";
 import type { CompletionRequest, EmbeddingRequest } from "./apiProviders";
+import { VISUAL_TAG_SYSTEM } from "../../shared/visualTags";
+import { HERITAGE_SUGGEST_SYSTEM } from "../../shared/heritage";
 import { orientedImage, withInferenceImage } from "../import/images";
 import { assetView, type ImageView } from "../../shared/imageRotation";
 import { LlamaPool, type LlamaMode } from "./llama";
@@ -1001,7 +1003,7 @@ export class Engine {
     zone: { x: number; y: number; w: number; h: number } | null,
     prompt: string,
     signal: AbortSignal,
-    regions = false,
+    mode?: "tags" | "heritage",
   ): Promise<string> {
     const asset = this.repo.asset(assetId) as { original_path: string; metadata_json: string; content_hash: string };
     if ((await hashFile(asset.original_path)) !== asset.content_hash) throw new Error("El original cambió.");
@@ -1025,7 +1027,7 @@ export class Engine {
           asset.original_path,
           (file) =>
             model.backend === "llama"
-              ? this.llama.describe(choice.model, file, prompt, signal, regions ? "regions" : "json")
+              ? this.llama.describe(choice.model, file, prompt, signal, mode === "tags" ? "regions" : mode ?? "json")
               : this.host.request(
                   {
                     task: "vision",
@@ -1034,7 +1036,7 @@ export class Engine {
                     threads: settings.profile === "light" ? 1 : 2,
                     image: file,
                     prompt,
-                    ...(regions ? { maxTokens: 1536 } : {}),
+                    ...(mode ? { maxTokens: 1536 } : {}),
                   },
                   signal,
                 ),
@@ -1054,9 +1056,9 @@ export class Engine {
         remoteEnabled: settings.remoteEnabled,
         minIntervalMs: settings.apiDelayMs,
         prompt,
-        system: aiColumnSystem(settings.language),
+        system: mode === "tags" ? VISUAL_TAG_SYSTEM : mode === "heritage" ? HERITAGE_SUGGEST_SYSTEM : aiColumnSystem(settings.language),
         images: [{ base64: buffer.toString("base64"), mediaType: "image/jpeg" }],
-        ...(regions ? { maxTokens: 3072 } : {}),
+        ...(mode === "tags" ? { visualTags: true } : mode === "heritage" ? { heritage: true } : {}),
       },
       signal,
     );

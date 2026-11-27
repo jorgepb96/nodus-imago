@@ -13,6 +13,7 @@ import {
   type Certainty,
 } from "../../shared/historicalDate";
 import { useT } from "../i18n";
+import { asLanguage } from "../../shared/language";
 import { CriteriaPopover } from "./CriteriaSelect";
 
 export function HistoricalDateCell({
@@ -35,7 +36,7 @@ export function HistoricalDateCell({
   useEffect(() => setDraft(decodeHistoricalDate(value)?.text ?? ""), [value]);
   // While typing, the period shown is the one the new text would give.
   const preview = draft !== (stored?.text ?? "") ? parseHistoricalDate(draft) : stored;
-  const label = periodLabel(preview, document.documentElement.lang === "en" ? "en" : "es");
+  const label = periodLabel(preview, asLanguage(document.documentElement.lang));
   // In the table, a text that only says the period («1950-1959») would repeat
   // it, cut short: the range alone is shown, and the text comes back to edit.
   const plain = (text: string) => text.replace(/[\s\u2010-\u2015-]+/g, "").toLowerCase();

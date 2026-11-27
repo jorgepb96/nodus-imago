@@ -47,6 +47,7 @@ import { useT } from "../i18n";
 import { Button, Modal } from "./ui";
 import { ImagePicker } from "./CompareView";
 import { SectionSideResize, useSectionSideWidth } from "./SectionSide";
+import { asLanguage, LANGUAGE_LOCALES } from "../../shared/language";
 
 const TASK_ICONS: Record<RestorationTask, React.ReactNode> = {
   restore: <Sparkles size={16} />,
@@ -108,7 +109,7 @@ export function RestorationsView({
   const t = useT();
   const api = window.imago;
   const [sideWidth, resizeSide] = useSectionSideWidth();
-  const language = settings.language === "en" ? "en" : "es";
+  const language = asLanguage(settings.language);
   const [source, setSource] = useState<CompareItem | null>(null);
   const [regions, setRegions] = useState<ImageAnnotation[]>([]);
   const [regionId, setRegionId] = useState<string>("");
@@ -312,7 +313,7 @@ export function RestorationsView({
                 <option value="">{t("El original")}</option>
                 {versions.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {`${t(TASK_LABELS[v.task])} · ${new Date(v.createdAt).toLocaleString(language === "en" ? "en-GB" : "es-ES", { dateStyle: "short", timeStyle: "short" })}`}
+                    {`${t(TASK_LABELS[v.task])} · ${new Date(v.createdAt).toLocaleString(LANGUAGE_LOCALES[language], { dateStyle: "short", timeStyle: "short" })}`}
                   </option>
                 ))}
               </select>
@@ -679,7 +680,7 @@ export function RestorationsView({
                       <span>
                         <strong>{t(TASK_LABELS[v.task])}</strong>
                         <small>
-                          {v.model} · {new Date(v.createdAt).toLocaleString(language === "en" ? "en-GB" : "es-ES", { dateStyle: "short", timeStyle: "short" })}
+                          {v.model} · {new Date(v.createdAt).toLocaleString(LANGUAGE_LOCALES[language], { dateStyle: "short", timeStyle: "short" })}
                         </small>
                         {(v.region || v.baseId) && <small>{[v.region ? t("Zona") : "", v.baseId ? t("sobre otra versión") : ""].filter(Boolean).join(" · ")}</small>}
                       </span>

@@ -44,10 +44,10 @@ import { useBrowse, ViewerStrip, type BrowseItem, type BrowseList } from "./View
 import type { Commands, ImageAnnotation, RecordRow } from "../../shared/imago";
 import { useT } from "../i18n";
 import { DetailSearchPanel, type DetailQuery } from "./DetailSearchPanel";
-import { Spinner } from "./ui";
+import { Button, Spinner } from "./ui";
 import { MIN_CROP, validCrop, type Region } from "../../shared/imageRotation";
 import { decodeMultiSelect, type DatabaseColumn } from "../../shared/databases";
-import { heritageScheme, isHeritageColumn, typology } from "../../shared/heritage";
+import { heritageDictionaryOptions, heritageScheme, isHeritageColumn, isHeritageDictionarySource, typology } from "../../shared/heritage";
 import { useHeritage } from "../heritageStore";
 import { HeritageIcon } from "./HeritageIcon";
 import { HeritageMarksPanel, type MarkDraft } from "./HeritageMarksPanel";
@@ -164,6 +164,7 @@ export function ImageViewer({
   onCompare?: (assetIds: string[]) => void;
 }) {
   const t = useT();
+  const viewerUsesCommand = /^Mac/i.test(navigator.platform);
   const dialog = useRef<HTMLDialogElement>(null);
   const stage = useRef<HTMLDivElement | null>(null);
   const [stageElement, setStageElement] = useState<HTMLDivElement | null>(null);
@@ -225,15 +226,23 @@ export function ImageViewer({
   /** Marking heritage elements: with a point or a rectangle. */
   const [marking, setMarking] = useState<"point" | "rect" | null>(null);
   const [markDraft, setMarkDraft] = useState<MarkDraft | null>(null);
-  /** The heritage side panel: the photo's elements, AI suggestions, or spreading one element. */
-  const [heritagePanel, setHeritagePanel] = useState<null | "suggest" | { optionId: string }>(null);
+  const [heritagePanel, setHeritagePanel] = useState<{ optionId: string; markId?: string } | null>(null);
   const [aiZones, setAiZones] = useState<{ x: number; y: number; w: number; h: number }[]>([]);
   const [drawingZone, setDrawingZone] = useState(false);
   const heritageColumns = (columns ?? []).filter((c) => isHeritageColumn(c));
   /** Select properties that can serve as the tags' dictionary. */
-  const dictionaryChoices = (columns ?? []).filter((c) => ["select", "multi_select", "status"].includes(c.type) && !c.config.visualTags && !isHeritageColumn(c));
-  const [heritageId, setHeritageId] = useState<string | null>(null);
-  const heritageColumn = heritageColumns.find((c) => c.id === heritageId) ?? heritageColumns[0] ?? null;
+  const dictionaryChoices = (columns ?? []).filter(isHeritageDictionarySource);
+  const [selectedHeritage, setSelectedHeritage] = useState<DatabaseColumn | null>(null);
+  const [heritageDictionaryBusy, setHeritageDictionaryBusy] = useState(false);
+  const heritageRequest = useRef(false);
+  const autoCreatedHeritage = useRef<string | null>(null);
+  const [heritageModel, setHeritageModel] = useState("");
+  const [allowNewHeritage, setAllowNewHeritage] = useState(false);
+  const heritageKey = `imago.viewerHeritage.${row.databaseId}`;
+  const currentHeritage = selectedHeritage?.databaseId === row.databaseId ? selectedHeritage : null;
+  const heritageId = currentHeritage?.id ?? localStorage.getItem(heritageKey);
+  const heritageColumn = heritageColumns.find((c) => c.id === heritageId) ?? currentHeritage ?? heritageColumns[0] ?? null;
+  const heritageDictionary = heritageColumn ? heritageDictionaryOptions(heritageColumn, columns ?? []) : [];
   const heritageElements = useHeritage(heritageColumn?.id);
   const inCell = heritageColumn ? decodeMultiSelect(row.cells[heritageColumn.id] ?? null) : [];
   const heritageOptions = new Set(heritageColumn?.options.map((o) => o.id) ?? []);
@@ -349,6 +358,33 @@ export function ImageViewer({
       setDrawingZone(false);
     }
   };
+  const chooseHeritageDictionary = useCallback(async (sourceId: string | null) => {
+    if (heritageRequest.current) return;
+    heritageRequest.current = true;
+    setHeritageDictionaryBusy(true);
+    setError(null);
+    try {
+      const column = await window.imago.call("heritageSelectDictionary", { databaseId: row.databaseId, sourceId });
+      localStorage.setItem(heritageKey, column.id);
+      setSelectedHeritage(column);
+      setMarkDraft(null);
+      setAiZones([]);
+      setDrawingZone(false);
+      setHeritagePanel(null);
+      window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+      onChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      heritageRequest.current = false;
+      setHeritageDictionaryBusy(false);
+    }
+  }, [row.databaseId, heritageKey, onChanged]);
+  useEffect(() => {
+    if (sideTab !== "heritage" || !columns || heritageColumn || autoCreatedHeritage.current === row.databaseId) return;
+    autoCreatedHeritage.current = row.databaseId;
+    void chooseHeritageDictionary(null);
+  }, [sideTab, columns, heritageColumn, row.databaseId, chooseHeritageDictionary]);
   const startCrop = () => {
     setAnnotating(false);
     setTagging(false);
@@ -461,6 +497,10 @@ export function ImageViewer({
     setDraft(null);
     setDrawing(null);
     setAnnotations([]);
+    setAiZones([]);
+    setDrawingZone(false);
+    setMarkDraft(null);
+    setHeritagePanel(null);
     setSelected(null);
     setTagDraft(null);
     setTagSelected(null);
@@ -818,9 +858,14 @@ export function ImageViewer({
   };
   /** Saves the drawn mark as showing this element (added to the record if missing). */
   const saveMark = async (optionId: string) => {
-    if (!markDraft || !image) return;
+    if (!markDraft || !image || !heritageColumn) return;
     setError(null);
     try {
+      const source = heritageDictionary.find((entry) => entry.id === optionId);
+      if (source && !heritageOptions.has(optionId)) {
+        optionId = await window.imago.call("heritageAddElement", { columnId: heritageColumn.id, label: source.label, link: null });
+        window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+      }
       const saved = await window.imago.call("annotationSave", {
         assetId: image.id,
         ...markDraft,
@@ -903,7 +948,11 @@ export function ImageViewer({
   };
 
   const toggleViewerTool = (tool: ViewerTool) => {
-    if (!image || cropping || (tool === "search" && !visualSearch) || (tool === "heritage" && !heritageColumn)) return;
+    if (!image || cropping || (tool === "search" && !visualSearch)) return;
+    if (tool === "heritage" && !heritageColumn) {
+      activateSideTab("heritage");
+      return;
+    }
     const active = { annotations: annotating, search: searchMode, heritage: !!marking, tags: tagging };
     const enabling = !active[tool];
 
@@ -925,8 +974,11 @@ export function ImageViewer({
     }
     if (tool === "heritage" && enabling) setHeritagePanel(null);
   };
-  const toolTooltip = (tool: ViewerTool, description: string) =>
-    `${t(description).replace(/\.$/, "")} (${VIEWER_TOOL_KEYS[tool]})`;
+  const toolShortcut = (tool: ViewerTool) => `${viewerUsesCommand ? "Meta" : "Control"}+${VIEWER_TOOL_KEYS[tool]}`;
+  const toolTooltip = (tool: ViewerTool, description: string) => {
+    const keys = `${viewerUsesCommand ? t("Comando") : "Ctrl"} + ${VIEWER_TOOL_KEYS[tool]}`;
+    return `${t(description).replace(/\.$/, "")} (${t("Atajo {teclas}").replace("{teclas}", keys)})`;
+  };
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -949,10 +1001,11 @@ export function ImageViewer({
         if (!event.repeat) void undoTag();
         return;
       }
-      if (!event.altKey && !event.ctrlKey && !event.metaKey) {
+      const viewerModifier = viewerUsesCommand ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      if (viewerModifier && !event.altKey && !event.shiftKey) {
         const shortcut = event.key.toUpperCase();
         const tool = VIEWER_SHORTCUTS.find((name) => VIEWER_TOOL_KEYS[name] === shortcut);
-        if (tool) {
+        if (tool && image && (tool !== "search" || visualSearch)) {
           event.preventDefault();
           if (!event.repeat) toggleViewerTool(tool);
           return;
@@ -1138,7 +1191,7 @@ export function ImageViewer({
               type="button"
               className={`viewer-annotate ${annotating ? "is-on" : ""}`}
               aria-pressed={annotating}
-              aria-keyshortcuts={VIEWER_TOOL_KEYS.annotations}
+              aria-keyshortcuts={toolShortcut("annotations")}
               data-testid="viewer-annotate"
               data-tour="viewer-annotate"
               disabled={!image}
@@ -1152,7 +1205,7 @@ export function ImageViewer({
               type="button"
               className={`viewer-annotate ${searchMode ? "is-on" : ""}`}
               aria-pressed={searchMode}
-              aria-keyshortcuts={VIEWER_TOOL_KEYS.search}
+              aria-keyshortcuts={toolShortcut("search")}
               data-testid="viewer-search"
               disabled={!image || !visualSearch}
               data-tooltip={toolTooltip(
@@ -1170,64 +1223,53 @@ export function ImageViewer({
               <ScanSearch size={16} />
               {t("Buscar")}
             </button>
-            {heritageColumn && (
-              <div className="viewer-group viewer-heritage">
-                <button
-                  type="button"
-                  className={`viewer-annotate ${marking ? "is-on" : ""}`}
-                  aria-pressed={!!marking}
-                  aria-keyshortcuts={VIEWER_TOOL_KEYS.heritage}
-                  data-testid="viewer-heritage"
-                  data-tour="viewer-heritage"
-                  disabled={!image}
-                  data-tooltip={toolTooltip("heritage", "Marca en la imagen un edificio, monumento u obra con un punto o un rectángulo.")}
-                  onClick={() => toggleViewerTool("heritage")}
-                >
-                  <Landmark size={16} />
-                  {t("Patrimonio")}
-                </button>
-                {marking && (
-                  <>
-                    <button
-                      type="button"
-                      aria-pressed={marking === "point"}
-                      className={marking === "point" ? "is-on" : ""}
-                      aria-label={t("Punto")}
-                      data-tooltip={t("Punto: haz clic sobre el elemento")}
-                      data-testid="viewer-heritage-point"
-                      onClick={() => setMarking("point")}
-                    >
-                      <Crosshair size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={marking === "rect"}
-                      className={marking === "rect" ? "is-on" : ""}
-                      aria-label={t("Rectángulo")}
-                      data-tooltip={t("Rectángulo: arrastra alrededor del elemento")}
-                      data-testid="viewer-heritage-rect"
-                      onClick={() => setMarking("rect")}
-                    >
-                      <Square size={15} />
-                    </button>
-                  </>
-                )}
-                {marking && heritageColumns.length > 1 && (
-                  <select value={heritageColumn.id} aria-label={t("Propiedad de patrimonio")} onChange={(e) => setHeritageId(e.target.value)}>
-                    {heritageColumns.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
+            <div className="viewer-group viewer-heritage">
+              <button
+                type="button"
+                className={`viewer-annotate ${marking ? "is-on" : ""}`}
+                aria-pressed={!!marking}
+                aria-keyshortcuts={toolShortcut("heritage")}
+                data-testid="viewer-heritage"
+                data-tour="viewer-heritage"
+                disabled={!image}
+                data-tooltip={toolTooltip("heritage", "Marca en la imagen un edificio, monumento u obra con un punto o un rectángulo.")}
+                onClick={() => toggleViewerTool("heritage")}
+              >
+                <Landmark size={16} />
+                {t("Patrimonio")}
+              </button>
+              {marking && (
+                <>
+                  <button
+                    type="button"
+                    aria-pressed={marking === "point"}
+                    className={marking === "point" ? "is-on" : ""}
+                    aria-label={t("Punto")}
+                    data-tooltip={t("Punto: haz clic sobre el elemento")}
+                    data-testid="viewer-heritage-point"
+                    onClick={() => setMarking("point")}
+                  >
+                    <Crosshair size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={marking === "rect"}
+                    className={marking === "rect" ? "is-on" : ""}
+                    aria-label={t("Rectángulo")}
+                    data-tooltip={t("Rectángulo: arrastra alrededor del elemento")}
+                    data-testid="viewer-heritage-rect"
+                    onClick={() => setMarking("rect")}
+                  >
+                    <Square size={15} />
+                  </button>
+                </>
+              )}
+            </div>
             <button
               type="button"
               className={`viewer-annotate ${tagging ? "is-on" : ""}`}
               aria-pressed={tagging}
-              aria-keyshortcuts={VIEWER_TOOL_KEYS.tags}
+              aria-keyshortcuts={toolShortcut("tags")}
               data-testid="viewer-tagging"
               data-tooltip={toolTooltip("tags", "Arrastra sobre la imagen para marcar un elemento y elige una o varias etiquetas.")}
               disabled={!image}
@@ -1527,7 +1569,7 @@ export function ImageViewer({
             {searchMode && !searching && !pending && (
               <p className="viewer-hint">{t("Arrastra sobre la imagen un recuadro alrededor de lo que quieres buscar.")}</p>
             )}
-            {sideTab === "heritage" && heritagePanel === "suggest" &&
+            {sideTab === "heritage" && !heritagePanel &&
               !searching &&
               aiZones.map((z, i) => (
                 <div key={i} className="viewer-ai-zone" style={box(z)}>
@@ -1646,14 +1688,18 @@ export function ImageViewer({
             data-testid="viewer-tag-panel"
             hidden={!!searching || sideTab !== "tags"}
           >
+            <p className="viewer-empty">
+              {t("Clasifica lo que aparece en la foto con etiquetas del diccionario. Una región puede tener varias etiquetas.")}
+            </p>
             {image && (
               <>
-                {dictionaryChoices.length > 0 && (
-                  <label className="viewer-tag-dictionary">
-                    {t("Diccionario")}
+                <section className="viewer-tag-section" aria-labelledby={`${sideId}-dictionary-title`}>
+                  <h3 id={`${sideId}-dictionary-title`}>{t("Diccionario")}</h3>
+                  <div className="viewer-tag-dictionary-row">
                     <select
+                      aria-labelledby={`${sideId}-dictionary-title`}
                       value={(switchingDictionary ? nextDictionaryId : dictionaryId) ?? ""}
-                      disabled={!tagsReady || !!tagDraft}
+                      disabled={!dictionaryChoices.length || !tagsReady || !!tagDraft}
                       data-testid="viewer-tag-dictionary"
                       onChange={(e) => void changeDictionary(e.target.value || null)}
                     >
@@ -1664,191 +1710,251 @@ export function ImageViewer({
                         </option>
                       ))}
                     </select>
-                  </label>
-                )}
+                    {tagsReady && (
+                      <button
+                        type="button"
+                        className="viewer-review viewer-tag-undo"
+                        data-testid="viewer-tag-undo"
+                        aria-label={t("Deshacer el último cambio de etiquetado (⌘Z / Ctrl+Z)")}
+                        aria-keyshortcuts="Meta+Z Control+Z"
+                        data-tooltip={t("Deshacer el último cambio de etiquetado (⌘Z / Ctrl+Z)")}
+                        disabled={!canUndoTag || undoingTag || !!tagDraft || !!tagPreview}
+                        onClick={() => void undoTag()}
+                      >
+                        <Undo2 size={16} aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                </section>
+                <section className="viewer-tag-section" aria-labelledby={`${sideId}-assigned-tags-title`}>
+                  <h3 id={`${sideId}-assigned-tags-title`}>{t("Etiquetas")}</h3>
+                  {tagsReady && tagRegions.length > 0 && tagColumn && (
+                    <div className="viewer-tag-counts" data-testid="viewer-tag-counts">
+                      {Object.entries(
+                        tagRegions.flatMap((r) => r.optionIds).reduce<Record<string, number>>((all, optionId) => {
+                          all[optionId] = (all[optionId] ?? 0) + 1;
+                          return all;
+                        }, {}),
+                      )
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([optionId, n]) => {
+                          const option = tagColumn.options.find((o) => o.id === optionId);
+                          return (
+                            <span key={optionId} className="chip" style={{ "--chip": option?.color ?? DEFAULT_OPTION_COLOR } as React.CSSProperties}>
+                              <OptionIcon value={optionIconValue(tagColumn.config, optionId)} size={11} />
+                              {option?.label}
+                              {n > 1 && <b className="visual-tags-count">×{n}</b>}
+                            </span>
+                          );
+                        })}
+                    </div>
+                  )}
+                  {tagsReady && tagRegions.length > 0 && (
+                    <ul className="viewer-list">
+                      {tagRegions.map((r) => {
+                        const tags = describeTags(r.optionIds.map((optionId) => ({ optionId })));
+                        return (
+                          <li key={r.id} className={tagSelected === r.id ? "is-selected" : ""}>
+                            <button
+                              type="button"
+                              className="viewer-item"
+                              onClick={() => {
+                                setTagSelected(r.id);
+                                focus(r);
+                              }}
+                            >
+                              <Crop annotation={{ ...r, color: tags[0]?.color ?? DEFAULT_OPTION_COLOR }} imageId={image.id} revision={image.revision} ratio={ratio} />
+                              <span className="viewer-item-text">
+                                {tags.map(({ key, label, color, icon }) => (
+                                  <span key={key} className="viewer-tag-name" style={{ "--chip": color } as React.CSSProperties}>
+                                    <OptionIcon value={icon} size={11} /> {label}
+                                  </span>
+                                ))}
+                                {r.source !== "manual" && <small>{t("Propuesta automática")}</small>}
+                              </span>
+                            </button>
+                            <span className="viewer-item-actions">
+                              <button type="button" aria-label={t("Editar etiquetas")} data-tooltip={t("Editar etiquetas")} disabled={!!tagDraft || !!tagPreview} onClick={() => editRegionTags(r)}>
+                                <Tag size={13} />
+                              </button>
+                              <button type="button" aria-label={t("Eliminar la región")} data-tooltip={t("Eliminar la región")} onClick={() => void removeTag(r.id)}>
+                                <Trash2 size={13} />
+                              </button>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {tagsReady && !tagRegions.length && (
+                    <>
+                      <p className="viewer-empty">
+                        {t(tagging
+                          ? "Arrastra sobre la imagen para marcar un elemento y elige una o varias etiquetas."
+                          : "Activa «Etiquetado» en la barra para marcar una región.")}
+                      </p>
+                      <button
+                        type="button"
+                        className={`viewer-review ${reviewed ? "is-on" : ""}`}
+                        aria-pressed={reviewed}
+                        data-testid="viewer-tag-review"
+                        onClick={() => void toggleReviewed()}
+                      >
+                        <CheckCheck size={14} />
+                        {t(reviewed ? "Revisada, sin elementos · deshacer" : "Marcar como revisada, sin elementos")}
+                      </button>
+                    </>
+                  )}
+                  {error && !tagDraft && <p className="error">{t(error)}</p>}
+                </section>
                 {tagsReady && (
-                  <button
-                    type="button"
-                    className="viewer-review"
-                    data-testid="viewer-tag-undo"
-                    aria-keyshortcuts="Meta+Z Control+Z"
-                    data-tooltip={t("Deshacer el último cambio de etiquetado (⌘Z / Ctrl+Z)")}
-                    disabled={!canUndoTag || undoingTag || !!tagDraft || !!tagPreview}
-                    onClick={() => void undoTag()}
-                  >
-                    <Undo2 size={14} /> {t("Deshacer")}
-                  </button>
+                  <section className="viewer-tag-section" aria-labelledby={`${sideId}-suggest-tags-title`}>
+                    <h3 id={`${sideId}-suggest-tags-title`}>{t("Sugerir con IA")}</h3>
+                    <VisualTagSuggestions
+                      key={JSON.stringify([image.id, image.revision, dictionaryId])}
+                      assetId={image.id}
+                      dictionary={tagDictionary}
+                      model={tagSuggestionModel}
+                      onModelChange={setTagSuggestionModel}
+                      onApplied={async () => {
+                        setPendingRevision((revision) => revision + 1);
+                        await loadTags();
+                        window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+                        onChanged();
+                      }}
+                      onPreview={focus}
+                      thumbnail={(region) => <Crop annotation={region} imageId={image.id} revision={image.revision} ratio={ratio} />}
+                      active={sideTab === "tags" && !searching}
+                      stage={stageElement}
+                      showBoxes={!!natural && showTags && sideTab === "tags" && !cropping && !searching && !tagDraft}
+                      position={box}
+                      point={point}
+                      reshape={(region, grip, dx, dy, from) => dragCrop(region, grip, dx, dy, from, 0.004)}
+                      undoVersion={suggestionsUndo}
+                    />
+                  </section>
                 )}
-                {tagsReady && (
-                  <VisualTagSuggestions
-                    key={JSON.stringify([image.id, image.revision, dictionaryId])}
+              </>
+            )}
+          </section>
+          <section
+            id={`${sideId}-panel-heritage`}
+            className="viewer-side-panel viewer-tagging"
+            role="tabpanel"
+            aria-labelledby={`${sideId}-tab-heritage`}
+            aria-busy={heritageDictionaryBusy}
+            tabIndex={0}
+            hidden={!!searching || sideTab !== "heritage"}
+          >
+            <p className="viewer-empty">
+              {t("Identifica edificios, monumentos u obras en la foto y vincúlalos a la ficha.")}
+            </p>
+            <section className="viewer-tag-section" aria-labelledby={`${sideId}-heritage-dictionary-title`}>
+              <h3 id={`${sideId}-heritage-dictionary-title`}>{t("Diccionario")}</h3>
+              <div className="viewer-tag-dictionary-row">
+                <select aria-labelledby={`${sideId}-heritage-dictionary-title`}
+                  value={heritageColumn?.id ?? ""} data-testid="viewer-heritage-dictionary"
+                  disabled={heritageDictionaryBusy || !!markDraft}
+                  onChange={(event) => void chooseHeritageDictionary(event.target.value || null)}>
+                  {!heritageColumn && <option value="">{t("Crear propiedad de patrimonio")}</option>}
+                  {heritageColumns.map((column) => (
+                    <option key={column.id} value={column.id}>{column.name} ({heritageDictionaryOptions(column, columns ?? []).length})</option>
+                  ))}
+                  {currentHeritage && !heritageColumns.some((column) => column.id === currentHeritage.id) && (
+                    <option value={currentHeritage.id}>{currentHeritage.name} ({heritageDictionary.length})</option>
+                  )}
+                  <optgroup label={t("Propiedades de selección")}>
+                    {dictionaryChoices.filter((source) => !heritageColumns.some((column) => column.config.heritageSource === source.id)).map((source) => (
+                      <option key={source.id} value={source.id}>{source.name} ({source.options.length})</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+              {!heritageColumn && !heritageDictionaryBusy && (
+                <Button type="button" onClick={() => void chooseHeritageDictionary(null)}>{t("Crear propiedad de patrimonio")}</Button>
+              )}
+            </section>
+            {heritageColumn && image && heritagePanel ? (
+              <HeritagePropagatePanel
+                column={heritageColumn}
+                optionId={heritagePanel.optionId}
+                assetId={image.id}
+                mark={heritageMarks.find((m) => m.id === heritagePanel.markId && m.kind !== "point") ??
+                  heritageMarks.find((m) => m.optionId === heritagePanel.optionId && m.kind !== "point") ?? null}
+                databaseId={row.databaseId}
+                onBack={() => setHeritagePanel(null)}
+                onAdded={() => onChanged()}
+              />
+            ) : heritageColumn && image && (
+              <>
+                <section className="viewer-tag-section" aria-labelledby={`${sideId}-heritage-elements-title`}>
+                  <h3 id={`${sideId}-heritage-elements-title`}>{t("Elementos de patrimonio")}</h3>
+                  <HeritageMarksPanel
+                    onPropagate={(optionId, markId) => {
+                      setDrawingZone(false);
+                      setHeritagePanel({ optionId, markId });
+                    }}
+                    column={heritageColumn}
+                    dictionary={heritageDictionary}
+                    inCell={inCell}
+                    marks={heritageMarks}
+                    draft={markDraft}
+                    selected={selected}
+                    onChoose={(id) => void saveMark(id)}
+                    onCreate={(label) => void createElement(label)}
+                    onCancel={() => setMarkDraft(null)}
+                    onFocus={(m) => {
+                      setSelected(m.id);
+                      focus(m.kind === "point" ? { x: m.x - 0.05, y: m.y - 0.05, w: 0.1, h: 0.1 } : m);
+                    }}
+                    onDelete={(m) => void removeMark(m)}
+                    thumbnail={(region) => <Crop annotation={region} imageId={image.id} revision={image.revision} ratio={ratio} />}
+                  />
+                </section>
+                <section className="viewer-tag-section" aria-labelledby={`${sideId}-heritage-suggest-title`}>
+                  <h3 id={`${sideId}-heritage-suggest-title`}>{t("Sugerir con IA")}</h3>
+                  <HeritageSuggestPanel
+                    key={JSON.stringify([image.id, image.revision, heritageColumn.id, heritageColumn.config.heritageSource])}
+                    column={heritageColumn}
                     assetId={image.id}
-                    dictionary={tagDictionary}
-                    model={tagSuggestionModel}
-                    onModelChange={setTagSuggestionModel}
-                    onApplied={async () => {
-                      setPendingRevision((revision) => revision + 1);
-                      await loadTags();
+                    dictionarySize={heritageDictionary.length}
+                    inCell={inCell}
+                    marks={heritageMarks}
+                    active={!searching && sideTab === "heritage"}
+                    model={heritageModel}
+                    onModelChange={setHeritageModel}
+                    allowNew={allowNewHeritage}
+                    onAllowNewChange={setAllowNewHeritage}
+                    zones={aiZones}
+                    drawing={drawingZone}
+                    onDraw={(on) => {
+                      if (on) {
+                        setAnnotating(false);
+                        setMarking(null);
+                        setMarkDraft(null);
+                        setSearchMode(false);
+                      }
+                      setDrawingZone(on);
+                    }}
+                    onRemoveZone={(i) => setAiZones((all) => all.filter((_, j) => j !== i))}
+                    onAdded={async () => {
+                      await load();
                       window.dispatchEvent(new CustomEvent("imago:reload-detail"));
                       onChanged();
                     }}
                     onPreview={focus}
                     thumbnail={(region) => <Crop annotation={region} imageId={image.id} revision={image.revision} ratio={ratio} />}
                     stage={stageElement}
-                    showBoxes={!!natural && showTags && sideTab === "tags" && !cropping && !searching && !tagDraft}
+                    showBoxes={!!natural && sideTab === "heritage" && !cropping && !searching && !markDraft && !marking && !drawingZone}
                     position={box}
                     point={point}
-                    reshape={(region, grip, dx, dy, from) => dragCrop(region, grip, dx, dy, from, 0.004)}
-                    undoVersion={suggestionsUndo}
+                    reshape={(region, grip, dx, dy, from) => dragCrop(region, grip, dx, dy, from, 0.005)}
                   />
-                )}
-                {tagsReady && tagRegions.length > 0 && tagColumn && (
-                  <div className="viewer-tag-counts" data-testid="viewer-tag-counts">
-                    {Object.entries(
-                      tagRegions.flatMap((r) => r.optionIds).reduce<Record<string, number>>((all, optionId) => {
-                        all[optionId] = (all[optionId] ?? 0) + 1;
-                        return all;
-                      }, {}),
-                    )
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([optionId, n]) => {
-                        const option = tagColumn.options.find((o) => o.id === optionId);
-                        return (
-                          <span key={optionId} className="chip" style={{ "--chip": option?.color ?? DEFAULT_OPTION_COLOR } as React.CSSProperties}>
-                            <OptionIcon value={optionIconValue(tagColumn.config, optionId)} size={11} />
-                            {option?.label}
-                            {n > 1 && <b className="visual-tags-count">×{n}</b>}
-                          </span>
-                        );
-                      })}
-                  </div>
-                )}
-                {tagsReady && !tagRegions.length && (
-                  <>
-                    <p className="viewer-empty">
-                      {t(tagging
-                        ? "Arrastra sobre la imagen para marcar un elemento y elige una o varias etiquetas."
-                        : "Activa «Etiquetado» en la barra para marcar una región.")}
-                    </p>
-                    <button
-                      type="button"
-                      className={`viewer-review ${reviewed ? "is-on" : ""}`}
-                      aria-pressed={reviewed}
-                      data-testid="viewer-tag-review"
-                      onClick={() => void toggleReviewed()}
-                    >
-                      <CheckCheck size={14} />
-                      {t(reviewed ? "Revisada, sin elementos · deshacer" : "Marcar como revisada, sin elementos")}
-                    </button>
-                  </>
-                )}
-                {error && !tagDraft && <p className="error">{t(error)}</p>}
-                <ul className="viewer-list">
-                  {tagsReady && tagRegions.map((r) => {
-                    const tags = describeTags(r.optionIds.map((optionId) => ({ optionId })));
-                    return (
-                      <li key={r.id} className={tagSelected === r.id ? "is-selected" : ""}>
-                        <button
-                          type="button"
-                          className="viewer-item"
-                          onClick={() => {
-                            setTagSelected(r.id);
-                            focus(r);
-                          }}
-                        >
-                          <Crop annotation={{ ...r, color: tags[0]?.color ?? DEFAULT_OPTION_COLOR }} imageId={image.id} revision={image.revision} ratio={ratio} />
-                          <span className="viewer-item-text">
-                            {tags.map(({ key, label, color, icon }) => (
-                              <span key={key} className="viewer-tag-name" style={{ "--chip": color } as React.CSSProperties}>
-                                <OptionIcon value={icon} size={11} /> {label}
-                              </span>
-                            ))}
-                            {r.source !== "manual" && <small>{t("Propuesta automática")}</small>}
-                          </span>
-                        </button>
-                        <span className="viewer-item-actions">
-                          <button type="button" aria-label={t("Editar etiquetas")} data-tooltip={t("Editar etiquetas")} disabled={!!tagDraft || !!tagPreview} onClick={() => editRegionTags(r)}>
-                            <Tag size={13} />
-                          </button>
-                          <button type="button" aria-label={t("Eliminar la región")} data-tooltip={t("Eliminar la región")} onClick={() => void removeTag(r.id)}>
-                            <Trash2 size={13} />
-                          </button>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                </section>
               </>
             )}
+            {error && <p className="error">{t(error)}</p>}
           </section>
-          <div
-            id={`${sideId}-panel-heritage`}
-            className="viewer-side-panel"
-            role="tabpanel"
-            aria-labelledby={`${sideId}-tab-heritage`}
-            tabIndex={0}
-            hidden={!!searching || sideTab !== "heritage"}
-          >
-            {heritageColumn && image && heritagePanel === "suggest" ? (
-              <HeritageSuggestPanel
-                column={heritageColumn}
-                rowId={row.id}
-                assetId={image.id}
-                inCell={inCell}
-                zones={aiZones}
-                drawing={drawingZone}
-                onDraw={(on) => {
-                  setAnnotating(false);
-                  setMarking(null);
-                  setSearchMode(false);
-                  setDrawingZone(on);
-                }}
-                onRemoveZone={(i) => setAiZones((all) => all.filter((_, j) => j !== i))}
-                onBack={() => {
-                  setHeritagePanel(null);
-                  setDrawingZone(false);
-                  setAiZones([]);
-                }}
-                onAdded={async () => {
-                  await load();
-                  onChanged();
-                }}
-              />
-            ) : heritageColumn && image && heritagePanel && typeof heritagePanel === "object" ? (
-              <HeritagePropagatePanel
-                column={heritageColumn}
-                optionId={heritagePanel.optionId}
-                assetId={image.id}
-                mark={heritageMarks.find((m) => m.optionId === heritagePanel.optionId && m.kind !== "point") ?? null}
-                databaseId={row.databaseId}
-                onBack={() => setHeritagePanel(null)}
-                onAdded={() => onChanged()}
-              />
-            ) : heritageColumn ? (
-              <HeritageMarksPanel
-                onSuggest={() => {
-                  setMarking(null);
-                  setMarkDraft(null);
-                  setHeritagePanel("suggest");
-                }}
-                onPropagate={(optionId) => setHeritagePanel({ optionId })}
-                column={heritageColumn}
-                inCell={inCell}
-                marks={heritageMarks}
-                draft={markDraft}
-                selected={selected}
-                onChoose={(id) => void saveMark(id)}
-                onCreate={(label) => void createElement(label)}
-                onCancel={() => setMarkDraft(null)}
-                onFocus={(m) => {
-                  setSelected(m.id);
-                  focus(m.kind === "point" ? { x: m.x - 0.05, y: m.y - 0.05, w: 0.1, h: 0.1 } : m);
-                }}
-                onDelete={(m) => void removeMark(m)}
-              />
-            ) : <p className="viewer-empty">{t("Esta base de datos no tiene una propiedad de patrimonio.")}</p>}
-            {error && markDraft && <p className="error">{t(error)}</p>}
-          </div>
           <div
             id={`${sideId}-panel-annotations`}
             className="viewer-side-panel"

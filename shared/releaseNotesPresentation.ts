@@ -1,16 +1,19 @@
 // How release notes are shown and published, as in Nodus Research
 // (shared/releaseNotesPresentation.ts): three sections in a fixed order, and
 // the GitHub description written from the English text in the window's order.
+import type { Language } from "./language";
 import type { ReleaseCategory, ReleaseHighlight, ReleaseNote, ReleaseNoteScope } from "./releaseNotes";
 
 export const RELEASE_CATEGORIES: readonly ReleaseCategory[] = ["new", "enhancement", "fix"];
-export const RELEASE_SECTION_LABELS: Record<"es" | "en", Record<ReleaseCategory, string>> = {
+export const RELEASE_SECTION_LABELS: Record<Language, Record<ReleaseCategory, string>> = {
   es: { new: "Funciones nuevas", enhancement: "Mejoras", fix: "Correcciones" },
   en: { new: "New features", enhancement: "Enhancements", fix: "Fixes" },
+  fr: { new: "Nouvelles fonctionnalités", enhancement: "Améliorations", fix: "Corrections" },
 };
-export const RELEASE_EMPTY_SECTION: Record<"es" | "en", string> = {
+export const RELEASE_EMPTY_SECTION: Record<Language, string> = {
   es: "Sin novedades en esta sección.",
   en: "No changes in this section.",
+  fr: "Aucune nouveauté dans cette section.",
 };
 
 /** Within a section: largest group of a scope first, ties by first appearance, original order inside. */

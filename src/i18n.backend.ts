@@ -27,6 +27,8 @@ export const backendEn: Record<string, string> = {
   "El modelo local no usa esta conexión.": "The local model does not use this connection.",
   "Las APIs remotas están desactivadas. No se ha enviado ningún dato.": "Remote APIs are disabled. No data has been sent.",
   "El proveedor no devolvió una respuesta de texto.": "The provider did not return a text response.",
+  "El modelo alcanzó el límite de salida al generar las etiquetas.": "The model reached its output limit while generating tags.",
+  "El modelo alcanzó el límite de salida al sugerir patrimonio.": "The model reached its output limit while suggesting heritage elements.",
   "Este modelo de embeddings solo admite texto; no se ha enviado ninguna imagen.": "This embedding model accepts text only; no image has been sent.",
   "Activa el uso opcional de APIs para consultar este catálogo.": "Enable optional APIs to query this catalogue.",
   "Las APIs no están disponibles en este proceso.": "APIs are not available in this process.",

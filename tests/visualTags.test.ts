@@ -64,6 +64,7 @@ test("visual suggestions group tags by box, ignore unknown labels and reject mal
     { x: 0.8, y: 0.3, w: 0.1, h: 0.15, optionIds: ["place"] },
   ]);
   assert.deepEqual(parseVisualTagSuggestions('{"regions":[]}', dictionary), []);
+  assert.throws(() => parseVisualTagSuggestions('{"regions":[{"box":[0,0,1000,1000],"tags":[98]}]}', dictionary), /formato/);
   assert.throws(() => parseVisualTagSuggestions("No encuentro coincidencias.", dictionary), /formato/);
 });
 

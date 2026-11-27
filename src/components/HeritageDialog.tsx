@@ -16,6 +16,7 @@ import {
   typeFromInstances,
   typeFromName,
   typology,
+  heritageLabel,
   type HeritageElement,
   type HeritageScheme,
 } from "../../shared/heritage";
@@ -461,7 +462,7 @@ function ElementRecord({
             <option value="">{t("Sin tipología")}</option>
             {scheme.groups.map((g) => (
               <option key={g.key} value={g.key}>
-                {language === "en" ? g.labelEn || g.label : g.label}
+                {heritageLabel(g, language)}
               </option>
             ))}
           </select>
@@ -476,7 +477,7 @@ function ElementRecord({
             <option value="">—</option>
             {group?.types.map((x) => (
               <option key={x.key} value={x.key}>
-                {language === "en" ? x.labelEn || x.label : x.label}
+                {heritageLabel(x, language)}
               </option>
             ))}
           </select>

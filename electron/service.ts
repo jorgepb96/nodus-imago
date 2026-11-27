@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { randomUUID as uuid } from "node:crypto";
+import { createHash, randomUUID as uuid } from "node:crypto";
 import sharp from "sharp";
 import { Repository } from "./db/repository";
 import {
@@ -50,8 +50,8 @@ import { HeritageFinder, type Towns } from "./heritage/finder";
 import { Gazetteer } from "./geo/gazetteer";
 import { decodeMultiSelect, encodeMultiSelect } from "../shared/databases";
 import { buildAiCellPrompt, buildAiRowContext } from "../shared/databaseAi";
-import { heritageSuggestPrompt, knownForRecord, matchSuggestion, parseSuggestions } from "../shared/heritage";
-import { parseVisualTagSuggestions, visualTagSuggestionPrompt, type VisualTagChoice } from "../shared/visualTags";
+import { foldText, heritageDictionaryOptions, heritageRegionPrompt, knownForRecord, matchSuggestion, parseHeritageRegions } from "../shared/heritage";
+import { parseVisualTagSuggestions, regionOverlap, visualTagSuggestionPrompt, type VisualTagChoice } from "../shared/visualTags";
 import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
@@ -82,6 +82,11 @@ const CONTENT_WRITES = new Set([
 import { AgreementResearch } from "./research/agreement";
 
 import { Automations } from "./automations";
+import { asLanguage, LANGUAGE_NAMES } from "../shared/language";
+
+type HeritageAsset = { row_id: string; content_hash: string; metadata_json: string };
+const heritageImageVersion = (asset: HeritageAsset, columnId: string, sourceId: unknown) => createHash("sha256")
+  .update(JSON.stringify([columnId, sourceId, asset.row_id, asset.content_hash, viewKey(assetView(asset.metadata_json))])).digest("hex");
 
 /** Settings that never affect a runtime or a running task. */
 const INTERFACE_SETTINGS = new Set([
@@ -222,8 +227,7 @@ export class Service {
         this.engine.enqueueAnalysis({
           rowIds: [rowId],
           columnIds,
-          language:
-            this.repo.getSettings().language === "en" ? "English" : "Español",
+          language: LANGUAGE_NAMES[asLanguage(this.repo.getSettings().language)],
           detailed: false,
         }),
       () => {
@@ -1066,26 +1070,88 @@ export class Service {
         this.changed();
         return created;
       }
+      case "heritageSelectDictionary": {
+        const column = this.heritage.selectDictionary(input.databaseId, input.sourceId);
+        this.changed();
+        return column;
+      }
       case "heritageSuggest": {
-        // A vision model names the elements it sees in the whole image and
-        // in each zone; each name is matched with the property's elements.
         const column = this.heritage.heritageColumn(input.columnId);
-        const asset = this.repo.asset(input.assetId) as { row_id: string };
+        const asset = this.repo.asset(input.assetId) as HeritageAsset;
         const row = this.repo.getRow(asset.row_id);
         if (row.databaseId !== column.databaseId) throw new Error("Elige una propiedad de patrimonio de esta base de datos.");
+        if (input.choice.provider === "local" && this.models.get(input.choice.model).task !== "vision")
+          throw new Error("Elige un modelo que admita imágenes.");
+        const columns = this.repo.detail(row.databaseId).columns;
         const language = this.repo.getSettings().language;
-        const context = buildAiRowContext(this.repo.detail(row.databaseId).columns, row, { excludeColumnId: column.id, language });
-        const known = knownForRecord(column.options, `${row.title} ${context}`);
+        const context = buildAiRowContext(columns, row, { excludeColumnId: column.id, language }).slice(0, 4000);
+        const options = heritageDictionaryOptions(column, columns);
+        const assigned = new Set(decodeMultiSelect(row.cells[column.id] ?? null));
+        const nearby = new Set(knownForRecord(options, `${row.title} ${context}`));
+        const priority = (option: typeof options[number]) => assigned.has(option.id) ? 0 : nearby.has(option.label) ? 1 : 2;
+        const dictionary = [...options].sort((a, b) => priority(a) - priority(b))
+          .slice(0, input.choice.provider === "local" ? 120 : undefined);
+        const allowNew = input.allowNew === true;
         const targets: ({ x: number; y: number; w: number; h: number } | null)[] = [...(input.whole ? [null] : []), ...input.zones];
         if (!targets.length) throw new Error("Elige la imagen completa o al menos una zona.");
-        const controller = new AbortController();
+        const imageVersion = heritageImageVersion(asset, column.id, column.config.heritageSource);
         const results = [];
         for (const zone of targets) {
-          const prompt = buildAiCellPrompt(heritageSuggestPrompt(known, !!zone), context, language);
-          const raw = await this.engine.askImage(input.choice, input.assetId, zone, prompt, controller.signal);
-          results.push({ zone, suggestions: parseSuggestions(raw).map((s) => ({ ...s, optionId: matchSuggestion(s, column.options) })) });
+          const prompt = buildAiCellPrompt(heritageRegionPrompt(dictionary, allowNew, !!zone, language), context, language);
+          const signal = AbortSignal.timeout(input.choice.provider === "local" ? 180_000 : 300_000);
+          const raw = await this.engine.askImage(input.choice, input.assetId, zone, prompt, signal, "heritage");
+          const suggestions = parseHeritageRegions(raw, dictionary, allowNew).map((item) => {
+            const box = item.box;
+            const shown = zone && box ? { x: zone.x + box.x * zone.w, y: zone.y + box.y * zone.h, w: box.w * zone.w, h: box.h * zone.h } : box ?? zone;
+            const optionId = item.optionId ?? matchSuggestion(item, options);
+            return {
+              ...item,
+              name: options.find((option) => option.id === optionId)?.label ?? item.name,
+              place: optionId ? null : item.place,
+              optionId,
+              box: shown && shown.w >= 0.005 && shown.h >= 0.005 ? shown : null,
+            };
+          });
+          results.push({ zone, suggestions });
         }
-        return { targets: results, known: known.length };
+        if (heritageImageVersion(this.repo.asset(input.assetId) as HeritageAsset, column.id,
+          this.heritage.heritageColumn(column.id).config.heritageSource) !== imageVersion)
+          throw new Error("La imagen o el diccionario han cambiado. Vuelve a generar las sugerencias.");
+        return { targets: results, known: dictionary.length, imageVersion };
+      }
+      case "heritageApplySuggestions": {
+        const db = this.repo.db;
+        const count = db.transaction(() => {
+          const column = this.heritage.heritageColumn(input.columnId);
+          const asset = this.repo.asset(input.assetId) as HeritageAsset;
+          const row = this.repo.getRow(asset.row_id);
+          if (row.databaseId !== column.databaseId || heritageImageVersion(asset, column.id, column.config.heritageSource) !== input.imageVersion)
+            throw new Error("La imagen o el diccionario han cambiado. Vuelve a generar las sugerencias.");
+          const dictionary = heritageDictionaryOptions(column, this.repo.detail(row.databaseId).columns);
+          const own = new Set(column.options.map((item) => item.id));
+          const saved = new Set(decodeMultiSelect(row.cells[column.id] ?? null));
+          const marks = this.annotations.list({ assetId: input.assetId });
+          let count = 0;
+          for (const item of input.items) {
+            const entry = item.optionId && dictionary.find((option) => option.id === item.optionId);
+            if (item.optionId ? !entry : !input.allowNew)
+              throw new Error("La imagen o el diccionario han cambiado. Vuelve a generar las sugerencias.");
+            const label = entry ? entry.label : item.place ? `${item.name} - ${item.place}` : item.name;
+            const existing = column.options.find((option) => foldText(option.label) === foldText(label))?.id;
+            const optionId = entry && own.has(entry.id) ? entry.id : existing ?? this.heritage.addElement(column.id, label, entry ? null : item.link);
+            const box = item.box;
+            if (box && !marks.some((mark) => mark.optionId === optionId && mark.kind !== "point" && regionOverlap(mark, box) >= 0.8)) {
+              marks.push(this.annotations.save({ assetId: input.assetId, ...box, note: "", tags: [], optionId }));
+              count++;
+            } else if (!saved.has(optionId)) count++;
+            saved.add(optionId);
+          }
+          const current = decodeMultiSelect(this.repo.getRow(row.id).cells[column.id] ?? null);
+          if (current.length !== saved.size) this.repo.setCell(row.id, column.id, encodeMultiSelect([...saved]));
+          return count;
+        })();
+        this.changed();
+        return count;
       }
       case "heritageRowsWith": {
         const column = this.heritage.heritageColumn(input.columnId);
@@ -1303,7 +1369,8 @@ export class Service {
         if (input.choice.provider === "local" && this.models.get(input.choice.model).task !== "vision")
           throw new Error("Elige un modelo que admita imágenes.");
         const raw = await this.engine.askImage(
-          input.choice, input.assetId, null, visualTagSuggestionPrompt(dictionary.options), AbortSignal.timeout(180_000), true,
+          input.choice, input.assetId, null, visualTagSuggestionPrompt(dictionary.options),
+          AbortSignal.timeout(input.choice.provider === "local" ? 180_000 : 300_000), "tags",
         );
         if (this.visualTags.suggestionTarget(input.assetId, input.dictionaryId).imageVersion !== imageVersion)
           throw new Error("La imagen o el diccionario han cambiado. Vuelve a generar las sugerencias.");

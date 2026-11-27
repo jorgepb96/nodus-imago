@@ -20,6 +20,7 @@ import {
   typeFromInstances,
   typeFromName,
   isHeritageColumn,
+  isHeritageDictionarySource,
   wouldCycle,
   type HeritageElement,
 } from "../../shared/heritage";
@@ -134,6 +135,30 @@ export class Heritage {
     return column;
   }
 
+  selectDictionary(databaseId: string, sourceId: string | null) {
+    return this.db.transaction(() => {
+      const { columns } = this.repo.detail(databaseId);
+      const own = columns.filter(isHeritageColumn);
+      const source = columns.find((column) => column.id === sourceId);
+      if (sourceId && (!source || (!isHeritageColumn(source) && !isHeritageDictionarySource(source))))
+        throw new Error("Elige una propiedad de patrimonio de esta base de datos.");
+      const current = source && isHeritageColumn(source) ? source :
+        source ? own.find((column) => column.config.heritageSource === source.id) : own[0];
+      if (current) return current;
+      const name = source ? `Patrimonio · ${source.name}` : "Patrimonio";
+      const provisional = source && own.find((column) => column.config.heritageViewerCreated &&
+        !column.config.heritageSource && column.name === "Patrimonio" && !column.options.length);
+      if (source && provisional) {
+        this.repo.updateColumn(provisional.id, name, { ...provisional.config, heritageSource: source.id });
+        return this.repo.column(provisional.id);
+      }
+      return this.repo.addColumn(
+        databaseId, name, "multi_select",
+        { heritage: true, ...(source ? { heritageSource: source.id } : { heritageViewerCreated: true }) },
+      );
+    })();
+  }
+
   private rows(columnId: string): Row[] {
     return this.db.prepare("SELECT * FROM heritage_elements WHERE column_id=?").all(columnId) as Row[];
   }
@@ -203,6 +228,13 @@ export class Heritage {
     const existing = column.options.find((o) => o.label.normalize("NFKC").trim().toLowerCase() === folded);
     if (existing) return existing.id;
     if (link && !/^https:\/\/www\.wikidata\.org\//.test(link.uri)) throw new Error("Enlace de autoridad no válido.");
+    if (link) {
+      const identified = this.db.prepare(
+        `SELECT o.id FROM db_select_options o JOIN option_authorities a ON a.option_id=o.id AND a.column_id=o.column_id
+         WHERE o.column_id=? AND json_extract(a.link_json,'$.id')=? ORDER BY o.position LIMIT 1`,
+      ).get(columnId, link.id) as { id: string } | undefined;
+      if (identified) return identified.id;
+    }
     const id = randomUUID();
     const at = new Date().toISOString();
     this.db.transaction(() => {

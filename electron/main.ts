@@ -57,6 +57,7 @@ import { Announcements } from "./announcements";
 import { autoUpdater } from "electron-updater";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { asLanguage, type Language } from "../shared/language";
 /** Wikimedia asks automated clients to name themselves and a way to find them. */
 const WIKIMEDIA_USER_AGENT = "NodusImago/0.1 (https://github.com/jorgepb96/nodus-imago)";
 
@@ -111,9 +112,9 @@ const pending = new Map<
   { resolve: (v: any) => void; reject: (e: Error) => void }
 >();
 /** Interface language, for the labels Wikidata answers with. */
-async function interfaceLanguage(): Promise<"es" | "en"> {
+async function interfaceLanguage(): Promise<Language> {
   const status = (await call("status")) as { settings: { language: string } };
-  return status.settings.language === "en" ? "en" : "es";
+  return asLanguage(status.settings.language);
 }
 function call(command: string, input?: unknown): Promise<any> {
   const id = ++nextId;
@@ -999,7 +1000,7 @@ app.whenReady().then(async () => {
           new AbortController().signal,
         );
       }
-      if (command === "visualTagModels" || command === "visualTagSuggest") {
+      if (command === "visualTagModels" || command === "visualTagSuggest" || command === "heritageSuggest") {
         const choice = (safe as { choice: ModelChoice } | undefined)?.choice;
         if (choice?.provider === "local") return call(command, safe);
         const settings = await call("_settings");

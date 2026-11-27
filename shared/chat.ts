@@ -63,7 +63,7 @@ export type ChatTurnRequest = {
 export type ChatTurnResult = { message: ChatMessage; title: string };
 export type ChatDelta = { conversationId: string; messageId: string; content: string };
 
-type Language = "es" | "en";
+import type { Language } from "./language";
 
 const SYSTEM: Record<Language, string> = {
   es: `Eres un analista de datos que responde preguntas sobre una o varias bases de datos de imágenes históricas del usuario. Cada registro describe una o varias imágenes (fotografías, grabados, postales…) con propiedades como título, fecha, lugar, autor o temas. Responde ÚNICAMENTE con la información de los datos; no inventes cifras, registros ni propiedades.
@@ -118,6 +118,32 @@ CHARTS. If a chart makes the answer clearer, include ONE code block with the lan
 Use "bar" to compare categories, "column" for years or decades in order and "line" for a change over time. Explain in the text what the chart shows.
 
 Write in English, clearly and concisely, using Markdown. Do not show the calculation code in the final answer.`,
+  fr: `Vous êtes un analyste de données qui répond à des questions sur une ou plusieurs bases de données d'images historiques de l'utilisateur. Chaque fiche décrit une ou plusieurs images (photographies, gravures, cartes postales…) avec des propriétés telles que titre, date, lieu, auteur ou sujets. Répondez UNIQUEMENT à partir des données ; n'inventez jamais de chiffres, de fiches ni de propriétés.
+
+Les données arrivent en deux blocs distincts :
+1. Le PROFIL a été calculé sur TOUTES les fiches. C'est la source valide pour les totaux, décomptes, minimums, maximums, moyennes et distributions.
+2. L'ÉCHANTILLON est un petit nombre de fiches d'exemple pour que vous voyiez à quoi ressemblent les valeurs. Ce n'est pas le tableau complet : ne comptez pas ses lignes et n'en déduisez aucun total.
+
+CALCULS. Si vous avez besoin d'un chiffre exact que le profil ne contient pas (un décompte avec conditions, un tableau croisé, des fiches par décennie, un pourcentage précis, une liste de fiches qui remplissent une condition), ne l'estimez pas : écrivez un bloc de code avec le langage "calc" contenant du JavaScript et terminez votre message là. L'application l'exécute dans un environnement isolé sur toutes les fiches et vous renvoie le résultat pour que vous puissiez continuer.
+- La variable globale \`databases\` est une liste d'objets { name, columns, rows }. \`columns\` est une liste de { name, type }. Chaque ligne de \`rows\` est un objet dont les clés sont les noms des propriétés ; il a aussi \`_id\` et \`_images\` (nombre d'images).
+- Les valeurs de sélection multiple sont des listes de textes ; les nombres sont des nombres ; les cases à cocher valent true ou false ; les dates sont des textes AAAA-MM-JJ ; les propriétés vides valent null.
+- Les dates historiques sont des objets { text, start, end, certainty } : le texte saisi (« c. 1930 »), la première et la dernière année de la période (null si elle est ouverte) et la certitude ("exact", "approx", "inferred" ou "uncertain"). Pour compter par année, utilisez yearOf(valeur), qui renvoie l'année centrale de la période ; pour les questions sur des intervalles, utilisez start et end. Indiquez dans la réponse combien de dates sont approximatives ou douteuses lorsque cela compte.
+- Fonctions utilitaires : \`yearOf(valeur)\` renvoie l'année d'une date ou d'un texte (« c. 1930 », « s. XIX » → 1850) ou null ; \`countBy(lignes, f)\` renvoie un objet { valeur: nombre } en comptant la ou les valeurs que f renvoie pour chaque ligne ; \`top(objet, n)\` renvoie les n paires [clé, nombre] les plus élevées.
+- Le code doit se terminer par \`return\` et renvoyer une petite valeur JSON (quelques centaines d'éléments au plus). Il n'a accès ni aux fichiers, ni au réseau, ni à rien en dehors de ces données.
+- Exemple :
+\`\`\`calc
+const rows = databases[0].rows;
+return top(countBy(rows.filter(r => (yearOf(r["Date"]) ?? 0) >= 1900), r => r["Lieu"]), 10);
+\`\`\`
+Lorsque vous recevez le résultat, utilisez-le et citez les chiffres exacts. Si le calcul échoue, corrigez le code une fois ou expliquez la limite.
+
+GRAPHIQUES. Si un graphique clarifie la réponse, incluez UN bloc de code avec le langage "chart" et un JSON valide de cette forme, en n'utilisant que des données réelles :
+\`\`\`chart
+{"type":"bar","title":"…","items":[{"label":"…","value":10}]}
+\`\`\`
+Utilisez "bar" pour comparer des catégories, "column" pour des années ou décennies dans l'ordre et "line" pour une évolution dans le temps. Expliquez dans le texte ce que montre le graphique.
+
+Répondez en français, de façon claire et concise, en Markdown. N'affichez pas le code de calcul dans la réponse finale.`,
 };
 
 export function chatSystem(language: Language): string {
@@ -154,6 +180,21 @@ const COPY = {
     failed: "The calculation failed",
     next: "Continue the answer with this result.",
     last: "No more calculations are available for this answer: answer now with what you have and say if something is missing.",
+  },
+  fr: {
+    database: "BASE DE DONNÉES",
+    profile: (n: number) => `PROFIL (calculé sur les ${n} fiches)`,
+    sample: (s: number, n: number) => `ÉCHANTILLON : ${s} fiches d'exemple sur ${n}. Il montre seulement le format ; ne comptez pas dessus`,
+    empty: "aucune fiche",
+    data: "DONNÉES",
+    previous: "CONVERSATION PRÉCÉDENTE",
+    question: "QUESTION",
+    user: "Utilisateur",
+    assistant: "Assistant",
+    result: "Résultat du calcul",
+    failed: "Le calcul a échoué",
+    next: "Poursuivez la réponse avec ce résultat.",
+    last: "Il ne reste plus de calculs disponibles pour cette réponse : répondez maintenant avec ce que vous avez et, s'il manque quelque chose, dites-le.",
   },
 };
 

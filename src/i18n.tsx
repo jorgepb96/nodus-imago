@@ -1,6 +1,8 @@
 import { createContext, useContext } from "react";
+import { asLanguage, LANGUAGE_LOCALES, type Language } from "../shared/language";
 import { backendEn, backendPatterns } from "./i18n.backend";
-export const LanguageContext = createContext<"es" | "en">("es");
+import { fr, frPatterns } from "./i18n.fr";
+export const LanguageContext = createContext<Language>("es");
 const en: Record<string, string> = {
   "Más información sobre": "More information about",
   "Abrir en Wikipedia": "Open in Wikipedia",
@@ -2677,6 +2679,18 @@ const en: Record<string, string> = {
   "Espacios urbanos y paisaje": "Urban spaces and landscape",
   "Obras de arte": "Works of art",
   "Buscar en Wikidata": "Search in Wikidata",
+  "Crear propiedad de patrimonio": "Create heritage property",
+  "Propiedades de selección": "Select properties",
+  "Elementos de patrimonio": "Heritage elements",
+  "Identifica edificios, monumentos u obras en la foto y vincúlalos a la ficha.": "Identify buildings, monuments or works of art in the photo and link them to the record.",
+  "Sugerir patrimonio": "Suggest heritage",
+  "Sugerir elementos fuera del diccionario": "Suggest elements outside the dictionary",
+  "Añade elementos al diccionario o permite sugerencias fuera de él.": "Add dictionary entries or allow suggestions outside it.",
+  "Al sugerir, se envían la imagen, el diccionario y el contexto de la ficha al proveedor del modelo.": "Suggestions send the image, dictionary, and record context to the model provider.",
+  "Entradas consultadas del diccionario": "Dictionary entries considered",
+  "Elementos añadidos: {n}": "Elements added: {n}",
+  "No hay propuestas nuevas para esta foto.": "There are no new suggestions for this photo.",
+  "Nuevo": "New",
   "Cambiar enlace": "Change link",
   "Filtros activos": "Active filters",
   "Sin filtros: toda la base de datos": "No filters: the whole database",
@@ -3161,6 +3175,9 @@ const en: Record<string, string> = {
   "Nueva": "New",
   "Arrastra el recuadro sugerido o sus bordes para ajustarlo.": "Drag the suggested box or its edges to adjust it.",
   "Deshacer el último cambio de etiquetado (⌘Z / Ctrl+Z)": "Undo the last tagging change (⌘Z / Ctrl+Z)",
+  "Comando": "Command",
+  "Atajo {teclas}": "Shortcut {teclas}",
+  "Clasifica lo que aparece en la foto con etiquetas del diccionario. Una región puede tener varias etiquetas.": "Classify what appears in the photo using dictionary tags. A region can have several tags.",
   "Esta acción ya no se puede deshacer porque el etiquetado ha cambiado.": "This action can no longer be undone because the tagging changed.",
   "Se ha guardado una región.": "One region was saved.",
   "Se han guardado {n} regiones.": "{n} regions were saved.",
@@ -3193,14 +3210,16 @@ const en: Record<string, string> = {
   "pendientes": "pending",
   "rechazadas": "rejected",
   "Tira": "Strip",
-  "Solo pendientes": "Pending only",
-  "1 pendiente en la tira": "1 pending in the strip",
-  "{n} pendientes en la tira": "{n} pending in the strip",
-  "Buscando fotos pendientes…": "Finding pending photos…",
-  "No se pudieron cargar las fotos pendientes.": "Pending photos could not be loaded.",
-  "No quedan fotos pendientes en esta lista.": "There are no pending photos left in this list.",
+  "Solo fotos sin revisar en Etiquetas": "Unreviewed photos in Tags only",
+  "Muestra las fotos que no tienen etiquetas validadas ni se han marcado como revisadas. Se aplica al diccionario activo.": "Shows photos with no validated tags that have not been marked as reviewed. This applies to the active dictionary.",
+  "1 foto sin revisar": "1 unreviewed photo",
+  "{n} fotos sin revisar": "{n} unreviewed photos",
+  "Buscando fotos sin revisar…": "Finding unreviewed photos…",
+  "No se pudieron cargar las fotos sin revisar.": "Unreviewed photos could not be loaded.",
+  "No quedan fotos sin revisar en esta lista.": "There are no unreviewed photos left in this list.",
   "Foto anterior": "Previous photo",
   "Foto siguiente": "Next photo",
+  "Usa las flechas del teclado": "Use the keyboard arrow keys",
   "Foto anterior (←)": "Previous photo (←)",
   "Foto siguiente (→)": "Next photo (→)",
   "Ocultar la tira de fotos": "Hide the photo strip",
@@ -3209,31 +3228,37 @@ const en: Record<string, string> = {
   "Resultados de la búsqueda": "Search results",
 };
 Object.assign(en, backendEn);
-const patterns = backendPatterns.map(([source, target]) => {
-  const names: string[] = [];
-  const regex = new RegExp(
-    "^" +
-      source
-        .split(/(\{\d+\})/)
-        .map((part) => {
-          const m = /^\{(\d+)\}$/.exec(part);
-          if (m) {
-            names.push(m[1]);
-            return "([\\s\\S]+?)";
-          }
-          return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        })
-        .join("") +
-      "$",
-  );
-  return { regex, names, target };
-});
-/** English for a Spanish source text: exact entry, then a message with variable parts. */
-export function translate(text: string, language: "es" | "en"): string {
-  if (language !== "en" || !text) return text;
-  const exact = en[text];
+/** A message with variable parts: «{0}» stands for any text. */
+const compile = (pairs: [string, string][]) =>
+  pairs.map(([source, target]) => {
+    const names: string[] = [];
+    const regex = new RegExp(
+      "^" +
+        source
+          .split(/(\{\d+\})/)
+          .map((part) => {
+            const m = /^\{(\d+)\}$/.exec(part);
+            if (m) {
+              names.push(m[1]);
+              return "([\\s\\S]+?)";
+            }
+            return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          })
+          .join("") +
+        "$",
+    );
+    return { regex, names, target };
+  });
+/** Every translation, keyed by the Spanish source (tests check they match). */
+export const dictionaries: Record<Exclude<Language, "es">, Record<string, string>> = { en, fr };
+const patterns: Record<Exclude<Language, "es">, ReturnType<typeof compile>> = {
+  en: compile(backendPatterns),
+  fr: compile(frPatterns),
+};
+function lookup(text: string, language: Exclude<Language, "es">): string | null {
+  const exact = dictionaries[language][text];
   if (exact) return exact;
-  for (const { regex, names, target } of patterns) {
+  for (const { regex, names, target } of patterns[language]) {
     const m = regex.exec(text);
     if (m)
       return names.reduce(
@@ -3241,11 +3266,19 @@ export function translate(text: string, language: "es" | "en"): string {
         target,
       );
   }
-  return text;
+  return null;
+}
+/**
+ * A Spanish source text in the interface language: exact entry, then a
+ * message with variable parts. A French text still missing falls back to
+ * English, which French readers follow more easily than Spanish.
+ */
+export function translate(text: string, language: Language): string {
+  if (language === "es" || !text) return text;
+  return lookup(text, language) ?? (language === "fr" ? lookup(text, "en") : null) ?? text;
 }
 /** The interface language, for numbers and dates (toLocaleString). */
-export const uiLocale = () =>
-  document.documentElement.lang === "en" ? "en-GB" : "es-ES";
+export const uiLocale = () => LANGUAGE_LOCALES[asLanguage(document.documentElement.lang)];
 /** A measured value: no thousands separator under 10,000 (years read as years). */
 export const formatNumber = (n: number, digits = 2) =>
   n.toLocaleString(uiLocale(), { maximumFractionDigits: digits, useGrouping: Math.abs(n) >= 10000 });

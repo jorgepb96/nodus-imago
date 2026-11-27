@@ -29,10 +29,10 @@ test("sections keep the order new features, enhancements, fixes; the largest sco
     version: "9.0.0",
     date: "2026-01-01",
     highlights: [
-      { scope: "general", category: "fix", es: "a", en: "Fix A" },
-      { scope: "visual", category: "new", es: "b", en: "New B" },
-      { scope: "places", category: "new", es: "c", en: "New C" },
-      { scope: "places", category: "new", es: "d", en: "New D" },
+      { scope: "general", category: "fix", es: "a", en: "Fix A", fr: "Correction A" },
+      { scope: "visual", category: "new", es: "b", en: "New B", fr: "Nouveau B" },
+      { scope: "places", category: "new", es: "c", en: "New C", fr: "Nouveau C" },
+      { scope: "places", category: "new", es: "d", en: "New D", fr: "Nouveau D" },
     ],
   };
   assert.deepEqual(

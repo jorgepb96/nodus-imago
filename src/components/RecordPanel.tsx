@@ -88,8 +88,7 @@ export function RecordPanel({
     [targets, setTargets] = useState<RecordRow[]>([]),
     // «Ficha» or «Variantes y apariciones»; it stays while moving between records.
     [tab, setTab] = useState<"record" | "variants">("record"),
-    [variantCount, setVariantCount] = useState<number | null>(null),
-    [taggedCount, setTaggedCount] = useState<{ assetId: string; count: number } | null>(null);
+    [variantCount, setVariantCount] = useState<number | null>(null);
   const taggedDescriptionId = useId();
   const dialog = useRef<HTMLDialogElement>(null),
     closeRef = useRef(onClose);
@@ -156,19 +155,7 @@ export function RecordPanel({
     };
   }, [imageId]);
   const annotatedRegions = imageId ? (row.annotations ?? []).filter((a) => a.assetId === imageId).length : 0;
-  const dictionaryId = detail.columns.find((column) => column.config.visualTags)?.config.visualTagsDictionary;
-  useEffect(() => {
-    setTaggedCount(null);
-    if (!imageId || viewer) return;
-    let cancelled = false;
-    void window.imago.call("visualTagsList", { assetId: imageId })
-      .then(({ regions }) => {
-        if (!cancelled) setTaggedCount({ assetId: imageId, count: regions.filter((region) => region.state === "validated").length });
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [imageId, image?.revision, dictionaryId, row.visualTags, viewer]);
-  const taggedRegions = taggedCount && taggedCount.assetId === imageId ? taggedCount.count : 0;
+  const taggedRegions = image?.validatedTagRegions ?? 0;
   /** A quarter turn kept with the image; its annotations turn with it. */
   const rotate = (id: string, direction: "left" | "right") =>
     void perform(async () => {

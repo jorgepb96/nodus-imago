@@ -35,6 +35,9 @@ export type ProviderModel = {
   vision?: boolean;
   /** Returns images: usable in AI restoration. */
   imageOutput?: boolean;
+  maxOutputTokens?: number;
+  structuredOutput?: "schema" | "json";
+  mediumReasoning?: boolean;
 };
 /** An image model of a provider with a saved key, for AI restoration. */
 export type ImageCatalogModel = { provider: ApiProvider; model: string; name?: string };

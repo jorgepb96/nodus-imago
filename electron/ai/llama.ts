@@ -3,6 +3,7 @@ import path from "node:path";
 import { Models } from "./models";
 import type { Repository } from "../db/repository";
 import { StringDecoder } from "node:string_decoder";
+import { HERITAGE_SUGGEST_SCHEMA } from "../../shared/heritage";
 
 /** A UTF-8 locale every platform has (macOS lacks C.UTF-8 in older releases). */
 const UTF8_LOCALE = process.platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8";
@@ -220,7 +221,7 @@ export class LlamaSession {
 }
 
 /** Structured modes constrain the output to the shape needed by the caller. */
-export type LlamaMode = "text" | "json" | "value" | "regions";
+export type LlamaMode = "text" | "json" | "value" | "regions" | "heritage";
 
 type Slot = {
   key: string;
@@ -328,11 +329,11 @@ export class LlamaPool {
       "--image-max-tokens",
       "280",
       "-n",
-      slot.mode === "regions" ? "2048" : "512",
+      slot.mode === "regions" || slot.mode === "heritage" ? "2048" : "512",
       "--temp",
       slot.mode === "regions" ? "0.2" : "0",
       "-c",
-      slot.mode === "regions" ? "8192" : "4096",
+      slot.mode === "regions" || slot.mode === "heritage" ? "8192" : "4096",
       "-t",
       threads,
       "--log-verbosity",
@@ -354,6 +355,8 @@ export class LlamaPool {
           required: ["value"],
         }),
       );
+    else if (slot.mode === "heritage")
+      args.push("--json-schema", JSON.stringify(HERITAGE_SUGGEST_SCHEMA));
     else if (slot.mode === "regions")
       args.push(
         "--json-schema",
