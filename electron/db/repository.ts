@@ -1093,22 +1093,17 @@ export class Repository {
     );
     if (new Set(labels).size !== labels.length)
       throw new Error("Hay opciones duplicadas.");
-    if (input.some((o) => o.id && !column.options.some((x) => x.id === o.id)))
+    const current = new Map(column.options.map((o) => [o.id, o]));
+    const retained = input.flatMap((o) => o.id ? [o.id] : []);
+    const retainedIds = new Set(retained);
+    if (retained.some((id) => !current.has(id)))
       throw new Error("Identificador de opción ajeno a la propiedad.");
-    if (
-      new Set(input.filter((o) => o.id).map((o) => o.id)).size !==
-      input.filter((o) => o.id).length
-    )
+    if (retainedIds.size !== retained.length)
       throw new Error("ID de opción duplicado.");
-    const removed = column.options.filter(
-      (o) => !input.some((n) => n.id === o.id),
-    );
+    const removed = column.options.filter((o) => !retainedIds.has(o.id));
     const gone = new Set(removed.map((o) => o.id));
-    // Order and colour alone change no value, formula or search text: the
-    // whole-database recompute and reindex below are only for names.
-    const relabelled =
-      gone.size > 0 ||
-      input.some((o) => !o.id || column.options.find((x) => x.id === o.id)?.label !== o.label.trim());
+    const labelsChanged = input.some((o) => !o.id || current.get(o.id)?.label !== o.label.trim());
+    const visualTags = column.type === "multi_select" && column.config.visualTags;
     const holding = (value: string) =>
       column.type === "multi_select"
         ? decodeMultiSelect(value).some((id) => gone.has(id))
@@ -1131,7 +1126,8 @@ export class Repository {
       );
     }
     this.db.transaction(() => {
-      for (const r of inUse) {
+      const affected = new Set(inUse.map((r) => r.row_id));
+      for (const r of visualTags ? [] : inUse) {
         const kept =
           column.type === "multi_select"
             ? decodeMultiSelect(r.value_text).filter((id) => !gone.has(id))
@@ -1146,25 +1142,27 @@ export class Repository {
       this.db
         .prepare("DELETE FROM db_select_options WHERE column_id=?")
         .run(columnId);
+      const insert = this.statement("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)");
       input.forEach((o, i) =>
-        this.db
-          .prepare("INSERT INTO db_select_options VALUES(?,?,?,?,?,?,?,?)")
-          .run(
-            o.id ?? uuid(),
-            column.databaseId,
-            columnId,
-            o.label.trim(),
-            o.color,
-            i,
-            now(),
-            now(),
-          ),
+        insert.run(
+          o.id ?? uuid(),
+          column.databaseId,
+          columnId,
+          o.label.trim(),
+          o.color,
+          i,
+          now(),
+          now(),
+        ),
       );
-      // Visual tags removed: their regions go, and every record is re-filled.
-      if (column.config.visualTags && gone.size) this.syncVisualTagsOf(column.databaseId);
-      if (!relabelled) return;
+      if (visualTags && gone.size) {
+        const reordered = column.options.filter((o) => retainedIds.has(o.id)).some((o, i) => o.id !== retained[i]);
+        this.removeVisualTagOptions(column, [...gone], affected, reordered);
+      }
+      if (!labelsChanged && !affected.size) return;
       this.recompute(column.databaseId);
-      this.rebuildText(column.databaseId);
+      if (labelsChanged) this.rebuildText(column.databaseId);
+      else this.indexRows([...affected]);
     })();
   }
   createRow(databaseId: string, index = true): RecordRow {
@@ -1410,7 +1408,8 @@ export class Repository {
       return;
     }
     const columns = this.detail(databaseId).columns;
-    if (!columns.some((c) => c.type === "formula")) return;
+    const formulas = columns.filter((c) => c.type === "formula");
+    if (!formulas.length) return;
     const ids = (
       this.db
         .prepare("SELECT id FROM db_rows WHERE database_id=? ORDER BY position")
@@ -1421,10 +1420,11 @@ export class Repository {
       rows.push(...this.hydrate(ids.slice(i, i + 200)));
     computeFormulas(rows, columns);
     for (const row of rows)
-      for (const c of columns.filter((c) => c.type === "formula"))
+      for (const c of formulas)
         this.rawCell(row.id, c.id, row.cells[c.id] ?? null, c.type);
     // Formula edits may change other rows (table-wide statistics).
-    for (const row of rows) this.indexRow(row.id);
+    for (const row of rows)
+      this.indexRow(row.id, columns, row);
   }
   hydrate(ids: string[]): RecordRow[] {
     if (!ids.length) return [];
@@ -1624,17 +1624,19 @@ export class Repository {
               .all(databaseId)
           : this.db.prepare("SELECT id FROM db_rows").all()
       ) as { id: string }[];
-      const columns = new Map<string, DatabaseColumn[]>();
-      for (let i = 0; i < rows.length; i += 200)
-        for (const row of this.hydrate(
-          rows.slice(i, i + 200).map((r) => r.id),
-        )) {
-          if (!columns.has(row.databaseId))
-            columns.set(row.databaseId, this.detail(row.databaseId).columns);
-          this.indexRow(row.id, columns.get(row.databaseId), row);
-        }
+      this.indexRows(rows.map((row) => row.id));
       return rows.length;
     })();
+  }
+  private indexRows(ids: string[]) {
+    const columns = new Map<string, DatabaseColumn[]>();
+    for (let i = 0; i < ids.length; i += 200) {
+      for (const row of this.hydrate(ids.slice(i, i + 200))) {
+        if (!columns.has(row.databaseId))
+          columns.set(row.databaseId, this.detail(row.databaseId).columns);
+        this.indexRow(row.id, columns.get(row.databaseId), row);
+      }
+    }
   }
   deleteRows(ids: string[]) {
     if (!ids.length) return;
@@ -2260,33 +2262,43 @@ export class Repository {
       .prepare("SELECT id FROM db_columns WHERE database_id=? AND type='multi_select' AND json_extract(config_json,'$.visualTags')=1")
       .get(row.database_id) as { id: string } | undefined;
     if (!column) return;
-    const ids = (
-      this.db
-        .prepare(
-          "SELECT t.option_id id,count(*) n FROM image_tags t JOIN image_assets a ON a.id=t.asset_id JOIN db_select_options o ON o.id=t.option_id AND o.column_id=? WHERE a.row_id=? AND t.state='validated' GROUP BY t.option_id ORDER BY n DESC,min(o.position)",
-        )
-        .all(column.id, rowId) as { id: string }[]
-    ).map((r) => r.id);
-    const value = ids.length ? encodeMultiSelect(ids) : null;
-    const current = (this.db.prepare("SELECT value_text v FROM db_cells WHERE row_id=? AND column_id=?").get(rowId, column.id) as { v: string | null } | undefined)?.v ?? null;
-    if (current !== value) this.rawCell(rowId, column.id, value, "multi_select");
+    this.syncVisualTagCell(rowId, column.id, row.database_id);
     this.touchRows([rowId]);
     this.recompute(row.database_id);
     this.indexRow(rowId);
   }
-  /** Re-fills «Etiquetas visuales» for every record of a database, dropping regions of removed tags. */
-  syncVisualTagsOf(databaseId: string) {
-    const column = this.db
-      .prepare("SELECT id FROM db_columns WHERE database_id=? AND type='multi_select' AND json_extract(config_json,'$.visualTags')=1")
-      .get(databaseId) as { id: string } | undefined;
-    this.db.transaction(() => {
-      this.db
-        .prepare(
-          `DELETE FROM image_tags WHERE asset_id IN (SELECT id FROM image_assets WHERE database_id=?) AND option_id NOT IN (SELECT id FROM db_select_options WHERE column_id=?)`,
-        )
-        .run(databaseId, column?.id ?? "");
-      for (const { id } of this.db.prepare("SELECT id FROM db_rows WHERE database_id=?").all(databaseId) as { id: string }[]) this.syncVisualTags(id);
-    })();
+  private syncVisualTagCell(rowId: string, columnId: string, databaseId: string) {
+    const ids = (
+      this.statement(
+        `SELECT t.option_id id FROM image_tags t JOIN image_assets a ON a.id=t.asset_id
+         JOIN db_select_options o ON o.id=t.option_id AND o.column_id=?
+         WHERE a.database_id=? AND a.row_id=? AND t.state='validated'
+         GROUP BY t.option_id ORDER BY count(*) DESC,min(o.position)`,
+      )
+        .all(columnId, databaseId, rowId) as { id: string }[]
+    ).map((r) => r.id);
+    const value = encodeMultiSelect(ids);
+    const current = this.statement("SELECT value_text v FROM db_cells WHERE row_id=? AND column_id=?")
+      .get(rowId, columnId) as { v: string | null } | undefined;
+    if ((current?.v ?? null) === value) return false;
+    this.rawCell(rowId, columnId, value, "multi_select");
+    return true;
+  }
+  private removeVisualTagOptions(column: DatabaseColumn, removed: string[], affected: Set<string>, reordered: boolean) {
+    const deleted = this.statement(
+      `DELETE FROM image_tags WHERE option_id IN (SELECT value FROM json_each(?))
+       AND EXISTS(SELECT 1 FROM image_assets a WHERE a.id=image_tags.asset_id AND a.database_id=?)
+       RETURNING (SELECT row_id FROM image_assets WHERE id=image_tags.asset_id) row_id`,
+    ).all(JSON.stringify(removed), column.databaseId) as { row_id: string }[];
+    for (const { row_id } of deleted) affected.add(row_id);
+    // Changing the relative order can also change the order of tags tied in frequency.
+    const rows = reordered
+      ? this.db.prepare("SELECT id FROM db_rows WHERE database_id=?").pluck().all(column.databaseId) as string[]
+      : affected;
+    for (const id of rows) {
+      if (this.syncVisualTagCell(id, column.id, column.databaseId)) affected.add(id);
+    }
+    this.touchRows([...affected]);
   }
   /** Keeps the exact instructions an AI value was written with; returns their hash. */
   rememberPrompt(text: string): string {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { GripVertical, Info, MoreHorizontal, Trash2 } from "lucide-react";
+import { GripVertical, Info, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import {
   decodeMultiSelect,
   encodeMultiSelect,
@@ -894,8 +894,8 @@ export function OptionPicker({
                 .finally(() => setDeleteBusy(false));
             }}
           >
-            <Trash2 size={14} />
-            {t("Eliminar")}
+            {deleteBusy ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <Trash2 size={14} />}
+            {t(deleteBusy ? "Eliminando…" : "Eliminar")}
           </Button>
         </footer>
       </Modal>

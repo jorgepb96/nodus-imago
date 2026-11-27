@@ -227,6 +227,36 @@ try {
   assert.equal(stats.visual.reviewedEmpty, 1);
   checks.push("«Etiquetas visuales» in the table (Toro ×2, Revisada, sin elementos) and counted by appearances");
 
+  // Keep the deletion pending long enough to check the confirmation's feedback.
+  await page.locator("tbody tr").getByRole("button", { name: "Abrir registro", exact: true }).first().click();
+  await page.getByTestId("record-image-open").click();
+  await viewer.locator(".viewer-image").waitFor();
+  await viewer.getByTestId("viewer-tagging").click();
+  await viewer.getByTestId("viewer-tag-region").filter({ hasText: "Toro" }).first().waitFor();
+  await drag(0.75, 0.1, 0.95, 0.4);
+  await picker.getByRole("button", { name: "Editar opción Toro" }).click();
+  await picker.getByRole("button", { name: "Eliminar", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "Eliminar opción" });
+  await app.evaluate(({ ipcMain }) => {
+    const handler = ipcMain._invokeHandlers.get("imago:call");
+    let release;
+    const hold = new Promise((resolve) => { release = resolve; });
+    ipcMain.removeHandler("imago:call");
+    ipcMain.handle("imago:call", async (event, command, input) => {
+      if (command === "saveOptions" && input?.dropFromCells) await hold;
+      return handler(event, command, input);
+    });
+    globalThis.releaseTagDeletion = release;
+  });
+  await confirm.getByRole("button", { name: "Eliminar", exact: true }).click();
+  const deleting = confirm.getByRole("button", { name: "Eliminando…", exact: true });
+  await deleting.locator(".spin").waitFor();
+  assert.ok(await deleting.isDisabled());
+  await app.evaluate(() => globalThis.releaseTagDeletion());
+  await confirm.waitFor({ state: "hidden" });
+  await viewer.getByTestId("viewer-tag-region").filter({ hasText: "Toro" }).first().waitFor({ state: "hidden" });
+  checks.push("Deleting a tag shows «Eliminando…» and a spinner while pending, then removes its regions from the viewer");
+
   assert.deepEqual(errors, []);
   await fs.writeFile("test-results/visual-tags-e2e.json", JSON.stringify({ status: "passed", checks, errors }, null, 2));
   console.log("Visual tags E2E passed:", checks.join("; "));
