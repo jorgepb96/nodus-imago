@@ -95,7 +95,9 @@ export function CriteriaPopover({
     observer.observe(node);
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
-    document.addEventListener("pointerdown", outside);
+    // Capture phase: a surface that stops its own pointer events (the image
+    // viewer's stage, a drag handle) must still close the popover.
+    document.addEventListener("pointerdown", outside, true);
     node.addEventListener("keydown", escape);
     if (closeOnFocusOutside) node.addEventListener("focusout", focusOutside);
     return () => {
@@ -103,7 +105,7 @@ export function CriteriaPopover({
       if (node.isConnected && node.matches(":popover-open")) node.hidePopover();
       window.removeEventListener("resize", position);
       window.removeEventListener("scroll", position, true);
-      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("pointerdown", outside, true);
       node.removeEventListener("keydown", escape);
       if (closeOnFocusOutside) node.removeEventListener("focusout", focusOutside);
     };

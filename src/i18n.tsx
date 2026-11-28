@@ -3474,6 +3474,8 @@ const en: Record<string, string> = {
   "Creatividad 0 es la reconstrucción más fiel que ofrece el modelo; valores altos inventan más textura. Cada versión se guarda aparte, marcada como modificada con IA, y conserva en su ficha la escala, la creatividad, el perfil de memoria y los tamaños de entrada y salida.": "Creativity 0 is the most faithful reconstruction the model offers; higher values invent more texture. Each version is saved separately, marked as modified with AI, and keeps the scale, creativity, memory profile and input and output sizes in its record.",
 
   // Image workshop
+  "Ver imagen": "View image",
+  "Abre la imagen en el visor, para ampliarla, anotarla o etiquetarla": "Opens the image in the viewer, to zoom in, annotate or tag it",
   "No se aprecian problemas evidentes en esta imagen: los tonos, la nitidez y la inclinación parecen correctos.": "No obvious problems found in this image: tones, sharpness and tilt look right.",
   "No se aprecia una trama regular en esta imagen: se ha aplicado un tamaño típico (4 px). Ajústalo en «Quitar trama de impresión» del historial.": "No regular screen found in this image: a typical size (4 px) has been applied. Adjust it in “Remove printing screen” in the history.",
   "Taller de imágenes": "Image workshop",

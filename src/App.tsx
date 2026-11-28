@@ -31,6 +31,7 @@ import {
   FolderInput,
   ImagePlus,
   ArrowUpRight,
+  Maximize2,
   Download,
   X,
   Bookmark,
@@ -913,7 +914,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
    * viewer's strip can move along it; `browse` keeps a list already chosen.
    */
   const recordOpenRequest = useRef(0);
-  const open = async (row: RecordRow, browse?: BrowseList) => {
+  /** The record was opened straight into its image viewer: closing the viewer closes it. */
+  const [viewerOnly, setViewerOnly] = useState(false);
+  const open = async (row: RecordRow, browse?: BrowseList, viewer = false) => {
     const request = ++recordOpenRequest.current;
     const at = page.rows.findIndex((r) => r.id === row.id);
     const knownDetail = browse
@@ -925,6 +928,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
     const nextRow = browse ? row : await api.call("getRow", { id: row.id });
     if (request !== recordOpenRequest.current) return;
     setRecordDetail(nextDetail);
+    if (!browse) setViewerOnly(viewer);
     setOpenRow(nextRow);
     setRecordBrowse(
       browse !== undefined
@@ -3813,6 +3817,16 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
                                 </Button>
                                 <Button
                                   icon
+                                  data-testid="row-view-image"
+                                  aria-label={t("Ver imagen")}
+                                  data-tooltip={t("Abre la imagen en el visor, para ampliarla, anotarla o etiquetarla")}
+                                  disabled={!row.images.some((i) => i.width > 0)}
+                                  onClick={() => void perform(() => open(row, undefined, true))}
+                                >
+                                  <Maximize2 size={14} />
+                                </Button>
+                                <Button
+                                  icon
                                   data-tour={rowIndex === 0 ? "row-open" : undefined}
                                   aria-label={t("Abrir registro")}
                                   onClick={() => void perform(() => open(row))}
@@ -4897,7 +4911,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
             ++recordOpenRequest.current;
             setOpenRow(null);
             setRecordStrip(null);
+            setViewerOnly(false);
           }}
+          viewerOnly={viewerOnly}
           onChanged={refresh}
           onOptionsChanged={() => void perform(() => reloadDetail(recordDetail.database.id))}
           onSimilar={similar}

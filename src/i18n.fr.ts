@@ -3669,6 +3669,8 @@ export const fr: Record<string, string> = {
   "Entrada reducida": "Entrée réduite",
   "Creatividad 0 es la reconstrucción más fiel que ofrece el modelo; valores altos inventan más textura. Cada versión se guarda aparte, marcada como modificada con IA, y conserva en su ficha la escala, la creatividad, el perfil de memoria y los tamaños de entrada y salida.": "La créativité 0 est la reconstruction la plus fidèle que propose le modèle ; des valeurs élevées inventent davantage de texture. Chaque version est enregistrée à part, marquée comme modifiée par IA, et conserve dans sa fiche l'échelle, la créativité, le profil de mémoire et les tailles d'entrée et de sortie.",
   // Atelier d'images
+  "Ver imagen": "Voir l'image",
+  "Abre la imagen en el visor, para ampliarla, anotarla o etiquetarla": "Ouvre l'image dans la visionneuse, pour l'agrandir, l'annoter ou l'étiqueter",
   "No se aprecian problemas evidentes en esta imagen: los tonos, la nitidez y la inclinación parecen correctos.": "Aucun problème évident dans cette image : les tons, la netteté et l'inclinaison semblent corrects.",
   "No se aprecia una trama regular en esta imagen: se ha aplicado un tamaño típico (4 px). Ajústalo en «Quitar trama de impresión» del historial.": "Aucune trame régulière dans cette image : une taille typique (4 px) a été appliquée. Ajustez-la dans « Supprimer la trame d'impression » de l'historique.",
   "Taller de imágenes": "Atelier d'images",

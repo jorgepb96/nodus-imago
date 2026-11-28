@@ -57,6 +57,7 @@ export function RecordPanel({
   onFullscreen,
   browse,
   onBrowse,
+  viewerOnly = false,
 }: {
   row: RecordRow;
   detail: DatabaseDetail;
@@ -86,6 +87,8 @@ export function RecordPanel({
   /** The list the record was opened from, for the viewer's strip. */
   browse?: BrowseList | null;
   onBrowse?: (item: BrowseItem) => void;
+  /** Opened straight into the image viewer (from a table row): closing the viewer closes the record. */
+  viewerOnly?: boolean;
 }) {
   const t = useT(),
     [imageIndex, setImageIndex] = useState(0),
@@ -147,6 +150,12 @@ export function RecordPanel({
       document.removeEventListener("pointerdown", outside, true);
       d.close();
     };
+  }, []);
+  // Opened straight into the viewer: only once the panel's own window is open,
+  // so the viewer opens over it and not under it.
+  useEffect(() => {
+    if (viewerOnly) setViewer("view");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const image = row.images[Math.min(imageIndex, row.images.length - 1)];
   // How many versions the image has, for the tab's label.
@@ -372,7 +381,7 @@ export function RecordPanel({
               columns={detail.columns}
               initialIndex={imageIndex}
               initialCrop={viewer === "crop"}
-              onClose={() => setViewer(false)}
+              onClose={() => (viewerOnly ? onClose() : setViewer(false))}
               onChanged={onChanged}
               onOpenRecord={onOpenRecord}
               onCompare={onCompare}
