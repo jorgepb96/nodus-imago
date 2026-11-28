@@ -45,7 +45,7 @@ import { optionIconValue } from "../../shared/databaseIcons";
 import { importedOptionColor } from "../../shared/databaseCsv";
 import type { VisualTagChoice, VisualTagRegion } from "../../shared/visualTags";
 import { useBrowse, ViewerStrip, type BrowseItem, type BrowseList } from "./ViewerStrip";
-import type { Commands, ImageAnnotation, RecordRow } from "../../shared/imago";
+import type { Commands, ImageAnnotation, ImageAsset, RecordRow } from "../../shared/imago";
 import type { WorkshopOp } from "../../shared/workshop";
 import { useT } from "../i18n";
 import { DetailSearchPanel, type DetailQuery } from "./DetailSearchPanel";
@@ -59,6 +59,7 @@ import { HeritageMarksPanel, type MarkDraft } from "./HeritageMarksPanel";
 import { HeritageSuggestPanel } from "./HeritageSuggestPanel";
 import { HeritagePropagatePanel } from "./HeritagePropagatePanel";
 import { VisualTagSuggestions } from "./VisualTagSuggestions";
+import { useVisionModels } from "./VisionModelPicker";
 
 type View = { scale: number; x: number; y: number };
 type Draft = { id?: string; x: number; y: number; w: number; h: number; note: string; tags: string[] };
@@ -266,6 +267,7 @@ export function ImageViewer({
   // The vision model of «Sugerir con IA», the same for tags and heritage and
   // kept for the next time: the last one the user chose.
   const [visionModel, setVisionModelState] = useState(() => localStorage.getItem("imago.visionModel") ?? "");
+  const tagCatalogue = useVisionModels(!!image && sideTab === "tags" && !searching, visionModel);
   const setVisionModel = (model: string) => {
     setVisionModelState(model);
     if (model) localStorage.setItem("imago.visionModel", model);
@@ -311,11 +313,14 @@ export function ImageViewer({
     openBrowseItem(next, direction);
     return true;
   };
-  const [tagViewAsset, setTagViewAsset] = useState<string>();
+  const [tagViewImage, setTagViewImage] = useState<ImageAsset>();
   const [nextDictionaryId, setNextDictionaryId] = useState<string | null>();
   const switchingDictionary = nextDictionaryId !== undefined;
   const tagScopeVersion = useRef(0);
-  const tagsReady = !!image && tagViewAsset === image.id && !switchingDictionary;
+  const tagsReady = !!image && tagViewImage?.id === image.id && !switchingDictionary;
+  const setTagContentInert = useCallback((element: HTMLElement | null) => {
+    if (element) element.inert = !tagsReady;
+  }, [tagsReady]);
   const [reviewed, setReviewed] = useState(false);
   const [canUndoTag, setCanUndoTag] = useState(false);
   const [canRedoTag, setCanRedoTag] = useState(false);
@@ -481,6 +486,8 @@ export function ImageViewer({
   // annotation, and that must not reset the view of the same image.
   const imageId = image?.id;
   const activeImage = useRef<string | undefined>(imageId);
+  const activeImageAsset = useRef<ImageAsset | undefined>(image);
+  useLayoutEffect(() => { activeImageAsset.current = image; }, [image]);
   useLayoutEffect(() => {
     activeImage.current = imageId;
     tagDrag.current = null;
@@ -504,7 +511,7 @@ export function ImageViewer({
     setReviewed(found.reviewed);
     setCanUndoTag(found.canUndo);
     setCanRedoTag(found.canRedo);
-    setTagViewAsset(assetId);
+    setTagViewImage(activeImageAsset.current);
     setTagDraft((draft) => draft?.id && !found.regions.some((r) => r.id === draft.id) ? null : draft);
   }, []);
   const loadTags = useCallback(() => loadTagsFor(imageId), [imageId, loadTagsFor]);
@@ -545,10 +552,6 @@ export function ImageViewer({
     setSelected(null);
     setTagDraft(null);
     setTagSelected(null);
-    setTagRegions([]);
-    setTagViewAsset(undefined);
-    setReviewed(false);
-    setCanUndoTag(false);
     setSuggestionsUndo(0);
     setCropping(null);
     setLoadFailed(false);
@@ -1131,12 +1134,12 @@ export function ImageViewer({
         if (event.key === "Enter" && natural) void applyCrop(cropping);
         return;
       }
-      if (sideTab === "tags" && !searching && !tagDraft && !tagPreview && undoShortcut && canUndoTag) {
+      if (sideTab === "tags" && tagsReady && !searching && !tagDraft && !tagPreview && undoShortcut && canUndoTag) {
         event.preventDefault();
         if (!event.repeat) void undoTag();
         return;
       }
-      if (sideTab === "tags" && !searching && !tagDraft && !tagPreview && redoShortcut && canRedoTag) {
+      if (sideTab === "tags" && tagsReady && !searching && !tagDraft && !tagPreview && redoShortcut && canRedoTag) {
         event.preventDefault();
         if (!event.repeat) void undoTag("redo");
         return;
@@ -1253,7 +1256,15 @@ export function ImageViewer({
   const notes = annotations.filter((a) => !a.optionId);
   const heritageMarks = annotations.filter((a) => a.optionId && heritageOptions.has(a.optionId));
   const shownMarks = heritageMarks.filter((m) => inCell.includes(m.optionId!));
-  const sideCounts = { annotations: notes.length, tags: tagsReady ? tagRegions.length : null, heritage: inCell.length };
+  // Keep the panel's last contents until the next image's tags arrive.
+  // During that handoff only the current image's metadata supplies its tab count.
+  const tagListImage = tagsReady ? image : tagColumn ? tagViewImage : undefined;
+  const tagListRatio = tagsReady ? ratio : tagListImage?.width && tagListImage.height ? tagListImage.width / tagListImage.height : 1;
+  const sideCounts = {
+    annotations: notes.length,
+    tags: image ? (tagsReady ? tagRegions.length : image.validatedTagRegions ?? 0) : null,
+    heritage: inCell.length,
+  };
   const showTagDraft = !searching && sideTab === "tags" && tagDraft;
   const canShowStrip = !!(browse && onBrowse);
   const layers = [
@@ -1911,7 +1922,7 @@ export function ImageViewer({
             className="viewer-side-panel viewer-tagging"
             role="tabpanel"
             aria-labelledby={`${sideId}-tab-tags`}
-            aria-busy={switchingDictionary}
+            aria-busy={!!image && !tagsReady}
             tabIndex={0}
             data-testid="viewer-tag-panel"
             hidden={!!searching || sideTab !== "tags"}
@@ -1927,7 +1938,7 @@ export function ImageViewer({
                     <select
                       aria-labelledby={`${sideId}-dictionary-title`}
                       value={(switchingDictionary ? nextDictionaryId : dictionaryId) ?? ""}
-                      disabled={!dictionaryChoices.length || !tagsReady || !!tagDraft}
+                      disabled={!dictionaryChoices.length || switchingDictionary || !!tagDraft}
                       data-testid="viewer-tag-dictionary"
                       onChange={(e) => void changeDictionary(e.target.value || null)}
                     >
@@ -1938,39 +1949,37 @@ export function ImageViewer({
                         </option>
                       ))}
                     </select>
-                    {tagsReady && (
-                      <button
-                        type="button"
-                        className="viewer-review viewer-tag-undo"
-                        data-testid="viewer-tag-undo"
-                        aria-label={t("Deshacer el último cambio de etiquetado (⌘Z / Ctrl+Z)")}
-                        aria-keyshortcuts="Meta+Z Control+Z"
-                        data-tooltip={t("Deshacer el último cambio de etiquetado (⌘Z / Ctrl+Z)")}
-                        disabled={!canUndoTag || undoingTag || !!tagDraft || !!tagPreview}
-                        onClick={() => void undoTag()}
-                      >
-                        <Undo2 size={16} aria-hidden="true" />
-                      </button>
-                    )}
-                    {tagsReady && (
-                      <button
-                        type="button"
-                        className="viewer-review viewer-tag-undo"
-                        data-testid="viewer-tag-redo"
-                        aria-label={t("Rehacer el último cambio de etiquetado deshecho (⇧⌘Z / Ctrl+Y)")}
-                        aria-keyshortcuts="Meta+Shift+Z Control+Y"
-                        data-tooltip={t("Rehacer el último cambio de etiquetado deshecho (⇧⌘Z / Ctrl+Y)")}
-                        disabled={!canRedoTag || undoingTag || !!tagDraft || !!tagPreview}
-                        onClick={() => void undoTag("redo")}
-                      >
-                        <Redo2 size={16} aria-hidden="true" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="viewer-review viewer-tag-undo"
+                      data-testid="viewer-tag-undo"
+                      aria-label={t("Deshacer el último cambio de etiquetado (⌘Z / Ctrl+Z)")}
+                      aria-keyshortcuts="Meta+Z Control+Z"
+                      data-tooltip={t("Deshacer el último cambio de etiquetado (⌘Z / Ctrl+Z)")}
+                      aria-disabled={!tagsReady || undefined}
+                      disabled={!canUndoTag || undoingTag || !!tagDraft || !!tagPreview}
+                      onClick={() => void undoTag()}
+                    >
+                      <Undo2 size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="viewer-review viewer-tag-undo"
+                      data-testid="viewer-tag-redo"
+                      aria-label={t("Rehacer el último cambio de etiquetado deshecho (⇧⌘Z / Ctrl+Y)")}
+                      aria-keyshortcuts="Meta+Shift+Z Control+Y"
+                      data-tooltip={t("Rehacer el último cambio de etiquetado deshecho (⇧⌘Z / Ctrl+Y)")}
+                      aria-disabled={!tagsReady || undefined}
+                      disabled={!canRedoTag || undoingTag || !!tagDraft || !!tagPreview}
+                      onClick={() => void undoTag("redo")}
+                    >
+                      <Redo2 size={16} aria-hidden="true" />
+                    </button>
                   </div>
                 </section>
-                <section className="viewer-tag-section" aria-labelledby={`${sideId}-assigned-tags-title`}>
+                <section className="viewer-tag-section" aria-labelledby={`${sideId}-assigned-tags-title`} ref={setTagContentInert}>
                   <h3 id={`${sideId}-assigned-tags-title`}>{t("Etiquetas")}</h3>
-                  {tagsReady && tagRegions.length > 0 && tagColumn && (
+                  {tagListImage && tagRegions.length > 0 && tagColumn && (
                     <div className="viewer-tag-counts" data-testid="viewer-tag-counts">
                       {Object.entries(
                         tagRegions.flatMap((r) => r.optionIds).reduce<Record<string, number>>((all, optionId) => {
@@ -1991,7 +2000,7 @@ export function ImageViewer({
                         })}
                     </div>
                   )}
-                  {tagsReady && tagRegions.length > 0 && (
+                  {tagListImage && tagRegions.length > 0 && (
                     <ul className="viewer-list">
                       {tagRegions.map((r) => {
                         const tags = describeTags(r.optionIds.map((optionId) => ({ optionId })));
@@ -2005,7 +2014,7 @@ export function ImageViewer({
                                 focus(r);
                               }}
                             >
-                              <Crop annotation={{ ...r, color: tags[0]?.color ?? DEFAULT_OPTION_COLOR }} imageId={image.id} revision={image.revision} ratio={ratio} />
+                              <Crop annotation={{ ...r, color: tags[0]?.color ?? DEFAULT_OPTION_COLOR }} imageId={tagListImage.id} revision={tagListImage.revision} ratio={tagListRatio} />
                               <span className="viewer-item-text">
                                 {tags.map(({ key, label, color, icon }) => (
                                   <span key={key} className="viewer-tag-name" style={{ "--chip": color } as React.CSSProperties}>
@@ -2028,7 +2037,7 @@ export function ImageViewer({
                       })}
                     </ul>
                   )}
-                  {tagsReady && !tagRegions.length && (
+                  {tagViewImage && !tagRegions.length && (
                     <>
                       <p className="viewer-empty">
                         {t(tagging
@@ -2049,35 +2058,33 @@ export function ImageViewer({
                   )}
                   {error && !tagDraft && <p className="error">{t(error)}</p>}
                 </section>
-                {tagsReady && (
-                  <section className="viewer-tag-section" aria-labelledby={`${sideId}-suggest-tags-title`}>
-                    <h3 id={`${sideId}-suggest-tags-title`}>{t("Sugerir con IA")}</h3>
-                    <VisualTagSuggestions
-                      key={JSON.stringify([image.id, image.revision, dictionaryId])}
-                      assetId={image.id}
-                      dictionary={tagDictionary}
-                      model={visionModel}
-                      onModelChange={setVisionModel}
-                      onApplied={async () => {
-                        setPendingRevision((revision) => revision + 1);
-                        await loadTags();
-                        window.dispatchEvent(new CustomEvent("imago:reload-detail"));
-                        onChanged();
-                      }}
-                      onPreview={focus}
-                      describe={(optionIds) => describeTags(optionIds.map((optionId) => ({ optionId })))}
-                      queueNext={browse || index < row.images.length - 1 ? queueTagAnalysis : undefined}
-                      thumbnail={(region, color) => <Crop annotation={{ ...region, color }} imageId={image.id} revision={image.revision} ratio={ratio} />}
-                      active={sideTab === "tags" && !searching}
-                      stage={stageElement}
-                      showBoxes={!!natural && showTags && sideTab === "tags" && !cropping && !searching && !tagDraft}
-                      position={box}
-                      point={point}
-                      reshape={(region, grip, dx, dy, from) => dragCrop(region, grip, dx, dy, from, 0.004)}
-                      undoVersion={suggestionsUndo}
-                    />
-                  </section>
-                )}
+                <section className="viewer-tag-section" aria-labelledby={`${sideId}-suggest-tags-title`} ref={setTagContentInert}>
+                  <h3 id={`${sideId}-suggest-tags-title`}>{t("Sugerir con IA")}</h3>
+                  <VisualTagSuggestions
+                    key={JSON.stringify([image.id, image.revision, dictionaryId])}
+                    assetId={image.id}
+                    dictionary={tagDictionary}
+                    catalogue={tagCatalogue}
+                    onModelChange={setVisionModel}
+                    onApplied={async () => {
+                      setPendingRevision((revision) => revision + 1);
+                      await loadTags();
+                      window.dispatchEvent(new CustomEvent("imago:reload-detail"));
+                      onChanged();
+                    }}
+                    onPreview={focus}
+                    describe={(optionIds) => describeTags(optionIds.map((optionId) => ({ optionId })))}
+                    queueNext={browse || index < row.images.length - 1 ? queueTagAnalysis : undefined}
+                    thumbnail={(region, color) => <Crop annotation={{ ...region, color }} imageId={image.id} revision={image.revision} ratio={ratio} />}
+                    active={tagsReady && sideTab === "tags" && !searching}
+                    stage={stageElement}
+                    showBoxes={tagsReady && !!natural && showTags && sideTab === "tags" && !cropping && !searching && !tagDraft}
+                    position={box}
+                    point={point}
+                    reshape={(region, grip, dx, dy, from) => dragCrop(region, grip, dx, dy, from, 0.004)}
+                    undoVersion={suggestionsUndo}
+                  />
+                </section>
               </>
             )}
           </section>

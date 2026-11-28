@@ -6,7 +6,7 @@ import type { Region } from "../../shared/imageRotation";
 import { mergeVisualTagReview, type VisualTagReviewItem, type VisualTagSuggestion } from "../../shared/visualTags";
 import { useT } from "../i18n";
 import { OptionIcon } from "./DatabaseIcon";
-import { useVisionModels, VisionModelPicker } from "./VisionModelPicker";
+import { VisionModelPicker, type useVisionModels } from "./VisionModelPicker";
 import { Button } from "./ui";
 import { VisionProposalBoxes, type ProposalGeometry } from "./VisionProposalBoxes";
 
@@ -16,12 +16,12 @@ type Review = {
   regions: VisualTagReviewItem[];
 };
 export function VisualTagSuggestions({
-  assetId, dictionary, model, onModelChange, onApplied, onPreview, thumbnail, describe,
+  assetId, dictionary, catalogue, onModelChange, onApplied, onPreview, thumbnail, describe,
   active, stage, showBoxes, position, point, reshape, undoVersion, queueNext,
 }: {
   assetId: string;
   dictionary: DatabaseColumn | null;
-  model: string;
+  catalogue: ReturnType<typeof useVisionModels>;
   onModelChange: (model: string) => void;
   onApplied: () => Promise<void>;
   onPreview: (region: VisualTagSuggestion) => void;
@@ -42,7 +42,6 @@ export function VisualTagSuggestions({
   const handledUndo = useRef(undoVersion);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState<number | null>(null);
-  const catalogue = useVisionModels(active, model);
   const [queueCount, setQueueCount] = useState(10);
   const [queued, setQueued] = useState<number | null>(null);
   // Suggestions kept for this image (a queued analysis, or an earlier run)

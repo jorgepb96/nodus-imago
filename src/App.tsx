@@ -2481,6 +2481,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
                 onWhatsNew={() => setWhatsNew("settings")}
                 onReplayTour={() => setTourOpen(true)}
                 initialTab={settingsTab}
+                onOpenAiTask={setArea}
                 onChanged={refresh}
                 perform={perform}
                 notify={notify}

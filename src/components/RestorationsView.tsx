@@ -776,7 +776,7 @@ export function RestorationsView({
                   })}
                 </ul>
               ) : (
-                <p className="hint">{t("No hay modelos de imagen. Configura la clave de OpenAI, Gemini u OpenRouter en Ajustes, o la de fal.ai o Replicate en Escalado IA, o añade un modelo.")}</p>
+                <p className="hint">{t("No hay modelos de imagen. Configura una clave en Ajustes › Proveedores o añade un modelo.")}</p>
               )}
               <div className="row">
                 <Button onClick={() => setAdding(true)}>

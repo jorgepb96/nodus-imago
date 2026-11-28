@@ -2,7 +2,7 @@
 // one: what it is, three steps to get started (account, credit, key), the
 // keys of the three services, and a short list of recommended models with
 // the rest one search away (favourites first, a price limit when wanted).
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { CircleCheck, Cloud, ExternalLink, KeyRound, Search, Star, Trash2 } from "lucide-react";
 import {
   PRICE_LIMITS,
@@ -26,12 +26,14 @@ export function ServiceKey({
   service,
   saved,
   onChanged,
-  compact = false,
+  disabled = false,
+  inSettings = false,
 }: {
   service: UpscaleService;
   saved: boolean;
   onChanged: (status: Record<UpscaleService, boolean>) => void;
-  compact?: boolean;
+  disabled?: boolean;
+  inSettings?: boolean;
 }) {
   const t = useT();
   const info = UPSCALE_SERVICES[service];
@@ -40,6 +42,7 @@ export function ServiceKey({
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [removing, setRemoving] = useState(false);
   const save = async () => {
+    if (disabled || !value.trim() || busy) return;
     setBusy(true);
     setNote(null);
     try {
@@ -59,19 +62,22 @@ export function ServiceKey({
     }
   };
   return (
-    <div className={`upscale-service-key ${compact ? "is-compact" : ""}`} data-testid={`upscale-key-${service}`}>
-      <div className="upscale-service-key-head">
-        <strong>{info.label}</strong>
-        {saved ? (
-          <span className="badge safe">
-            <CircleCheck size={12} /> {t("Clave guardada")}
-          </span>
-        ) : (
-          <span className="badge">{t("Sin clave")}</span>
-        )}
-      </div>
-      {!compact && <p className="hint">{t(info.about)}</p>}
-      <div className="upscale-service-key-row">
+    <div className="upscale-service-key" data-testid={`upscale-key-${service}`}>
+      {inSettings ? (
+        <p className="hint">{t(info.about)}</p>
+      ) : (
+        <div className="upscale-service-key-head">
+          <strong>{info.label}</strong>
+          {saved ? (
+            <span className="badge safe">
+              <CircleCheck size={12} /> {t("Clave guardada")}
+            </span>
+          ) : (
+            <span className="badge">{t("Sin clave")}</span>
+          )}
+        </div>
+      )}
+      <div className={inSettings ? "provider-input-row" : "upscale-service-key-row"}>
         <input
           type="password"
           autoComplete="off"
@@ -79,9 +85,13 @@ export function ServiceKey({
           placeholder={t(saved ? "Pegar una clave nueva para sustituirla" : "Pega aquí la clave")}
           aria-label={t("Clave de {s}").replace("{s}", info.label)}
           value={value}
+          disabled={disabled || busy}
           onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+          }}
         />
-        <Button primary disabled={!value.trim() || busy} onClick={() => void save()}>
+        <Button primary disabled={disabled || !value.trim() || busy} onClick={() => void save()}>
           <KeyRound size={13} />
           {t(busy ? "Comprobando…" : "Guardar")}
         </Button>
@@ -188,7 +198,7 @@ export function ServiceSetupModal({
             <div>
               <strong>{t("Crea una clave y pégala aquí")}</strong>
               <span>{t("En la página de claves del servicio, crea una nueva, cópiala y pégala abajo. Imago comprueba al momento que funciona.")}</span>
-              <ServiceKey key={service} service={service} saved={keys[service]} onChanged={onKeys} compact />
+              <ServiceKey key={service} service={service} saved={keys[service]} onChanged={onKeys} />
             </div>
           </li>
         </ol>
@@ -314,24 +324,5 @@ export function ApiModelPicker({
         )}
       </details>
     </div>
-  );
-}
-
-/** Settings › Providers: the keys of the online upscaling services. */
-export function UpscaleServicesSettings() {
-  const t = useT();
-  const [keys, setKeys] = useState<Record<UpscaleService, boolean> | null>(null);
-  useEffect(() => {
-    void window.imago.call("upscaleServicesStatus").then(setKeys).catch(() => {});
-  }, []);
-  if (!keys) return null;
-  return (
-    <section className="settings-section upscale-services-settings" data-testid="upscale-services-settings">
-      <h2>{t("Servicios para ampliar imágenes")}</h2>
-      <p className="muted">{t("Solo se usan en Escalado IA, cuando eliges «Con un servicio de internet». Cada imagen se paga en el propio servicio.")}</p>
-      {UPSCALE_SERVICE_IDS.map((s) => (
-        <ServiceKey key={s} service={s} saved={keys[s]} onChanged={setKeys} />
-      ))}
-    </section>
   );
 }
