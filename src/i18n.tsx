@@ -3537,7 +3537,7 @@ const en: Record<string, string> = {
   "Guardar versión": "Save version",
   "Cambios sin guardar: se guardarán como una versión nueva de esta imagen.": "Unsaved changes: they will be saved as a new version of this image.",
   "Sin cambios pendientes.": "No pending changes.",
-  "Elige una imagen de cualquier base de datos, o pulsa «Taller» en el visor o en la ficha de un registro.": "Choose an image from any database, or press “Workshop” in the viewer or on a record.",
+  "Elige una imagen de cualquier base de datos, o pulsa «Abrir en el Taller» en la ficha de un registro.": "Choose an image from any database or click “Open in Workshop” in a record.",
   "Antes / después": "Before / after",
   "El archivo original es idéntico al importado (SHA-256 comprobado).": "The original file is identical to the one imported (SHA-256 checked).",
   "No se ha podido comprobar el archivo original: puede haberse movido o modificado fuera de Imago.": "The original file could not be checked: it may have been moved or modified outside Imago.",

@@ -219,7 +219,11 @@ export function RestorationsView({
   useEffect(() => loadCatalog(), [loadCatalog]);
   // The services' restorers or colourisers, for the ones with a key.
   const loadServices = useCallback(
-    (refresh = false) =>
+    (refresh = false) => {
+      if (!settings.remoteEnabled) {
+        setServiceModels([]);
+        return;
+      }
       void api
         .call("upscaleServicesStatus")
         .then((status) =>
@@ -228,8 +232,9 @@ export function RestorationsView({
             : [],
         )
         .then(setServiceModels)
-        .catch(() => setServiceModels([])),
-    [api, colorMode],
+        .catch(() => setServiceModels([]));
+    },
+    [api, colorMode, settings.remoteEnabled],
   );
   useEffect(() => loadServices(), [loadServices]);
   const choose = useCallback(
@@ -303,6 +308,9 @@ export function RestorationsView({
   });
   const region: Region | null = regionId === "drawn" ? drawn : (regions.find((r) => r.id === regionId) ?? null);
   const base = versions.find((v) => v.id === baseId) ?? null;
+  const history = versions.filter((v) =>
+    colorMode ? v.task === "colorize" : v.task !== "colorize" && v.task !== "workshop" && v.task !== "upscale",
+  );
   const context = restorationContext({ note, fields: useRecord ? fields.filter((f) => !excluded.has(f.label)) : [] }, language, task);
   // The selected version's faithfulness, measured against what it started from.
   useEffect(() => {
@@ -908,11 +916,11 @@ export function RestorationsView({
             )}
             <div className="restoration-versions">
               <h2>
-                {t("Versiones de esta imagen")} <span>{versions.length}</span>
+                {t("Versiones de esta imagen")} <span>{history.length}</span>
               </h2>
-              {!versions.length && <p className="hint">{t(colorMode ? "Todavía no hay versiones coloreadas de esta imagen." : "Todavía no hay versiones restauradas de esta imagen.")}</p>}
+              {!history.length && <p className="hint">{t(colorMode ? "Todavía no hay versiones coloreadas de esta imagen." : "Todavía no hay versiones restauradas de esta imagen.")}</p>}
               <ul>
-                {versions.map((v) => (
+                {history.map((v) => (
                   <li key={v.id} className={current?.id === v.id ? "is-selected" : ""}>
                     <button type="button" onClick={() => setCurrent(v)} data-testid="restoration-version">
                       <img src={`imago://restoration/${v.id}`} alt="" />

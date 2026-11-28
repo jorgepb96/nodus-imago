@@ -682,8 +682,8 @@ export class Restorations {
   /** A region of an image, as PNG. */
   private async cut(png: Buffer, region: Region): Promise<Buffer> {
     const m = await sharp(png).metadata();
-    const left = Math.floor(region.x * m.width!),
-      top = Math.floor(region.y * m.height!);
+    const left = Math.min(m.width! - 1, Math.round(region.x * m.width!)),
+      top = Math.min(m.height! - 1, Math.round(region.y * m.height!));
     return sharp(png)
       .extract({ left, top, width: Math.max(1, Math.min(m.width! - left, Math.round(region.w * m.width!))), height: Math.max(1, Math.min(m.height! - top, Math.round(region.h * m.height!))) })
       .png()
@@ -724,9 +724,9 @@ export class Restorations {
     return target;
   }
 
-  /** Versions, newest first; `kind` keeps the restoration workshop's or the upscaler's own. */
-  list(input: { assetId?: string; kind?: "restoration" | "upscale" }): Restoration[] {
-    const where = [input.assetId ? "asset_id=?" : "", input.kind === "upscale" ? "task='upscale'" : input.kind === "restoration" ? "task<>'upscale'" : ""].filter(Boolean);
+  /** Versions, newest first, optionally limited to upscaling results. */
+  list(input: { assetId?: string; kind?: "upscale" }): Restoration[] {
+    const where = [input.assetId ? "asset_id=?" : "", input.kind === "upscale" ? "task='upscale'" : ""].filter(Boolean);
     const rows = this.repo.db
       .prepare(
         `SELECT id,asset_id assetId,row_id rowId,provider,model,task,prompt,region_json,params_json,file,width,height,created_at createdAt,base_id baseId FROM restorations ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created_at DESC LIMIT 500`,

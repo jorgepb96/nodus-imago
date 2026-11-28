@@ -34,7 +34,7 @@ export type Restoration = {
   title: string;
   provider: ApiProvider;
   model: string;
-  task: RestorationTask;
+  task: RestorationTask | "workshop";
   prompt: string;
   /** The region restored, in fractions of the image; null: the whole image. */
   region: { x: number; y: number; w: number; h: number } | null;

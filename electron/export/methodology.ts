@@ -278,12 +278,12 @@ export function collectMethodology(ctx: MethodologyContext, input: { databaseIds
   addModel(settings.embeddingModel, settings.embeddingModel === "api-embedding" ? "API" : undefined, "embedding", imagesIndexed);
   const restorations = rowIds.length
     ? all<{ provider: string; model: string; task: string; count: number }>(
-        `SELECT provider,model,task,count(*) count FROM restorations WHERE row_id IN ${inRows} GROUP BY provider,model,task ORDER BY count DESC`,
+        `SELECT provider,model,task,count(*) count FROM restorations WHERE task NOT IN ('upscale','workshop') AND row_id IN ${inRows} GROUP BY provider,model,task ORDER BY count DESC`,
         ...ids,
       )
     : [];
-  for (const r of restorations.filter((r) => r.task !== "upscale")) addModel(`${r.provider}/${r.model}`, "API", "restoration", r.count);
-  // AI upscaling runs locally: the model, its revision and every parameter of the runs.
+  for (const r of restorations) addModel(`${r.provider}/${r.model}`, "API", "restoration", r.count);
+  // Upscaling runs: model, revision and parameters, grouped separately from restoration.
   const upscaleRows = rowIds.length
     ? all<{ params_json: string | null; region_json: string | null }>(
         `SELECT params_json,region_json FROM restorations WHERE task='upscale' AND row_id IN ${inRows}`,
@@ -477,7 +477,7 @@ export function collectMethodology(ctx: MethodologyContext, input: { databaseIds
     },
     views,
     statistics,
-    restorations: restorations.filter((r) => r.task !== "upscale"),
+    restorations: restorations,
     upscales,
     settings: {
       profile: settings.profile,

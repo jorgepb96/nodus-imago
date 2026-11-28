@@ -29,7 +29,8 @@ const remember = (key: string, img: Raw) => {
 };
 
 async function source(src: RenderSource): Promise<Raw> {
-  const key = JSON.stringify(src);
+  const { mtimeMs, ctimeMs, size } = await fs.stat(src.path);
+  const key = JSON.stringify([src, mtimeMs, ctimeMs, size]);
   if (full?.key === key) return full.img;
   const pipeline = src.kind === "asset" ? await orientedImage(src.path, src.view) : sharp(src.path);
   const img = await decode(pipeline);
@@ -94,7 +95,7 @@ async function render(job: RenderJob): Promise<Raw> {
   return small;
 }
 
-parentPort!.on("message", async (message: { id: number; job: RenderJob }) => {
+async function renderMessage(message: { id: number; job: RenderJob }) {
   const started = Date.now();
   try {
     const { job } = message;
@@ -117,4 +118,10 @@ parentPort!.on("message", async (message: { id: number; job: RenderJob }) => {
   } catch (error) {
     parentPort!.postMessage({ id: message.id, ok: false, error: error instanceof Error ? error.message : String(error) });
   }
+}
+
+// Jobs share a source and a prefix cache. Finish each before the next replaces them.
+let queue = Promise.resolve();
+parentPort!.on("message", (message: { id: number; job: RenderJob }) => {
+  queue = queue.then(() => renderMessage(message));
 });

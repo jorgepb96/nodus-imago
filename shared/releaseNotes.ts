@@ -34,6 +34,54 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.10.0",
+    date: "2026-11-28",
+    highlights: [
+      {
+        scope: "visual",
+        category: "new",
+        es: "En el Taller de imágenes puedes ajustar tonos, quitar la trama de impresión, recortar y corregir la curvatura de una página. Empieza con una receta o ajusta cada herramienta. Compara el resultado y guarda una versión con su historial.",
+        en: "In the Image Workshop, adjust tones, remove print halftones, crop and straighten curved book pages. Start with a recipe or tune each tool. Compare the result and save a version with its edit history.",
+        fr: "Dans l’Atelier d’images, ajustez les tons, supprimez la trame d’impression, recadrez et redressez les pages courbées. Partez d’une recette ou réglez chaque outil. Comparez le résultat et enregistrez une version avec son historique.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "Amplía imágenes o zonas por dos o por cuatro, una a una o por lotes. Puedes descargar Kandinsky ImageSR 2.0 y ejecutarlo en tu equipo, o elegir un modelo de fal.ai, Replicate o Stability AI y consultar su precio estimado cuando esté disponible.",
+        en: "Upscale images or regions by two or four, individually or in batches. Download Kandinsky ImageSR 2.0 to run it on your computer, or choose a model from fal.ai, Replicate or Stability AI and see its estimated price when available.",
+        fr: "Agrandissez des images ou des zones par deux ou par quatre, à l’unité ou par lots. Téléchargez Kandinsky ImageSR 2.0 pour l’exécuter sur votre ordinateur ou choisissez un modèle de fal.ai, Replicate ou Stability AI et consultez son prix estimé lorsqu’il est disponible.",
+      },
+      {
+        scope: "ai",
+        category: "new",
+        es: "La Colorización IA tiene su propia sección. Tanto allí como en Restauración IA puedes elegir modelos especializados de fal.ai y Replicate. Los controles se adaptan a lo que admite cada modelo.",
+        en: "AI Colourising has its own section. Both it and AI Restoration offer specialised models from fal.ai and Replicate, with controls tailored to what each model supports.",
+        fr: "La colorisation par IA dispose de sa propre section. La colorisation et la restauration proposent des modèles spécialisés de fal.ai et de Replicate, avec des réglages adaptés à chaque modèle.",
+      },
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "Abre una imagen directamente desde su fila en la tabla. En el visor, usa Inspeccionar para probar ajustes temporales o abre la imagen en el Taller. El Taller y el etiquetado visual admiten atajos para deshacer y rehacer.",
+        en: "Open an image directly from its table row. In the viewer, use Inspect to try temporary adjustments or open the image in the Workshop. The Workshop and visual tagging support undo and redo shortcuts.",
+        fr: "Ouvrez une image directement depuis sa ligne dans le tableau. Dans la visionneuse, utilisez Inspecter pour essayer des réglages temporaires ou ouvrez l’image dans l’Atelier. L’Atelier et l’étiquetage visuel disposent de raccourcis pour annuler et rétablir.",
+      },
+      {
+        scope: "publish",
+        category: "enhancement",
+        es: "Las versiones se guardan aparte del original. Puedes exportarlas con metadatos XMP o con el historial en un archivo JSON. El informe metodológico recoge el modelo y los parámetros del escalado IA.",
+        en: "Versions are stored separately from the original. Export them with XMP metadata or a JSON edit history. The methodology report records the AI upscaling model and parameters.",
+        fr: "Les versions sont conservées à part de l’original. Exportez-les avec des métadonnées XMP ou un historique JSON. Le rapport méthodologique consigne le modèle et les paramètres de l’agrandissement par IA.",
+      },
+      {
+        scope: "ai",
+        category: "fix",
+        es: "El progreso del escalado y de la restauración sigue visible al volver a sus secciones. Si desactivas las API remotas en Ajustes, tampoco se envían imágenes a los modelos especializados.",
+        en: "Upscaling and restoration progress is still visible when you return to their sections. Turning off remote APIs in Settings also blocks uploads to specialised models.",
+        fr: "La progression de l’agrandissement et de la restauration reste visible lorsque vous revenez à ces sections. La désactivation des API à distance dans les réglages bloque aussi l’envoi d’images aux modèles spécialisés.",
+      },
+    ],
+  },
+  {
     version: "0.9.6",
     date: "2026-11-28",
     highlights: [

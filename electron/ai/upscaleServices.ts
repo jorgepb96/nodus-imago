@@ -2,6 +2,7 @@
 // main process, which holds the keys. Each service has its own way of
 // listing models, receiving the image and returning the result; this file
 // hides those differences behind catalog() and run().
+import { setTimeout as delay } from "node:timers/promises";
 import sharp from "sharp";
 import type { Secrets } from "../secrets/store";
 import {
@@ -49,11 +50,13 @@ class ServiceError extends Error {
   fatal = false;
 }
 const fail = (message: string, fatal = false) => Object.assign(new ServiceError(message), { fatal });
-const wait = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => (clearTimeout(timer), reject(new Error("Escalado cancelado."))), { once: true });
-  });
+const wait = (ms: number, signal?: AbortSignal) => delay(ms, undefined, { signal });
+
+function serviceUrl(value: string, origin: string): string {
+  const url = new URL(value);
+  if (url.origin !== origin || url.username || url.password) throw fail("El servicio devolvió una dirección no segura.");
+  return url.href;
+}
 
 export class UpscaleServices {
   private caches = new Map<ServiceTask, { at: number; signature: string; models: ApiUpscaleModel[] }>();
@@ -84,7 +87,7 @@ export class UpscaleServices {
       if (response.status !== 429 || attempt >= 6) break;
       const after = Number(response.headers.get("retry-after"));
       await response.text().catch(() => "");
-      await wait(Math.min(30_000, (Number.isFinite(after) && after > 0 ? after : 2 ** attempt * 2) * 1000), signal ?? new AbortController().signal);
+      await wait(Math.min(30_000, (Number.isFinite(after) && after > 0 ? after : 2 ** attempt * 2) * 1000), signal);
     }
     const text = await response.text();
     let body: any = null;
@@ -94,7 +97,6 @@ export class UpscaleServices {
       body = { raw: text.slice(0, 300) };
     }
     if (!response.ok) {
-      const detail = body?.detail ?? body?.error?.message ?? body?.errors?.join?.(" ") ?? body?.message ?? body?.raw ?? "";
       const message =
         response.status === 401 || response.status === 403
           ? "El servicio no acepta la clave. Comprueba que la has copiado entera y que sigue activa."
@@ -102,7 +104,7 @@ export class UpscaleServices {
             ? "No queda saldo en tu cuenta del servicio. Añade crédito en su web y vuelve a intentarlo."
             : response.status === 429
               ? "El servicio está recibiendo demasiadas peticiones; espera un momento y reanuda la tarea."
-              : `El servicio respondió con un error (${response.status}). ${String(detail).slice(0, 300)}`;
+              : `El servicio respondió con un error (${response.status}).`;
       throw fail(message, [401, 402, 403].includes(response.status));
     }
     return body;
@@ -349,7 +351,12 @@ export class UpscaleServices {
         signal,
       );
       if (init?.upload_url && init?.file_url) {
-        const put = await this.fetcher(init.upload_url, { method: "PUT", headers: { "Content-Type": "image/png" }, body: new Uint8Array(png), signal });
+        const upload = new URL(init.upload_url);
+        if (upload.protocol !== "https:" || upload.username || upload.password) throw fail("El servicio devolvió una dirección no segura.");
+        const put = await this.fetcher(upload, {
+          method: "PUT", headers: { "Content-Type": "image/png" }, body: new Uint8Array(png),
+          signal: AbortSignal.any([signal, AbortSignal.timeout(300_000)]), redirect: "error",
+        });
         if (put.ok) imageUrl = init.file_url;
       }
     } catch {
@@ -366,17 +373,24 @@ export class UpscaleServices {
       signal,
     );
     if (!job?.status_url || !job?.response_url) throw fail("El servicio no ha aceptado la tarea.");
-    const cancel = () => void this.fetcher(job.cancel_url, { method: "PUT", headers: auth }).catch(() => {});
+    const origin = "https://queue.fal.run";
+    const statusUrl = serviceUrl(job.status_url, origin);
+    const responseUrl = serviceUrl(job.response_url, origin);
+    const cancelUrl = job.cancel_url ? serviceUrl(job.cancel_url, origin) : null;
+    const cancel = () => {
+      if (cancelUrl) void this.fetcher(cancelUrl, { method: "PUT", headers: auth, redirect: "error", signal: AbortSignal.timeout(10_000) }).catch(() => {});
+    };
+    if (signal.aborted) cancel();
     signal.addEventListener("abort", cancel, { once: true });
     try {
       for (let n = 0; ; n++) {
-        const status = await this.json(job.status_url, { headers: auth }, signal);
-        if (status?.error) throw fail(`El modelo no ha podido procesar la imagen: ${String(status.error).slice(0, 300)}`);
+        const status = await this.json(statusUrl, { headers: auth, redirect: "error" }, signal);
+        if (status?.error) throw fail("El modelo no ha podido procesar la imagen.");
         if (status?.status === "COMPLETED") break;
         if (n > 900) throw fail("El servicio tarda demasiado; inténtalo más tarde.");
         await wait(n < 10 ? 1000 : 2000, signal);
       }
-      const out = await this.json(job.response_url, { headers: auth }, signal);
+      const out = await this.json(responseUrl, { headers: auth, redirect: "error" }, signal);
       const url = out?.image?.url ?? out?.images?.[0]?.url ?? out?.output?.url;
       if (!url) throw fail("El servicio no ha devuelto ninguna imagen.");
       return url;
@@ -416,16 +430,21 @@ export class UpscaleServices {
       signal,
       90_000,
     );
-    const cancel = () => prediction?.urls?.cancel && void this.fetcher(prediction.urls.cancel, { method: "POST", headers: auth }).catch(() => {});
+    const origin = "https://api.replicate.com";
+    const cancelUrl = prediction?.urls?.cancel ? serviceUrl(prediction.urls.cancel, origin) : null;
+    const cancel = () => {
+      if (cancelUrl) void this.fetcher(cancelUrl, { method: "POST", headers: auth, redirect: "error", signal: AbortSignal.timeout(10_000) }).catch(() => {});
+    };
+    if (signal.aborted) cancel();
     signal.addEventListener("abort", cancel, { once: true });
     try {
       let p = prediction;
       for (let n = 0; !["succeeded", "failed", "canceled"].includes(p?.status); n++) {
         if (n > 900) throw fail("El servicio tarda demasiado; inténtalo más tarde.");
         await wait(n < 10 ? 1000 : 2000, signal);
-        p = await this.json(p.urls.get, { headers: auth }, signal);
+        p = await this.json(serviceUrl(p.urls.get, origin), { headers: auth, redirect: "error" }, signal);
       }
-      if (p.status !== "succeeded") throw fail(`El modelo no ha podido procesar la imagen: ${String(p.error ?? p.status).slice(0, 300)}`);
+      if (p.status !== "succeeded") throw fail("El modelo no ha podido procesar la imagen.");
       const out = p.output;
       const url = typeof out === "string" ? out : Array.isArray(out) ? out[out.length - 1] : (out?.image ?? out?.url ?? out?.output);
       if (typeof url !== "string") throw fail("El servicio no ha devuelto ninguna imagen.");
@@ -458,13 +477,13 @@ export class UpscaleServices {
       return { image: Buffer.from(await r.arrayBuffer()).toString("base64"), mimeType: r.headers.get("content-type") ?? "image/png" };
     };
     if (!response.ok) {
-      const body = await response.json().catch(() => null);
+      await response.body?.cancel().catch(() => {});
       throw fail(
         response.status === 401
           ? "El servicio no acepta la clave. Comprueba que la has copiado entera."
           : response.status === 402
             ? "No queda saldo en tu cuenta de Stability AI. Añade créditos en su web."
-            : `Stability AI respondió con un error (${response.status}). ${(body?.errors ?? []).join(" ")}`,
+            : `Stability AI respondió con un error (${response.status}).`,
         [401, 402, 403].includes(response.status),
       );
     }

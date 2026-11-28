@@ -503,7 +503,7 @@ export class Upscaler {
         top = Math.max(0, Math.min(h - 1, Math.round(item.region.y * h)));
       image = sharp(
         await image
-          .extract({ left, top, width: Math.max(8, Math.min(w - left, Math.round(item.region.w * w))), height: Math.max(8, Math.min(h - top, Math.round(item.region.h * h))) })
+          .extract({ left, top, width: Math.min(w - left, Math.max(1, Math.round(item.region.w * w))), height: Math.min(h - top, Math.max(1, Math.round(item.region.h * h))) })
           .png()
           .toBuffer(),
       );

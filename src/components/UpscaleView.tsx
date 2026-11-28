@@ -241,14 +241,14 @@ export function UpscaleView({
   const anyKey = Object.values(keys).some(Boolean);
   const keySignature = JSON.stringify(keys);
   useEffect(() => {
-    if (engine !== "api" || !anyKey) return;
+    if (engine !== "api" || !settings.remoteEnabled || !anyKey) return;
     setCatalogLoading(true);
     void api
       .call("upscaleApiCatalog", {})
       .then(setCatalog)
       .catch(() => {})
       .finally(() => setCatalogLoading(false));
-  }, [api, engine, anyKey, keySignature]);
+  }, [api, engine, settings.remoteEnabled, anyKey, keySignature]);
   const favorites = prefs.favorites ?? [];
   const maxPrice = prefs.maxPrice ?? null;
   const usableModels = catalog.filter((m) => keys[m.service]);

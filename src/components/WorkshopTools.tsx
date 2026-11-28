@@ -6,7 +6,7 @@ import type { Point, WorkshopAnalysis, WorkshopOp } from "../../shared/workshop"
 import { useT } from "../i18n";
 import { Button } from "./ui";
 
-export function Slider({
+function Slider({
   label,
   value,
   min,
@@ -25,11 +25,10 @@ export function Slider({
   onChange: (v: number) => void;
   help?: string;
 }) {
-  const t = useT();
   return (
-    <label className="workshop-slider" data-tooltip={help ? t(help) : undefined}>
+    <label className="workshop-slider" data-tooltip={help}>
       <span>
-        {t(label)}
+        {label}
         <output>{`${Number.isInteger(step) ? Math.round(value) : value.toFixed(step < 0.1 ? 2 : 1)}${unit}`}</output>
       </span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} onDoubleClick={() => onChange(min < 0 ? 0 : value)} />
@@ -217,21 +216,21 @@ export function ToolControls({
     case "adjust":
       return (
         <div className="workshop-controls">
-          <Slider label="Exposición" value={op.exposure} min={-2} max={2} step={0.05} unit=" EV" onChange={(v) => set({ exposure: v })} help="Más o menos luz en toda la imagen, como abrir o cerrar el diafragma." />
-          <Slider label="Brillo" value={op.brightness} min={-100} max={100} onChange={(v) => set({ brightness: v })} />
-          <Slider label="Contraste" value={op.contrast} min={-100} max={100} onChange={(v) => set({ contrast: v })} />
-          <Slider label="Luces" value={op.highlights} min={-100} max={100} onChange={(v) => set({ highlights: v })} help="Oscurece (o aclara) solo las zonas claras: recupera cielos y fachadas quemadas." />
-          <Slider label="Sombras" value={op.shadows} min={-100} max={100} onChange={(v) => set({ shadows: v })} help="Aclara (u oscurece) solo las zonas oscuras: deja ver lo que hay en la sombra." />
-          <Slider label="Saturación" value={op.saturation} min={-100} max={100} onChange={(v) => set({ saturation: v })} />
+          <Slider label={t("Exposición")} value={op.exposure} min={-2} max={2} step={0.05} unit=" EV" onChange={(v) => set({ exposure: v })} help={t("Más o menos luz en toda la imagen, como abrir o cerrar el diafragma.")} />
+          <Slider label={t("Brillo")} value={op.brightness} min={-100} max={100} onChange={(v) => set({ brightness: v })} />
+          <Slider label={t("Contraste")} value={op.contrast} min={-100} max={100} onChange={(v) => set({ contrast: v })} />
+          <Slider label={t("Luces")} value={op.highlights} min={-100} max={100} onChange={(v) => set({ highlights: v })} help={t("Oscurece (o aclara) solo las zonas claras: recupera cielos y fachadas quemadas.")} />
+          <Slider label={t("Sombras")} value={op.shadows} min={-100} max={100} onChange={(v) => set({ shadows: v })} help={t("Aclara (u oscurece) solo las zonas oscuras: deja ver lo que hay en la sombra.")} />
+          <Slider label={t("Saturación")} value={op.saturation} min={-100} max={100} onChange={(v) => set({ saturation: v })} />
         </div>
       );
     case "levels":
       return (
         <div className="workshop-controls">
           <Histogram data={histogram} black={op.black} white={op.white} />
-          <Slider label="Negro" value={op.black} min={0} max={254} onChange={(v) => set({ black: Math.min(v, op.white - 1) })} />
-          <Slider label="Blanco" value={op.white} min={1} max={255} onChange={(v) => set({ white: Math.max(v, op.black + 1) })} />
-          <Slider label="Tonos medios" value={op.gamma} min={0.2} max={3} step={0.05} onChange={(v) => set({ gamma: v })} />
+          <Slider label={t("Negro")} value={op.black} min={0} max={254} onChange={(v) => set({ black: Math.min(v, op.white - 1) })} />
+          <Slider label={t("Blanco")} value={op.white} min={1} max={255} onChange={(v) => set({ white: Math.max(v, op.black + 1) })} />
+          <Slider label={t("Tonos medios")} value={op.gamma} min={0.2} max={3} step={0.05} onChange={(v) => set({ gamma: v })} />
           {histogram && (
             <Button
               onClick={() => {
@@ -255,22 +254,22 @@ export function ToolControls({
     case "sharpen":
       return (
         <div className="workshop-controls">
-          <Slider label="Cantidad" value={op.amount} min={0} max={100} onChange={(v) => set({ amount: v })} />
-          <Slider label="Radio" value={op.radius} min={0.3} max={5} step={0.1} unit=" px" onChange={(v) => set({ radius: v })} />
+          <Slider label={t("Cantidad")} value={op.amount} min={0} max={100} onChange={(v) => set({ amount: v })} />
+          <Slider label={t("Radio")} value={op.radius} min={0.3} max={5} step={0.1} unit=" px" onChange={(v) => set({ radius: v })} />
         </div>
       );
     case "denoise":
     case "clahe":
       return (
         <div className="workshop-controls">
-          <Slider label="Intensidad" value={op.strength} min={0} max={100} onChange={(v) => set({ strength: v })} />
+          <Slider label={t("Intensidad")} value={op.strength} min={0} max={100} onChange={(v) => set({ strength: v })} />
           {op.tool === "denoise" && op.strength > 66 && <p className="hint upscale-warn">{t("Con esta intensidad se pierde detalle fino: compara con el original.")}</p>}
         </div>
       );
     case "edges":
       return (
         <div className="workshop-controls">
-          <Slider label="Intensidad" value={op.strength} min={0} max={100} onChange={(v) => set({ strength: v })} />
+          <Slider label={t("Intensidad")} value={op.strength} min={0} max={100} onChange={(v) => set({ strength: v })} />
         </div>
       );
     case "descreen":
@@ -289,8 +288,8 @@ export function ToolControls({
               </small>
             )}
           </div>
-          <Slider label="Tamaño de la trama" value={op.period} min={2} max={14} step={0.1} unit=" px" onChange={(v) => set({ period: v })} help="La distancia entre los puntos de la trama, en píxeles de la imagen original." />
-          <Slider label="Intensidad" value={op.strength} min={0} max={100} onChange={(v) => set({ strength: v })} />
+          <Slider label={t("Tamaño de la trama")} value={op.period} min={2} max={14} step={0.1} unit=" px" onChange={(v) => set({ period: v })} help={t("La distancia entre los puntos de la trama, en píxeles de la imagen original.")} />
+          <Slider label={t("Intensidad")} value={op.strength} min={0} max={100} onChange={(v) => set({ strength: v })} />
           <p className="hint">{t("En imágenes grandes, la primera vista previa tarda unos segundos: se procesa a tamaño completo para no confundir la trama con la reducción.")}</p>
         </div>
       );
@@ -309,7 +308,7 @@ export function ToolControls({
               {t("Voltear")}
             </Button>
           </div>
-          <Slider label="Enderezar" value={op.angle} min={-15} max={15} step={0.1} unit="°" onChange={(v) => set({ angle: v })} help="Corrige una foto torcida; se recortan los bordes vacíos." />
+          <Slider label={t("Enderezar")} value={op.angle} min={-15} max={15} step={0.1} unit="°" onChange={(v) => set({ angle: v })} help={t("Corrige una foto torcida; se recortan los bordes vacíos.")} />
         </div>
       );
     case "crop":

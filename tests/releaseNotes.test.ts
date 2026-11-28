@@ -14,13 +14,13 @@ test("the window offers every version up to the installed one, newest first", ()
   assert.deepEqual(releaseNotesUpTo("0.2.1-beta.1", notes).map((n) => n.version), ["0.2.1", "0.2.0", "0.1.0"]);
 });
 
-test("the installed version has its notes, in Spanish and English, newest first", () => {
+test("the installed version has its notes, in every interface language, newest first", () => {
   assert.equal(RELEASE_NOTES[0].version, version, "add the notes of the new version to shared/releaseNotes.ts");
   for (let i = 1; i < RELEASE_NOTES.length; i++) assert.equal(compareVersions(RELEASE_NOTES[i - 1].version, RELEASE_NOTES[i].version), 1);
   for (const note of RELEASE_NOTES) {
     assert.match(note.date, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(note.highlights.length, `${note.version} has no highlights`);
-    for (const h of note.highlights) assert.ok(h.es.trim() && h.en.trim(), `${note.version}: ${h.en}`);
+    for (const h of note.highlights) assert.ok(h.es.trim() && h.en.trim() && h.fr.trim(), `${note.version}: ${h.en}`);
   }
 });
 

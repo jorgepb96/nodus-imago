@@ -701,8 +701,13 @@ app.whenReady().then(async () => {
         secrets.clear((safe as any).service);
         return upscaleServices.keyStatus();
       }
-      if (command === "checkUpscaleKey") return upscaleServices.check((safe as any).service);
-      if (command === "upscaleApiCatalog") return upscaleServices.catalog(!!(safe as any)?.refresh, (safe as any)?.task ?? "upscale");
+      if (command === "checkUpscaleKey" || command === "upscaleApiCatalog") {
+        const settings = await call("_settings");
+        if (command === "upscaleApiCatalog")
+          return settings.remoteEnabled ? upscaleServices.catalog(!!(safe as any)?.refresh, (safe as any)?.task ?? "upscale") : [];
+        if (!settings.remoteEnabled) throw new Error("Las APIs remotas están desactivadas en Ajustes.");
+        return upscaleServices.check((safe as any).service);
+      }
       if (command === "reloadInterface") { setTimeout(() => window?.webContents.reload(), 100); return; }
       // Deterministic banner coverage in the unpackaged E2E profile, as in
       // Nodus; a packaged build never reads this variable.
@@ -842,6 +847,8 @@ app.whenReady().then(async () => {
         restorationAbort?.abort();
         const abort = (restorationAbort = new AbortController());
         try {
+          if ((data.provider === "fal" || data.provider === "replicate") && !settings.remoteEnabled)
+            throw new Error("Las APIs remotas están desactivadas en Ajustes.");
           const source = await call("_restorationInput", { assetId: data.assetId, region: data.region, baseId: data.baseId });
           // The instructions, then what is known about the photograph.
           const prompt = restorationRequest(data.prompt, data.context ?? "");

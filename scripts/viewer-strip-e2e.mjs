@@ -182,6 +182,57 @@ try {
   assert.equal(await stripToggle.getAttribute("aria-pressed"), "true");
   checks.push("Capas hides and shows the strip, the arrow still works without it, and the choice is kept");
 
+  await viewer.locator(".viewer-close").click();
+  await viewer.waitFor({ state: "detached" });
+  await page.getByTestId("record-panel").getByRole("button", { name: "Cerrar", exact: true }).last().click();
+
+  const firstRow = page.locator("tbody tr").filter({ has: page.getByRole("checkbox", { name: `seleccionar ${title(1)}`, exact: true }) });
+  await firstRow.getByTestId("row-view-image").click();
+  await poll(async () => (await current(viewer)) === title(1), "open viewer from table row");
+  await viewer.locator(".viewer-close").click();
+  await page.getByTestId("record-panel").waitFor({ state: "detached" });
+  await firstRow.getByTestId("row-view-image").click();
+  await viewer.locator(".viewer-image").waitFor();
+  checks.push("The table opens the image directly, and closing the viewer returns to the table");
+
+  // The viewer hands the selected asset to the workshop. Render and save a
+  // derived version of the generated scene, then use it as an AI input.
+  await viewer.getByTestId("viewer-inspect").click();
+  await viewer.getByTestId("viewer-open-workshop").click();
+  const workshop = page.getByTestId("workshop-view");
+  await workshop.getByRole("button", { name: "Inspección visual", exact: true }).click();
+  await workshop.getByTestId("workshop-tool-invert").click();
+  await workshop.getByTestId("workshop-apply").click();
+  const asset = (await call("getRow", { id: rows.find((r) => r.title === title(1)).id })).images[0];
+  const before = await call("workshopIntegrity", { assetId: asset.id });
+  assert.equal(before.ok, true);
+  await workshop.getByTestId("workshop-save").click();
+  await workshop.getByTestId("workshop-version-item").first().waitFor();
+  const [version] = await call("workshopVersions", { assetId: asset.id });
+  assert.deepEqual(version.own, [{ tool: "invert" }]);
+  assert.equal(version.ai, false);
+  assert.match(version.sha256, /^[a-f\d]{64}$/);
+  assert.notEqual(version.sha256, before.sha256);
+  assert.deepEqual(await call("workshopIntegrity", { assetId: asset.id }), before);
+  await workshop.getByRole("button", { name: "Inteligencia artificial", exact: true }).click();
+  await workshop.getByTestId("workshop-ai-restore").click();
+  const base = page.getByTestId("restoration-base");
+  await poll(async () => (await base.inputValue()) === version.id, "saved workshop version is selected for restoration");
+  assert.equal(await page.getByTestId("restoration-version").count(), 0);
+  checks.push("The viewer opens the workshop, which saves a sealed version and passes it to restoration while preserving the original");
+
+  // Verify these IPC commands enforce the same local-only preference as the UI.
+  await call("updateSettings", { remoteEnabled: false });
+  assert.deepEqual(await call("upscaleApiCatalog", { refresh: true }), []);
+  for (const provider of ["fal", "replicate"]) {
+    await assert.rejects(call("checkUpscaleKey", { service: provider }), /Las APIs remotas están desactivadas/);
+    await assert.rejects(call("restorationRun", {
+      assetId: asset.id, region: null, provider, model: "synthetic/test-model", task: "restore",
+      prompt: "Restore the test image", baseId: version.id,
+    }), /Las APIs remotas están desactivadas/);
+  }
+  checks.push("The specialised catalogue, key checks and restoration obey the remote APIs setting");
+
   assert.deepEqual(errors, []);
   await fs.writeFile("test-results/viewer-strip-e2e.json", JSON.stringify({ status: "passed", checks, errors }, null, 2));
   console.log("Viewer strip E2E passed:", checks.join("; "));

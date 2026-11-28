@@ -72,15 +72,19 @@ Frequencies, cross-tabs with chi-square and Cramér’s V, co-occurrence, trends
 
 ![Statistics: the photographs counted by heritage group](docs/screenshots/readme-statistics.png)
 
-### 6. AI restoration
+### 6. Image Workshop and AI image tools
 
-Repair stains, cracks, folds and missing corners, recover faded contrast or colourise a black-and-white photograph with an image model from Google Gemini, OpenAI or OpenRouter. Work on the whole image or on a zone you draw; the zone is pasted back in place and the rest of the image does not change. Each result is saved as a new version, the original file is never modified, and downloads carry an “AI modified” watermark.
+Use the **Image Workshop** to adjust tones, remove print halftones, crop or correct a curved book page. Apply a recipe, compare the result with its source and save a separate version. Exports can include XMP metadata and a JSON edit history.
 
-When colourising, Imago keeps the lightness and detail of the starting image and takes only the colour from the model. Repairs keep the tone of black-and-white and sepia photographs, and results that come back shifted or zoomed are realigned. You can add a note about the photograph or send the fields of its record, and check the exact instructions before running. Each version is compared with its source and marked as faithful, retouched or heavily retouched; the **Changes** view highlights in red what differs.
+**AI Upscaling** enlarges whole images or selected regions by 2× or 4×, individually or in batches. Download Kandinsky ImageSR 2.0 for local processing, or choose an online model from fal.ai, Replicate or Stability AI. Imago estimates costs when it has pricing for the model and records the upscaling settings in the methodology report.
+
+Use **AI Restoration** to repair stains, cracks, folds and missing corners, or **AI Colourising** to colourise a black-and-white photograph. Both offer compatible image models from Google Gemini, OpenAI and OpenRouter, alongside specialised models from fal.ai and Replicate. Work on the whole image or on a zone you draw; the zone is pasted back in place and the rest of the image does not change. Each result is saved as a new version, the original file is never modified, and you can use an “AI modified” watermark on downloads.
+
+When colourising, Imago keeps the lightness and detail of the starting image and takes only the colour from the model. Repairs keep the tone of black-and-white and sepia photographs, and results that come back shifted or zoomed are realigned. With models that accept instructions, you can preview the prompt and choose which notes or record fields to send. Each version is compared with its source and marked as faithful, retouched or heavily retouched; the **Changes** view highlights in red what differs.
 
 ![A damaged glass-plate portrait, half original and half repaired, next to the same portrait half repaired and half colourised](docs/screenshots/readme-restoration.png)
 
-**Limitations.** With heavy damage the model may redraw faces, hands or lettering differently from the original; the check flags these versions but cannot recover what was lost. Colours are an estimate, not historical evidence, and a toned print may be taken for black and white. Restoration requires an API key from one of these providers, and the image or zone and any note or record fields are sent to it. Restored copies do not replace the original as a source.
+**Limitations.** With heavy damage the model may redraw faces, hands or lettering differently from the original; the check flags these versions but cannot recover what was lost. Colours are an estimate, not historical evidence, and a toned print may be taken for black and white. Restoration requires an API key from one of these providers, and the image or zone is sent to the selected provider, together with any context you choose to include for a model that accepts instructions. Restored copies do not replace the original as a source.
 
 ## And also
 

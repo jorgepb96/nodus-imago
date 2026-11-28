@@ -96,13 +96,15 @@ export class Workshop {
       this.worker!.postMessage({ id, job });
     }).finally(() => {
       // The decoded image takes memory: let it go after a while without work.
-      this.idle = setTimeout(() => this.close(), 180_000);
+      if (this.worker && !this.pending.size) this.idle = setTimeout(() => this.close(), 180_000);
     });
   }
   close() {
     clearTimeout(this.idle);
     const w = this.worker;
     this.worker = null;
+    for (const p of this.pending.values()) p.reject(new Error("El procesador de imágenes se ha detenido."));
+    this.pending.clear();
     void w?.terminate();
   }
 

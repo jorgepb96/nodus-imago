@@ -1310,7 +1310,7 @@ export class Service {
       case "neighbourSuggestionsApply":
         return this.suggestions.apply(input.items);
       case "restorationsList":
-        return this.restorations.list({ assetId: input?.assetId, kind: "restoration" });
+        return this.restorations.list(input ?? {});
       case "upscaleStatus":
         return this.upscaler.status(!!input?.refresh);
       case "upscaleInstall": {
