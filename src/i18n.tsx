@@ -3474,6 +3474,8 @@ const en: Record<string, string> = {
   "Creatividad 0 es la reconstrucción más fiel que ofrece el modelo; valores altos inventan más textura. Cada versión se guarda aparte, marcada como modificada con IA, y conserva en su ficha la escala, la creatividad, el perfil de memoria y los tamaños de entrada y salida.": "Creativity 0 is the most faithful reconstruction the model offers; higher values invent more texture. Each version is saved separately, marked as modified with AI, and keeps the scale, creativity, memory profile and input and output sizes in its record.",
 
   // Image workshop
+  "Este modelo no usa el contexto: solo recibe la imagen.": "This model does not use the context: it only receives the image.",
+  "Todavía no hay versiones coloreadas de esta imagen.": "There are no colourised versions of this image yet.",
   "Hecho para fotos antiguas: quita arañazos, polvo y manchas sin repintar la escena. Discreto y fiel; menos de un céntimo.": "Made for old photos: removes scratches, dust and stains without repainting the scene. Subtle and faithful; less than a cent.",
   "Repara y además colorea siempre, y puede reinventar la escena (la hora del día, edificios, vegetación). Vistoso para divulgar; no sirve como documento.": "Repairs and always colourises too, and may reinvent the scene (time of day, buildings, vegetation). Eye-catching for outreach; not usable as a document.",
   "Una décima de céntimo por foto: ideal para probar. Colores vivos; a veces tiñe de más (morados, azules).": "A tenth of a cent per photo: ideal for trying. Vivid colours; sometimes over-tints (purples, blues).",

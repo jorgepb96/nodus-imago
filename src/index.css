@@ -12279,3 +12279,6 @@ tr:hover .ai-cell-button,
 .record-versions li { display: flex; }
 .record-versions button { height: 100%; }
 .record-versions .workshop-badge { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-height: 2.6em; }
+.restoration-model-title { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.restoration-model-title > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.restoration-model-title .restoration-recommended { flex-shrink: 0; margin-left: 0; }

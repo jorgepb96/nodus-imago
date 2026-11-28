@@ -3669,6 +3669,8 @@ export const fr: Record<string, string> = {
   "Entrada reducida": "Entrée réduite",
   "Creatividad 0 es la reconstrucción más fiel que ofrece el modelo; valores altos inventan más textura. Cada versión se guarda aparte, marcada como modificada con IA, y conserva en su ficha la escala, la creatividad, el perfil de memoria y los tamaños de entrada y salida.": "La créativité 0 est la reconstruction la plus fidèle que propose le modèle ; des valeurs élevées inventent davantage de texture. Chaque version est enregistrée à part, marquée comme modifiée par IA, et conserve dans sa fiche l'échelle, la créativité, le profil de mémoire et les tailles d'entrée et de sortie.",
   // Atelier d'images
+  "Este modelo no usa el contexto: solo recibe la imagen.": "Ce modèle n'utilise pas le contexte : il ne reçoit que l'image.",
+  "Todavía no hay versiones coloreadas de esta imagen.": "Il n'y a pas encore de versions colorisées de cette image.",
   "Hecho para fotos antiguas: quita arañazos, polvo y manchas sin repintar la escena. Discreto y fiel; menos de un céntimo.": "Conçu pour les photos anciennes : retire rayures, poussière et taches sans repeindre la scène. Discret et fidèle ; moins d'un centime.",
   "Repara y además colorea siempre, y puede reinventar la escena (la hora del día, edificios, vegetación). Vistoso para divulgar; no sirve como documento.": "Répare et colorise toujours en plus, et peut réinventer la scène (heure du jour, bâtiments, végétation). Spectaculaire pour la diffusion ; inutilisable comme document.",
   "Una décima de céntimo por foto: ideal para probar. Colores vivos; a veces tiñe de más (morados, azules).": "Un dixième de centime par photo : idéal pour essayer. Couleurs vives ; teinte parfois trop (violets, bleus).",

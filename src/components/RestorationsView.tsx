@@ -382,7 +382,8 @@ export function RestorationsView({
       (!query || `${m.model} ${names.get(value) ?? ""} ${t(providerLabel(m.provider))}`.toLowerCase().includes(query))
     );
   });
-  const chosen = models.includes(model) ? model : (models[0] ?? "");
+  // What the filters hide is not used: the first model shown takes its place.
+  const chosen = visibleModels.includes(model) ? model : (visibleModels[0] ?? (models.includes(model) ? model : (models[0] ?? "")));
   const choice = decodeChoice(chosen);
   /** A specialised service model: it restores or colourises on its own and reads no instructions. */
   const specialised = !!choice && !instructed(chosen);
@@ -489,7 +490,7 @@ export function RestorationsView({
             </section>
             <section>
               <h2>{t(colorMode ? "3. Colores" : "3. Tarea")}</h2>
-              {colorMode ? (
+              {specialised ? null : colorMode ? (
                 <div className="restoration-tasks" role="radiogroup" aria-label={t("Estilo de color")}>
                   {COLOR_STYLES.map((c) => (
                     <button
@@ -578,6 +579,12 @@ export function RestorationsView({
                 </button>
               )}
             </section>
+            {specialised ? (
+              <section>
+                <h2>{t("4. Contexto")}</h2>
+                <p className="hint">{t("Este modelo no usa el contexto: solo recibe la imagen.")}</p>
+              </section>
+            ) : (
             <section>
               <h2>{t("4. Contexto")}</h2>
               <label className="restoration-prompt">
@@ -639,6 +646,7 @@ export function RestorationsView({
                 <pre>{restorationRequest(prompt, context) || "—"}</pre>
               </details>
             </section>
+            )}
             <section>
               <h2>{t("5. Modelo")}</h2>
               {models.length > 0 && (
@@ -729,8 +737,8 @@ export function RestorationsView({
                           }}
                         >
                           <span>
-                            <strong title={m.model}>
-                              {service ? t(service.name) : m.model}
+                            <strong title={m.model} className="restoration-model-title">
+                              <span>{service ? t(service.name) : m.model}</span>
                               {service?.recommended && <em className="restoration-recommended">{t("Recomendado")}</em>}
                             </strong>
                             <small>
@@ -738,7 +746,7 @@ export function RestorationsView({
                                 t(providerLabel(m.provider)),
                                 service ? t(service.instructed ? "Sigue instrucciones" : "Especializado") : names.get(value),
                                 service && service.style !== "unknown" ? t(STYLE_LABELS[service.style]) : "",
-                                service ? (cost === null ? t("precio desconocido") : `~${formatCost(cost, language)}`) : "",
+                                service ? (cost === null ? t("precio desconocido") : `~${formatCost(cost, language)}`.replace(" ", "\u00a0")) : "",
                               ]
                                 .filter(Boolean)
                                 .join(" · ")}
@@ -902,7 +910,7 @@ export function RestorationsView({
               <h2>
                 {t("Versiones de esta imagen")} <span>{versions.length}</span>
               </h2>
-              {!versions.length && <p className="hint">{t("Todavía no hay versiones restauradas de esta imagen.")}</p>}
+              {!versions.length && <p className="hint">{t(colorMode ? "Todavía no hay versiones coloreadas de esta imagen." : "Todavía no hay versiones restauradas de esta imagen.")}</p>}
               <ul>
                 {versions.map((v) => (
                   <li key={v.id} className={current?.id === v.id ? "is-selected" : ""}>
