@@ -60,6 +60,9 @@ CREATE INDEX IF NOT EXISTS image_tags_asset ON image_tags(asset_id);
 CREATE TABLE IF NOT EXISTS image_tag_options(region_id TEXT NOT NULL REFERENCES image_tags(id) ON DELETE CASCADE,option_id TEXT NOT NULL,position INTEGER NOT NULL,PRIMARY KEY(region_id,option_id));
 CREATE INDEX IF NOT EXISTS image_tag_options_option ON image_tag_options(option_id);
 ${visualTagReviewsSchema}
+-- Suggestions of a vision model waiting for review (one set per image and
+-- dictionary), so a queued analysis is ready when the researcher arrives.
+CREATE TABLE IF NOT EXISTS image_tag_suggestions(asset_id TEXT NOT NULL REFERENCES image_assets(id) ON DELETE CASCADE,dictionary_id TEXT NOT NULL,image_version TEXT NOT NULL,choice_json TEXT NOT NULL,regions_json TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(asset_id,dictionary_id));
 CREATE TABLE IF NOT EXISTS ai_prompts(hash TEXT PRIMARY KEY,text TEXT NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS search_documents(row_id TEXT PRIMARY KEY REFERENCES db_rows(id) ON DELETE CASCADE,database_id TEXT NOT NULL,body TEXT NOT NULL);
 CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(row_id UNINDEXED,database_id UNINDEXED,body,tokenize='unicode61 remove_diacritics 2');

@@ -214,6 +214,41 @@ export class VisualTags {
     return { dictionary, imageVersion, rowId: asset.row_id };
   }
 
+  /** Keeps a model's suggestions for this image, replacing earlier ones. */
+  storeSuggestions(assetId: string, dictionaryId: string, imageVersion: string, choice: ModelChoice, regions: VisualTagSuggestion[]) {
+    this.repo.db.prepare(
+      "INSERT OR REPLACE INTO image_tag_suggestions(asset_id,dictionary_id,image_version,choice_json,regions_json,created_at) VALUES(?,?,?,?,?,?)",
+    ).run(assetId, dictionaryId, imageVersion, JSON.stringify(choice), JSON.stringify(regions), now());
+  }
+
+  /**
+   * The suggestions kept for this image, if the image and the dictionary are
+   * as they were; each with the tags already added from it.
+   */
+  storedSuggestions(assetId: string, dictionaryId: string) {
+    const stored = this.repo.db.prepare(
+      "SELECT image_version imageVersion,choice_json choice,regions_json regions FROM image_tag_suggestions WHERE asset_id=? AND dictionary_id=?",
+    ).get(assetId, dictionaryId) as { imageVersion: string; choice: string; regions: string } | undefined;
+    if (!stored) return null;
+    let target: ReturnType<VisualTags["suggestionTarget"]>;
+    try {
+      target = this.suggestionTarget(assetId, dictionaryId);
+    } catch {
+      return null;
+    }
+    if (target.imageVersion !== stored.imageVersion) return null;
+    const terms = new Map(target.dictionary.options.map((option) => [option.id, optionName(option.label)]));
+    const names = new Map(this.column(target.dictionary.databaseId)?.options.map((option) => [option.id, optionName(option.label)]));
+    const boxKey = (region: Region) => [region.x, region.y, region.w, region.h].map((n) => Math.round(n * 1000)).join(",");
+    const saved = this.list(assetId, dictionaryId).filter((region) => region.state === "validated");
+    const regions = (JSON.parse(stored.regions) as VisualTagSuggestion[]).map((region) => {
+      const sameBox = saved.filter((other) => boxKey(other) === boxKey(region));
+      const applied = region.optionIds.filter((id) => sameBox.some((other) => other.optionIds.some((own) => names.get(own) === terms.get(id))));
+      return { region, applied };
+    });
+    return { imageVersion: stored.imageVersion, choice: JSON.parse(stored.choice) as ModelChoice, regions };
+  }
+
   applySuggestions(input: { assetId: string; dictionaryId: string; imageVersion: string; choice: ModelChoice; regions: (VisualTagSuggestion & { choice?: ModelChoice })[] }) {
     return this.remember(input.assetId, input.dictionaryId, "suggestions", () => {
       const { dictionary, imageVersion, rowId } = this.suggestionTarget(input.assetId, input.dictionaryId);

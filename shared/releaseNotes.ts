@@ -34,6 +34,54 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.9.6",
+    date: "2026-11-28",
+    highlights: [
+      {
+        scope: "visual",
+        category: "new",
+        es: "Encola el análisis de etiquetas de las siguientes 5 a 100 imágenes sin revisar: se analizan en segundo plano y, al llegar a cada foto, sus sugerencias ya están listas para revisarlas. Las sugerencias que pides a mano también se guardan y no se pierden al cambiar de foto.",
+        en: "Queue the tag analysis of the next 5 to 100 unreviewed images: they are analysed in the background and, when you reach each photo, its suggestions are ready to review. Suggestions you request by hand are kept too and are not lost when you change photo.",
+        fr: "Mettez en file l'analyse des étiquettes des 5 à 100 images suivantes non révisées : elles sont analysées en arrière-plan et, en arrivant à chaque photo, ses suggestions sont prêtes à être révisées. Les suggestions demandées à la main sont aussi conservées et ne se perdent plus en changeant de photo.",
+      },
+      {
+        scope: "visual",
+        category: "new",
+        es: "En el visor, ↑ y ↓ recorren las etiquetas, anotaciones o elementos de patrimonio de la pestaña abierta y enfocan cada uno, igual que ← y → pasan de foto.",
+        en: "In the viewer, ↑ and ↓ step through the tags, annotations or heritage elements of the open tab and focus each one, just as ← and → move between photos.",
+        fr: "Dans la visionneuse, ↑ et ↓ parcourent les étiquettes, annotations ou éléments de patrimoine de l'onglet ouvert et cadrent chacun, comme ← et → passent d'une photo à l'autre.",
+      },
+      {
+        scope: "visual",
+        category: "new",
+        es: "Cada elemento de patrimonio sin marcar tiene dos botones para marcarlo con un punto o un rectángulo: haz clic o arrastra en la imagen y la marca se guarda en ese elemento, sin elegirlo de nuevo.",
+        en: "Each unmarked heritage element has two buttons to mark it with a point or a rectangle: click or drag on the image and the mark is saved for that element, without choosing it again.",
+        fr: "Chaque élément de patrimoine non marqué dispose de deux boutons pour le marquer d'un point ou d'un rectangle : cliquez ou faites glisser sur l'image et la marque est enregistrée pour cet élément, sans le choisir à nouveau.",
+      },
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "La rueda del ratón y el trackpad desplazan la imagen en lugar de ampliarla. El zoom se hace pellizcando, con los botones o con Comando (Ctrl) y + o −, y Comando (Ctrl) + 0 la ajusta a la pantalla; los botones indican estos atajos.",
+        en: "The mouse wheel and the trackpad now scroll the image instead of zooming it. Zoom with a pinch, the buttons or Command (Ctrl) and + or −, and Command (Ctrl) + 0 fits it to the screen; the buttons show these shortcuts.",
+        fr: "La molette de la souris et le trackpad font désormais défiler l'image au lieu de l'agrandir. Le zoom se fait en pinçant, avec les boutons ou avec Commande (Ctrl) et + ou −, et Commande (Ctrl) + 0 l'ajuste à l'écran ; les boutons indiquent ces raccourcis.",
+      },
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "Las sugerencias de la IA se dibujan con el color de cada etiqueta, en la imagen y en la lista, y las miniaturas de las listas del visor se alinean para que cada texto empiece en el mismo sitio. «Sugerir con IA» recuerda el modelo elegido.",
+        en: "AI suggestions are drawn in each tag's colour, on the image and in the list, and the thumbnails of the viewer's lists line up so every text starts in the same place. «Suggest with AI» remembers the chosen model.",
+        fr: "Les suggestions de l'IA sont dessinées avec la couleur de chaque étiquette, sur l'image et dans la liste, et les miniatures des listes de la visionneuse sont alignées pour que chaque texte commence au même endroit. « Suggérer avec l'IA » mémorise le modèle choisi.",
+      },
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "Las pestañas Etiquetas y Patrimonio explican cómo empezar («Pulsa «Etiquetado»…», «Pulsa «Patrimonio»…»), como ya hacía Anotaciones.",
+        en: "The Tags and Heritage tabs explain how to start («Press “Tagging”…», «Press “Heritage”…»), as Annotations already did.",
+        fr: "Les onglets Étiquettes et Patrimoine expliquent comment commencer (« Cliquez sur « Étiquetage »… », « Cliquez sur « Patrimoine »… »), comme le faisait déjà Annotations.",
+      },
+    ],
+  },
+  {
     version: "0.9.5",
     date: "2026-11-27",
     highlights: [

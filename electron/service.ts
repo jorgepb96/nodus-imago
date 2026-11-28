@@ -52,6 +52,7 @@ import { decodeMultiSelect, encodeMultiSelect } from "../shared/databases";
 import { buildAiCellPrompt, buildAiRowContext } from "../shared/databaseAi";
 import { foldText, heritageDictionaryOptions, heritageRegionPrompt, knownForRecord, matchSuggestion, parseHeritageRegions } from "../shared/heritage";
 import { parseVisualTagSuggestions, regionOverlap, visualTagSuggestionPrompt, type VisualTagChoice } from "../shared/visualTags";
+import { modelChoiceLabel } from "../shared/aiConfig";
 import { Restorations } from "./db/restorations";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
@@ -260,6 +261,25 @@ export class Service {
         if (!at) return "skipped";
         this.heritage.saveProposal(payload.columnId, item.optionId, source, null, [{ ...at, town: towns.town(item.optionId) }], true);
       }
+      return "imported";
+    };
+    this.queue.visualTagOne = async (payload, index, signal) => {
+      const assetId = payload.assetIds[index];
+      let target: ReturnType<VisualTags["suggestionTarget"]>;
+      try {
+        target = this.visualTags.suggestionTarget(assetId, payload.dictionaryId);
+      } catch {
+        return "skipped"; // The image or the dictionary is gone.
+      }
+      const kept = this.visualTags.storedSuggestions(assetId, payload.dictionaryId);
+      if (kept && modelChoiceLabel(kept.choice) === modelChoiceLabel(payload.choice)) return "skipped";
+      const raw = await this.engine.askImage(
+        payload.choice, assetId, null, visualTagSuggestionPrompt(target.dictionary.options),
+        AbortSignal.any([signal, AbortSignal.timeout(180_000)]), "tags",
+      );
+      if (this.visualTags.suggestionTarget(assetId, payload.dictionaryId).imageVersion !== target.imageVersion) return "skipped";
+      this.visualTags.storeSuggestions(assetId, payload.dictionaryId, target.imageVersion, payload.choice,
+        parseVisualTagSuggestions(raw, target.dictionary.options));
       return "imported";
     };
     this.queue.onFinished = (kind) => {
@@ -1374,7 +1394,22 @@ export class Service {
         );
         if (this.visualTags.suggestionTarget(input.assetId, input.dictionaryId).imageVersion !== imageVersion)
           throw new Error("La imagen o el diccionario han cambiado. Vuelve a generar las sugerencias.");
-        return { imageVersion, regions: parseVisualTagSuggestions(raw, dictionary.options) };
+        const regions = parseVisualTagSuggestions(raw, dictionary.options);
+        this.visualTags.storeSuggestions(input.assetId, input.dictionaryId, imageVersion, input.choice, regions);
+        return { imageVersion, regions };
+      }
+      case "visualTagStoredSuggestions":
+        return this.visualTags.storedSuggestions(input.assetId, input.dictionaryId);
+      case "visualTagQueue": {
+        // The next images analysed in the background; their suggestions wait
+        // for review in the viewer.
+        if (input.choice.provider === "local" && this.models.get(input.choice.model).task !== "vision")
+          throw new Error("Elige un modelo que admita imágenes.");
+        this.visualTags.suggestionTarget(input.assetIds[0], input.dictionaryId);
+        const id = this.repo.newJob("visualTags", { dictionaryId: input.dictionaryId, choice: input.choice, assetIds: input.assetIds }, input.assetIds.length);
+        this.queue.pump();
+        this.changed("jobs");
+        return id;
       }
       case "visualTagApplySuggestions": {
         const added = this.visualTags.applySuggestions(input);

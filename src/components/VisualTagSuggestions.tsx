@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { ListPlus, Loader2, Sparkles } from "lucide-react";
 import type { ModelChoice } from "../../shared/aiConfig";
 import type { DatabaseColumn } from "../../shared/databases";
 import type { Region } from "../../shared/imageRotation";
 import { mergeVisualTagReview, type VisualTagReviewItem, type VisualTagSuggestion } from "../../shared/visualTags";
 import { useT } from "../i18n";
+import { OptionIcon } from "./DatabaseIcon";
 import { useVisionModels, VisionModelPicker } from "./VisionModelPicker";
 import { Button } from "./ui";
 import { VisionProposalBoxes, type ProposalGeometry } from "./VisionProposalBoxes";
@@ -15,8 +16,8 @@ type Review = {
   regions: VisualTagReviewItem[];
 };
 export function VisualTagSuggestions({
-  assetId, dictionary, model, onModelChange, onApplied, onPreview, thumbnail,
-  active, stage, showBoxes, position, point, reshape, undoVersion,
+  assetId, dictionary, model, onModelChange, onApplied, onPreview, thumbnail, describe,
+  active, stage, showBoxes, position, point, reshape, undoVersion, queueNext,
 }: {
   assetId: string;
   dictionary: DatabaseColumn | null;
@@ -24,12 +25,17 @@ export function VisualTagSuggestions({
   onModelChange: (model: string) => void;
   onApplied: () => Promise<void>;
   onPreview: (region: VisualTagSuggestion) => void;
-  thumbnail: (region: VisualTagSuggestion) => ReactNode;
+  /** The region's crop, framed in the colour of its first tag. */
+  thumbnail: (region: VisualTagSuggestion, color: string | undefined) => ReactNode;
+  /** How each tag looks in the viewer: its label, colour and icon. */
+  describe: (optionIds: string[]) => { key: string; label: string; color: string; icon: string | null }[];
   active: boolean;
   undoVersion: number;
+  /** Queues the analysis of the next images not yet reviewed; how many were queued. */
+  queueNext?: (count: number, choice: ModelChoice) => Promise<number>;
 } & ProposalGeometry) {
   const t = useT();
-  const [busy, setBusy] = useState<"suggest" | "apply" | null>(null);
+  const [busy, setBusy] = useState<"suggest" | "apply" | "queue" | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const [activeRegion, setActiveRegion] = useState<number | null>(null);
   const approvalBatches = useRef<Map<number, string[]>[]>([]);
@@ -37,9 +43,34 @@ export function VisualTagSuggestions({
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState<number | null>(null);
   const catalogue = useVisionModels(active, model);
+  const [queueCount, setQueueCount] = useState(10);
+  const [queued, setQueued] = useState<number | null>(null);
+  // Suggestions kept for this image (a queued analysis, or an earlier run)
+  // are ready for review on arrival, also when the queue reaches it later.
+  const showReview = !!review;
+  const dictionaryId = dictionary?.id;
+  useEffect(() => {
+    if (!active || !dictionaryId || showReview) return;
+    let current = true;
+    const load = () => void window.imago.call("visualTagStoredSuggestions", { assetId, dictionaryId }).then((stored) => {
+      if (!current || !stored) return;
+      const regions: VisualTagReviewItem[] = stored.regions.map(({ region, applied }, index) => ({
+        id: index + 1, region, detected: region, choice: stored.choice, applied,
+        checked: region.optionIds.filter((tag) => !applied.includes(tag)), newTags: [],
+      }));
+      setReview((now) => now ?? { imageVersion: stored.imageVersion, choice: stored.choice, regions });
+      setActiveRegion((id) => id ?? regions.find((item) => item.applied.length < item.region.optionIds.length)?.id ?? null);
+    }, () => {});
+    load();
+    const unsubscribe = window.imago.onChange((scope) => { if (scope === "jobs") load(); });
+    return () => {
+      current = false;
+      unsubscribe();
+    };
+  }, [active, assetId, dictionaryId, showReview]);
   const { selected } = catalogue;
   const feedback = error ?? catalogue.error;
-  const labels = new Map(dictionary?.options.map((o) => [o.id, o.label]));
+  const look = (id: string) => describe([id])[0];
   const checkedCount = review?.regions.reduce((count, item) => count + item.checked.length, 0) ?? 0;
   const pendingCount = review?.regions.reduce((count, { region, applied }) => count + region.optionIds.length - applied.length, 0) ?? 0;
   const allChecked = pendingCount > 0 && checkedCount === pendingCount;
@@ -120,6 +151,42 @@ export function VisualTagSuggestions({
       {!catalogue.loading && !catalogue.options.length && !catalogue.error && <p className="viewer-empty">{t("No hay modelos de visión disponibles. Comprueba los modelos instalados o tus proveedores de IA en Ajustes.")}</p>}
       {!dictionary?.options.length && <p className="viewer-empty">{t("Elige un diccionario activo que contenga etiquetas.")}</p>}
       {selected?.remote && <small className="muted">{t("Al sugerir, se envían la imagen y el diccionario al proveedor del modelo.")}</small>}
+      {queueNext && selected && !!dictionary?.options.length && (
+        <div className="viewer-tag-queue">
+          <select
+            aria-label={t("Imágenes que analizar en segundo plano")}
+            value={queueCount}
+            disabled={!!busy}
+            onChange={(e) => setQueueCount(Number(e.target.value))}
+          >
+            {[5, 10, 25, 50, 100].map((n) => (
+              <option key={n} value={n}>{t("Las {n} siguientes sin revisar").replace("{n}", String(n))}</option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            disabled={!!busy}
+            data-tooltip={t("Analiza en segundo plano las siguientes imágenes sin revisar de la lista; sus sugerencias te esperarán aquí al llegar a cada una.")}
+            data-testid="viewer-tag-queue"
+            onClick={() => {
+              setBusy("queue");
+              setError(null);
+              void queueNext(queueCount, selected.choice).then(setQueued, (err) => setError(err instanceof Error ? err.message : String(err)))
+                .finally(() => setBusy(null));
+            }}
+          >
+            {busy === "queue" ? <Loader2 size={14} className="spin" /> : <ListPlus size={14} />}
+            {t("Encolar")}
+          </Button>
+        </div>
+      )}
+      {queued !== null && (
+        <p className="viewer-empty" role="status">
+          {queued
+            ? t("Se analizarán {n} imágenes en segundo plano. Sigue la tarea en la cola de IA.").replace("{n}", String(queued))
+            : t("No quedan imágenes sin revisar después de esta.")}
+        </p>
+      )}
       {feedback && <p className="annotation-error" role="alert">{t(feedback)}</p>}
       {added !== null && (
         <p className="viewer-empty" role="status">
@@ -152,7 +219,7 @@ export function VisualTagSuggestions({
                   setActiveRegion(regionId);
                   onPreview(region);
                 }}>
-                  {thumbnail(region)}
+                  {thumbnail(region, look(region.optionIds[0])?.color)}
                 </button>
                 <div className="viewer-tag-proposal-choices">
                   {region.optionIds.map((id) => (
@@ -166,7 +233,10 @@ export function VisualTagSuggestions({
                           changeRegion(regionId, (item) => ({ ...item, checked: next }));
                         }}
                       />
-                      <span>{labels.get(id) ?? id}</span>
+                      <span className="viewer-tag-name" style={{ "--chip": look(id)?.color } as CSSProperties}>
+                        <OptionIcon value={look(id)?.icon ?? null} size={11} />
+                        {look(id)?.label ?? id}
+                      </span>
                       {applied.includes(id) ? <small>{t("Guardada")}</small> : newTags.includes(id) && <small>{t("Nueva")}</small>}
                     </label>
                   ))}
@@ -186,7 +256,8 @@ export function VisualTagSuggestions({
       {active && review && (
         <VisionProposalBoxes
           stage={stage} showBoxes={showBoxes} position={position} point={point} reshape={reshape}
-          boxes={review.regions.filter(({ region, applied }) => applied.length < region.optionIds.length)}
+          boxes={review.regions.filter(({ region, applied }) => applied.length < region.optionIds.length)
+            .map((item) => ({ ...item, colors: describe(item.region.optionIds).map(({ color }) => color) }))}
           selected={activeRegion} onSelect={setActiveRegion} busy={!!busy}
           onChange={(id, region) => changeRegion(id, (item) => ({ ...item, region: { ...item.region, ...region } }))}
         />

@@ -757,6 +757,16 @@ export type Commands = {
     input: { assetId: string; dictionaryId: string; choice: ModelChoice };
     result: { imageVersion: string; regions: import("./visualTags").VisualTagSuggestion[] };
   };
+  /** Suggestions kept for an image (from the viewer or a queued analysis), if still current. */
+  visualTagStoredSuggestions: {
+    input: { assetId: string; dictionaryId: string };
+    result: {
+      imageVersion: string; choice: ModelChoice;
+      regions: { region: import("./visualTags").VisualTagSuggestion; applied: string[] }[];
+    } | null;
+  };
+  /** Analyses these images in the background; returns the task. */
+  visualTagQueue: { input: { dictionaryId: string; choice: ModelChoice; assetIds: string[] }; result: string };
   visualTagApplySuggestions: {
     input: { assetId: string; dictionaryId: string; choice: ModelChoice; imageVersion: string; regions: (import("./visualTags").VisualTagSuggestion & { choice?: ModelChoice })[] };
     result: number;

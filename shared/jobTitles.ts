@@ -8,6 +8,7 @@ const TITLES: Record<string, string> = {
   download: "Descargar",
   prepare: "Preparar modelos",
   fingerprints: "Calcular huellas visuales",
+  visualTags: "Sugerir etiquetas",
 };
 
 export function jobTitle(job: Pick<Job, "kind" | "indexRows" | "indexAssets">): string {

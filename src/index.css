@@ -8243,6 +8243,14 @@ body:has(.tour-layer.is-tutorial) .record-image-tools {
 .viewer-item-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; }
 .viewer-item-actions button { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: #a1a1aa; }
 .viewer-item-actions button:hover { color: white; background: #ffffff14; }
+.viewer-item-actions button[aria-pressed="true"] { color: white; background: var(--accent, #6366f1); }
+.viewer-list li.has-three-actions .viewer-item { padding-right: 90px; }
+.viewer-list li.is-marking { border-color: var(--accent, #6366f1); }
+.heritage-mark-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--accent-ink, #c7d2fe); }
+.heritage-mark-hint button { padding: 1px 8px; border: 1px solid #ffffff26; border-radius: 6px; font-size: 11px; color: inherit; }
+.viewer-tag-queue { display: flex; gap: 6px; align-items: center; }
+.viewer-tag-queue select { flex: 1; min-width: 0; }
+.viewer-crop-slot { flex: none; display: grid; place-items: start center; width: 64px; min-height: 22px; }
 .viewer-crop { flex-shrink: 0; display: block; border: 2px solid #f59e0b; border-radius: 6px; background-repeat: no-repeat; background-color: #000; }
 .viewer-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .viewer-tags span, .annotation-tags button { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 11px; color: #fde68a; background: #f59e0b26; }
@@ -11641,14 +11649,31 @@ tr:hover .ai-cell-button,
   color: var(--accent-ink);
   font-size: 10px;
 }
+/* A proposal looks like the tag it would save, dashed until it is added. */
 .viewer-proposal-box {
   position: absolute;
   z-index: 4;
   border: 2px dashed #fff;
-  outline: 2px dashed var(--accent, #6366f1);
+  outline: 2px dashed var(--tag, var(--accent, #6366f1));
   outline-offset: -2px;
-  background: color-mix(in srgb, var(--accent, #6366f1) 8%, transparent);
+  background: color-mix(in srgb, var(--tag, var(--accent, #6366f1)) 10%, transparent);
   pointer-events: none;
+}
+/* Several tags: the band of their colours, with the dashed line inside it. */
+.viewer-proposal-box.is-multicolor {
+  border: 2px solid;
+  border-image: var(--tag-gradient) 1;
+  outline: 1px dashed #fffc;
+  outline-offset: -4px;
+  background: none;
+}
+.viewer-proposal-box.is-multicolor::before {
+  position: absolute;
+  inset: 0;
+  background: var(--tag-gradient);
+  opacity: 0.12;
+  pointer-events: none;
+  content: "";
 }
 .viewer-proposal-box.is-editable {
   pointer-events: auto;
@@ -11659,7 +11684,6 @@ tr:hover .ai-cell-button,
   display: grid;
   flex: none;
   place-items: center;
-  min-width: 52px;
   padding: 0;
   border: 0;
   background: none;

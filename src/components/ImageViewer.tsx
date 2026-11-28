@@ -36,6 +36,7 @@ import {
 import { OptionPicker } from "./Cell";
 import { CriteriaPopover } from "./CriteriaSelect";
 import { OptionIcon } from "./DatabaseIcon";
+import type { ModelChoice } from "../../shared/aiConfig";
 import { DEFAULT_OPTION_COLOR } from "./OptionEditMenu";
 import { optionIconValue } from "../../shared/databaseIcons";
 import { importedOptionColor } from "../../shared/databaseCsv";
@@ -226,6 +227,8 @@ export function ImageViewer({
   /** Marking heritage elements: with a point or a rectangle. */
   const [marking, setMarking] = useState<"point" | "rect" | null>(null);
   const [markDraft, setMarkDraft] = useState<MarkDraft | null>(null);
+  /** An element of the record chosen in the panel to be marked next: the mark is saved as soon as it is drawn. */
+  const [markTarget, setMarkTarget] = useState<string | null>(null);
   const [heritagePanel, setHeritagePanel] = useState<{ optionId: string; markId?: string } | null>(null);
   const [aiZones, setAiZones] = useState<{ x: number; y: number; w: number; h: number }[]>([]);
   const [drawingZone, setDrawingZone] = useState(false);
@@ -236,7 +239,14 @@ export function ImageViewer({
   const [heritageDictionaryBusy, setHeritageDictionaryBusy] = useState(false);
   const heritageRequest = useRef(false);
   const autoCreatedHeritage = useRef<string | null>(null);
-  const [heritageModel, setHeritageModel] = useState("");
+  // The vision model of «Sugerir con IA», the same for tags and heritage and
+  // kept for the next time: the last one the user chose.
+  const [visionModel, setVisionModelState] = useState(() => localStorage.getItem("imago.visionModel") ?? "");
+  const setVisionModel = (model: string) => {
+    setVisionModelState(model);
+    if (model) localStorage.setItem("imago.visionModel", model);
+    else localStorage.removeItem("imago.visionModel");
+  };
   const [allowNewHeritage, setAllowNewHeritage] = useState(false);
   const heritageKey = `imago.viewerHeritage.${row.databaseId}`;
   const currentHeritage = selectedHeritage?.databaseId === row.databaseId ? selectedHeritage : null;
@@ -248,7 +258,6 @@ export function ImageViewer({
   const heritageOptions = new Set(heritageColumn?.options.map((o) => o.id) ?? []);
   /** «Etiquetado»: regions drawn on the image and their tags. */
   const [tagging, setTagging] = useState(false);
-  const [tagSuggestionModel, setTagSuggestionModel] = useState("");
   const [tagRegions, setTagRegions] = useState<VisualTagRegion[]>([]);
   const [loadedTagColumn, setTagColumn] = useState<DatabaseColumn | null>(null);
   const [tagOptionIds, setTagOptionIds] = useState<string[]>([]);
@@ -601,6 +610,73 @@ export function ImageViewer({
       return { scale, x: px - (px - v.x) * k, y: py - (py - v.y) * k };
     });
   };
+  // The wheel scrolls the image like a page, without leaving it out of view;
+  // a pinch on the trackpad (or Ctrl + wheel) zooms where the pointer is.
+  // A listener of its own, because React's wheel handler cannot stop the page
+  // from zooming.
+  useEffect(() => {
+    if (!stageElement) return;
+    const wheel = (event: WheelEvent) => {
+      // The tag picker floating over the image scrolls its own list.
+      if (event.target instanceof Element && event.target.closest(".viewer-tag-picker") && !event.ctrlKey) return;
+      event.preventDefault();
+      if (!natural) return;
+      const box = stageElement.getBoundingClientRect();
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? box.height : 1;
+      if (event.ctrlKey) {
+        const factor = Math.exp(-event.deltaY * unit * 0.01),
+          px = event.clientX - box.left,
+          py = event.clientY - box.top;
+        setView((v) => {
+          const scale = Math.min(12, Math.max(0.05, v.scale * factor));
+          const k = scale / v.scale;
+          return { scale, x: px - (px - v.x) * k, y: py - (py - v.y) * k };
+        });
+        return;
+      }
+      // Shift turns a mouse's vertical wheel into a sideways scroll.
+      const [dx, dy] = event.shiftKey && !event.deltaX ? [event.deltaY, 0] : [event.deltaX, event.deltaY];
+      const scroll = (at: number, delta: number, size: number, room: number) => {
+        if (size + 48 <= room || !delta) return at;
+        const next = at - delta * unit;
+        return delta > 0 ? Math.max(next, Math.min(at, room - size - 24)) : Math.min(next, Math.max(at, 24));
+      };
+      setView((v) => {
+        const x = scroll(v.x, dx, natural.w * v.scale, box.width),
+          y = scroll(v.y, dy, natural.h * v.scale, box.height);
+        return x === v.x && y === v.y ? v : { ...v, x, y };
+      });
+    };
+    stageElement.addEventListener("wheel", wheel, { passive: false });
+    return () => stageElement.removeEventListener("wheel", wheel);
+  }, [stageElement, natural]);
+  /**
+   * Queues the tag analysis of the next images of the list (from the rest of
+   * this record on) that are not reviewed yet in the active dictionary.
+   */
+  const queueTagAnalysis = async (count: number, choice: ModelChoice) => {
+    if (!dictionaryId || !image) return 0;
+    const ids: string[] = [];
+    const collect = async (rows: { id: string; images: { id: string }[] }[]) => {
+      if (!rows.length) return;
+      const pending = new Set(await window.imago.call("visualTagPending", {
+        databaseId: row.databaseId, dictionaryId, rowIds: rows.map((r) => r.id),
+      }));
+      for (const r of rows)
+        for (const asset of r.images)
+          if (pending.has(asset.id) && asset.id !== image.id && !ids.includes(asset.id)) ids.push(asset.id);
+    };
+    await collect([{ id: row.id, images: row.images.slice(index + 1) }]);
+    // Through the list in pages, up to a couple of thousand records ahead.
+    for (let offset = (browse?.index ?? 0) + 1; browse && ids.length < count && offset < browse.total && offset - browse.index <= 2000; offset += 100) {
+      const page = await window.imago.call("search", { ...browse.input, offset, limit: 100 });
+      if (!page.rows.length) break;
+      await collect(page.rows);
+    }
+    const assetIds = ids.slice(0, count);
+    if (assetIds.length) await window.imago.call("visualTagQueue", { dictionaryId, choice, assetIds });
+    return assetIds.length;
+  };
   /** A pointer position as fractions of the image. */
   const point = (event: { clientX: number; clientY: number }) => {
     if (!natural) return { x: 0, y: 0 };
@@ -652,7 +728,9 @@ export function ImageViewer({
     if ((event.target as HTMLElement).closest(".viewer-region, .viewer-mark")) return;
     if (marking === "point") {
       const p = point(event);
-      setMarkDraft({ kind: "point", x: p.x, y: p.y, w: 0, h: 0 });
+      const draft = { kind: "point" as const, x: p.x, y: p.y, w: 0, h: 0 };
+      if (markTarget) void saveMark(markTarget, draft);
+      else setMarkDraft(draft);
       setSelected(null);
       return;
     }
@@ -710,7 +788,10 @@ export function ImageViewer({
     else if (searchMode) {
       if (image) setSearching({ assetId: image.id, x, y, w, h, drawn: true });
     } else if (drawingZone) setAiZones((all) => [...all, { x, y, w, h }].slice(0, 6));
-    else if (marking === "rect") setMarkDraft({ kind: "rect", x, y, w, h });
+    else if (marking === "rect") {
+      if (markTarget) void saveMark(markTarget, { kind: "rect", x, y, w, h });
+      else setMarkDraft({ kind: "rect", x, y, w, h });
+    }
     else setDraft({ x, y, w, h, note: "", tags: [] });
   };
   /** Saves a region's geometry and any edited tags, then refreshes the record. */
@@ -857,8 +938,9 @@ export function ImageViewer({
     onChanged();
   };
   /** Saves the drawn mark as showing this element (added to the record if missing). */
-  const saveMark = async (optionId: string) => {
-    if (!markDraft || !image || !heritageColumn) return;
+  const saveMark = async (optionId: string, mark: MarkDraft | null = markDraft) => {
+    if (!mark || !image || !heritageColumn) return;
+    setMarkTarget(null);
     setError(null);
     try {
       const source = heritageDictionary.find((entry) => entry.id === optionId);
@@ -868,7 +950,7 @@ export function ImageViewer({
       }
       const saved = await window.imago.call("annotationSave", {
         assetId: image.id,
-        ...markDraft,
+        ...mark,
         note: "",
         tags: [],
         optionId,
@@ -961,6 +1043,7 @@ export function ImageViewer({
     setAnnotating(tool === "annotations" && enabling);
     setSearchMode(tool === "search" && enabling);
     setMarking(tool === "heritage" && enabling ? "point" : null);
+    setMarkTarget(null);
     setTagging(tool === "tags" && enabling);
     cancelTagDrag();
     setDrawing(null);
@@ -979,6 +1062,8 @@ export function ImageViewer({
     const keys = `${viewerUsesCommand ? t("Comando") : "Ctrl"} + ${VIEWER_TOOL_KEYS[tool]}`;
     return `${t(description).replace(/\.$/, "")} (${t("Atajo {teclas}").replace("{teclas}", keys)})`;
   };
+  const keyTooltip = (description: string, key: string) =>
+    `${t(description)} (${t("Atajo {teclas}").replace("{teclas}", `${viewerUsesCommand ? t("Comando") : "Ctrl"} + ${key}`)})`;
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -1019,9 +1104,54 @@ export function ImageViewer({
         setTagDraft(null);
         setTagSelected(null);
       }
-      if (event.key === "+" || event.key === "=") zoom(1.25);
-      if (event.key === "-") zoom(0.8);
-      if (event.key === "0") fit();
+      // Up and down go through the list of the side panel's open tab (tags,
+      // notes or heritage marks), focusing each one as a click on it does.
+      if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !event.altKey && !event.metaKey && !event.ctrlKey && !searching) {
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        const next = <T extends { id: string }>(items: T[], current: string | null) => {
+          if (!items.length) return null;
+          const at = items.findIndex((item) => item.id === current);
+          return items[at < 0 ? (step > 0 ? 0 : items.length - 1) : Math.min(items.length - 1, Math.max(0, at + step))];
+        };
+        const reveal = () => window.setTimeout(() =>
+          document.querySelector(`[id$="-panel-${sideTab}"] .viewer-list li.is-selected`)?.scrollIntoView({ block: "nearest" }), 30);
+        if (sideTab === "tags" && tagsReady && !tagDraft && !tagPreview) {
+          const region = next(tagRegions, tagSelected);
+          if (region) {
+            event.preventDefault();
+            setTagSelected(region.id);
+            focus(region);
+            reveal();
+          }
+        } else if (sideTab === "annotations" && !draft) {
+          const note = next(annotations.filter((a) => !a.optionId), selected);
+          if (note) {
+            event.preventDefault();
+            setSelected(note.id);
+            focus(note);
+            reveal();
+          }
+        } else if (sideTab === "heritage" && !markDraft && !heritagePanel) {
+          // In the order of the list: element by element, each of its marks.
+          const mark = next(inCell.flatMap((id) => annotations.filter((m) => m.optionId === id)), selected);
+          if (mark) {
+            event.preventDefault();
+            setSelected(mark.id);
+            focus(mark.kind === "point" ? { x: mark.x - 0.05, y: mark.y - 0.05, w: 0.1, h: 0.1 } : mark);
+            reveal();
+          }
+        }
+        return;
+      }
+      // Zoom: Command (Ctrl) with + − 0 as in every app, or those keys alone.
+      // Taken here so the window's own zoom does not enlarge the whole interface.
+      const zoomKey = ({ "+": 1.25, "=": 1.25, "-": 0.8, "0": 0 } as Record<string, number>)[event.key];
+      if (zoomKey !== undefined && !event.altKey && (viewerModifier || (!event.metaKey && !event.ctrlKey))) {
+        event.preventDefault();
+        if (zoomKey) zoom(zoomKey);
+        else fit();
+        return;
+      }
       // The arrows go through the record's images, then on to the next or previous photograph of the list.
       if (event.key === "ArrowRight") {
         if (stripArrow) event.preventDefault();
@@ -1110,14 +1240,14 @@ export function ImageViewer({
           </div>
         )}
         <div className="viewer-group">
-          <button type="button" aria-label={t("Alejar")} data-tooltip={t("Alejar")} onClick={() => zoom(0.8)}>
+          <button type="button" aria-label={t("Alejar")} data-tooltip={keyTooltip("Alejar", "-")} onClick={() => zoom(0.8)}>
             <Minus size={16} />
           </button>
           <span className="viewer-count">{Math.round(view.scale * 100)} %</span>
-          <button type="button" aria-label={t("Acercar")} data-tooltip={t("Acercar")} onClick={() => zoom(1.25)}>
+          <button type="button" aria-label={t("Acercar")} data-tooltip={keyTooltip("Acercar", "+")} onClick={() => zoom(1.25)}>
             <Plus size={16} />
           </button>
-          <button type="button" aria-label={t("Ajustar a la pantalla")} data-tooltip={t("Ajustar a la pantalla")} onClick={fit}>
+          <button type="button" aria-label={t("Ajustar a la pantalla")} data-tooltip={keyTooltip("Ajustar a la pantalla", "0")} onClick={fit}>
             <Maximize size={15} />
           </button>
         </div>
@@ -1330,10 +1460,6 @@ export function ImageViewer({
             ref={attachStage}
             data-tour="viewer-stage"
             className={`viewer-stage ${annotating || marking || drawingZone || searchMode || tagging ? "is-annotating" : ""} ${cropping ? "is-cropping" : ""}`}
-            onWheel={(event) => {
-              const r = stage.current!.getBoundingClientRect();
-              zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - r.left, event.clientY - r.top);
-            }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -1523,7 +1649,6 @@ export function ImageViewer({
                 className="viewer-tag-picker"
                 style={pickerAt(showTagDraft)}
                 onPointerDown={(e) => e.stopPropagation()}
-                onWheel={(e) => e.stopPropagation()}
               >
                 <OptionPicker
                   column={tagColumn ?? { id: "", databaseId: row.databaseId, name: "", type: "multi_select", position: 0, config: {}, options: [] }}
@@ -1689,7 +1814,7 @@ export function ImageViewer({
             hidden={!!searching || sideTab !== "tags"}
           >
             <p className="viewer-empty">
-              {t("Clasifica lo que aparece en la foto con etiquetas del diccionario. Una región puede tener varias etiquetas.")}
+              {t("Clasifica lo que aparece en la foto con etiquetas del diccionario. Pulsa «Etiquetado» y arrastra sobre una parte de la imagen para marcar una región; cada región puede tener varias etiquetas.")}
             </p>
             {image && (
               <>
@@ -1791,7 +1916,7 @@ export function ImageViewer({
                       <p className="viewer-empty">
                         {t(tagging
                           ? "Arrastra sobre la imagen para marcar un elemento y elige una o varias etiquetas."
-                          : "Activa «Etiquetado» en la barra para marcar una región.")}
+                          : "Esta imagen aún no tiene etiquetas.")}
                       </p>
                       <button
                         type="button"
@@ -1814,8 +1939,8 @@ export function ImageViewer({
                       key={JSON.stringify([image.id, image.revision, dictionaryId])}
                       assetId={image.id}
                       dictionary={tagDictionary}
-                      model={tagSuggestionModel}
-                      onModelChange={setTagSuggestionModel}
+                      model={visionModel}
+                      onModelChange={setVisionModel}
                       onApplied={async () => {
                         setPendingRevision((revision) => revision + 1);
                         await loadTags();
@@ -1823,7 +1948,9 @@ export function ImageViewer({
                         onChanged();
                       }}
                       onPreview={focus}
-                      thumbnail={(region) => <Crop annotation={region} imageId={image.id} revision={image.revision} ratio={ratio} />}
+                      describe={(optionIds) => describeTags(optionIds.map((optionId) => ({ optionId })))}
+                      queueNext={browse || index < row.images.length - 1 ? queueTagAnalysis : undefined}
+                      thumbnail={(region, color) => <Crop annotation={{ ...region, color }} imageId={image.id} revision={image.revision} ratio={ratio} />}
                       active={sideTab === "tags" && !searching}
                       stage={stageElement}
                       showBoxes={!!natural && showTags && sideTab === "tags" && !cropping && !searching && !tagDraft}
@@ -1847,7 +1974,7 @@ export function ImageViewer({
             hidden={!!searching || sideTab !== "heritage"}
           >
             <p className="viewer-empty">
-              {t("Identifica edificios, monumentos u obras en la foto y vincúlalos a la ficha.")}
+              {t("Identifica edificios, monumentos u obras en la foto y vincúlalos a la ficha. Pulsa «Patrimonio» y márcalos en la imagen con un punto o un rectángulo.")}
             </p>
             <section className="viewer-tag-section" aria-labelledby={`${sideId}-heritage-dictionary-title`}>
               <h3 id={`${sideId}-heritage-dictionary-title`}>{t("Diccionario")}</h3>
@@ -1903,6 +2030,16 @@ export function ImageViewer({
                     onChoose={(id) => void saveMark(id)}
                     onCreate={(label) => void createElement(label)}
                     onCancel={() => setMarkDraft(null)}
+                    target={marking && markTarget ? { optionId: markTarget, kind: marking } : null}
+                    onMark={(optionId, kind) => {
+                      if (!image || cropping) return;
+                      if (!marking) toggleViewerTool("heritage");
+                      setMarking(kind);
+                      setMarkDraft(null);
+                      setSelected(null);
+                      setMarkTarget(optionId);
+                    }}
+                    onCancelTarget={() => setMarkTarget(null)}
                     onFocus={(m) => {
                       setSelected(m.id);
                       focus(m.kind === "point" ? { x: m.x - 0.05, y: m.y - 0.05, w: 0.1, h: 0.1 } : m);
@@ -1921,8 +2058,8 @@ export function ImageViewer({
                     inCell={inCell}
                     marks={heritageMarks}
                     active={!searching && sideTab === "heritage"}
-                    model={heritageModel}
-                    onModelChange={setHeritageModel}
+                    model={visionModel}
+                    onModelChange={setVisionModel}
                     allowNew={allowNewHeritage}
                     onAllowNewChange={setAllowNewHeritage}
                     zones={aiZones}
@@ -2052,7 +2189,10 @@ function Crop({
 }) {
   const aspect = (a.w * ratio) / a.h,
     max = 64;
+  // Every thumbnail sits in the same square, so the text beside it always
+  // starts at the same place whatever the shape of the region.
   return (
+    <span className="viewer-crop-slot">
     <span
       className="viewer-crop"
       style={{
@@ -2064,6 +2204,7 @@ function Crop({
         borderColor: a.color ?? undefined,
       }}
     />
+    </span>
   );
 }
 

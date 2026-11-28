@@ -14,10 +14,18 @@ export type ProposalGeometry = {
   reshape: (region: Region, grip: ProposalGrip, dx: number, dy: number, from: Point) => Region;
 };
 
+function proposalColors(colors: string[]): CSSProperties {
+  if (!colors.length) return {};
+  const width = 100 / colors.length;
+  const stops = colors.map((color, i) => `${color} ${i * width}% ${(i + 1) * width}%`);
+  return { "--tag": colors[0], "--tag-gradient": `linear-gradient(90deg, ${stops.join(", ")})` } as CSSProperties;
+}
+
 export function VisionProposalBoxes<Id extends number | string>({
   stage, showBoxes, position, point, reshape, boxes, selected, onSelect, onChange, busy, testId = "viewer-proposal-box",
 }: ProposalGeometry & {
-  boxes: { id: Id; region: Region }[];
+  /** With colours, the box takes them (one per tag, like the saved tags). */
+  boxes: { id: Id; region: Region; colors?: string[] }[];
   selected: Id | null;
   onSelect: (id: Id) => void;
   onChange: (id: Id, region: Region) => void;
@@ -32,13 +40,13 @@ export function VisionProposalBoxes<Id extends number | string>({
     const to = point(event);
     onChange(moving.id, reshape(moving.start, moving.grip, to.x - moving.from.x, to.y - moving.from.y, moving.from));
   };
-  return createPortal(boxes.map(({ id, region }) => {
+  return createPortal(boxes.map(({ id, region, colors = [] }) => {
     const active = selected === id && !busy;
     return (
       <div
         key={id}
-        className={`viewer-proposal-box${active ? " is-active" : ""}${busy ? "" : " is-editable"}`}
-        style={position(region)}
+        className={`viewer-proposal-box${active ? " is-active" : ""}${busy ? "" : " is-editable"}${colors.length > 1 ? " is-multicolor" : ""}`}
+        style={{ ...position(region), ...proposalColors(colors) }}
         data-testid={testId}
         onPointerDown={(event) => {
           if (busy || event.button !== 0) return;

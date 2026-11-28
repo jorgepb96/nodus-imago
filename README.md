@@ -50,13 +50,13 @@ Every image has a record with the fields you choose: text, dates, places, people
 
 An AI model describes images, tags them with your own vocabulary or transcribes backs, stamps and inscriptions, one record or thousands. You choose the model and the instructions, see each result appear in its cell, and undo what you do not want; batch automations wait as proposals until you approve them. Models can run on your computer or with the provider you choose.
 
-In the image viewer, use **Tags** to mark regions with multiple labels from a dictionary and filter the photo strip to images still awaiting review for that dictionary. A local vision model can suggest boxes and labels for you to adjust and approve. Selecting an external model sends the photo and active dictionary to that provider when you request suggestions. Full `.imago` backups preserve saved tags, annotations, and heritage marks with their positions.
+In the image viewer, use **Tags** to mark regions with multiple labels from a dictionary and filter the photo strip to images still awaiting review for that dictionary. A vision model suggests boxes and labels, drawn in each tag's own colour, for you to adjust and approve; Imago remembers the model you chose. **Queue** the next 5 to 100 unreviewed images and they are analysed in the background: their suggestions are waiting, ready to review, when you reach each photograph. Selecting an external model sends the photo and active dictionary to that provider when you request suggestions. Full `.imago` backups preserve saved tags, pending suggestions, annotations and heritage marks with their positions.
 
 ![AI models chosen by task, all running locally](docs/screenshots/readme-settings.png)
 
 ### 3. Identify heritage and find it by sight
 
-A **Heritage** property turns the monuments, buildings, streets and artworks in your photographs into identified elements: linked to Wikidata, with coordinates, a typology with icons (religious, civil, defensive…) and what each one is part of. Imago identifies a whole list in the background, with Wikidata and OpenStreetMap, and keeps every proposal for you to review. Mark an element on the photograph, ask a vision model which ones appear, or select a detail and find it in every other image.
+A **Heritage** property turns the monuments, buildings, streets and artworks in your photographs into identified elements: linked to Wikidata, with coordinates, a typology with icons (religious, civil, defensive…) and what each one is part of. Imago identifies a whole list in the background, with Wikidata and OpenStreetMap, and keeps every proposal for you to review. Mark an element on the photograph — straight from its card in the side panel, with a point or a rectangle — ask a vision model which ones appear, or select a detail and find it in every other image.
 
 ![Heritage records: the Court of the Lions linked to Wikidata, with its typology, coordinates and the ensemble it is part of](docs/screenshots/readme-heritage.png)
 
@@ -93,6 +93,7 @@ When colourising, Imago keeps the lightness and detail of the starting image and
 - **Methodology report**: a PDF in the interface language that documents a study for others to reproduce or assess — the data and its fingerprint, the vocabularies, every AI model with its revision and exact instructions, what was reviewed and corrected, agreement trials, thresholds, saved views and statistics, with charts and an optional JSON annex.
 - **Ask the chat** about your databases; exact figures come from a calculation run over every record on your computer.
 - **Back up and export**: CSV, JSON or XLSX, and full `.imago` backups that can be scheduled and encrypted.
+- **A viewer made for close reading**: scroll across a large image with the mouse wheel or trackpad, and zoom with a pinch, the buttons or ⌘/Ctrl with + and − (0 fits the image again); ← and → move along the photo strip, while ↑ and ↓ step through the tags, annotations or heritage elements of the open tab, focusing each one.
 - **Guided tutorials** walk you through each task on the real interface.
 
 <table>

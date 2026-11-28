@@ -781,6 +781,8 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   visualTagDictionary: z.object({ databaseId: id, columnId: id.nullable() }).strict(),
   visualTagModels: z.undefined(),
   visualTagSuggest: z.object({ assetId: id, dictionaryId: id, choice }).strict(),
+  visualTagStoredSuggestions: z.object({ assetId: id, dictionaryId: id }).strict(),
+  visualTagQueue: z.object({ dictionaryId: id, choice, assetIds: z.array(id).min(1).max(200) }).strict(),
   visualTagApplySuggestions: z.object({
     assetId: id, dictionaryId: id, choice, imageVersion: z.string().min(1).max(400),
     regions: z.array(z.object({
