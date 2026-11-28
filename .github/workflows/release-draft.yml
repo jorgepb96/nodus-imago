@@ -267,6 +267,8 @@ jobs:
     # it appends its DMG and ZIP to the published release and never holds
     # back or changes the result of this one.
     needs: publish
+    # The quality gate can be skipped when PR CI already passed.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     permissions:

@@ -14,7 +14,7 @@ module.exports = {
   extraResources: [
     { from: "build/icon.png", to: "icons/icon.png" },
     { from: "build/icon-dark.png", to: "icons/icon-dark.png" },
-    { from: "runtime", to: "runtime", filter: ["*.py", "*.txt"] },
+    { from: "runtime", to: "runtime", filter: ["*.py", "*.txt", "kandinsky_image_sr/*.py", "kandinsky_image_sr/LICENSE"] },
     { from: "LICENSE", to: "legal/LICENSE" },
     { from: "THIRD_PARTY_NOTICES.md", to: "legal/THIRD_PARTY_NOTICES.md" },
     { from: "PRIVACY.md", to: "legal/PRIVACY.md" },

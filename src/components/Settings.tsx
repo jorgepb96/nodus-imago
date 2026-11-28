@@ -2,6 +2,8 @@ import { UpdateSettings } from "./UpdateSettings";
 import { version as APP_VERSION } from "../../package.json";
 import { BackupSettings } from "./BackupSettings";
 import { ModelPreparation } from "./ModelPreparation";
+import { UpscaleModelCard } from "./UpscaleModelCard";
+import { UpscaleServicesSettings } from "./UpscaleApi";
 import { useState, useEffect } from "react";
 import {
   Download,
@@ -362,11 +364,14 @@ export function Settings({
           </div>
         )}
         {tab === "api" && (
-          <ApiSettings
-            status={status}
-            perform={perform}
-            onChanged={onChanged}
-          />
+          <>
+            <ApiSettings
+              status={status}
+              perform={perform}
+              onChanged={onChanged}
+            />
+            <UpscaleServicesSettings />
+          </>
         )}
         {tab === "models" && (
           <div className="settings-section">
@@ -380,7 +385,8 @@ export function Settings({
               )}
             </p>
             <ModelPreparation status={status} perform={perform} onChanged={onChanged}/>
-            {status.models.filter(m => !m.experimental || m.id === s.embeddingModel || m.id === s.visionModel || m.id === s.descriptionModel.model || m.id === s.classificationModel.model).map((m) => (
+            <UpscaleModelCard jobs={status.jobs} settings={s} perform={perform} onChanged={onChanged} />
+            {status.models.filter(m => m.task !== "upscale" && m.task !== "upscale-runtime").filter(m => !m.experimental || m.id === s.embeddingModel || m.id === s.visionModel || m.id === s.descriptionModel.model || m.id === s.classificationModel.model).map((m) => (
               <article className="model-card" key={m.id}>
                 <div className="row">
                   <div className="model-icon">

@@ -4,7 +4,9 @@
 // that produced it.
 import type { ApiProvider } from "./aiConfig";
 
-export type RestorationTask = "restore" | "repair" | "sharpen" | "colorize" | "custom";
+export type RestorationTask = "restore" | "repair" | "sharpen" | "colorize" | "custom" | "upscale";
+/** The tasks of the restoration workshop; "upscale" versions come from the AI upscaling section. */
+export const RESTORATION_TASKS: Exclude<RestorationTask, "upscale">[] = ["restore", "repair", "sharpen", "colorize", "custom"];
 export type WatermarkPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 export type Watermark = { enabled: boolean; text: string; position: WatermarkPosition };
 export type ImageApiStyle = "openai-images" | "gemini" | "chat-images";
@@ -32,7 +34,7 @@ export type Restoration = {
   title: string;
   provider: ApiProvider;
   model: string;
-  task: RestorationTask;
+  task: RestorationTask | "workshop";
   prompt: string;
   /** The region restored, in fractions of the image; null: the whole image. */
   region: { x: number; y: number; w: number; h: number } | null;
@@ -44,6 +46,8 @@ export type Restoration = {
   /** Only right after a run: how faithful it is, and anything the user should know. */
   check?: RestorationCheck;
   notes?: string[];
+  /** AI upscaling: how the version was made (scale, creativity, profile…); null for other tasks. */
+  params?: import("./upscale").UpscaleParams | null;
 };
 
 import type { Language } from "./language";
@@ -52,7 +56,7 @@ const FIDELITY: Record<Language, string> = {
   en: "Absolute fidelity: keep the framing, composition, perspective and proportions exactly; the people, their features, expressions and hair; the clothing, buildings, objects, text, inscriptions and numbers. Do not change the shape of the photograph: do not crop, zoom or add oval vignettes, frames, album corners or borders. Do not redraw faces or anything that is clearly visible: retouch only what is damaged. Do not invent details, beautify, smooth skin or modernise anything.",
   fr: "Fidélité absolue : conservez exactement le cadrage, la composition, la perspective et les proportions ; les personnes, leurs traits, expressions et coiffures ; les vêtements, les bâtiments, les objets, les textes, les inscriptions et les chiffres. Ne changez pas la forme de la photographie : ne la recadrez pas, ne l'agrandissez pas et n'ajoutez ni vignettes ovales, ni cadres, ni coins d'album, ni bordures. Ne redessinez pas les visages ni ce qui est bien visible : retouchez uniquement ce qui est abîmé. N'inventez pas de détails, n'embellissez pas, ne lissez pas la peau et ne modernisez rien.",
 };
-const TASKS: Record<Exclude<RestorationTask, "custom">, Record<Language, string>> = {
+const TASKS: Record<Exclude<RestorationTask, "custom" | "upscale">, Record<Language, string>> = {
   restore: {
     es: "Restaura esta fotografía antigua como lo haría un restaurador profesional: elimina el polvo, las motas, los arañazos, las grietas finas, las manchas y el ruido, y corrige el desvanecimiento: recupera la densidad y el contraste de los tonos apagados. Mantén el grano, la textura y la tonalidad de la época (blanco y negro, sepia o virado): no la colorees.",
     en: "Restore this old photograph as a professional restorer would: remove dust, specks, scratches, fine cracks, stains and noise, and correct fading: recover the density and contrast of washed-out tones. Keep the grain, texture and tone of the period (black and white, sepia or toned): do not colourise it.",
@@ -80,18 +84,22 @@ export const TASK_LABELS: Record<RestorationTask, string> = {
   sharpen: "Mejorar nitidez",
   colorize: "Colorear",
   custom: "Instrucciones propias",
+  upscale: "Escalado IA",
 };
+/** The label of a version's task; versions made in the image workshop share the table. */
+export const taskLabel = (task: string) => TASK_LABELS[task as RestorationTask] ?? "Taller de imágenes";
 export const TASK_HELP: Record<RestorationTask, string> = {
   restore: "Quita polvo, arañazos, manchas y ruido, y corrige el desvanecimiento.",
   repair: "Rellena desconchones, grietas, pliegues, roturas y esquinas perdidas.",
   sharpen: "Define bordes y detalles sin cambiar el contenido.",
   colorize: "Añade colores verosímiles a una fotografía en blanco y negro.",
   custom: "Escribe tú lo que debe hacer el modelo.",
+  upscale: "Amplía la imagen ×2 o ×4 con un modelo local.",
 };
 
 /** The instructions sent to the model for a task. */
 export function restorationPrompt(task: RestorationTask, language: Language, region: boolean): string {
-  if (task === "custom") return "";
+  if (task === "custom" || task === "upscale") return "";
   const crop = region
     ? language === "en"
       ? " This image is a crop of a larger one and will be pasted back in place: return it with the same framing, size and exposure, without changing its edges."
@@ -100,6 +108,33 @@ export function restorationPrompt(task: RestorationTask, language: Language, reg
       : " Esta imagen es un recorte de otra mayor y se volverá a pegar en su sitio: devuélvela con el mismo encuadre, tamaño y exposición, sin cambiar sus bordes."
     : "";
   return `${TASKS[task][language]} ${FIDELITY[language]}${crop}`;
+}
+
+/** Ways of colourising, for models that read instructions. */
+export type ColorStyle = "period" | "subtle" | "hand" | "custom";
+export const COLOR_STYLES: { id: ColorStyle; label: string; help: string }[] = [
+  { id: "period", label: "Colores de época", help: "Colores verosímiles para el lugar y la fecha de la foto." },
+  { id: "subtle", label: "Discreta", help: "Colores suaves y apagados: la foto sigue pareciendo antigua." },
+  { id: "hand", label: "Iluminada a mano", help: "Como las postales y fotos coloreadas a mano de principios del siglo XX." },
+  { id: "custom", label: "Instrucciones propias", help: "Escribe tú qué colores quieres (la fachada ocre, el uniforme azul marino…)." },
+];
+const COLOR_TEXT: Record<Exclude<ColorStyle, "period" | "custom">, Record<Language, string>> = {
+  subtle: {
+    es: "Colorea esta fotografía en blanco y negro con colores suaves, apagados y poco saturados, verosímiles para su época y su lugar, de modo que siga pareciendo una fotografía antigua. Cambia solo el color: conserva cada detalle, la textura, las luces y las sombras.",
+    en: "Colourise this black-and-white photograph with soft, muted, low-saturation colours, plausible for its period and place, so that it still looks like an old photograph. Change only the colour: keep every detail, the texture, the highlights and the shadows.",
+    fr: "Colorisez cette photographie en noir et blanc avec des couleurs douces, éteintes et peu saturées, vraisemblables pour son époque et son lieu, de sorte qu'elle ait toujours l'air d'une photographie ancienne. Ne changez que la couleur : conservez chaque détail, la texture, les lumières et les ombres.",
+  },
+  hand: {
+    es: "Colorea esta fotografía en blanco y negro como las fotografías y postales iluminadas a mano de principios del siglo XX: aguadas de color transparentes y delicadas sobre la imagen original, pocos tonos, cielos y vegetación suaves. Cambia solo el color: conserva cada detalle, la textura, las luces y las sombras.",
+    en: "Colourise this black-and-white photograph like the hand-coloured photographs and postcards of the early twentieth century: delicate, transparent washes of colour over the original image, few hues, soft skies and vegetation. Change only the colour: keep every detail, the texture, the highlights and the shadows.",
+    fr: "Colorisez cette photographie en noir et blanc comme les photographies et cartes postales coloriées à la main du début du XXe siècle : des lavis de couleur transparents et délicats sur l'image d'origine, peu de teintes, des ciels et une végétation doux. Ne changez que la couleur : conservez chaque détail, la texture, les lumières et les ombres.",
+  },
+};
+/** The instructions for a way of colourising. */
+export function colorPrompt(style: ColorStyle, language: Language, region: boolean): string {
+  if (style === "custom") return "";
+  const base = restorationPrompt("colorize", language, region);
+  return style === "period" ? base : base.replace(TASKS.colorize[language], COLOR_TEXT[style][language]);
 }
 
 /** Most context sent with an image: a long catalogue entry, but bounded. */

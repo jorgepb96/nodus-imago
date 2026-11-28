@@ -1,0 +1,150 @@
+{
+  "model": {
+    "id": "kandinsky-imagesr-2",
+    "repository": "kandinskylab/Kandinsky-ImageSR-2.0",
+    "revision": "7d5b5ed7def0b45b98f398c0b295a6b1658863db",
+    "label": "Kandinsky ImageSR 2.0 · escalado ×2 / ×4",
+    "task": "upscale",
+    "license": "MIT (VAE: Apache-2.0)",
+    "files": [
+      {
+        "path": "model_index.json",
+        "size": 455,
+        "algorithm": "git-sha1",
+        "digest": "246c240df138d131bd8eb95246034b6e1eb7770e"
+      },
+      {
+        "path": "transformer/config.json",
+        "size": 628,
+        "algorithm": "git-sha1",
+        "digest": "9514d5e5edf318680f5522d27512bc5e7eef4945"
+      },
+      {
+        "path": "transformer/diffusion_pytorch_model.safetensors.index.json",
+        "size": 90362,
+        "algorithm": "git-sha1",
+        "digest": "34e816f7a7f89b471fcd8c0db05919cf9e392e27"
+      },
+      {
+        "path": "transformer/diffusion_pytorch_model-00001-of-00003.safetensors",
+        "size": 4988839016,
+        "algorithm": "sha256",
+        "digest": "999909010bf61b311b7b1d1f71a1a5e4dd39fe1e5ae8f51bb7164d24a61e383f"
+      },
+      {
+        "path": "transformer/diffusion_pytorch_model-00002-of-00003.safetensors",
+        "size": 4993423840,
+        "algorithm": "sha256",
+        "digest": "3976b0d0879011bb6a79940aaf00c9172ee8dae18f4ee24ed7a132e6b1cca6a6"
+      },
+      {
+        "path": "transformer/diffusion_pytorch_model-00003-of-00003.safetensors",
+        "size": 268045424,
+        "algorithm": "sha256",
+        "digest": "4b0772dc003f0dd4b5ada3bd0f830cf33cdead44bc2e806096064262bb651e12"
+      },
+      {
+        "path": "vae/config.json",
+        "size": 824,
+        "algorithm": "git-sha1",
+        "digest": "3666d1d35f884cdcea30f125f4963a030793ec25"
+      },
+      {
+        "path": "vae/diffusion_pytorch_model.safetensors",
+        "size": 167666902,
+        "algorithm": "sha256",
+        "digest": "f5b59a26851551b67ae1fe58d32e76486e1e812def4696a4bea97f16604d40a3"
+      },
+      {
+        "path": "README.md",
+        "size": 4209,
+        "algorithm": "git-sha1",
+        "digest": "c8480cf688718d498c0072c08cd2319df05a2633"
+      },
+      {
+        "path": "SOURCE.json",
+        "size": 362,
+        "algorithm": "git-sha1",
+        "digest": "3880f0a23a93bd0d4b31999d9edd1715db5cb2f1"
+      }
+    ]
+  },
+  "runtimes": [
+    {
+      "id": "upscale-runtime",
+      "platform": "darwin",
+      "arch": "arm64",
+      "repository": "astral-sh/uv",
+      "revision": "0.13.10",
+      "label": "Gestor del entorno de escalado · uv",
+      "task": "upscale-runtime",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "uv-aarch64-apple-darwin.tar.gz",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.10/uv-aarch64-apple-darwin.tar.gz",
+          "size": 14700626,
+          "algorithm": "sha256",
+          "digest": "e419bf07533bdbf48795fc793601c834dd79db57a8c49ce8e25cfe3a8639958d"
+        }
+      ]
+    },
+    {
+      "id": "upscale-runtime",
+      "platform": "win32",
+      "arch": "x64",
+      "repository": "astral-sh/uv",
+      "revision": "0.13.10",
+      "label": "Gestor del entorno de escalado · uv",
+      "task": "upscale-runtime",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "uv-x86_64-pc-windows-msvc.zip",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.10/uv-x86_64-pc-windows-msvc.zip",
+          "size": 15641577,
+          "algorithm": "sha256",
+          "digest": "297b3881fe1adfb922becc2c1613202abb41dc83ea5ff43d472aa087ca1f8683"
+        }
+      ]
+    },
+    {
+      "id": "upscale-runtime",
+      "platform": "linux",
+      "arch": "x64",
+      "repository": "astral-sh/uv",
+      "revision": "0.13.10",
+      "label": "Gestor del entorno de escalado · uv",
+      "task": "upscale-runtime",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "uv-x86_64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.10/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "size": 17113138,
+          "algorithm": "sha256",
+          "digest": "bf65ac1a0af10f92c522d91ac096c7c0a39657647b155577e7836c2cbbb4526c"
+        }
+      ]
+    },
+    {
+      "id": "upscale-runtime",
+      "platform": "linux",
+      "arch": "arm64",
+      "repository": "astral-sh/uv",
+      "revision": "0.13.10",
+      "label": "Gestor del entorno de escalado · uv",
+      "task": "upscale-runtime",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "uv-aarch64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.10/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "size": 16275135,
+          "algorithm": "sha256",
+          "digest": "14590f644805a6234ffe071154340669e38137f38e60aa9629690119704107d2"
+        }
+      ]
+    }
+  ]
+}

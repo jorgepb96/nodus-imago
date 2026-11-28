@@ -17,13 +17,14 @@ import { checkLevel, type Restoration, type RestorationCheck, type RestorationTa
 import { recordEmbeddingParts } from "../../shared/recordEmbedding";
 import { imagePipeline, orientedImage } from "../import/images";
 import { assetView, shownSize } from "../../shared/imageRotation";
+import { sha256File } from "../workshop/workshop";
 
 /** Longest side sent to a provider. */
 const SEND_MAX = 2048;
 /** Extra margin around a region, so the model sees its surroundings. */
 const PADDING = 0.04;
 type Region = { x: number; y: number; w: number; h: number };
-type Row = Omit<Restoration, "region" | "title"> & { region_json: string | null; file: string };
+type Row = Omit<Restoration, "region" | "title" | "params"> & { region_json: string | null; params_json: string | null; file: string };
 
 /** Width and height as displayed, after the EXIF rotation. */
 function orientedSize(meta: { width?: number; height?: number; orientation?: number }): [number, number] {
@@ -399,6 +400,26 @@ export async function matchTone(source: Buffer, answer: Buffer, width: number, h
   return sharp(out, { raw: { width, height, channels: 3 } }).png().toBuffer();
 }
 
+const xmlEscape = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]!);
+/** XMP describing a derived version: what it is, what was done and from which original (by SHA-256). */
+export function xmpPacket(meta: { label: string; ops: unknown[]; original: string; app: string; sha256: string | null; createdAt: string }) {
+  return `<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:imago="https://nodus.app/ns/imago/1.0/">
+   <dc:description><rdf:Alt><rdf:li xml:lang="x-default">${xmlEscape(meta.label)}</rdf:li></rdf:Alt></dc:description>
+   <xmp:CreatorTool>${xmlEscape(meta.app)}</xmp:CreatorTool>
+   <xmp:ModifyDate>${xmlEscape(meta.createdAt)}</xmp:ModifyDate>
+   <imago:DerivedFrom>${xmlEscape(meta.original)}</imago:DerivedFrom>
+   <imago:VersionSHA256>${xmlEscape(meta.sha256 ?? "")}</imago:VersionSHA256>
+   <imago:Treatment>${xmlEscape(meta.label)}</imago:Treatment>
+   <imago:History>${xmlEscape(JSON.stringify(meta.ops))}</imago:History>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`;
+}
+
 export function watermarkSvg(width: number, height: number, mark: Watermark): Buffer {
   const size = Math.max(12, Math.round(Math.min(width, height) * 0.032)),
     pad = Math.round(size * 0.6),
@@ -602,7 +623,17 @@ export class Restorations {
         new Date().toISOString(),
         input.baseId ?? null,
       );
+    await this.seal(id);
     return { ...this.get(id), notes, check: await this.check(id) };
+  }
+
+  /** Records the SHA-256 of a version's file and of the original it comes from. */
+  async seal(id: string) {
+    const row = this.repo.db.prepare("SELECT r.file,a.content_hash FROM restorations r JOIN image_assets a ON a.id=r.asset_id WHERE r.id=?").get(id) as
+      | { file: string; content_hash: string }
+      | undefined;
+    if (!row) return;
+    this.repo.db.prepare("UPDATE restorations SET sha256=?,source_sha256=? WHERE id=?").run(await sha256File(row.file), row.content_hash, id);
   }
 
   /** What the record of an image says, field by field, to tell the model. */
@@ -619,13 +650,15 @@ export class Restorations {
 
   /** How closely a version keeps the original's light and shapes (inside its region, if any). */
   async check(id: string): Promise<RestorationCheck> {
-    const row = this.repo.db.prepare("SELECT asset_id,file,region_json,base_id FROM restorations WHERE id=?").get(id) as
-      | { asset_id: string; file: string; region_json: string | null; base_id: string | null }
+    const row = this.repo.db.prepare("SELECT asset_id,file,region_json,base_id,task FROM restorations WHERE id=?").get(id) as
+      | { asset_id: string; file: string; region_json: string | null; base_id: string | null; task: string }
       | undefined;
     if (!row) throw new Error("Versión no encontrada.");
     let [before, after] = [await this.reference(row.asset_id, row.base_id), await fs.readFile(row.file)];
     const region = row.region_json ? (JSON.parse(row.region_json) as Region) : null;
-    if (region) {
+    // An upscaled region is saved on its own, enlarged: only its source is cut.
+    if (region && row.task === "upscale") before = await this.cut(before, region);
+    else if (region) {
       const cut = async (png: Buffer) => {
         const m = await sharp(png).metadata();
         const left = Math.floor(region.x * m.width!),
@@ -646,19 +679,31 @@ export class Restorations {
     return { similarity, level: checkLevel(similarity) };
   }
 
+  /** A region of an image, as PNG. */
+  private async cut(png: Buffer, region: Region): Promise<Buffer> {
+    const m = await sharp(png).metadata();
+    const left = Math.min(m.width! - 1, Math.round(region.x * m.width!)),
+      top = Math.min(m.height! - 1, Math.round(region.y * m.height!));
+    return sharp(png)
+      .extract({ left, top, width: Math.max(1, Math.min(m.width! - left, Math.round(region.w * m.width!))), height: Math.max(1, Math.min(m.height! - top, Math.round(region.h * m.height!))) })
+      .png()
+      .toBuffer();
+  }
   /** The version in grey with what changed from the original in red (colour changes do not count). */
   async diff(id: string): Promise<string> {
     const target = path.join(this.folder, id + ".changes.png");
     if (await fs.stat(target).then(() => true, () => false)) return target;
-    const row = this.repo.db.prepare("SELECT asset_id,file,base_id FROM restorations WHERE id=?").get(id) as
-      | { asset_id: string; file: string; base_id: string | null }
+    const row = this.repo.db.prepare("SELECT asset_id,file,base_id,task,region_json FROM restorations WHERE id=?").get(id) as
+      | { asset_id: string; file: string; base_id: string | null; task: string; region_json: string | null }
       | undefined;
     if (!row) throw new Error("Versión no encontrada.");
     const m = await sharp(row.file).metadata();
     const scale = Math.min(1, 1600 / Math.max(m.width!, m.height!));
     const w = Math.round(m.width! * scale),
       h = Math.round(m.height! * scale);
-    const [a, raw] = await Promise.all([greyAt(await this.reference(row.asset_id, row.base_id), w, h), greyAt(await fs.readFile(row.file), w, h)]);
+    let reference = await this.reference(row.asset_id, row.base_id);
+    if (row.task === "upscale" && row.region_json) reference = await this.cut(reference, JSON.parse(row.region_json) as Region);
+    const [a, raw] = await Promise.all([greyAt(reference, w, h), greyAt(await fs.readFile(row.file), w, h)]);
     // Tone changes (lighter, more contrast) are not marked: only what changed
     // shape or detail. Fine detail is compared apart from the tone of each
     // area, so a darker dress is not a change but a redrawn eye is.
@@ -679,17 +724,20 @@ export class Restorations {
     return target;
   }
 
-  list(input: { assetId?: string }): Restoration[] {
+  /** Versions, newest first, optionally limited to upscaling results. */
+  list(input: { assetId?: string; kind?: "upscale" }): Restoration[] {
+    const where = [input.assetId ? "asset_id=?" : "", input.kind === "upscale" ? "task='upscale'" : ""].filter(Boolean);
     const rows = this.repo.db
       .prepare(
-        `SELECT id,asset_id assetId,row_id rowId,provider,model,task,prompt,region_json,file,width,height,created_at createdAt,base_id baseId FROM restorations ${input.assetId ? "WHERE asset_id=?" : ""} ORDER BY created_at DESC LIMIT 500`,
+        `SELECT id,asset_id assetId,row_id rowId,provider,model,task,prompt,region_json,params_json,file,width,height,created_at createdAt,base_id baseId FROM restorations ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created_at DESC LIMIT 500`,
       )
       .all(...(input.assetId ? [input.assetId] : [])) as Row[];
     const titles = new Map(this.repo.hydrate([...new Set(rows.map((r) => r.rowId))]).map((r) => [r.id, r.title]));
-    return rows.map(({ region_json, file: _file, ...r }) => ({
+    return rows.map(({ region_json, params_json, file: _file, ...r }) => ({
       ...r,
       title: titles.get(r.rowId) ?? "",
       region: region_json ? JSON.parse(region_json) : null,
+      params: params_json ? JSON.parse(params_json) : null,
     }));
   }
   get(id: string): Restoration {
@@ -704,18 +752,36 @@ export class Restorations {
   }
   async delete(id: string) {
     const file = this.file(id);
+    // A version others were made from keeps their history: delete those first.
+    if (this.repo.db.prepare("SELECT 1 FROM restorations WHERE base_id=? LIMIT 1").get(id))
+      throw new Error("Hay versiones hechas a partir de esta. Elimínalas antes para no romper su historial.");
     this.repo.db.prepare("DELETE FROM restorations WHERE id=?").run(id);
     await fs.rm(file, { force: true });
     await fs.rm(path.join(this.folder, id + ".changes.png"), { force: true });
   }
-  /** Writes a copy, with the watermark when it is on. */
-  async export(input: { id: string; target: string; format: "png" | "jpeg"; watermark: Watermark }) {
+  /**
+   * Writes a copy: with the label drawn on it when asked (only the copy; the
+   * saved version is never touched), XMP metadata saying what was done, and
+   * optionally the whole history as JSON beside it.
+   */
+  async export(input: {
+    id: string;
+    target: string;
+    format: "png" | "jpeg";
+    watermark: Watermark;
+    xmp?: boolean;
+    history?: boolean;
+    meta?: { label: string; ops: unknown[]; original: string; app: string; sha256: string | null; createdAt: string };
+  }) {
     let image = sharp(this.file(input.id));
     if (input.watermark.enabled && input.watermark.text.trim()) {
       const meta = await image.metadata();
       image = image.composite([{ input: watermarkSvg(meta.width!, meta.height!, input.watermark), left: 0, top: 0 }]);
     }
+    if (input.xmp !== false && input.meta) image = image.withXmp(xmpPacket(input.meta));
     const bytes = input.format === "jpeg" ? await image.jpeg({ quality: 92 }).toBuffer() : await image.png().toBuffer();
     await fs.writeFile(input.target, bytes);
+    if (input.history && input.meta)
+      await fs.writeFile(input.target.replace(/\.[a-z]+$/i, "") + ".historial.json", JSON.stringify({ version: input.id, ...input.meta }, null, 2));
   }
 }

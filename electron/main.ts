@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import {
   app,
   BrowserWindow,
@@ -58,6 +59,7 @@ import { autoUpdater } from "electron-updater";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { asLanguage, type Language } from "../shared/language";
+import { UpscaleServices } from "./ai/upscaleServices";
 /** Wikimedia asks automated clients to name themselves and a way to find them. */
 const WIKIMEDIA_USER_AGENT = "NodusImago/0.1 (https://github.com/jorgepb96/nodus-imago)";
 
@@ -215,6 +217,8 @@ app.whenReady().then(async () => {
     decrypt: (data) => safeStorage.decryptString(data),
   });
   const approvedEndpoints = new Set<string>();
+  // Online upscaling (fal.ai, Replicate, Stability AI): keys stay in this process.
+  const upscaleServices = new UpscaleServices(secrets);
   const providers = new ApiProviders(secrets, fetch, async (provider, base) => {
       const entry = provider + "|" + base;
       if (approvedEndpoints.has(entry)) return true;
@@ -258,7 +262,12 @@ app.whenReady().then(async () => {
       const abort = new AbortController();
       completionAborts.set(message.completionId, abort);
       void (
-        message.input?.embedding === true
+        message.input?.upscaleApi === true
+          ? call("_settings").then((settings) => {
+              if (!settings.remoteEnabled) throw Object.assign(new Error("Las APIs remotas están desactivadas en Ajustes."), { fatal: true });
+              return upscaleServices.run(message.input, abort.signal);
+            })
+          : message.input?.embedding === true
           ? providers.embed(message.input, abort.signal)
           : message.input?.stream === true
             ? providers.completeStream(
@@ -474,6 +483,11 @@ app.whenReady().then(async () => {
       const u = new URL(request.url),
         parts = u.pathname.split("/").filter(Boolean);
       // A restored version: imago://restoration/<id>; what changed in it: imago://restoration/<id>/changes.
+      // A workshop preview: imago://workshop/<file>.
+      if (u.hostname === "workshop" && parts.length === 1) {
+        const file = await call("_workshopFile", { name: parts[0] });
+        return new Response(await fs.readFile(file), { headers: { "Content-Type": "image/png", "Cache-Control": "no-store" } });
+      }
       if (u.hostname === "restoration" && (parts.length === 1 || (parts.length === 2 && parts[1] === "changes")) && /^[a-z0-9-]{1,200}$/i.test(parts[0])) {
         const file = await call(parts[1] ? "_restorationDiff" : "_restorationFile", { id: parts[0] });
         return new Response(await fs.readFile(file), {
@@ -674,6 +688,26 @@ app.whenReady().then(async () => {
         };
       }
       if (command === "credentialsStatus") return providers.keyStatus();
+      if (command === "upscaleServicesStatus") return upscaleServices.keyStatus();
+      if (command === "setUpscaleKey") {
+        const data = safe as any;
+        const settings = await call("_settings");
+        if (!settings.remoteEnabled && data.key.trim())
+          throw new Error("Activa «Permitir APIs remotas» en Ajustes para introducir claves de API.");
+        secrets.set(data.service, data.key);
+        return upscaleServices.keyStatus();
+      }
+      if (command === "clearUpscaleKey") {
+        secrets.clear((safe as any).service);
+        return upscaleServices.keyStatus();
+      }
+      if (command === "checkUpscaleKey" || command === "upscaleApiCatalog") {
+        const settings = await call("_settings");
+        if (command === "upscaleApiCatalog")
+          return settings.remoteEnabled ? upscaleServices.catalog(!!(safe as any)?.refresh, (safe as any)?.task ?? "upscale") : [];
+        if (!settings.remoteEnabled) throw new Error("Las APIs remotas están desactivadas en Ajustes.");
+        return upscaleServices.check((safe as any).service);
+      }
       if (command === "reloadInterface") { setTimeout(() => window?.webContents.reload(), 100); return; }
       // Deterministic banner coverage in the unpackaged E2E profile, as in
       // Nodus; a packaged build never reads this variable.
@@ -813,9 +847,40 @@ app.whenReady().then(async () => {
         restorationAbort?.abort();
         const abort = (restorationAbort = new AbortController());
         try {
+          if ((data.provider === "fal" || data.provider === "replicate") && !settings.remoteEnabled)
+            throw new Error("Las APIs remotas están desactivadas en Ajustes.");
           const source = await call("_restorationInput", { assetId: data.assetId, region: data.region, baseId: data.baseId });
           // The instructions, then what is known about the photograph.
           const prompt = restorationRequest(data.prompt, data.context ?? "");
+          // A specialised service (fal.ai, Replicate): its models restore or colourise on their own.
+          if (data.provider === "fal" || data.provider === "replicate") {
+            const png = await sharp(Buffer.from(source.image, "base64")).png().toBuffer();
+            const meta = await sharp(png).metadata();
+            const done = await upscaleServices.edit(
+              {
+                service: data.provider,
+                model: data.model,
+                task: data.task === "colorize" ? "colorize" : "restore",
+                image: png,
+                width: meta.width ?? source.sent[0],
+                height: meta.height ?? source.sent[1],
+                prompt,
+              },
+              abort.signal,
+            );
+            return await call("_restorationStore", {
+              assetId: data.assetId,
+              provider: data.provider,
+              model: data.model,
+              task: data.task,
+              prompt,
+              region: data.region,
+              crop: source.crop,
+              result: done.image.toString("base64"),
+              baseId: data.baseId ?? null,
+              keepDetail: data.keepDetail,
+            });
+          }
           const result = await providers.editImage(
             {
               choice: { provider: data.provider, model: data.model },
@@ -988,7 +1053,7 @@ app.whenReady().then(async () => {
           filters: [data.format === "jpeg" ? { name: "JPEG", extensions: ["jpg", "jpeg"] } : { name: "PNG", extensions: ["png"] }],
         });
         if (result.canceled || !result.filePath) return null;
-        await call("_restorationExport", { id: data.id, target: result.filePath, format: data.format, watermark: data.watermark });
+        await call("_restorationExport", { id: data.id, target: result.filePath, format: data.format, watermark: data.watermark, xmp: data.xmp, history: data.history });
         return result.filePath;
       }
       if (command === "imageModelCatalog") {

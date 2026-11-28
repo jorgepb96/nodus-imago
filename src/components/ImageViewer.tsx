@@ -27,6 +27,9 @@ import {
   Tag,
   Tags,
   Undo2,
+  Redo2,
+  SlidersHorizontal,
+  Microscope,
   Eye,
   EyeOff,
   CheckCheck,
@@ -43,6 +46,7 @@ import { importedOptionColor } from "../../shared/databaseCsv";
 import type { VisualTagChoice, VisualTagRegion } from "../../shared/visualTags";
 import { useBrowse, ViewerStrip, type BrowseItem, type BrowseList } from "./ViewerStrip";
 import type { Commands, ImageAnnotation, RecordRow } from "../../shared/imago";
+import type { WorkshopOp } from "../../shared/workshop";
 import { useT } from "../i18n";
 import { DetailSearchPanel, type DetailQuery } from "./DetailSearchPanel";
 import { Button, Spinner } from "./ui";
@@ -137,6 +141,23 @@ function dragCrop(start: Region, grip: Grip, dx: number, dy: number, origin: { x
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
+type InspectMode = "none" | "contrast" | "clahe" | "invert" | "gray" | "edges" | "falsecolor";
+const INSPECT_MODES: [InspectMode, string, string][] = [
+  ["none", "Imagen normal", "La imagen tal como es."],
+  ["contrast", "Más contraste", "Separa más los claros de los oscuros."],
+  ["clahe", "Contraste local", "Realza el detalle en sombras y luces a la vez: ayuda a leer inscripciones y rótulos."],
+  ["invert", "Negativo", "Invierte los tonos: positiva un negativo escaneado o deja ver lo que se pierde en las sombras."],
+  ["gray", "Blanco y negro", "Quita el color o el tono sepia."],
+  ["edges", "Bordes", "Dibuja los contornos: deja ver retoques, letras borradas o perfiles."],
+  ["falsecolor", "Falso color", "Pinta cada nivel de gris de un color: distingue tonos casi iguales."],
+];
+const INSPECT_FILTERS: Partial<Record<InspectMode, string>> = { contrast: "contrast(1.7) brightness(1.05)", invert: "invert(1)", gray: "grayscale(1)" };
+const INSPECT_OPS: Partial<Record<InspectMode, WorkshopOp[]>> = {
+  clahe: [{ tool: "clahe", strength: 70 }],
+  edges: [{ tool: "edges", strength: 60 }],
+  falsecolor: [{ tool: "falsecolor", palette: "thermal" }],
+};
+
 export function ImageViewer({
   row,
   initialIndex = 0,
@@ -145,6 +166,7 @@ export function ImageViewer({
   onChanged,
   onOpenRecord,
   onCompare,
+  onWorkshop,
   columns,
   browse,
   onBrowse,
@@ -163,6 +185,8 @@ export function ImageViewer({
   onChanged: () => void;
   onOpenRecord?: (rowId: string) => void;
   onCompare?: (assetIds: string[]) => void;
+  /** Opens the image workshop with the image shown. */
+  onWorkshop?: (assetId: string) => void;
 }) {
   const t = useT();
   const viewerUsesCommand = /^Mac/i.test(navigator.platform);
@@ -294,6 +318,7 @@ export function ImageViewer({
   const tagsReady = !!image && tagViewAsset === image.id && !switchingDictionary;
   const [reviewed, setReviewed] = useState(false);
   const [canUndoTag, setCanUndoTag] = useState(false);
+  const [canRedoTag, setCanRedoTag] = useState(false);
   const [undoingTag, setUndoingTag] = useState(false);
   const [suggestionsUndo, setSuggestionsUndo] = useState(0);
   /** The selection and its editable tag choices, before saving. */
@@ -335,6 +360,12 @@ export function ImageViewer({
   const [showTags, setShowTags] = useState(true);
   const [showNotes, setShowNotes] = useState(true);
   const [layersOpen, setLayersOpen] = useState(false);
+  /** A way of looking at the image, only while it is shown: nothing is saved. */
+  const [inspect, setInspect] = useState<InspectMode>("none");
+  const [inspectOpen, setInspectOpen] = useState(false);
+  const [inspectView, setInspectView] = useState<{ key: string; url: string } | null>(null);
+  const [inspectBusy, setInspectBusy] = useState(false);
+  const inspectTrigger = useRef<HTMLButtonElement>(null);
   const layerTrigger = useRef<HTMLButtonElement>(null);
   const firstLayer = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -472,6 +503,7 @@ export function ImageViewer({
     setTagOptionIds(found.optionIds);
     setReviewed(found.reviewed);
     setCanUndoTag(found.canUndo);
+    setCanRedoTag(found.canRedo);
     setTagViewAsset(assetId);
     setTagDraft((draft) => draft?.id && !found.regions.some((r) => r.id === draft.id) ? null : draft);
   }, []);
@@ -530,6 +562,22 @@ export function ImageViewer({
   // instead of waiting behind imports or indexing.
   const imageRevision = image?.revision;
   const imageSrc = imageId ? src(imageId, imageRevision, cropping ? "full" : "preview") : undefined;
+  // The modes that need the workshop's engine are drawn over the image, the same size.
+  const inspectKey = imageId && INSPECT_OPS[inspect] ? `${imageId}|${imageRevision}|${inspect}` : null;
+  useEffect(() => {
+    if (!inspectKey || !imageId) return;
+    let live = true;
+    setInspectBusy(true);
+    void window.imago
+      .call("workshopPreview", { session: "inspect", assetId: imageId, versionId: null, ops: INSPECT_OPS[inspect]!, maxSide: 2400 })
+      .then((r) => live && setInspectView({ key: inspectKey, url: `imago://workshop/${r.name}` }))
+      .catch(() => live && setInspect("none"))
+      .finally(() => live && setInspectBusy(false));
+    return () => {
+      live = false;
+    };
+  }, [inspectKey, imageId, inspect]);
+  const inspectFilter = cropping ? undefined : INSPECT_FILTERS[inspect];
   const thumbSrc = imageId && !cropping ? src(imageId, imageRevision, "thumb") : undefined;
   const [loadedThumb, setLoadedThumb] = useState<string>();
   const imageElement = useRef<HTMLImageElement>(null);
@@ -881,14 +929,14 @@ export function ImageViewer({
       if (activeImage.current === image.id) setError(err instanceof Error ? err.message : String(err));
     }
   };
-  const undoTag = async () => {
-    if (!image || !tagsReady || !canUndoTag || undoingTag || tagDraft || tagPreview || savingTags.current.has(image.id)) return;
+  const undoTag = async (direction: "undo" | "redo" = "undo") => {
+    if (!image || !tagsReady || !(direction === "undo" ? canUndoTag : canRedoTag) || undoingTag || tagDraft || tagPreview || savingTags.current.has(image.id)) return;
     const assetId = image.id;
     const scopeVersion = tagScopeVersion.current;
     setUndoingTag(true);
     setError(null);
     try {
-      const action = await window.imago.call("visualTagUndo", { assetId, dictionaryId });
+      const action = await window.imago.call(direction === "undo" ? "visualTagUndo" : "visualTagRedo", { assetId, dictionaryId });
       if (action) {
         setPendingRevision((revision) => revision + 1);
         if (activeImage.current === assetId && scopeVersion === tagScopeVersion.current) {
@@ -1070,9 +1118,11 @@ export function ImageViewer({
       if (event.defaultPrevented || event.isComposing) return;
       const target = event.target instanceof Element ? event.target : null;
       const undoShortcut = event.key.toLowerCase() === "z" && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
+      const redoShortcut = (event.metaKey || event.ctrlKey) && !event.altKey &&
+        ((event.key.toLowerCase() === "z" && event.shiftKey) || (event.key.toLowerCase() === "y" && !event.shiftKey));
       const stripArrow = (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
         target?.matches('.viewer-strip-pending input[type="checkbox"]');
-      const checkboxUndo = undoShortcut && target?.matches('input[type="checkbox"]');
+      const checkboxUndo = (undoShortcut || redoShortcut) && target?.matches('input[type="checkbox"]');
       if (!stripArrow && !checkboxUndo && target?.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])')) return;
       // Keys typed in a window opened over the viewer (a result of «Buscar») are its own.
       const within = target?.closest('dialog,[role="dialog"]');
@@ -1084,6 +1134,11 @@ export function ImageViewer({
       if (sideTab === "tags" && !searching && !tagDraft && !tagPreview && undoShortcut && canUndoTag) {
         event.preventDefault();
         if (!event.repeat) void undoTag();
+        return;
+      }
+      if (sideTab === "tags" && !searching && !tagDraft && !tagPreview && redoShortcut && canRedoTag) {
+        event.preventDefault();
+        if (!event.repeat) void undoTag("redo");
         return;
       }
       const viewerModifier = viewerUsesCommand ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
@@ -1446,6 +1501,45 @@ export function ImageViewer({
                 ))}
               </CriteriaPopover>
             )}
+            <button
+              type="button"
+              ref={inspectTrigger}
+              className={`viewer-annotate ${inspect !== "none" ? "is-on" : ""}`}
+              aria-haspopup="dialog"
+              aria-expanded={inspectOpen}
+              data-testid="viewer-inspect"
+              data-tooltip={t("Otras formas de mirar la imagen (más contraste, negativo, bordes…). Solo mientras la ves: no se guarda nada.")}
+              disabled={!image || !!cropping}
+              onClick={() => setInspectOpen((open) => !open)}
+            >
+              {/* While the view is prepared the spinner takes the icon's place: the button keeps its size. */}
+              {inspectBusy ? <span className="viewer-inspect-busy" aria-hidden="true" /> : <Microscope size={16} aria-hidden="true" />}
+              {t("Inspeccionar")}
+              <ChevronDown size={13} aria-hidden="true" />
+            </button>
+            {inspectOpen && (
+              <CriteriaPopover anchor={inspectTrigger} onClose={() => setInspectOpen(false)} width={250} label={t("Inspeccionar")} className="viewer-layers-menu viewer-inspect-menu">
+                {INSPECT_MODES.map(([mode, label, tooltip]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={inspect === mode}
+                    data-tooltip={t(tooltip)}
+                    data-testid={`viewer-inspect-${mode}`}
+                    onClick={() => setInspect(mode)}
+                  >
+                    <span>{t(label)}</span>
+                    {inspect === mode && <Check size={15} aria-hidden="true" />}
+                  </button>
+                ))}
+                {onWorkshop && image && (
+                  <button type="button" className="viewer-inspect-workshop" onClick={() => onWorkshop(image.id)} data-testid="viewer-open-workshop">
+                    <span>{t("Tratar en el Taller…")}</span>
+                    <SlidersHorizontal size={15} aria-hidden="true" />
+                  </button>
+                )}
+              </CriteriaPopover>
+            )}
           </>
         )}
         <span className="viewer-spacer" />
@@ -1480,9 +1574,18 @@ export function ImageViewer({
                 onError={() => setLoadFailed(true)}
                 style={
                   natural
-                    ? { width: natural.w * view.scale, height: natural.h * view.scale, transform: `translate(${view.x}px, ${view.y}px)` }
+                    ? { width: natural.w * view.scale, height: natural.h * view.scale, transform: `translate(${view.x}px, ${view.y}px)`, filter: inspectFilter }
                     : { visibility: "hidden" }
                 }
+              />
+            )}
+            {image && natural && !cropping && inspectView && inspectView.key === inspectKey && (
+              <img
+                className="viewer-image viewer-inspect-layer"
+                src={inspectView.url}
+                alt=""
+                draggable={false}
+                style={{ width: natural.w * view.scale, height: natural.h * view.scale, transform: `translate(${view.x}px, ${view.y}px)` }}
               />
             )}
             {!natural && !loadFailed && thumbSrc && (
@@ -1847,6 +1950,20 @@ export function ImageViewer({
                         onClick={() => void undoTag()}
                       >
                         <Undo2 size={16} aria-hidden="true" />
+                      </button>
+                    )}
+                    {tagsReady && (
+                      <button
+                        type="button"
+                        className="viewer-review viewer-tag-undo"
+                        data-testid="viewer-tag-redo"
+                        aria-label={t("Rehacer el último cambio de etiquetado deshecho (⇧⌘Z / Ctrl+Y)")}
+                        aria-keyshortcuts="Meta+Shift+Z Control+Y"
+                        data-tooltip={t("Rehacer el último cambio de etiquetado deshecho (⇧⌘Z / Ctrl+Y)")}
+                        disabled={!canRedoTag || undoingTag || !!tagDraft || !!tagPreview}
+                        onClick={() => void undoTag("redo")}
+                      >
+                        <Redo2 size={16} aria-hidden="true" />
                       </button>
                     )}
                   </div>

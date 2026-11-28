@@ -54,6 +54,11 @@ import { foldText, heritageDictionaryOptions, heritageRegionPrompt, knownForReco
 import { parseVisualTagSuggestions, regionOverlap, visualTagSuggestionPrompt, type VisualTagChoice } from "../shared/visualTags";
 import { modelChoiceLabel } from "../shared/aiConfig";
 import { Restorations } from "./db/restorations";
+import { Upscaler } from "./ai/upscaler";
+import { Workshop } from "./workshop/workshop";
+import { exportLabel } from "../shared/workshop";
+import { version as APP_VERSION } from "../package.json";
+import { UPSCALE_ENV_ID, UPSCALE_MODEL_ID, UPSCALE_RUNTIME_ID } from "../shared/upscale";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
 import { preparePlates } from "./export/plates";
@@ -78,7 +83,7 @@ const CONTENT_WRITES = new Set([
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
-  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "visualTagUndo", "visualTagDictionary", "visualTagApplySuggestions", "convertToRelation", "pairRelation", "createWorkFromFamily",
+  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "visualTagUndo", "visualTagRedo", "visualTagDictionary", "visualTagApplySuggestions", "convertToRelation", "pairRelation", "createWorkFromFamily",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -132,6 +137,8 @@ export class Service {
   /** Towns of a running heritage search, worked out once per run. */
   private heritageTowns = new WeakMap<object, Promise<Towns>>();
   restorations: Restorations;
+  upscaler: Upscaler;
+  workshop: Workshop;
   suggestions: NeighbourSuggestions;
   details: DetailSearch;
   chatData: ChatData;
@@ -210,6 +217,17 @@ export class Service {
       }
     });
     this.queue.fingerprint = (payload, index) => this.variants.fingerprintOne(payload, index);
+    // Local AI upscaling: its own Python process, next to the inference script.
+    this.upscaler = new Upscaler(this.repo, this.models, path.join(path.dirname(script), "upscale.py"));
+    this.upscaler.remote = remote as ((input: unknown, signal: AbortSignal) => Promise<unknown>) | undefined;
+    this.upscaler.seal = (id) => this.restorations.seal(id);
+    // The image workshop renders in a thread of its own (dist-electron/workshop/renderWorker.cjs).
+    this.workshop = new Workshop(this.repo, path.join(__dirname, "workshop", "renderWorker.cjs"));
+    this.queue.upscaleOne = async (payload, index, signal, message) => {
+      await this.upscaler.runItem(payload, index, signal, message);
+      return "imported";
+    };
+    this.queue.upscaleEnvironment = (signal, message) => this.upscaler.prepareEnvironment(signal, message);
     this.works = new Works(this.repo, this.variants);
     this.visualTags = new VisualTags(this.repo);
     this.appearances = new Appearances(this.repo, this.variants, this.works);
@@ -920,6 +938,7 @@ export class Service {
         await this.engine.resetRuntimes();
         return this.models.verify(input.id);
       case "deleteModel":
+        if ([UPSCALE_MODEL_ID, UPSCALE_RUNTIME_ID, UPSCALE_ENV_ID].includes(input.id)) return this.run("upscaleUninstall");
         if (this.unfinishedJobs())
           throw new Error(
             "Pausa o cancela las tareas antes de eliminar un modelo.",
@@ -1292,6 +1311,46 @@ export class Service {
         return this.suggestions.apply(input.items);
       case "restorationsList":
         return this.restorations.list(input ?? {});
+      case "upscaleStatus":
+        return this.upscaler.status(!!input?.refresh);
+      case "upscaleInstall": {
+        const id = await this.upscaler.install();
+        this.queue.pump();
+        return id;
+      }
+      case "upscaleUninstall":
+        if (this.repo.jobs().some((job) => ["upscale", "prepare"].includes(job.kind) && ["queued", "running"].includes(job.state)))
+          throw new Error("Pausa o cancela los escalados y la instalación antes de eliminar el modelo.");
+        for (const job of this.repo.jobs())
+          if (job.kind === "prepare" && job.state === "paused") this.queue.control(job.id, "cancel", false);
+        await this.upscaler.uninstall();
+        return;
+      case "upscaleProbe":
+        await this.upscaler.probe();
+        return this.upscaler.status(true);
+      case "upscaleEnqueue": {
+        const api = input.engine?.kind === "api";
+        if (api && !this.repo.getSettings().remoteEnabled) throw new Error("Las APIs remotas están desactivadas en Ajustes.");
+        if (!api && !(await this.upscaler.status()).ready) throw new Error("Instala el escalado local en Ajustes › Modelos locales.");
+        const settings = this.repo.getSettings();
+        this.repo.updateSettings({
+          upscale: { ...settings.upscale, scale: input.scale, creativity: input.creativity, fit: input.fit, maxOutputSide: input.maxOutputSide },
+        });
+        const label = input.items.length === 1 ? `Escalar ×${input.scale}` : `Escalar ${input.items.length} imágenes ×${input.scale}`;
+        const id = this.repo.newJob("upscale", { label, ...input }, input.items.length);
+        this.queue.pump();
+        return id;
+      }
+      case "upscaleActive": {
+        const job = this.repo.db
+          .prepare("SELECT id,payload_json FROM jobs WHERE kind='upscale' AND state IN ('queued','running','paused') ORDER BY created_at DESC LIMIT 1")
+          .get() as { id: string; payload_json: string } | undefined;
+        if (!job) return null;
+        const payload = JSON.parse(job.payload_json);
+        return { id: job.id, items: payload.items, scale: payload.scale, creativity: payload.creativity };
+      }
+      case "upscalesList":
+        return this.restorations.list({ assetId: input?.assetId, kind: "upscale" });
       case "restorationDelete":
         return this.restorations.delete(input.id);
       case "_restorationInput":
@@ -1306,8 +1365,30 @@ export class Service {
         return this.restorations.store(input);
       case "_restorationFile":
         return this.restorations.file(input.id);
-      case "_restorationExport":
-        return this.restorations.export(input);
+      case "_restorationExport": {
+        // What the version is and how it was made, for the XMP and the JSON history.
+        const assetId = (this.repo.db.prepare("SELECT asset_id FROM restorations WHERE id=?").get(input.id) as { asset_id: string } | undefined)?.asset_id;
+        const version = assetId ? this.workshop.versions(assetId).find((v) => v.id === input.id) : undefined;
+        const asset = assetId ? (this.repo.asset(assetId) as { file_name: string; content_hash: string }) : null;
+        return this.restorations.export({
+          ...input,
+          meta: version && asset
+            ? { label: exportLabel(version.ops), ops: version.ops, original: `${asset.file_name} (SHA-256 ${asset.content_hash})`, app: `Nodus Imago ${APP_VERSION}`, sha256: version.sha256, createdAt: version.createdAt }
+            : undefined,
+        });
+      }
+      case "workshopPreview":
+        return this.workshop.preview(input);
+      case "_workshopFile":
+        return this.workshop.file(input.name);
+      case "workshopAnalyze":
+        return this.workshop.analyze(input.assetId, input.versionId ?? null);
+      case "workshopSave":
+        return this.workshop.save(input);
+      case "workshopVersions":
+        return this.workshop.versions(input.assetId);
+      case "workshopIntegrity":
+        return this.workshop.integrity(input.assetId);
       case "variantsStatus":
         return this.variants.status(input.databaseIds);
       case "variantsPrepare": {
@@ -1368,6 +1449,11 @@ export class Service {
         return this.visualTags.pendingImages(input.databaseId, input.dictionaryId, input.rowIds);
       case "visualTagUndo": {
         const action = this.visualTags.undo(input.assetId, input.dictionaryId);
+        if (action) this.changed();
+        return action;
+      }
+      case "visualTagRedo": {
+        const action = this.visualTags.redo(input.assetId, input.dictionaryId);
         if (action) this.changed();
         return action;
       }
@@ -1488,6 +1574,8 @@ export class Service {
         this.backupAbort?.abort();
         await this.storageTask?.catch(() => {});
         await this.queue.close();
+        this.upscaler.close();
+        this.workshop.close();
         this.engine.close();
         this.repo.close();
         return;

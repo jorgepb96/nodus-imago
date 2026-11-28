@@ -4,6 +4,7 @@ await build({
     "electron/main.ts",
     "electron/preload.ts",
     "electron/worker.ts",
+    "electron/workshop/renderWorker.ts",
     "electron/ai/onnxWorker.ts",
     "electron/chat/sandboxChild.ts",
   ],

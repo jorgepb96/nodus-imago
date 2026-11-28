@@ -65,6 +65,8 @@ const decode = (r: Row, optionIds: string[]): VisualTagRegion => ({
 
 export class VisualTags {
   private readonly undoSteps: UndoStep[] = [];
+  /** Steps undone, newest last; any new change of the same image and dictionary drops them. */
+  private readonly redoSteps: UndoStep[] = [];
 
   constructor(private repo: Repository) {}
 
@@ -106,6 +108,7 @@ export class VisualTags {
       dictionary,
       optionIds: column ? this.appliedOptionIds(column.id, dictionaryId) : [],
       canUndo: this.undoIndex(assetId, dictionaryId) >= 0,
+      canRedo: this.undoIndex(assetId, dictionaryId, this.redoSteps) >= 0,
     };
   }
 
@@ -124,9 +127,9 @@ export class VisualTags {
     ).pluck().all(databaseId, JSON.stringify(rowIds), dictionaryId ?? "", dictionaryId) as string[];
   }
 
-  private undoIndex(assetId: string, dictionaryId: string | null) {
-    for (let i = this.undoSteps.length - 1; i >= 0; i--) {
-      const step = this.undoSteps[i];
+  private undoIndex(assetId: string, dictionaryId: string | null, steps = this.undoSteps) {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const step = steps[i];
       if (step.assetId === assetId && step.dictionaryId === dictionaryId) return i;
     }
     return -1;
@@ -155,18 +158,30 @@ export class VisualTags {
     if (regions.length || before.reviewedAt !== after.reviewedAt) {
       this.undoSteps.push({ assetId, dictionaryId, kind, regions, beforeReview: before.reviewedAt, afterReview: after.reviewedAt });
       if (this.undoSteps.length > 100) this.undoSteps.shift();
+      for (let i = this.redoSteps.length - 1; i >= 0; i--)
+        if (this.redoSteps[i].assetId === assetId && this.redoSteps[i].dictionaryId === dictionaryId) this.redoSteps.splice(i, 1);
     }
     return result;
   }
 
   clearUndo() {
     this.undoSteps.length = 0;
+    this.redoSteps.length = 0;
   }
 
   undo(assetId: string, dictionaryId: string | null): { kind: UndoKind } | null {
-    const index = this.undoIndex(assetId, dictionaryId);
+    return this.step(assetId, dictionaryId, this.undoSteps, this.redoSteps, "Esta acción ya no se puede deshacer porque el etiquetado ha cambiado.");
+  }
+
+  redo(assetId: string, dictionaryId: string | null): { kind: UndoKind } | null {
+    return this.step(assetId, dictionaryId, this.redoSteps, this.undoSteps, "Esta acción ya no se puede rehacer porque el etiquetado ha cambiado.");
+  }
+
+  /** Takes the image's newest step from one stack, puts its «before» back and keeps the reverse step in the other. */
+  private step(assetId: string, dictionaryId: string | null, from: UndoStep[], to: UndoStep[], staleMessage: string): { kind: UndoKind } | null {
+    const index = this.undoIndex(assetId, dictionaryId, from);
     if (index < 0) return null;
-    const step = this.undoSteps[index];
+    const step = from[index];
     const asset = this.repo.asset(assetId) as { row_id: string; database_id: string };
     const restored = this.repo.db.transaction(() => {
       const current = this.snapshot(assetId, dictionaryId);
@@ -197,8 +212,15 @@ export class VisualTags {
       this.repo.syncVisualTags(asset.row_id);
       return true;
     })();
-    this.undoSteps.splice(index, 1);
-    if (!restored) throw new Error("Esta acción ya no se puede deshacer porque el etiquetado ha cambiado.");
+    from.splice(index, 1);
+    if (!restored) throw new Error(staleMessage);
+    to.push({
+      ...step,
+      regions: step.regions.map(({ id, before, after }) => ({ id, before: after, after: before })),
+      beforeReview: step.afterReview,
+      afterReview: step.beforeReview,
+    });
+    if (to.length > 100) to.shift();
     return { kind: step.kind };
   }
 

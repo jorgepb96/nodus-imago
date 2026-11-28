@@ -265,7 +265,7 @@ export type ModelInfo = {
   experimental?: boolean;
   id: string;
   label: string;
-  task: "embedding" | "vision" | "runtime";
+  task: "embedding" | "vision" | "runtime" | "upscale" | "upscale-runtime";
   repository: string;
   revision: string;
   license: string;
@@ -318,6 +318,23 @@ export type Settings = {
   citationTemplates?: Record<string, string>;
   /** Mark added to restored images when they are downloaded. */
   watermark?: import("./restoration").Watermark;
+  /** Local AI upscaling: the memory profile, the last choices and this computer's timings. */
+  upscale?: UpscaleSettings;
+};
+export type UpscaleSettings = {
+  profile?: import("./upscale").UpscaleProfileChoice;
+  scale?: import("./upscale").UpscaleScale;
+  creativity?: number;
+  fit?: boolean;
+  maxOutputSide?: number;
+  /** Seconds per tile measured here, by profile (a running average). */
+  measured?: Partial<Record<import("./upscale").UpscaleProfile, number>>;
+  /** Where to upscale: this computer or an online service. */
+  engine?: "local" | "api";
+  /** The online model chosen («service|id»), the starred ones and the most a run may cost per image (USD). */
+  apiModel?: string;
+  favorites?: string[];
+  maxPrice?: number | null;
 };
 export type Status = {
   root: string;
@@ -552,13 +569,40 @@ export type Commands = {
   };
   neighbourSuggestionsApply: { input: { items: { rowId: string; columnId: string; value: string }[] }; result: number };
   restorationsList: { input: { assetId?: string }; result: import("./restoration").Restoration[] };
+  /** Local AI upscaling: hardware, recommended profile and what is installed. */
+  upscaleStatus: { input: { refresh?: boolean } | undefined; result: import("./upscale").UpscaleStatus };
+  /** Queues the download of the model and the preparation of its environment. */
+  upscaleInstall: { input: void; result: string };
+  upscaleUninstall: { input: void; result: void };
+  /** Asks PyTorch what it sees (exact GPU memory) once the environment is installed. */
+  upscaleProbe: { input: void; result: import("./upscale").UpscaleStatus };
+  upscaleEnqueue: {
+    input: { items: import("./upscale").UpscaleItem[]; scale: import("./upscale").UpscaleScale; creativity: number; fit: boolean; maxOutputSide: number; engine?: import("./upscale").UpscaleEngine };
+    result: string;
+  };
+  upscalesList: { input: { assetId?: string }; result: import("./restoration").Restoration[] };
+  /** Image workshop: a preview of operations on the original or a version. */
+  workshopPreview: {
+    input: { session: string; assetId: string; versionId: string | null; ops: import("./workshop").WorkshopOp[]; maxSide?: number };
+    result: { name: string; width: number; height: number; histogram: number[]; low: number; high: number; mean: number; ms: number };
+  };
+  workshopAnalyze: { input: { assetId: string; versionId: string | null }; result: import("./workshop").WorkshopAnalysis };
+  workshopSave: { input: { assetId: string; versionId: string | null; ops: import("./workshop").WorkshopOp[] }; result: import("./workshop").ImageVersion };
+  workshopVersions: { input: { assetId: string }; result: import("./workshop").ImageVersion[] };
+  workshopIntegrity: { input: { assetId: string }; result: { ok: boolean; sha256: string | null } };
+  /** The upscale run still in the queue, if any, so the section can show it again. */
+  upscaleActive: {
+    input: void;
+    result: { id: string; items: import("./upscale").UpscaleItem[]; scale: import("./upscale").UpscaleScale; creativity: number } | null;
+  };
   restorationDelete: { input: { id: string }; result: void };
   /** Handled in the main process, which holds the keys. */
   restorationRun: {
     input: {
       assetId: string;
       region: { x: number; y: number; w: number; h: number } | null;
-      provider: ApiProvider;
+      /** An AI provider, or a specialised service (fal.ai, Replicate). */
+      provider: ApiProvider | "fal" | "replicate";
       model: string;
       task: import("./restoration").RestorationTask;
       prompt: string;
@@ -681,7 +725,7 @@ export type Commands = {
     result: import("./commons").CommonsPhoto[];
   };
   restorationExport: {
-    input: { id: string; format: "png" | "jpeg"; watermark: import("./restoration").Watermark };
+    input: { id: string; format: "png" | "jpeg"; watermark: import("./restoration").Watermark; xmp?: boolean; history?: boolean };
     result: string | null;
   };
   variantsStatus: { input: { databaseIds?: string[] }; result: import("./variants").VariantStatus };
@@ -726,6 +770,7 @@ export type Commands = {
       regions: import("./visualTags").VisualTagRegion[];
       reviewed: boolean;
       canUndo: boolean;
+      canRedo: boolean;
       column: import("./databases").DatabaseColumn | null;
       /** Applied options in the active tagging criterion. */
       optionIds: string[];
@@ -748,6 +793,7 @@ export type Commands = {
   visualTagReview: { input: { assetId: string; reviewed: boolean; dictionaryId?: string | null }; result: boolean };
   visualTagPending: { input: { databaseId: string; dictionaryId: string | null; rowIds: string[] }; result: string[] };
   visualTagUndo: { input: { assetId: string; dictionaryId: string | null }; result: { kind: "region" | "review" | "suggestions" } | null };
+  visualTagRedo: { input: { assetId: string; dictionaryId: string | null }; result: { kind: "region" | "review" | "suggestions" } | null };
   visualTagsSummary: {
     input: { databaseId: string };
     result: import("./visualTags").VisualTagsSummary;
@@ -1089,6 +1135,13 @@ export type Commands = {
     };
   };
   setApiKey: { input: { provider: ApiProvider; key: string }; result: void };
+  /** Online upscaling services (fal.ai, Replicate, Stability AI): which have a key. */
+  upscaleServicesStatus: { input: void; result: Record<import("./upscaleApi").UpscaleService, boolean> };
+  setUpscaleKey: { input: { service: import("./upscaleApi").UpscaleService; key: string }; result: Record<import("./upscaleApi").UpscaleService, boolean> };
+  clearUpscaleKey: { input: { service: import("./upscaleApi").UpscaleService }; result: Record<import("./upscaleApi").UpscaleService, boolean> };
+  /** Tries the key and returns the balance where the service gives it. */
+  checkUpscaleKey: { input: { service: import("./upscaleApi").UpscaleService }; result: { ok: true; balance?: string } };
+  upscaleApiCatalog: { input: { refresh?: boolean; task?: import("./upscaleApi").ServiceTask } | undefined; result: import("./upscaleApi").ApiUpscaleModel[] };
   clearApiKey: { input: { provider: ApiProvider }; result: void };
   listProviderModels: { input: { provider: ApiProvider }; result: import("./aiConfig").ProviderModel[] };
   /** The image models of the providers with a saved key, read from their catalogues. */

@@ -9,6 +9,7 @@
 import { LANGUAGE_LOCALES } from "./language";
 import { COLUMN_TYPES, ROLLUP_FUNCTIONS } from "./databases";
 import { TASK_LABELS } from "./restoration";
+import { PROFILE_LABELS as UPSCALE_PROFILE_LABELS } from "./upscale";
 import type {
   MethodologyAgreement,
   MethodologyAiProperty,
@@ -328,6 +329,7 @@ export function renderMethodologyHtml(
     description: "Descripciones (por defecto)",
     classification: "Clasificación (por defecto)",
     restoration: "Restauración de imágenes",
+    upscale: "Escalado de imágenes (local)",
     property: "Propiedades rellenadas con IA",
   };
   sections.push({
@@ -640,6 +642,34 @@ ${a.prompts.length ? `<h4>${esc(t("Instrucciones completas enviadas al modelo"))
         data.restorations.map((x) => [esc(x.provider), `<code>${esc(x.model)}</code>`, esc(t(TASK_LABELS[x.task as keyof typeof TASK_LABELS] ?? x.task)), esc(num(x.count))]),
         "compact",
       ),
+    });
+
+  // 11b. Local AI upscaling
+  if (data.upscales?.length)
+    sections.push({
+      id: "upscales",
+      title: t("Escalado con IA"),
+      eyebrow: t("Imágenes modificadas"),
+      lead: t("Versiones ampliadas ×2 o ×4 con un modelo local de superresolución. El modelo reconstruye detalle que no está en el original: no sustituyen al original como fuente."),
+      html:
+        table(
+          [t("Modelo"), t("Revisión"), t("Escala"), t("Creatividad"), t("Perfil"), t("Dispositivo"), t("Imágenes"), t("Zonas"), t("Entrada reducida")],
+          data.upscales.map((x) => [
+            `<code>${esc(x.model)}</code>`,
+            x.device === "api" ? esc(t("según el servicio")) : `<code>${esc(x.revision.slice(0, 12))}</code>`,
+            esc(`×${x.scale}`),
+            esc(x.device === "api" ? "—" : `${x.creativity}/8`),
+            esc(x.device === "api" ? t("Servicio en línea") : t(UPSCALE_PROFILE_LABELS[x.profile as keyof typeof UPSCALE_PROFILE_LABELS] ?? x.profile)),
+            esc(x.device === "api" ? `API · ${x.revision}` : `${x.device.toUpperCase()} · ${x.dtype}`),
+            esc(num(x.whole)),
+            esc(num(x.regions)),
+            esc(num(x.reduced)),
+          ]),
+          "compact",
+        ) +
+        `<div class="prose">${p(
+          t("Creatividad 0 es la reconstrucción más fiel que ofrece el modelo; valores altos inventan más textura. Cada versión se guarda aparte, marcada como modificada con IA, y conserva en su ficha la escala, la creatividad, el perfil de memoria y los tamaños de entrada y salida."),
+        )}</div>`,
     });
 
   // 12. Environment and reproduction

@@ -1,3 +1,4 @@
+import { UPSCALE_INSTALL_LABEL } from "../../shared/upscale";
 import { useEffect, useState } from "react";
 import {
   Cpu,
@@ -76,6 +77,7 @@ export function ModelPreparation({
   const jobs = status.jobs.filter(
     (j) =>
       j.kind === "prepare" &&
+      j.label !== UPSCALE_INSTALL_LABEL &&
       ["queued", "running", "paused", "failed"].includes(j.state),
   );
   const api = status.settings.embeddingModel === API_EMBEDDING_ID,
