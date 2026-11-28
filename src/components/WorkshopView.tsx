@@ -129,6 +129,8 @@ export function WorkshopView({
   const [exporting, setExporting] = useState<ImageVersion | null>(null);
   const [deleting, setDeleting] = useState<ImageVersion | null>(null);
   const seq = useRef(0);
+  const selectionSeq = useRef(0);
+  const analysisSeq = useRef(0);
   useEffect(() => remember({ source, versionId, ops, past, future }));
 
   const version = versions.find((v) => v.id === versionId) ?? null;
@@ -149,12 +151,19 @@ export function WorkshopView({
   const before = useMemo(() => (draft ? ops.slice(0, draft.index ?? ops.length) : null), [ops, draft]);
   const geometryEditing = draft && (draft.op.tool === "straighten" || draft.op.tool === "crop");
 
-  const loadVersions = useCallback(async (assetId: string) => setVersions(await api.call("workshopVersions", { assetId })), [api]);
+  const loadVersions = useCallback(async (assetId: string) => {
+    const id = selectionSeq.current;
+    const list = await api.call("workshopVersions", { assetId });
+    if (id === selectionSeq.current) setVersions(list);
+  }, [api]);
   useEffect(() => {
     if (!source) return;
+    const id = selectionSeq.current;
     void loadVersions(source.assetId);
     setIntegrity(null);
-    void api.call("workshopIntegrity", { assetId: source.assetId }).then((r) => setIntegrity(r.ok)).catch(() => setIntegrity(null));
+    void api.call("workshopIntegrity", { assetId: source.assetId })
+      .then((r) => { if (id === selectionSeq.current) setIntegrity(r.ok); })
+      .catch(() => {});
   }, [api, source, loadVersions]);
 
   // The preview follows the operations (a moment after the last change).
@@ -243,12 +252,15 @@ export function WorkshopView({
   };
   const analyze = useCallback(async () => {
     if (!source) return null;
+    const id = ++analysisSeq.current;
     setAnalysis("loading");
     try {
       const a = await api.call("workshopAnalyze", { assetId: source.assetId, versionId });
+      if (id !== analysisSeq.current) return null;
       setAnalysis(a);
       return a;
     } catch (e) {
+      if (id !== analysisSeq.current) return null;
       setAnalysis(null);
       setError(e instanceof Error ? e.message : String(e));
       return null;
@@ -269,6 +281,11 @@ export function WorkshopView({
   /** Asks before losing unsaved work; then does what was asked. */
   const guarded = (then: () => void) => (pending || draft || auto ? setGuard({ then }) : then());
   const reset = () => {
+    seq.current++;
+    analysisSeq.current++;
+    setBusy(false);
+    setSlow(false);
+    setError(null);
     setOps([]);
     setPast([]);
     setFuture([]);
@@ -279,13 +296,27 @@ export function WorkshopView({
     setInputView(null);
     setAnalysis(null);
   };
+  const closeImage = () => {
+    selectionSeq.current++;
+    setSource(null);
+    setVersionId(null);
+    setVersions([]);
+    setIntegrity(null);
+    setChoosingVersion(false);
+    setOpen("recipes");
+    setMode("compare");
+    reset();
+  };
   const choose = async (assetId: string, version: string | null = null) => {
+    const id = ++selectionSeq.current;
     const [item] = await api.call("compareItems", { assetIds: [assetId] });
+    if (id !== selectionSeq.current) return;
     setSource(item ?? null);
     setVersionId(version);
     reset();
     if (item) {
       const list = await api.call("workshopVersions", { assetId });
+      if (id !== selectionSeq.current) return;
       setVersions(list);
       // With derived versions, the researcher chooses where to start (never the newest by default).
       if (list.length && version === null) setChoosingVersion(true);
@@ -298,19 +329,16 @@ export function WorkshopView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed]);
 
-  const save = async () => {
-    if (!source || !ops.length) return;
+  const save = async (operations = ops) => {
+    if (!source || !operations.length || saving) return;
     setSaving(true);
     setError(null);
     try {
-      const v = await api.call("workshopSave", { assetId: source.assetId, versionId, ops });
+      const v = await api.call("workshopSave", { assetId: source.assetId, versionId, ops: operations });
       await loadVersions(source.assetId);
       // Work goes on from the version just saved.
       setVersionId(v.id);
-      setOps([]);
-      setPast([]);
-      setFuture([]);
-      setResult(null);
+      reset();
       return v;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -356,14 +384,20 @@ export function WorkshopView({
           </div>
         )}
         <div className="row workshop-source-actions">
-          <Button onClick={() => guarded(() => setPicking(true))} data-testid="workshop-pick">
+          <Button disabled={saving} onClick={() => guarded(() => setPicking(true))} data-testid="workshop-pick">
             <ImageIcon size={14} />
             {t(source ? "Cambiar imagen" : "Elegir imagen")}
           </Button>
           {source && versions.length > 0 && (
-            <Button onClick={() => guarded(() => setChoosingVersion(true))} data-testid="workshop-version">
+            <Button disabled={saving} onClick={() => guarded(() => setChoosingVersion(true))} data-testid="workshop-version">
               <History size={14} />
               {t("Cambiar versión")}
+            </Button>
+          )}
+          {source && (
+            <Button disabled={saving} onClick={() => guarded(closeImage)} data-testid="workshop-close-image">
+              <X size={14} />
+              {t("Cerrar imagen")}
             </Button>
           )}
         </div>
@@ -710,17 +744,26 @@ export function WorkshopView({
         </Modal>
       )}
       {guard && (
-        <Modal icon={Save} title={t("Hay cambios sin guardar")} onClose={() => setGuard(null)}>
+        <Modal icon={Save} title={t("Hay cambios sin guardar")} onClose={() => { if (!saving) setGuard(null); }}>
           <div className="modal-body">
             <p>{t("Puedes guardarlos como una versión nueva antes de seguir, o descartarlos.")}</p>
+            {error && <p className="restoration-error" role="alert">{t(error)}</p>}
           </div>
           <footer>
-            <Button onClick={() => setGuard(null)}>{t("Cancelar")}</Button>
-            <Button className="danger" onClick={() => (reset(), guard.then(), setGuard(null))}>
+            <Button disabled={saving} onClick={() => setGuard(null)}>{t("Cancelar")}</Button>
+            <Button className="danger" disabled={saving} onClick={() => (reset(), guard.then(), setGuard(null))}>
               {t("Descartar cambios")}
             </Button>
-            <Button primary onClick={() => void save().then(() => (guard.then(), setGuard(null)))}>
-              {t("Guardar versión")}
+            <Button
+              primary
+              disabled={saving || !shown.length}
+              onClick={() => void save(shown).then((saved) => {
+                if (!saved) return;
+                guard.then();
+                setGuard(null);
+              })}
+            >
+              {t(saving ? "Guardando…" : "Guardar versión")}
             </Button>
           </footer>
         </Modal>

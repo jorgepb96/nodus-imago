@@ -34,6 +34,47 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "0.10.1",
+    date: "2026-11-28",
+    highlights: [
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "Ajustes › Proveedores reúne todos los proveedores de IA y los servicios de escalado en una sola lista, con una etiqueta de lo que puede hacer cada uno. Las claves de fal.ai, Replicate y Stability AI se guardan en el mismo sitio.",
+        en: "Settings › Providers now lists every AI provider and upscaling service together, with a label for what each one can do. fal.ai, Replicate and Stability AI keys are saved in the same place.",
+        fr: "Réglages › Fournisseurs réunit tous les fournisseurs d’IA et les services d’agrandissement dans une seule liste, avec une étiquette pour ce que chacun sait faire. Les clés de fal.ai, de Replicate et de Stability AI s’enregistrent au même endroit.",
+      },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "Ajustes › Modelos IA explica para qué sirve cada tarea y enlaza con la herramienta donde eliges o usas su modelo.",
+        en: "Settings › AI models explains what each task is for and links to the tool where you choose or use its model.",
+        fr: "Réglages › Modèles d’IA décrit à quoi sert chaque tâche et renvoie vers l’outil où l’on choisit ou utilise son modèle.",
+      },
+      {
+        scope: "ai",
+        category: "enhancement",
+        es: "La sección Modelos locales ocupa todo el ancho disponible y alinea sus controles con el resto de Ajustes.",
+        en: "The Local models section uses the full available width and aligns its controls with the rest of Settings.",
+        fr: "La section Modèles locaux occupe toute la largeur disponible et aligne ses contrôles sur le reste des réglages.",
+      },
+      {
+        scope: "visual",
+        category: "enhancement",
+        es: "En el Taller de imágenes, «Cerrar imagen» quita la imagen y pide confirmación si hay cambios sin guardar.",
+        en: "In the Image Workshop, “Close image” removes the image and asks for confirmation when there are unsaved changes.",
+        fr: "Dans l’Atelier d’images, « Fermer l’image » retire l’image et demande confirmation s’il reste des modifications non enregistrées.",
+      },
+      {
+        scope: "visual",
+        category: "fix",
+        es: "La pestaña «Etiquetas» del visor ya no parpadea al pasar de una foto a otra: mantiene su contenido mientras llegan las etiquetas de la siguiente.",
+        en: "The viewer’s “Tags” tab no longer flickers when you move from one photo to another: it keeps its contents while the next photo’s tags load.",
+        fr: "L’onglet « Étiquettes » de la visionneuse ne clignote plus lorsqu’on passe d’une photo à l’autre : il conserve son contenu pendant le chargement des étiquettes de la photo suivante.",
+      },
+    ],
+  },
+  {
     version: "0.10.0",
     date: "2026-11-28",
     highlights: [

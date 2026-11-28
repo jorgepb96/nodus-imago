@@ -4,10 +4,14 @@
 // favourites every model selector offers; they are kept in each provider's
 // profile (`apiProfiles[provider].models`), so the selectors read them as
 // before. Imago keeps its own keys, apart from Nodus's.
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { KeyRound, ShieldCheck, Star, X } from "lucide-react";
 import { PROVIDERS, remoteProvider, type ApiProvider, type ProviderModel } from "../../shared/aiConfig";
+import { EMBEDDING_API_PROVIDERS } from "../../shared/embeddingApi";
+import { IMAGE_API, SUGGESTED_IMAGE_MODELS } from "../../shared/restoration";
+import { KNOWN_EDIT_MODELS, UPSCALE_SERVICES, UPSCALE_SERVICE_IDS, type UpscaleService } from "../../shared/upscaleApi";
 import type { Settings, Status } from "../../shared/imago";
+import { ServiceKey } from "./UpscaleApi";
 import { Button } from "./ui";
 import type { Perform } from "./Properties";
 import { useT } from "../i18n";
@@ -19,6 +23,45 @@ const LOCAL: ApiProvider[] = ["ollama", "lmstudio"];
 const OWN_ENDPOINT: ApiProvider[] = ["ollama", "lmstudio", "custom"];
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const refKey = (m: ModelRef) => `${m.provider}::${m.model}`;
+type ProviderId = ApiProvider | UpscaleService;
+const PROVIDER_ORDER: ProviderId[] = [
+  ...(Object.keys(PROVIDERS) as ApiProvider[]).filter((provider) => !OWN_ENDPOINT.includes(provider)),
+  ...UPSCALE_SERVICE_IDS,
+  ...OWN_ENDPOINT,
+];
+const isUpscaleService = (provider: ProviderId): provider is UpscaleService =>
+  Object.hasOwn(UPSCALE_SERVICES, provider);
+
+
+const CAPABILITY_LABELS = {
+  chat: "Chat",
+  automations: "Automatizaciones",
+  vision: "Análisis de imágenes",
+  search: "Búsqueda semántica",
+  restore: "Restauración IA",
+  colorize: "Colorización IA",
+  upscale: "Escalado IA",
+} as const;
+type Capability = keyof typeof CAPABILITY_LABELS;
+const VISION_PROVIDERS: ApiProvider[] = ["anthropic", "openai", "openrouter", "gemini", "groq", "ollama", "lmstudio", "custom"];
+const REMOTE_BLOCKED = "Las APIs remotas están desactivadas. Activa «Permitir APIs remotas» para introducir claves y consultar modelos.";
+
+function modelCapabilities(provider: ApiProvider, models: ProviderModel[] | null): Capability[] {
+  const capabilities: Capability[] = ["chat", "automations"];
+  if (VISION_PROVIDERS.includes(provider) || models?.some((model) => model.vision)) capabilities.push("vision");
+  if (EMBEDDING_API_PROVIDERS.some((supported) => supported === provider)) capabilities.push("search");
+  if (SUGGESTED_IMAGE_MODELS[provider] || (IMAGE_API[provider] && models?.some((model) => model.imageOutput)))
+    capabilities.push("restore", "colorize");
+  return capabilities;
+}
+
+function serviceCapabilities(service: UpscaleService): Capability[] {
+  const capabilities: Capability[] = [];
+  for (const task of ["restore", "colorize"] as const)
+    if (KNOWN_EDIT_MODELS.some((model) => model.service === service && model.task === task)) capabilities.push(task);
+  capabilities.push("upscale");
+  return capabilities;
+}
 
 export function ApiSettings({
   status,
@@ -31,8 +74,9 @@ export function ApiSettings({
 }) {
   const t = useT(),
     s = status.settings,
-    [open, setOpen] = useState<ApiProvider | null>(null),
-    [keys, setKeys] = useState<Keys | null>(null);
+    [open, setOpen] = useState<ProviderId | null>(null),
+    [keys, setKeys] = useState<Keys | null>(null),
+    [serviceKeys, setServiceKeys] = useState<Record<UpscaleService, boolean> | null>(null);
   const refreshKeys = useCallback(
     () => void perform(async () => setKeys(await window.imago.call("credentialsStatus"))),
     [perform],
@@ -40,6 +84,10 @@ export function ApiSettings({
   useEffect(() => {
     refreshKeys();
   }, [refreshKeys]);
+  useEffect(() => {
+    void window.imago.call("upscaleServicesStatus").then(setServiceKeys).catch(() => {});
+  }, []);
+  const toggleProvider = (provider: ProviderId) => setOpen((current) => current === provider ? null : provider);
   const update = (patch: Partial<Settings>) =>
     void perform(async () => {
       await window.imago.call("updateSettings", patch);
@@ -102,15 +150,37 @@ export function ApiSettings({
           </p>
         </div>
       </div>
+      <p className="hint">{t("Las funciones disponibles dependen del modelo elegido.")}</p>
       <div className="provider-list">
-        {(Object.keys(PROVIDERS) as ApiProvider[]).map((provider) => (
+        {PROVIDER_ORDER.map((provider) => isUpscaleService(provider) ? (
+          <ProviderAccordion
+            key={provider}
+            provider={provider}
+            label={UPSCALE_SERVICES[provider].label}
+            hasKey={!!serviceKeys?.[provider]}
+            capabilities={serviceCapabilities(provider)}
+            expanded={open === provider}
+            onToggle={() => toggleProvider(provider)}
+          >
+            {!s.remoteEnabled && (
+              <p className="provider-blocked" data-testid={`provider-blocked-${provider}`}>{t(REMOTE_BLOCKED)}</p>
+            )}
+            <ServiceKey
+              service={provider}
+              saved={!!serviceKeys?.[provider]}
+              onChanged={setServiceKeys}
+              disabled={!s.remoteEnabled || !keys?.encryptionAvailable}
+              inSettings
+            />
+          </ProviderAccordion>
+        ) : (
           <ProviderRow
             key={provider}
             provider={provider}
             settings={s}
             keys={keys}
             expanded={open === provider}
-            onToggle={() => setOpen(open === provider ? null : provider)}
+            onToggle={() => toggleProvider(provider)}
             onKeysChanged={refreshKeys}
             saveProfile={saveProfile}
             isFav={isFav}
@@ -224,6 +294,49 @@ function FavoriteModels({ favorites, toggleFav }: { favorites: ModelRef[]; toggl
   );
 }
 
+function ProviderAccordion({
+  provider,
+  label,
+  hasKey,
+  localEndpoint,
+  capabilities,
+  expanded,
+  onToggle,
+  children,
+}: {
+  provider: ProviderId;
+  label: string;
+  hasKey: boolean;
+  localEndpoint?: string;
+  capabilities: Capability[];
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const t = useT();
+  return (
+    <div className={`provider-row${expanded ? " is-open" : ""}`} data-testid={`provider-${provider}`}>
+      <button type="button" className="provider-row-head" aria-expanded={expanded} onClick={onToggle}>
+        <span className="provider-row-identity">
+          <span className="provider-row-caret" aria-hidden>{expanded ? "▾" : "▸"}</span>
+          <strong>{label}</strong>
+          <span className={`provider-key-state${hasKey ? " saved" : ""}`}>
+            {hasKey ? `● ${t("clave guardada")}` : localEndpoint !== undefined ? t("(local)") : `○ ${t("sin clave")}`}
+          </span>
+          {provider === "openrouter" && <span className="provider-row-note">{t("(modelos públicos)")}</span>}
+        </span>
+        <span className="provider-capabilities">
+          {capabilities.map((capability) => (
+            <span key={capability} className="provider-capability" data-capability={capability}>{t(CAPABILITY_LABELS[capability])}</span>
+          ))}
+        </span>
+        {localEndpoint && <code>{localEndpoint}</code>}
+      </button>
+      {expanded && <div className="provider-row-body">{children}</div>}
+    </div>
+  );
+}
+
 function ProviderRow({
   provider,
   settings,
@@ -285,116 +398,109 @@ function ProviderRow({
   const filtered = (models ?? []).filter((m) => !q || m.id.toLowerCase().includes(q) || (m.name ?? "").toLowerCase().includes(q));
   const shown = filtered.slice(0, 300);
   return (
-    <div className={`provider-row${expanded ? " is-open" : ""}`} data-testid={`provider-${provider}`}>
-      <button type="button" className="provider-row-head" aria-expanded={expanded} onClick={onToggle}>
-        <span className="provider-row-caret" aria-hidden>
-          {expanded ? "▾" : "▸"}
-        </span>
-        <strong>{t(p.label)}</strong>
-        <span className={`provider-key-state${hasKey ? " saved" : ""}`}>
-          {hasKey ? `● ${t("clave guardada")}` : local ? t("(local)") : `○ ${t("sin clave")}`}
-        </span>
-        {provider === "openrouter" && <span className="provider-row-note">{t("(modelos públicos)")}</span>}
-        {local && <code>{savedBase}</code>}
-      </button>
-      {expanded && (
-        <div className="provider-row-body">
-          {showEndpoint && (
-            <div className="provider-input-row">
-              <input
-                aria-label={t("Endpoint")}
-                value={base}
-                placeholder={p.baseUrl || "https://…/v1"}
-                disabled={!!busy}
-                onChange={(e) => setBase(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && base.trim() !== savedBase) void run("endpoint", () => saveProfile(provider, { baseUrl: base.trim() }));
-                }}
-              />
-              <Button disabled={!!busy || base.trim() === savedBase} onClick={() => void run("endpoint", () => saveProfile(provider, { baseUrl: base.trim() }))}>
-                {t("Guardar endpoint")}
-              </Button>
-            </div>
-          )}
-          {blocked && (
-            <p className="provider-blocked" data-testid={`provider-blocked-${provider}`}>
-              {t("Las APIs remotas están desactivadas. Activa «Permitir APIs remotas» para introducir claves y consultar modelos.")}
-            </p>
-          )}
-          <div className="provider-input-row">
-            <input
-              type="password"
-              autoComplete="off"
-              aria-label={t("Clave de API")}
-              placeholder={hasKey ? t("•••••••• (guardada)") : OWN_ENDPOINT.includes(provider) ? t("clave de API (opcional)") : t("clave del proveedor")}
-              value={keyInput}
-              disabled={!!busy || blocked || !keys?.encryptionAvailable}
-              onChange={(e) => setKeyInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveKey();
-              }}
-            />
-            <Button primary disabled={!!busy || blocked || !keyInput.trim() || !keys?.encryptionAvailable} onClick={saveKey}>
-              {t("Guardar")}
-            </Button>
-            {hasKey && (
-              <Button
-                className="provider-delete"
-                disabled={!!busy}
-                onClick={() =>
-                  void run("delete", async () => {
-                    await window.imago.call("clearApiKey", { provider });
-                    onKeysChanged();
-                  })
-                }
-              >
-                {t("Borrar")}
-              </Button>
-            )}
-          </div>
-          <div className="provider-input-row">
-            <Button
-              disabled={!!busy || blocked}
-              onClick={() => void run("load", async () => setModels(await window.imago.call("listProviderModels", { provider })))}
-            >
-              {busy === "load" ? t("Cargando…") : t("Cargar modelos")}
-            </Button>
-            {models && <input aria-label={t("Buscar modelo…")} placeholder={t("Buscar modelo…")} value={search} onChange={(e) => setSearch(e.target.value)} />}
-            {models && <span className="provider-model-count">{filtered.length}</span>}
-          </div>
-          {OWN_ENDPOINT.includes(provider) && (
-            <form
-              className="provider-input-row"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const id = manual.trim();
-                if (!id || isFav({ provider, model: id })) return;
-                void toggleFav({ provider, model: id }).then(() => setManual(""));
-              }}
-            >
-              <input aria-label={t("Identificador exacto del modelo")} placeholder={t("Identificador exacto del modelo")} value={manual} onChange={(e) => setManual(e.target.value)} />
-              <Button type="submit" disabled={!manual.trim()}>
-                {t("Añadir a favoritos")}
-              </Button>
-            </form>
-          )}
-          {error && (
-            <p role="alert" className="provider-error">
-              {error}
-            </p>
-          )}
-          {models && (
-            <div className="provider-model-list" data-testid={`provider-model-list-${provider}`}>
-              <ModelList provider={provider} models={shown} isFav={isFav} toggleFav={toggleFav} />
-              {!filtered.length && <p className="provider-model-more">{t("No hay modelos que coincidan.")}</p>}
-              {filtered.length > shown.length && (
-                <p className="provider-model-more">{t("Mostrando {n}; refina la búsqueda para ver más.").replace("{n}", String(shown.length))}</p>
-              )}
-            </div>
+    <ProviderAccordion
+      provider={provider}
+      label={t(p.label)}
+      hasKey={hasKey}
+      localEndpoint={local ? savedBase : undefined}
+      capabilities={modelCapabilities(provider, models)}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
+      {showEndpoint && (
+        <div className="provider-input-row">
+          <input
+            aria-label={t("Endpoint")}
+            value={base}
+            placeholder={p.baseUrl || "https://…/v1"}
+            disabled={!!busy}
+            onChange={(e) => setBase(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && base.trim() !== savedBase) void run("endpoint", () => saveProfile(provider, { baseUrl: base.trim() }));
+            }}
+          />
+          <Button disabled={!!busy || base.trim() === savedBase} onClick={() => void run("endpoint", () => saveProfile(provider, { baseUrl: base.trim() }))}>
+            {t("Guardar endpoint")}
+          </Button>
+        </div>
+      )}
+      {blocked && (
+        <p className="provider-blocked" data-testid={`provider-blocked-${provider}`}>
+          {t(REMOTE_BLOCKED)}
+        </p>
+      )}
+      <div className="provider-input-row">
+        <input
+          type="password"
+          autoComplete="off"
+          aria-label={t("Clave de API")}
+          placeholder={hasKey ? t("•••••••• (guardada)") : OWN_ENDPOINT.includes(provider) ? t("clave de API (opcional)") : t("clave del proveedor")}
+          value={keyInput}
+          disabled={!!busy || blocked || !keys?.encryptionAvailable}
+          onChange={(e) => setKeyInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") saveKey();
+          }}
+        />
+        <Button primary disabled={!!busy || blocked || !keyInput.trim() || !keys?.encryptionAvailable} onClick={saveKey}>
+          {t("Guardar")}
+        </Button>
+        {hasKey && (
+          <Button
+            className="provider-delete"
+            disabled={!!busy}
+            onClick={() =>
+              void run("delete", async () => {
+                await window.imago.call("clearApiKey", { provider });
+                onKeysChanged();
+              })
+            }
+          >
+            {t("Borrar")}
+          </Button>
+        )}
+      </div>
+      <div className="provider-input-row">
+        <Button
+          disabled={!!busy || blocked}
+          onClick={() => void run("load", async () => setModels(await window.imago.call("listProviderModels", { provider })))}
+        >
+          {busy === "load" ? t("Cargando…") : t("Cargar modelos")}
+        </Button>
+        {models && <input aria-label={t("Buscar modelo…")} placeholder={t("Buscar modelo…")} value={search} onChange={(e) => setSearch(e.target.value)} />}
+        {models && <span className="provider-model-count">{filtered.length}</span>}
+      </div>
+      {OWN_ENDPOINT.includes(provider) && (
+        <form
+          className="provider-input-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const id = manual.trim();
+            if (!id || isFav({ provider, model: id })) return;
+            void toggleFav({ provider, model: id }).then(() => setManual(""));
+          }}
+        >
+          <input aria-label={t("Identificador exacto del modelo")} placeholder={t("Identificador exacto del modelo")} value={manual} onChange={(e) => setManual(e.target.value)} />
+          <Button type="submit" disabled={!manual.trim()}>
+            {t("Añadir a favoritos")}
+          </Button>
+        </form>
+      )}
+      {error && (
+        <p role="alert" className="provider-error">
+          {error}
+        </p>
+      )}
+      {models && (
+        <div className="provider-model-list" data-testid={`provider-model-list-${provider}`}>
+          <ModelList provider={provider} models={shown} isFav={isFav} toggleFav={toggleFav} />
+          {!filtered.length && <p className="provider-model-more">{t("No hay modelos que coincidan.")}</p>}
+          {filtered.length > shown.length && (
+            <p className="provider-model-more">{t("Mostrando {n}; refina la búsqueda para ver más.").replace("{n}", String(shown.length))}</p>
           )}
         </div>
       )}
-    </div>
+    </ProviderAccordion>
   );
 }
 

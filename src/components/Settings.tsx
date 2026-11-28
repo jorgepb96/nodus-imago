@@ -3,9 +3,9 @@ import { version as APP_VERSION } from "../../package.json";
 import { BackupSettings } from "./BackupSettings";
 import { ModelPreparation } from "./ModelPreparation";
 import { UpscaleModelCard } from "./UpscaleModelCard";
-import { UpscaleServicesSettings } from "./UpscaleApi";
 import { useState, useEffect } from "react";
 import {
+  ArrowRight,
   Download,
   FolderOpen,
   ShieldCheck,
@@ -46,6 +46,30 @@ import { ModelPicker } from "./ModelPicker";
 import { askIndexQuality } from "./IndexQualityDialog";
 import { jobTitle } from "../../shared/jobTitles";
 import { LANGUAGES, LANGUAGE_NAMES, type Language } from "../../shared/language";
+
+const AI_TASK_TOOLS = [
+  {
+    area: "chat",
+    label: "Chat",
+    description: "Responde preguntas sobre tus bases de datos y recupera los registros relevantes para la conversación.",
+  },
+  {
+    area: "restorations",
+    label: "Restauración IA",
+    description: "Atenúa manchas y arañazos, repara roturas o mejora la nitidez. Guarda el resultado como una versión de la imagen.",
+  },
+  {
+    area: "colorize",
+    label: "Colorización IA",
+    description: "Propone colores para una imagen en blanco y negro y guarda una versión que puedes comparar con el original.",
+  },
+  {
+    area: "upscale",
+    label: "Escalado IA",
+    description: "Amplía la imagen o una zona seleccionada por dos o por cuatro con un modelo local o un servicio en línea.",
+  },
+] as const;
+
 export function Jobs({
   jobs,
   perform,
@@ -205,6 +229,7 @@ export function Settings({
   onChanged,
   perform,
   notify,
+  onOpenAiTask,
   initialTab = "api",
   details = [],
   onReplayWelcome,
@@ -218,6 +243,7 @@ export function Settings({
   onChanged: () => void;
   perform: Perform;
   notify: (s: string) => void;
+  onOpenAiTask: (area: (typeof AI_TASK_TOOLS)[number]["area"]) => void;
   initialTab?: string;
   details?: DatabaseDetail[];
 }) {
@@ -316,62 +342,106 @@ export function Settings({
         {tab === "tasks" && (
           <div className="settings-section">
             <div className="settings-card-heading">
-              <span>
-                <Sparkles size={21} />
-              </span>
+              <span><Sparkles size={21} /></span>
               <div>
                 <h2>{t("Modelos de IA por tarea")}</h2>
-                <p>{t("Selecciona modelos independientes para descripción, clasificación y recuperación.")}</p>
+                <p>{t("Elige los modelos predeterminados de tus propiedades y localiza el selector de cada herramienta.")}</p>
               </div>
             </div>
-            <label className="setting-row">
-              <strong>{t("Descripción visual")}</strong>
-              <ModelPicker
-                value={s.descriptionModel}
-                settings={s}
-                models={status.models}
-                onChange={(v) => {
-                  if (v) update({ descriptionModel: v });
-                }}
-              />
-            </label>
-            <label className="setting-row">
-              <strong>{t("Clasificación de columnas")}</strong>
-              <ModelPicker
-                value={s.classificationModel}
-                settings={s}
-                models={status.models}
-                onChange={(v) => {
-                  if (v) update({ classificationModel: v });
-                }}
-              />
-            </label>
-            <label className="setting-row">
-              <strong>{t("Búsqueda multimodal")}</strong>
-              <span>
-                {s.embeddingModel === "api-embedding"
-                  ? `${t(PROVIDERS[(s.embeddingApi ?? DEFAULT_EMBEDDING_API).provider].label)} · ${(s.embeddingApi ?? DEFAULT_EMBEDDING_API).model}`
-                  : s.embeddingModel === "harrier-oss-v1-0.6b-q8_0"
-                    ? "Harrier OSS v1 · local"
-                    : t("EmbeddingGemma 2 · local")}
-              </span>
-            </label>
-            <p className="hint">
-              {t(
-                "Puedes elegir otro modelo e instrucciones para cada propiedad desde su configuración. Los modelos de API solo se usan al habilitarlos y encolar una tarea expresamente.",
-              )}
-            </p>
+            <div className="settings-task-list">
+              <label className="setting-row settings-task-row">
+                <span>
+                  <strong>{t("Descripción visual")}</strong>
+                  <small className="hint">{t("Redacta una descripción de lo que se ve en la imagen y la guarda en una propiedad del registro.")}</small>
+                </span>
+                <ModelPicker
+                  label={t("Descripción visual")}
+                  value={s.descriptionModel}
+                  settings={s}
+                  models={status.models}
+                  onChange={(v) => {
+                    if (v) update({ descriptionModel: v });
+                  }}
+                />
+              </label>
+              <label className="setting-row settings-task-row">
+                <span>
+                  <strong>{t("Clasificación de columnas")}</strong>
+                  <small className="hint">{t("Asigna categorías o etiquetas a un registro según su imagen y las opciones de la propiedad.")}</small>
+                </span>
+                <ModelPicker
+                  label={t("Clasificación de columnas")}
+                  value={s.classificationModel}
+                  settings={s}
+                  models={status.models}
+                  onChange={(v) => {
+                    if (v) update({ classificationModel: v });
+                  }}
+                />
+              </label>
+              <div className="setting-row settings-task-row">
+                <span>
+                  <strong>{t("Transcribir texto")}</strong>
+                  <small className="hint">{t("Copia el texto visible en las imágenes, como inscripciones, sellos o pies de foto, en una propiedad del registro.")}</small>
+                </span>
+                <span className="settings-task-location">{t("Usa el modelo de descripción visual")}</span>
+              </div>
+              <div className="setting-row settings-task-row">
+                <span>
+                  <strong>{t("Automatizaciones")}</strong>
+                  <small className="hint">{t("Encola el análisis de propiedades en varios registros cuando se cumple una regla y deja las propuestas para revisión.")}</small>
+                </span>
+                <span className="settings-task-location">{t("Según la propiedad que analiza la regla")}</span>
+              </div>
+              <div className="setting-row settings-task-row">
+                <span>
+                  <strong>{t("Búsqueda multimodal")}</strong>
+                  <small className="hint">{t("Indexa fichas e imágenes para encontrarlas por significado o usar una imagen como consulta.")}</small>
+                </span>
+                <div className="settings-task-action">
+                  <span>
+                    {s.embeddingModel === "api-embedding"
+                      ? `${t(PROVIDERS[(s.embeddingApi ?? DEFAULT_EMBEDDING_API).provider].label)} · ${(s.embeddingApi ?? DEFAULT_EMBEDDING_API).model}`
+                      : s.embeddingModel === "harrier-oss-v1-0.6b-q8_0"
+                        ? "Harrier OSS v1 · local"
+                        : t("EmbeddingGemma 2 · local")}
+                  </span>
+                  <Button type="button" onClick={() => setTab("models")}>
+                    {t("Configurar búsqueda")} <ArrowRight size={13} />
+                  </Button>
+                </div>
+              </div>
+              <div className="setting-row settings-task-row">
+                <span>
+                  <strong>{t("Etiquetado visual")}</strong>
+                  <small className="hint">{t("Localiza elementos en la foto y propone zonas con etiquetas de tu diccionario para que las revises.")}</small>
+                </span>
+                <span className="settings-task-location">{t("Visor › Sugerir con IA")}</span>
+              </div>
+              <div className="setting-row settings-task-row">
+                <span>
+                  <strong>{t("Patrimonio")}</strong>
+                  <small className="hint">{t("Sugiere edificios, monumentos u obras que aparecen en una foto para revisar y vincular a su ficha.")}</small>
+                </span>
+                <span className="settings-task-location">{t("Visor › Sugerir con IA")}</span>
+              </div>
+              {AI_TASK_TOOLS.map(({ area, label, description }) => (
+                <div className="setting-row settings-task-row" key={area}>
+                  <span>
+                    <strong>{t(label)}</strong>
+                    <small className="hint">{t(description)}</small>
+                  </span>
+                  <Button type="button" aria-label={t("Abrir {s}").replace("{s}", t(label))} onClick={() => onOpenAiTask(area)}>
+                    {t("Ir a la herramienta")} <ArrowRight size={13} />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="hint">{t("Puedes elegir otro modelo e instrucciones para cada propiedad desde su configuración.")}</p>
           </div>
         )}
         {tab === "api" && (
-          <>
-            <ApiSettings
-              status={status}
-              perform={perform}
-              onChanged={onChanged}
-            />
-            <UpscaleServicesSettings />
-          </>
+          <ApiSettings status={status} perform={perform} onChanged={onChanged} />
         )}
         {tab === "models" && (
           <div className="settings-section">

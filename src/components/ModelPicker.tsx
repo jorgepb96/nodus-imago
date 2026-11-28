@@ -22,12 +22,14 @@ export function ModelPicker({
   onChange,
   settings,
   models,
+  label,
   inherit = false,
 }: {
   value: ModelChoice | null;
   onChange: (v: ModelChoice | null) => void;
   settings: Settings;
   models: ModelInfo[];
+  label?: string;
   inherit?: boolean;
 }) {
   const t = useT(),
@@ -35,7 +37,7 @@ export function ModelPicker({
     choices = modelChoices(settings, models);
   return (
     <select
-      aria-label={t("Modelo")}
+      aria-label={label ?? t("Modelo")}
       value={value ? encode(value) : ""}
       onChange={(e) => {
         const v = e.target.value;
