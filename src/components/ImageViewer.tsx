@@ -1512,9 +1512,9 @@ export function ImageViewer({
               disabled={!image || !!cropping}
               onClick={() => setInspectOpen((open) => !open)}
             >
-              <Microscope size={16} aria-hidden="true" />
+              {/* While the view is prepared the spinner takes the icon's place: the button keeps its size. */}
+              {inspectBusy ? <span className="viewer-inspect-busy" aria-hidden="true" /> : <Microscope size={16} aria-hidden="true" />}
               {t("Inspeccionar")}
-              {inspectBusy && <span className="viewer-inspect-busy" aria-hidden="true" />}
               <ChevronDown size={13} aria-hidden="true" />
             </button>
             {inspectOpen && (
