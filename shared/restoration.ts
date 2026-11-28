@@ -4,7 +4,9 @@
 // that produced it.
 import type { ApiProvider } from "./aiConfig";
 
-export type RestorationTask = "restore" | "repair" | "sharpen" | "colorize" | "custom";
+export type RestorationTask = "restore" | "repair" | "sharpen" | "colorize" | "custom" | "upscale";
+/** The tasks of the restoration workshop; "upscale" versions come from the AI upscaling section. */
+export const RESTORATION_TASKS: Exclude<RestorationTask, "upscale">[] = ["restore", "repair", "sharpen", "colorize", "custom"];
 export type WatermarkPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 export type Watermark = { enabled: boolean; text: string; position: WatermarkPosition };
 export type ImageApiStyle = "openai-images" | "gemini" | "chat-images";
@@ -44,6 +46,8 @@ export type Restoration = {
   /** Only right after a run: how faithful it is, and anything the user should know. */
   check?: RestorationCheck;
   notes?: string[];
+  /** AI upscaling: how the version was made (scale, creativity, profile…); null for other tasks. */
+  params?: import("./upscale").UpscaleParams | null;
 };
 
 import type { Language } from "./language";
@@ -52,7 +56,7 @@ const FIDELITY: Record<Language, string> = {
   en: "Absolute fidelity: keep the framing, composition, perspective and proportions exactly; the people, their features, expressions and hair; the clothing, buildings, objects, text, inscriptions and numbers. Do not change the shape of the photograph: do not crop, zoom or add oval vignettes, frames, album corners or borders. Do not redraw faces or anything that is clearly visible: retouch only what is damaged. Do not invent details, beautify, smooth skin or modernise anything.",
   fr: "Fidélité absolue : conservez exactement le cadrage, la composition, la perspective et les proportions ; les personnes, leurs traits, expressions et coiffures ; les vêtements, les bâtiments, les objets, les textes, les inscriptions et les chiffres. Ne changez pas la forme de la photographie : ne la recadrez pas, ne l'agrandissez pas et n'ajoutez ni vignettes ovales, ni cadres, ni coins d'album, ni bordures. Ne redessinez pas les visages ni ce qui est bien visible : retouchez uniquement ce qui est abîmé. N'inventez pas de détails, n'embellissez pas, ne lissez pas la peau et ne modernisez rien.",
 };
-const TASKS: Record<Exclude<RestorationTask, "custom">, Record<Language, string>> = {
+const TASKS: Record<Exclude<RestorationTask, "custom" | "upscale">, Record<Language, string>> = {
   restore: {
     es: "Restaura esta fotografía antigua como lo haría un restaurador profesional: elimina el polvo, las motas, los arañazos, las grietas finas, las manchas y el ruido, y corrige el desvanecimiento: recupera la densidad y el contraste de los tonos apagados. Mantén el grano, la textura y la tonalidad de la época (blanco y negro, sepia o virado): no la colorees.",
     en: "Restore this old photograph as a professional restorer would: remove dust, specks, scratches, fine cracks, stains and noise, and correct fading: recover the density and contrast of washed-out tones. Keep the grain, texture and tone of the period (black and white, sepia or toned): do not colourise it.",
@@ -80,6 +84,7 @@ export const TASK_LABELS: Record<RestorationTask, string> = {
   sharpen: "Mejorar nitidez",
   colorize: "Colorear",
   custom: "Instrucciones propias",
+  upscale: "Escalado IA",
 };
 export const TASK_HELP: Record<RestorationTask, string> = {
   restore: "Quita polvo, arañazos, manchas y ruido, y corrige el desvanecimiento.",
@@ -87,11 +92,12 @@ export const TASK_HELP: Record<RestorationTask, string> = {
   sharpen: "Define bordes y detalles sin cambiar el contenido.",
   colorize: "Añade colores verosímiles a una fotografía en blanco y negro.",
   custom: "Escribe tú lo que debe hacer el modelo.",
+  upscale: "Amplía la imagen ×2 o ×4 con un modelo local.",
 };
 
 /** The instructions sent to the model for a task. */
 export function restorationPrompt(task: RestorationTask, language: Language, region: boolean): string {
-  if (task === "custom") return "";
+  if (task === "custom" || task === "upscale") return "";
   const crop = region
     ? language === "en"
       ? " This image is a crop of a larger one and will be pasted back in place: return it with the same framing, size and exposure, without changing its edges."

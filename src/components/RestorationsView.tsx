@@ -22,6 +22,8 @@ import {
   Trash2,
   Wand2,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import type { DatabaseSummary } from "../../shared/databases";
 import type { ImageAnnotation, Settings } from "../../shared/imago";
@@ -32,6 +34,7 @@ import {
   SUGGESTED_IMAGE_MODELS,
   TASK_HELP,
   TASK_LABELS,
+  RESTORATION_TASKS,
   decodeImageModel,
   encodeImageModel,
   restorationContext,
@@ -49,7 +52,7 @@ import { ImagePicker } from "./CompareView";
 import { SectionSideResize, useSectionSideWidth } from "./SectionSide";
 import { asLanguage, LANGUAGE_LOCALES } from "../../shared/language";
 
-const TASK_ICONS: Record<RestorationTask, React.ReactNode> = {
+const TASK_ICONS: Record<Exclude<RestorationTask, "upscale">, React.ReactNode> = {
   restore: <Sparkles size={16} />,
   repair: <Brush size={16} />,
   sharpen: <ScanLine size={16} />,
@@ -60,7 +63,7 @@ const preview = (id: string, revision?: string) =>
   `imago://asset/${id}/preview${revision ? "?v=" + encodeURIComponent(revision) : ""}`;
 type Region = { x: number; y: number; w: number; h: number };
 /** The run button: [whole image, region]. */
-const RUN_LABELS: Record<RestorationTask, [string, string]> = {
+const RUN_LABELS: Record<Exclude<RestorationTask, "upscale">, [string, string]> = {
   restore: ["Restaurar la imagen", "Restaurar la zona"],
   repair: ["Reparar la imagen", "Reparar la zona"],
   sharpen: ["Mejorar la imagen", "Mejorar la zona"],
@@ -90,6 +93,23 @@ const CHECK_TEXT: Record<RestorationCheck["level"], { label: string; help: strin
     help: "El modelo ha reconstruido zonas grandes: caras, rasgos o detalles pueden no ser los reales. Revisa «Cambios» y úsala con cautela.",
   },
 };
+
+/**
+ * What the workshop was showing and the run in progress, kept while the app
+ * is open: the request goes on in the main process when the section is left,
+ * and coming back shows the same image, the waiting state and then its result.
+ */
+const memory: {
+  assetId: string | null;
+  regionId: string;
+  drawn: Region | null;
+  baseId: string;
+  note: string;
+  task: Exclude<RestorationTask, "upscale">;
+  currentId: string | null;
+  pending: { assetId: string; promise: Promise<Restoration> } | null;
+} = { assetId: null, regionId: "", drawn: null, baseId: "", note: "", task: "restore", currentId: null, pending: null };
+const remember = (patch: Partial<typeof memory>) => void Object.assign(memory, patch);
 
 export function RestorationsView({
   settings,
@@ -123,7 +143,7 @@ export function RestorationsView({
   const [keepDetail, setKeepDetail] = useState(() => readBool("imago.restoration.keepDetail", true));
   const [check, setCheck] = useState<RestorationCheck | null>(null);
   const [changes, setChanges] = useState(false);
-  const [task, setTask] = useState<RestorationTask>("restore");
+  const [task, setTask] = useState<Exclude<RestorationTask, "upscale">>("restore");
   const [prompt, setPrompt] = useState(() => restorationPrompt("restore", language, false));
   const [edited, setEdited] = useState(false);
   const [model, setModel] = useState<string>(() => localStorage.getItem("imago.restoration.model") ?? "");
@@ -184,6 +204,44 @@ export function RestorationsView({
     onSeedUsed();
     void choose(seed);
   }, [seed, onSeedUsed, choose]);
+  /** Waits for a run, wherever it was started from, and shows its result. */
+  const follow = useCallback(
+    (pending: NonNullable<typeof memory.pending>) => {
+      setRunning(true);
+      setError(null);
+      void pending.promise
+        .then(async (result) => {
+          setVersions(await api.call("restorationsList", { assetId: pending.assetId }));
+          setCurrent(result);
+        })
+        .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+        .finally(() => {
+          if (memory.pending === pending) remember({ pending: null });
+          setRunning(false);
+        });
+    },
+    [api],
+  );
+  // Coming back to the section: the same image, choices and run in progress.
+  useEffect(() => {
+    if (seed || !memory.assetId) return;
+    const saved = { ...memory };
+    void choose(saved.assetId!).then(async () => {
+      setRegionId(saved.regionId);
+      setDrawn(saved.drawn);
+      setBaseId(saved.baseId);
+      setNote(saved.note);
+      setTask(saved.task);
+      const list = await api.call("restorationsList", { assetId: saved.assetId! });
+      setCurrent(list.find((v) => v.id === saved.currentId) ?? null);
+      if (saved.pending && saved.pending.assetId === saved.assetId) follow(saved.pending);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!source) return;
+    remember({ assetId: source.assetId, regionId, drawn, baseId, note, task, currentId: current?.id ?? null });
+  });
   const region: Region | null = regionId === "drawn" ? drawn : (regions.find((r) => r.id === regionId) ?? null);
   const base = versions.find((v) => v.id === baseId) ?? null;
   const context = restorationContext({ note, fields: useRecord ? fields.filter((f) => !excluded.has(f.label)) : [] }, language, task);
@@ -258,10 +316,7 @@ export function RestorationsView({
 
   const run = async () => {
     if (!source || !choice) return;
-    setRunning(true);
-    setError(null);
-    try {
-      const result = await api.call("restorationRun", {
+    const promise = api.call("restorationRun", {
         assetId: source.assetId,
         region: region ? { x: region.x, y: region.y, w: region.w, h: region.h } : null,
         provider: choice.provider,
@@ -272,13 +327,9 @@ export function RestorationsView({
         baseId: base?.id ?? null,
         keepDetail: task === "colorize" ? keepDetail : undefined,
       });
-      setVersions(await api.call("restorationsList", { assetId: source.assetId }));
-      setCurrent(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRunning(false);
-    }
+    const pending = { assetId: source.assetId, promise };
+    remember({ pending });
+    follow(pending);
   };
 
   return (
@@ -348,7 +399,7 @@ export function RestorationsView({
             <section>
               <h2>{t("3. Tarea")}</h2>
               <div className="restoration-tasks" role="radiogroup" aria-label={t("Tarea")}>
-                {(Object.keys(TASK_LABELS) as RestorationTask[]).map((key) => (
+                {RESTORATION_TASKS.map((key) => (
                   <button
                     key={key}
                     type="button"
@@ -766,27 +817,48 @@ export function RestorationsView({
 }
 
 /**
- * The original and the restored version, with a divider to drag; or only the
- * version (what changed). A region can be drawn on the image: boxes are laid
- * over the picture itself, not its letterboxed frame.
+ * The original and the processed version, with a divider to drag; or only
+ * the version (what changed). A region can be drawn on the image: boxes are
+ * laid over the picture itself, not its letterboxed frame. With `zoomable`,
+ * the wheel (or the buttons) zooms into both at once and dragging away from
+ * the divider moves the view, so fine detail can be compared.
  */
-function BeforeAfter({
+export function BeforeAfter({
   before,
   beforeLabel,
   after,
+  afterLabel = "Restaurada",
   only,
   region,
   running,
+  runningLabel = "El modelo está procesando la imagen…",
   drawing,
+  drawHint = "Arrastra para marcar la zona que quieres arreglar",
+  compareHint = "Arrastra sobre la imagen para mover la línea entre el original y la versión restaurada.",
+  beforeRegion = null,
+  pixelated = false,
+  zoomable = false,
+  progress = null,
   onDraw,
 }: {
   before: string;
   beforeLabel: string;
   after: string | null;
+  afterLabel?: string;
   only: boolean;
   region: Region | null;
   running: boolean;
+  runningLabel?: string;
   drawing: boolean;
+  drawHint?: string;
+  compareHint?: string;
+  /** Show only this part of the «before» image, enlarged to fill the frame (a region that was upscaled). */
+  beforeRegion?: Region | null;
+  /** Enlarge the «before» image without smoothing, so its real pixels can be seen against the result. */
+  pixelated?: boolean;
+  zoomable?: boolean;
+  /** 0-1 while running, when known. */
+  progress?: number | null;
   onDraw: (box: Region) => void;
 }) {
   const t = useT();
@@ -794,8 +866,9 @@ function BeforeAfter({
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [frameSize, setFrameSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [draft, setDraft] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
   const frame = useRef<HTMLDivElement>(null);
-  const drag = useRef(false);
+  const drag = useRef<null | { mode: "split" } | { mode: "pan"; x: number; y: number; vx: number; vy: number }>(null);
   useEffect(() => {
     const el = frame.current;
     if (!el) return;
@@ -803,6 +876,8 @@ function BeforeAfter({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+  // A new picture or drawing starts from the whole image.
+  useEffect(() => setView({ zoom: 1, x: 0, y: 0 }), [before, beforeRegion?.x, beforeRegion?.y, drawing]);
   // Where the picture sits inside the frame (object-fit: contain).
   const scale = natural ? Math.min(frameSize.w / natural.w, frameSize.h / natural.h) : 0;
   const stage = natural
@@ -820,15 +895,71 @@ function BeforeAfter({
     const box = frame.current!.getBoundingClientRect();
     setSplit(Math.min(1, Math.max(0, (clientX - box.left) / box.width)));
   };
+  /** Keeps the view inside the picture. */
+  const clamp = (v: { zoom: number; x: number; y: number }) => {
+    const zoom = Math.min(16, Math.max(1, v.zoom));
+    const maxX = 0,
+      minX = frameSize.w - frameSize.w * zoom,
+      maxY = 0,
+      minY = frameSize.h - frameSize.h * zoom;
+    return { zoom, x: Math.min(maxX, Math.max(minX, v.x)), y: Math.min(maxY, Math.max(minY, v.y)) };
+  };
+  const zoomAt = (factor: number, px = frameSize.w / 2, py = frameSize.h / 2) =>
+    setView((v) => {
+      const zoom = Math.min(16, Math.max(1, v.zoom * factor));
+      const k = zoom / v.zoom;
+      return clamp({ zoom, x: px - (px - v.x) * k, y: py - (py - v.y) * k });
+    });
+  // The wheel zooms (a listener of its own: React's is passive and cannot stop the page scrolling).
+  useEffect(() => {
+    const el = frame.current;
+    if (!el || !zoomable) return;
+    const wheel = (e: WheelEvent) => {
+      if (drawing) return;
+      e.preventDefault();
+      const box = el.getBoundingClientRect();
+      zoomAt(Math.exp(-e.deltaY * 0.0025), e.clientX - box.left, e.clientY - box.top);
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  });
   const shown = draft
     ? { x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), w: Math.abs(draft.x1 - draft.x0), h: Math.abs(draft.y1 - draft.y0) }
     : region;
   const comparing = !!after && !only;
+  const transform = view.zoom !== 1 ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`, transformOrigin: "0 0" } : undefined;
+  const smooth = view.zoom >= 3 ? "pixelated" : undefined;
+  const beforeImage =
+    beforeRegion && stage ? (
+      // The region of the original, laid exactly over where the enlarged result sits.
+      <span className="before-after-crop" style={{ left: stage.left, top: stage.top, width: stage.width, height: stage.height }}>
+        <img
+          src={before}
+          alt={t("Original")}
+          draggable={false}
+          style={{
+            width: `${100 / beforeRegion.w}%`,
+            height: `${100 / beforeRegion.h}%`,
+            left: `${(-beforeRegion.x / beforeRegion.w) * 100}%`,
+            top: `${(-beforeRegion.y / beforeRegion.h) * 100}%`,
+            imageRendering: pixelated ? "pixelated" : undefined,
+          }}
+        />
+      </span>
+    ) : beforeRegion ? null : (
+      <img
+        src={before}
+        alt={t("Original")}
+        draggable={false}
+        style={{ imageRendering: pixelated ? "pixelated" : undefined }}
+        onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+      />
+    );
   return (
     <div className="before-after-wrap">
       <div
         ref={frame}
-        className={`before-after ${comparing ? "has-after" : ""} ${drawing ? "is-drawing" : ""}`}
+        className={`before-after ${comparing ? "has-after" : ""} ${drawing ? "is-drawing" : ""} ${view.zoom > 1 ? "is-zoomed" : ""}`}
         data-testid="before-after"
         onPointerDown={(e) => {
           if (drawing && stage) {
@@ -837,8 +968,16 @@ function BeforeAfter({
             setDraft({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
             return;
           }
+          const box = e.currentTarget.getBoundingClientRect();
+          const nearLine = Math.abs(e.clientX - box.left - split * box.width) < 28;
+          // Zoomed in, dragging away from the divider moves the view.
+          if (view.zoom > 1 && (!comparing || !nearLine)) {
+            drag.current = { mode: "pan", x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+            e.currentTarget.setPointerCapture(e.pointerId);
+            return;
+          }
           if (!comparing) return;
-          drag.current = true;
+          drag.current = { mode: "split" };
           e.currentTarget.setPointerCapture(e.pointerId);
           move(e.clientX);
         }}
@@ -846,28 +985,48 @@ function BeforeAfter({
           if (draft) {
             const p = at(e.clientX, e.clientY);
             setDraft({ ...draft, x1: p.x, y1: p.y });
-          } else if (drag.current) move(e.clientX);
+          } else if (drag.current?.mode === "split") move(e.clientX);
+          else if (drag.current?.mode === "pan") {
+            const d = drag.current;
+            setView((v) => clamp({ ...v, x: d.vx + e.clientX - d.x, y: d.vy + e.clientY - d.y }));
+          }
         }}
         onPointerUp={() => {
-          drag.current = false;
+          drag.current = null;
           if (!draft) return;
           const box = { x: Math.min(draft.x0, draft.x1), y: Math.min(draft.y0, draft.y1), w: Math.abs(draft.x1 - draft.x0), h: Math.abs(draft.y1 - draft.y0) };
           setDraft(null);
           if (box.w >= 0.02 && box.h >= 0.02) onDraw(box);
         }}
+        onDoubleClick={(e) => {
+          if (!zoomable || drawing) return;
+          const box = e.currentTarget.getBoundingClientRect();
+          if (view.zoom > 1) setView({ zoom: 1, x: 0, y: 0 });
+          else zoomAt(4, e.clientX - box.left, e.clientY - box.top);
+        }}
       >
-        {!only && <img src={before} alt={t("Original")} draggable={false} onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })} />}
-        {after && (
-          <img
-            className="after"
-            src={after}
-            alt={t("Versión restaurada")}
-            draggable={false}
-            onLoad={(e) => only && setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-            style={comparing ? { clipPath: `inset(0 0 0 ${split * 100}%)` } : undefined}
-          />
+        {!only && (
+          <div className="before-after-layer">
+            <div className="before-after-content" style={transform}>
+              {beforeImage}
+            </div>
+          </div>
         )}
-        {stage && shown && (!after || draft) && (
+        {after && (
+          <div className="before-after-layer" style={comparing ? { clipPath: `inset(0 0 0 ${split * 100}%)` } : undefined}>
+            <div className="before-after-content" style={transform}>
+              <img
+                className="after"
+                src={after}
+                alt={t(afterLabel)}
+                draggable={false}
+                style={{ imageRendering: smooth }}
+                onLoad={(e) => (only || beforeRegion) && setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+              />
+            </div>
+          </div>
+        )}
+        {stage && shown && (!after || draft) && view.zoom === 1 && (
           <span
             className="before-after-region"
             data-testid="restoration-region"
@@ -883,10 +1042,23 @@ function BeforeAfter({
           <>
             <span className="before-after-line" style={{ left: `${split * 100}%` }} />
             <span className="before-after-label left">{beforeLabel}</span>
-            <span className="before-after-label right">{t("Restaurada")}</span>
+            <span className="before-after-label right">{t(afterLabel)}</span>
           </>
         )}
-        {drawing && !draft && <span className="before-after-hint">{t("Arrastra para marcar la zona que quieres arreglar")}</span>}
+        {zoomable && natural && !drawing && (
+          <span className="before-after-zoom" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+            <button type="button" aria-label={t("Alejar")} data-tooltip={t("Alejar")} disabled={view.zoom <= 1} onClick={() => zoomAt(1 / 1.6)}>
+              <ZoomOut size={14} />
+            </button>
+            <button type="button" className="before-after-zoom-value" onClick={() => setView({ zoom: 1, x: 0, y: 0 })} data-tooltip={t("Ver entera")}>
+              {view.zoom === 1 ? t("Ajustar") : `${Math.round(view.zoom * 100)} %`}
+            </button>
+            <button type="button" aria-label={t("Acercar")} data-tooltip={t("Acercar")} disabled={view.zoom >= 16} onClick={() => zoomAt(1.6)}>
+              <ZoomIn size={14} />
+            </button>
+          </span>
+        )}
+        {drawing && !draft && <span className="before-after-hint">{t(drawHint)}</span>}
         {running && (
           <span className="before-after-running" role="status">
             <span className="chat-typing-indicator">
@@ -894,11 +1066,16 @@ function BeforeAfter({
               <span className="chat-typing-dot" />
               <span className="chat-typing-dot" />
             </span>
-            {t("El modelo está procesando la imagen…")}
+            {t(runningLabel)}
+            {progress !== null && (
+              <span className="before-after-progress" aria-hidden>
+                <i style={{ width: `${Math.round(progress * 100)}%` }} />
+              </span>
+            )}
           </span>
         )}
       </div>
-      {comparing && <p className="hint">{t("Arrastra sobre la imagen para mover la línea entre el original y la versión restaurada.")}</p>}
+      {comparing && <p className="hint">{t(compareHint)}{zoomable ? " " + t("Usa la rueda o doble clic para ampliar el detalle.") : ""}</p>}
     </div>
   );
 }
@@ -946,13 +1123,15 @@ function AddModel({ onClose, onAdd }: { onClose: () => void; onAdd: (value: stri
   );
 }
 
-function ExportDialog({
+export function ExportDialog({
   version,
   watermark,
+  title = "Descargar versión restaurada",
   onClose,
   onExport,
 }: {
   version: Restoration;
+  title?: string;
   watermark: Watermark;
   onClose: () => void;
   onExport: (format: "png" | "jpeg", watermark: Watermark) => Promise<void>;
@@ -962,7 +1141,7 @@ function ExportDialog({
   const [format, setFormat] = useState<"png" | "jpeg">("jpeg");
   const [busy, setBusy] = useState(false);
   return (
-    <Modal icon={Download} title={t("Descargar versión restaurada")} onClose={onClose}>
+    <Modal icon={Download} title={t(title)} onClose={onClose}>
       <div className="modal-body restoration-export">
         <div className="restoration-export-preview">
           <img src={`imago://restoration/${version.id}`} alt="" />

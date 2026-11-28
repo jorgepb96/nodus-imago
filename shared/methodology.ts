@@ -45,13 +45,28 @@ export type MethodologyDatabase = {
   fingerprint: string;
 };
 /** A model that produced or can produce values, with where it came from. */
+export type MethodologyUpscale = {
+  model: string;
+  revision: string;
+  scale: number;
+  creativity: number;
+  profile: string;
+  device: string;
+  dtype: string;
+  /** Versions of whole images and of regions. */
+  whole: number;
+  regions: number;
+  /** Inputs reduced to save tiles or stay under the size limit. */
+  reduced: number;
+  seconds: number;
+};
 export type MethodologyModel = {
   /** As Imago names it: a repository, «provider/model» or a catalogue id. */
   model: string;
   label?: string;
   revision?: string;
   license?: string;
-  task: "embedding" | "vision" | "description" | "classification" | "restoration" | "property";
+  task: "embedding" | "vision" | "description" | "classification" | "restoration" | "upscale" | "property";
   /** local: runs on the computer; api: an external provider. */
   where: "local" | "api";
   /** Values written with it (AI properties, accepted proposals, restorations). */
@@ -171,5 +186,7 @@ export type MethodologyData = {
   views: MethodologyView[];
   statistics: MethodologyStatistic[];
   restorations: { provider: string; model: string; task: string; count: number }[];
+  /** Local AI upscaling: one line per model revision and parameters used. */
+  upscales?: MethodologyUpscale[];
   settings: { profile: string; device: string; parallelJobs: number; apiDelayMs: number; remoteEnabled: boolean };
 };

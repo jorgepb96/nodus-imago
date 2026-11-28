@@ -5,6 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import catalog from "../../shared/modelCatalog.json";
 import runtimes from "../../shared/runtimeCatalog.json";
 import embeddingOnnx from "../../shared/embeddingOnnxCatalog.json";
+import upscaleCatalog from "../../shared/upscaleCatalog.json";
 import {
   HARRIER_ID,
   HARRIER_REVISION,
@@ -21,6 +22,7 @@ import type {
   ModelPreparationStep,
 } from "../../shared/modelPreparation";
 import { embeddingDimensions } from "../../shared/embeddingBackends";
+import { UPSCALE_MODEL_ID, UPSCALE_RUNTIME_ID } from "../../shared/upscale";
 import {
   API_EMBEDDING_ID,
   DEFAULT_EMBEDDING_API,
@@ -66,7 +68,9 @@ export class Models {
         },
       ],
     };
-    return [embeddingOnnx, harrier, ...catalog, ...(runtime ? [runtime] : [])];
+    // Local AI upscaling: the model's weights and uv, which prepares its Python environment.
+    const uv = upscaleCatalog.runtimes.find((r) => r.platform === process.platform && r.arch === process.arch);
+    return [embeddingOnnx, harrier, ...catalog, ...(runtime ? [runtime] : []), upscaleCatalog.model, ...(uv ? [uv] : [])];
   }
   get(id: string): CatalogModel {
     const model = this.catalog().find((m) => m.id === id);
@@ -76,6 +80,9 @@ export class Models {
   available(id: string) {
     const target = `${process.platform}-${process.arch}`;
     if (id === API_EMBEDDING_ID) return true;
+    // PyTorch has no current builds for Intel Macs.
+    if (id === UPSCALE_MODEL_ID || id === UPSCALE_RUNTIME_ID)
+      return ["darwin-arm64", "win32-x64", "linux-x64", "linux-arm64"].includes(target);
     return (
       [
         "darwin-arm64",
@@ -239,7 +246,9 @@ export class Models {
         available: this.available(m.id),
         unavailableReason: this.available(m.id)
           ? undefined
-          : "EmbeddingGemma ONNX no dispone de runtime para Mac Intel; utiliza Harrier.",
+          : m.id === UPSCALE_MODEL_ID || m.id === UPSCALE_RUNTIME_ID
+            ? "El escalado local necesita PyTorch, que no tiene versiones actuales para Mac con Intel."
+            : "EmbeddingGemma ONNX no dispone de runtime para Mac Intel; utiliza Harrier.",
         experimental: m.id === "embeddinggemma2" || m.id.startsWith("smolvlm"),
       };
     });

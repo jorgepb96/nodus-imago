@@ -14,6 +14,7 @@ import {
   Shrink,
   SquareDashedMousePointer,
   Wand2,
+  ImageUpscale,
   Quote,
   Check,
   RotateCcw,
@@ -41,6 +42,7 @@ export function RecordPanel({
   onOptionsChanged,
   onSimilar,
   onRestore,
+  onUpscale,
   onOpenRecord,
   onCompare,
   citation,
@@ -61,6 +63,7 @@ export function RecordPanel({
   onSimilar: (id: string) => void;
   /** Opens the restoration workshop with this image. */
   onRestore?: (assetId: string) => void;
+  onUpscale?: (assetId: string) => void;
   onOpenRecord?: (rowId: string) => void;
   onCompare?: (assetIds: string[]) => void;
   /** The database's citation template. */
@@ -417,6 +420,15 @@ export function RecordPanel({
                   >
                     <Wand2 size={15} />
                     {t("Restaurar con IA")}
+                  </Button>
+                )}
+                {onUpscale && (
+                  <Button
+                    data-tooltip={t("Abre Escalado IA con esta imagen. El original no se modifica.")}
+                    onClick={() => onUpscale(image.id)}
+                  >
+                    <ImageUpscale size={15} />
+                    {t("Escalar con IA")}
                   </Button>
                 )}
                 <Button

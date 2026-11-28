@@ -56,6 +56,7 @@ import {
   Columns2,
   Copy,
   Wand2,
+  ImageUpscale,
   GraduationCap,
   Lightbulb,
   FileImage,
@@ -119,6 +120,7 @@ import { DataSourcePicker, SavedViewDialog, ViewColorPicker, ViewVisibility, VIE
 import { DATABASE_VIEWS, combineCriteria, moveViewKey, orderViewKeys, savedIdOf, savedViewKey, type SavedView, type ViewColor } from "../shared/savedViews";
 import { VariantsView } from "./components/VariantsView";
 import { RestorationsView } from "./components/RestorationsView";
+import { UpscaleView } from "./components/UpscaleView";
 import { SuggestDialog } from "./components/SuggestDialog";
 import { PlatesDialog } from "./components/PlatesDialog";
 import { MethodologyDialog } from "./components/MethodologyDialog";
@@ -204,11 +206,13 @@ function formatDay(value: string) {
   const date = new Date(`${day}T00:00:00`);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(uiLocale());
 }
+/** The sections of the side menu's «Tools» group. */
+const TOOL_AREAS: string[] = ["compare", "restorations", "upscale"];
 function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
   const t = useT(),
     api = window.imago;
   const [area, setArea] = useState<
-      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "restorations" | "tutorials"
+      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "restorations" | "upscale" | "tutorials"
     >("home"),
     [databases, setDatabases] = useState<DatabaseSummary[]>([]),
     [databaseId, setDatabaseId] = useState(""),
@@ -650,6 +654,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
       area === "chat" ||
       area === "compare" ||
       area === "restorations" ||
+      area === "upscale" ||
       area === "tutorials" ||
       (area === "databases" && !databaseId) ||
       criteriaContext !== criteriaKey
@@ -783,6 +788,28 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
   const [analysisTask, setAnalysisTask] = useState<"describe" | "transcribe">("describe");
   const [restoreSeed, setRestoreSeed] = useState<string | null>(null);
   const clearRestoreSeed = useCallback(() => setRestoreSeed(null), [setRestoreSeed]);
+  // The «Tools» group of the side menu folds like Nodus's groups and stays as left.
+  const [toolsCollapsed, setToolsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("imago.nav.toolsCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleTools = (value: boolean) => {
+    setToolsCollapsed(value);
+    try {
+      localStorage.setItem("imago.nav.toolsCollapsed", value ? "1" : "0");
+    } catch {
+      /* A preference only. */
+    }
+  };
+  // Opening one of its sections from elsewhere (a record, the tour) unfolds it.
+  useEffect(() => {
+    if (TOOL_AREAS.includes(area)) setToolsCollapsed(false);
+  }, [area]);
+  const [upscaleSeed, setUpscaleSeed] = useState<string | null>(null);
+  const clearUpscaleSeed = useCallback(() => setUpscaleSeed(null), [setUpscaleSeed]);
   const clearCompareSeed = useCallback(() => setCompareSeed(null), [setCompareSeed]);
   const openApiSettings = () => {
     setSettingsTab("api");
@@ -2100,7 +2127,6 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
               <span className="nav-title">{t("Bases de datos")}</span>
               <span className="nav-count">{databases.length}</span>
             </button>
-            <div className="nav-group-label">{t("EXPLORAR")}</div>
             <button
               title={t("Búsqueda")}
               data-tour="nav-search"
@@ -2122,6 +2148,20 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
               <MessageSquare size={18} />
               <span className="nav-title">{t("Chat")}</span>
             </button>
+            <div className={`nav-group-label ${toolsCollapsed && TOOL_AREAS.includes(area) ? "has-active" : ""}`}>
+              <button
+                type="button"
+                className="nav-group-toggle"
+                aria-expanded={!toolsCollapsed}
+                title={t(toolsCollapsed ? "Mostrar grupo" : "Plegar grupo")}
+                data-testid="nav-tools-toggle"
+                onClick={() => toggleTools(!toolsCollapsed)}
+              >
+                <ChevronRight size={11} className={toolsCollapsed ? "" : "is-open"} />
+                {t("HERRAMIENTAS")}
+              </button>
+            </div>
+            {(!toolsCollapsed || collapsed) && (<>
             <button
               title={t("Mesa de comparación")}
               data-tour="nav-compare"
@@ -2140,6 +2180,17 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
               <Wand2 size={18} />
               <span className="nav-title">{t("Restauración IA")}</span>
             </button>
+            <button
+              title={t("Escalado IA")}
+              data-tour="nav-upscale"
+              data-testid="nav-upscale"
+              className={area === "upscale" ? "active" : ""}
+              onClick={() => setArea("upscale")}
+            >
+              <ImageUpscale size={18} />
+              <span className="nav-title">{t("Escalado IA")}</span>
+            </button>
+            </>)}
           </nav>
           <div className="sidebar-databases" data-tour="collections" data-tour-fit="content">
             <div className="row">
@@ -2279,6 +2330,22 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
                 setTourOpen(true);
               }}
             />
+          ) : area === "upscale" ? (
+            status && (
+              <UpscaleView
+                settings={status.settings}
+                databases={databases}
+                jobs={status.jobs}
+                seed={upscaleSeed}
+                onSeedUsed={clearUpscaleSeed}
+                onSettings={async (patch) => {
+                  await api.call("updateSettings", patch);
+                  refresh();
+                }}
+                onOpenSettings={openEmbeddingSettings}
+                onOpenProviders={openApiSettings}
+              />
+            )
           ) : area === "restorations" ? (
             status && (
               <RestorationsView
@@ -4807,6 +4874,11 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
             setOpenRow(null);
             setRestoreSeed(assetId);
             setArea("restorations");
+          }}
+          onUpscale={(assetId) => {
+            setOpenRow(null);
+            setUpscaleSeed(assetId);
+            setArea("upscale");
           }}
           perform={perform}
         />

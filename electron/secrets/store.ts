@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ApiProvider } from "../../shared/aiConfig";
 /** Provider keys, backup passwords and the ChatGPT tunnel's runtime key. */
-type StoredSecret = ApiProvider | `backup_${string}` | "mcptunnel";
+type StoredSecret = ApiProvider | import("../../shared/upscaleApi").UpscaleService | `backup_${string}` | "mcptunnel";
 // Adapted from Nodus secretStore: one encrypted file per provider, shared across
 // collections, atomic writes and no plaintext fallback. Imago never reads Nodus keys.
 export interface SecretEncryption {

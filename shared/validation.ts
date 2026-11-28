@@ -289,6 +289,21 @@ export const settingsSchema = z
       })
       .strict()
       .optional(),
+    upscale: z
+      .object({
+        profile: z.enum(["auto", "full", "balanced", "low", "minimum", "cpu"]).optional(),
+        scale: z.union([z.literal(2), z.literal(4)]).optional(),
+        creativity: z.number().int().min(0).max(8).optional(),
+        fit: z.boolean().optional(),
+        maxOutputSide: z.number().int().min(1024).max(16384).optional(),
+        measured: z.partialRecord(z.enum(["full", "balanced", "low", "minimum", "cpu"]), z.number().min(0).max(36000)).optional(),
+        engine: z.enum(["local", "api"]).optional(),
+        apiModel: z.string().max(400).optional(),
+        favorites: z.array(z.string().max(400)).max(200).optional(),
+        maxPrice: z.number().min(0).max(100).nullable().optional(),
+      })
+      .strict()
+      .optional(),
     parallelJobs: z.number().int().min(1).max(4),
     apiParallel: z.number().int().min(1).max(50).optional(),
     fieldEquivalences: z
@@ -547,6 +562,38 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({ items: z.array(z.object({ rowId: id, columnId: id, value: z.string().max(100000) }).strict()).min(1).max(5000) })
     .strict(),
   restorationsList: z.object({ assetId: id.optional() }).strict(),
+  upscaleStatus: z.object({ refresh: z.boolean().optional() }).strict().optional(),
+  upscaleInstall: z.undefined(),
+  upscaleUninstall: z.undefined(),
+  upscaleProbe: z.undefined(),
+  upscaleEnqueue: z
+    .object({
+      items: z
+        .array(
+          z
+            .object({
+              assetId: id,
+              region: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0.005).max(1), h: z.number().min(0.005).max(1) }).strict().nullable(),
+              baseId: id.nullable(),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(500),
+      scale: z.union([z.literal(2), z.literal(4)]),
+      creativity: z.number().int().min(0).max(8),
+      fit: z.boolean(),
+      maxOutputSide: z.number().int().min(1024).max(16384),
+      engine: z
+        .union([
+          z.object({ kind: z.literal("local") }).strict(),
+          z.object({ kind: z.literal("api"), service: z.enum(["fal", "replicate", "stability"]), model: z.string().trim().min(1).max(300), name: z.string().max(300) }).strict(),
+        ])
+        .optional(),
+    })
+    .strict(),
+  upscalesList: z.object({ assetId: id.optional() }).strict(),
+  upscaleActive: z.undefined(),
   restorationDelete: z.object({ id }).strict(),
   restorationRun: z
     .object({
@@ -1057,6 +1104,11 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({ provider: providerSchema, key: z.string().max(10000) })
     .strict(),
   clearApiKey: z.object({ provider: providerSchema }).strict(),
+  upscaleServicesStatus: z.undefined(),
+  setUpscaleKey: z.object({ service: z.enum(["fal", "replicate", "stability"]), key: z.string().max(10000) }).strict(),
+  clearUpscaleKey: z.object({ service: z.enum(["fal", "replicate", "stability"]) }).strict(),
+  checkUpscaleKey: z.object({ service: z.enum(["fal", "replicate", "stability"]) }).strict(),
+  upscaleApiCatalog: z.object({ refresh: z.boolean().optional() }).strict().optional(),
   listProviderModels: z.object({ provider: providerSchema }).strict(),
   imageModelCatalog: z.object({ refresh: z.boolean().optional() }).strict(),
   savedSearches: z.undefined(),

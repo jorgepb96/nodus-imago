@@ -28,9 +28,13 @@ import type {
   MethodologyDatabase,
   MethodologyFilter,
   MethodologyModel,
+  MethodologyUpscale,
   MethodologyProperty,
 } from "../../shared/methodology";
-import catalog from "../../shared/modelCatalog.json";
+import modelCatalog from "../../shared/modelCatalog.json";
+import upscaleCatalog from "../../shared/upscaleCatalog.json";
+import { UPSCALE_MODEL_ID, UPSCALE_REPOSITORY, type UpscaleParams } from "../../shared/upscale";
+const catalog = [...modelCatalog, upscaleCatalog.model];
 
 /** Options listed per vocabulary; the rest are counted. */
 const MAX_OPTIONS = 40;
@@ -278,7 +282,43 @@ export function collectMethodology(ctx: MethodologyContext, input: { databaseIds
         ...ids,
       )
     : [];
-  for (const r of restorations) addModel(`${r.provider}/${r.model}`, "API", "restoration", r.count);
+  for (const r of restorations.filter((r) => r.task !== "upscale")) addModel(`${r.provider}/${r.model}`, "API", "restoration", r.count);
+  // AI upscaling runs locally: the model, its revision and every parameter of the runs.
+  const upscaleRows = rowIds.length
+    ? all<{ params_json: string | null; region_json: string | null }>(
+        `SELECT params_json,region_json FROM restorations WHERE task='upscale' AND row_id IN ${inRows}`,
+        ...ids,
+      )
+    : [];
+  const upscaleGroups = new Map<string, MethodologyUpscale>();
+  for (const r of upscaleRows) {
+    const p = r.params_json ? (JSON.parse(r.params_json) as UpscaleParams) : null;
+    if (!p) continue;
+    const api = p.engine === "api";
+    const key = [api ? `${p.service}/${p.model}` : "local", p.revision, p.scale, p.creativity, p.profile, p.device, p.dtype].join("|");
+    const g = upscaleGroups.get(key) ?? {
+      model: api ? `${p.service}/${p.model}` : UPSCALE_REPOSITORY,
+      revision: p.revision,
+      scale: p.scale,
+      creativity: p.creativity,
+      profile: p.profile,
+      device: p.device,
+      dtype: p.dtype,
+      whole: 0,
+      regions: 0,
+      reduced: 0,
+      seconds: 0,
+    };
+    if (r.region_json) g.regions++;
+    else g.whole++;
+    if (p.reduced < 1) g.reduced++;
+    g.seconds += p.seconds;
+    upscaleGroups.set(key, g);
+  }
+  const upscales = [...upscaleGroups.values()].sort((a, b) => b.whole + b.regions - (a.whole + a.regions));
+  const localUpscales = upscales.filter((u) => u.device !== "api");
+  if (localUpscales.length) addModel(UPSCALE_MODEL_ID, undefined, "upscale", localUpscales.reduce((n, u) => n + u.whole + u.regions, 0));
+  for (const u of upscales.filter((u) => u.device === "api")) addModel(u.model, "API", "upscale", u.whole + u.regions);
   const embeddingEntry = known.find((m) => m.id === settings.embeddingModel || settings.embeddingModel.startsWith(`${m.id}-`));
 
   // ── Review and corrections ──────────────────────────────────────────────
@@ -437,7 +477,8 @@ export function collectMethodology(ctx: MethodologyContext, input: { databaseIds
     },
     views,
     statistics,
-    restorations,
+    restorations: restorations.filter((r) => r.task !== "upscale"),
+    upscales,
     settings: {
       profile: settings.profile,
       device: settings.device,

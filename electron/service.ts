@@ -54,6 +54,8 @@ import { foldText, heritageDictionaryOptions, heritageRegionPrompt, knownForReco
 import { parseVisualTagSuggestions, regionOverlap, visualTagSuggestionPrompt, type VisualTagChoice } from "../shared/visualTags";
 import { modelChoiceLabel } from "../shared/aiConfig";
 import { Restorations } from "./db/restorations";
+import { Upscaler } from "./ai/upscaler";
+import { UPSCALE_ENV_ID, UPSCALE_MODEL_ID, UPSCALE_RUNTIME_ID } from "../shared/upscale";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
 import { preparePlates } from "./export/plates";
@@ -132,6 +134,7 @@ export class Service {
   /** Towns of a running heritage search, worked out once per run. */
   private heritageTowns = new WeakMap<object, Promise<Towns>>();
   restorations: Restorations;
+  upscaler: Upscaler;
   suggestions: NeighbourSuggestions;
   details: DetailSearch;
   chatData: ChatData;
@@ -210,6 +213,14 @@ export class Service {
       }
     });
     this.queue.fingerprint = (payload, index) => this.variants.fingerprintOne(payload, index);
+    // Local AI upscaling: its own Python process, next to the inference script.
+    this.upscaler = new Upscaler(this.repo, this.models, path.join(path.dirname(script), "upscale.py"));
+    this.upscaler.remote = remote as ((input: unknown, signal: AbortSignal) => Promise<unknown>) | undefined;
+    this.queue.upscaleOne = async (payload, index, signal, message) => {
+      await this.upscaler.runItem(payload, index, signal, message);
+      return "imported";
+    };
+    this.queue.upscaleEnvironment = (signal, message) => this.upscaler.prepareEnvironment(signal, message);
     this.works = new Works(this.repo, this.variants);
     this.visualTags = new VisualTags(this.repo);
     this.appearances = new Appearances(this.repo, this.variants, this.works);
@@ -920,6 +931,7 @@ export class Service {
         await this.engine.resetRuntimes();
         return this.models.verify(input.id);
       case "deleteModel":
+        if ([UPSCALE_MODEL_ID, UPSCALE_RUNTIME_ID, UPSCALE_ENV_ID].includes(input.id)) return this.run("upscaleUninstall");
         if (this.unfinishedJobs())
           throw new Error(
             "Pausa o cancela las tareas antes de eliminar un modelo.",
@@ -1291,7 +1303,47 @@ export class Service {
       case "neighbourSuggestionsApply":
         return this.suggestions.apply(input.items);
       case "restorationsList":
-        return this.restorations.list(input ?? {});
+        return this.restorations.list({ assetId: input?.assetId, kind: "restoration" });
+      case "upscaleStatus":
+        return this.upscaler.status(!!input?.refresh);
+      case "upscaleInstall": {
+        const id = await this.upscaler.install();
+        this.queue.pump();
+        return id;
+      }
+      case "upscaleUninstall":
+        if (this.repo.jobs().some((job) => ["upscale", "prepare"].includes(job.kind) && ["queued", "running"].includes(job.state)))
+          throw new Error("Pausa o cancela los escalados y la instalación antes de eliminar el modelo.");
+        for (const job of this.repo.jobs())
+          if (job.kind === "prepare" && job.state === "paused") this.queue.control(job.id, "cancel", false);
+        await this.upscaler.uninstall();
+        return;
+      case "upscaleProbe":
+        await this.upscaler.probe();
+        return this.upscaler.status(true);
+      case "upscaleEnqueue": {
+        const api = input.engine?.kind === "api";
+        if (api && !this.repo.getSettings().remoteEnabled) throw new Error("Las APIs remotas están desactivadas en Ajustes.");
+        if (!api && !(await this.upscaler.status()).ready) throw new Error("Instala el escalado local en Ajustes › Modelos locales.");
+        const settings = this.repo.getSettings();
+        this.repo.updateSettings({
+          upscale: { ...settings.upscale, scale: input.scale, creativity: input.creativity, fit: input.fit, maxOutputSide: input.maxOutputSide },
+        });
+        const label = input.items.length === 1 ? `Escalar ×${input.scale}` : `Escalar ${input.items.length} imágenes ×${input.scale}`;
+        const id = this.repo.newJob("upscale", { label, ...input }, input.items.length);
+        this.queue.pump();
+        return id;
+      }
+      case "upscaleActive": {
+        const job = this.repo.db
+          .prepare("SELECT id,payload_json FROM jobs WHERE kind='upscale' AND state IN ('queued','running','paused') ORDER BY created_at DESC LIMIT 1")
+          .get() as { id: string; payload_json: string } | undefined;
+        if (!job) return null;
+        const payload = JSON.parse(job.payload_json);
+        return { id: job.id, items: payload.items, scale: payload.scale, creativity: payload.creativity };
+      }
+      case "upscalesList":
+        return this.restorations.list({ assetId: input?.assetId, kind: "upscale" });
       case "restorationDelete":
         return this.restorations.delete(input.id);
       case "_restorationInput":
@@ -1488,6 +1540,7 @@ export class Service {
         this.backupAbort?.abort();
         await this.storageTask?.catch(() => {});
         await this.queue.close();
+        this.upscaler.close();
         this.engine.close();
         this.repo.close();
         return;

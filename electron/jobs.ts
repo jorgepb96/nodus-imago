@@ -139,7 +139,7 @@ export class JobQueue {
     )
       throw new Error("Progreso de tarea inválido.");
     if (
-      !["images", "download", "prepare", "index", "analyze", "fingerprints", "heritage", "visualTags"].includes(job.kind)
+      !["images", "download", "prepare", "index", "analyze", "fingerprints", "heritage", "visualTags", "upscale"].includes(job.kind)
     )
       throw new Error("Tipo de tarea desconocido.");
     const payload = JSON.parse(job.payload_json),
@@ -153,6 +153,7 @@ export class JobQueue {
         fingerprints: "hashes",
         heritage: "items",
         visualTags: "assetIds",
+        upscale: "items",
       } as Record<string, string>
     )[job.kind];
     // Index jobs carry record texts before images; older ones only images.
@@ -197,6 +198,15 @@ export class JobQueue {
         resources.add("uses:llama-runtime");
       }
     }
+    // The upscaler holds several GB: one image at a time, never beside a local vision model.
+    if (job.kind === "upscale" && payload.engine?.kind === "api") {
+      // Online: nothing runs here, one request at a time per service.
+      resources.add("upscale-api:" + payload.engine.service);
+    } else if (job.kind === "upscale") {
+      resources.add("upscale-engine");
+      resources.add("local-vision");
+      resources.add("uses:kandinsky-imagesr-2");
+    }
     if (job.kind === "visualTags" && payload.choice?.provider === "local") {
       resources.add("local-vision");
       resources.add("uses:" + payload.choice.model);
@@ -229,6 +239,10 @@ export class JobQueue {
   fingerprint?: (payload: { hashes: string[] }, index: number) => Promise<"imported" | "skipped">;
   /** Suggests the tags of one image of a queued analysis and keeps them for review. */
   visualTagOne?: (payload: { dictionaryId: string; choice: ModelChoice; assetIds: string[] }, index: number, signal: AbortSignal) => Promise<"imported" | "skipped">;
+  /** Upscales one image of a queued job into a new version (set by the service). */
+  upscaleOne?: (payload: import("../shared/upscale").UpscaleJobPayload, index: number, signal: AbortSignal, message: (text: string) => void) => Promise<"imported" | "skipped">;
+  /** Prepares the upscaling environment, one step of its installation (set by the service). */
+  upscaleEnvironment?: (signal: AbortSignal, message: (text: string) => void) => Promise<void>;
   /** How many API cells to run together from `from` (1 when local or retrying). */
   private remoteBatch(
     payload: { items?: { choice?: { provider?: string } }[] },
@@ -362,12 +376,17 @@ export class JobQueue {
             outcome = await this.heritageOne(payload, done, signal);
           else if (job.kind === "visualTags" && this.visualTagOne)
             outcome = await this.visualTagOne(payload, done, signal);
+          else if (job.kind === "upscale" && this.upscaleOne)
+            outcome = await this.upscaleOne(payload, done, signal, (text) => this.note(job.id, text));
           else if (job.kind === "download" || job.kind === "prepare") {
             const step =
               job.kind === "prepare"
                 ? payload.steps[done]
                 : { id: payload.id, fileIndex: done };
-            if (step.fileIndex === null) {
+            if (step.id === "upscale-env" && this.upscaleEnvironment) {
+              await this.upscaleEnvironment(signal, (text) => this.note(job.id, text));
+            } else if (step.fileIndex === null) {
+              this.note(job.id, `${this.models.get(step.id).label} · verificando integridad`, true);
               await this.models.verify(step.id);
             } else {
               let last = 0;
@@ -457,6 +476,17 @@ export class JobQueue {
           );
       }
     }
+  }
+  /** A line about what the job is doing now, shown in the queue (at most twice a second). */
+  private noted = new Map<string, { at: number; step: string }>();
+  private note(jobId: string, text: string, force = false) {
+    const last = this.noted.get(jobId);
+    // A new step always shows at once; progress within a step at most every 400 ms.
+    const step = text.split(" · ")[0];
+    if (!force && last && last.step === step && Date.now() - last.at < 400) return;
+    this.noted.set(jobId, { at: Date.now(), step });
+    this.repo.db.prepare("UPDATE jobs SET message=?,updated_at=? WHERE id=?").run(text, now(), jobId);
+    this.changed("jobs");
   }
   private itemFailed(jobId: string, item: number, error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

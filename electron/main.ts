@@ -58,6 +58,7 @@ import { autoUpdater } from "electron-updater";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { asLanguage, type Language } from "../shared/language";
+import { UpscaleServices } from "./ai/upscaleServices";
 /** Wikimedia asks automated clients to name themselves and a way to find them. */
 const WIKIMEDIA_USER_AGENT = "NodusImago/0.1 (https://github.com/jorgepb96/nodus-imago)";
 
@@ -215,6 +216,8 @@ app.whenReady().then(async () => {
     decrypt: (data) => safeStorage.decryptString(data),
   });
   const approvedEndpoints = new Set<string>();
+  // Online upscaling (fal.ai, Replicate, Stability AI): keys stay in this process.
+  const upscaleServices = new UpscaleServices(secrets);
   const providers = new ApiProviders(secrets, fetch, async (provider, base) => {
       const entry = provider + "|" + base;
       if (approvedEndpoints.has(entry)) return true;
@@ -258,7 +261,12 @@ app.whenReady().then(async () => {
       const abort = new AbortController();
       completionAborts.set(message.completionId, abort);
       void (
-        message.input?.embedding === true
+        message.input?.upscaleApi === true
+          ? call("_settings").then((settings) => {
+              if (!settings.remoteEnabled) throw Object.assign(new Error("Las APIs remotas están desactivadas en Ajustes."), { fatal: true });
+              return upscaleServices.run(message.input, abort.signal);
+            })
+          : message.input?.embedding === true
           ? providers.embed(message.input, abort.signal)
           : message.input?.stream === true
             ? providers.completeStream(
@@ -674,6 +682,21 @@ app.whenReady().then(async () => {
         };
       }
       if (command === "credentialsStatus") return providers.keyStatus();
+      if (command === "upscaleServicesStatus") return upscaleServices.keyStatus();
+      if (command === "setUpscaleKey") {
+        const data = safe as any;
+        const settings = await call("_settings");
+        if (!settings.remoteEnabled && data.key.trim())
+          throw new Error("Activa «Permitir APIs remotas» en Ajustes para introducir claves de API.");
+        secrets.set(data.service, data.key);
+        return upscaleServices.keyStatus();
+      }
+      if (command === "clearUpscaleKey") {
+        secrets.clear((safe as any).service);
+        return upscaleServices.keyStatus();
+      }
+      if (command === "checkUpscaleKey") return upscaleServices.check((safe as any).service);
+      if (command === "upscaleApiCatalog") return upscaleServices.catalog(!!(safe as any)?.refresh);
       if (command === "reloadInterface") { setTimeout(() => window?.webContents.reload(), 100); return; }
       // Deterministic banner coverage in the unpackaged E2E profile, as in
       // Nodus; a packaged build never reads this variable.

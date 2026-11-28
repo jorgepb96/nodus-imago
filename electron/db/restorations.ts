@@ -23,7 +23,7 @@ const SEND_MAX = 2048;
 /** Extra margin around a region, so the model sees its surroundings. */
 const PADDING = 0.04;
 type Region = { x: number; y: number; w: number; h: number };
-type Row = Omit<Restoration, "region" | "title"> & { region_json: string | null; file: string };
+type Row = Omit<Restoration, "region" | "title" | "params"> & { region_json: string | null; params_json: string | null; file: string };
 
 /** Width and height as displayed, after the EXIF rotation. */
 function orientedSize(meta: { width?: number; height?: number; orientation?: number }): [number, number] {
@@ -619,13 +619,15 @@ export class Restorations {
 
   /** How closely a version keeps the original's light and shapes (inside its region, if any). */
   async check(id: string): Promise<RestorationCheck> {
-    const row = this.repo.db.prepare("SELECT asset_id,file,region_json,base_id FROM restorations WHERE id=?").get(id) as
-      | { asset_id: string; file: string; region_json: string | null; base_id: string | null }
+    const row = this.repo.db.prepare("SELECT asset_id,file,region_json,base_id,task FROM restorations WHERE id=?").get(id) as
+      | { asset_id: string; file: string; region_json: string | null; base_id: string | null; task: string }
       | undefined;
     if (!row) throw new Error("Versión no encontrada.");
     let [before, after] = [await this.reference(row.asset_id, row.base_id), await fs.readFile(row.file)];
     const region = row.region_json ? (JSON.parse(row.region_json) as Region) : null;
-    if (region) {
+    // An upscaled region is saved on its own, enlarged: only its source is cut.
+    if (region && row.task === "upscale") before = await this.cut(before, region);
+    else if (region) {
       const cut = async (png: Buffer) => {
         const m = await sharp(png).metadata();
         const left = Math.floor(region.x * m.width!),
@@ -646,19 +648,31 @@ export class Restorations {
     return { similarity, level: checkLevel(similarity) };
   }
 
+  /** A region of an image, as PNG. */
+  private async cut(png: Buffer, region: Region): Promise<Buffer> {
+    const m = await sharp(png).metadata();
+    const left = Math.floor(region.x * m.width!),
+      top = Math.floor(region.y * m.height!);
+    return sharp(png)
+      .extract({ left, top, width: Math.max(1, Math.min(m.width! - left, Math.round(region.w * m.width!))), height: Math.max(1, Math.min(m.height! - top, Math.round(region.h * m.height!))) })
+      .png()
+      .toBuffer();
+  }
   /** The version in grey with what changed from the original in red (colour changes do not count). */
   async diff(id: string): Promise<string> {
     const target = path.join(this.folder, id + ".changes.png");
     if (await fs.stat(target).then(() => true, () => false)) return target;
-    const row = this.repo.db.prepare("SELECT asset_id,file,base_id FROM restorations WHERE id=?").get(id) as
-      | { asset_id: string; file: string; base_id: string | null }
+    const row = this.repo.db.prepare("SELECT asset_id,file,base_id,task,region_json FROM restorations WHERE id=?").get(id) as
+      | { asset_id: string; file: string; base_id: string | null; task: string; region_json: string | null }
       | undefined;
     if (!row) throw new Error("Versión no encontrada.");
     const m = await sharp(row.file).metadata();
     const scale = Math.min(1, 1600 / Math.max(m.width!, m.height!));
     const w = Math.round(m.width! * scale),
       h = Math.round(m.height! * scale);
-    const [a, raw] = await Promise.all([greyAt(await this.reference(row.asset_id, row.base_id), w, h), greyAt(await fs.readFile(row.file), w, h)]);
+    let reference = await this.reference(row.asset_id, row.base_id);
+    if (row.task === "upscale" && row.region_json) reference = await this.cut(reference, JSON.parse(row.region_json) as Region);
+    const [a, raw] = await Promise.all([greyAt(reference, w, h), greyAt(await fs.readFile(row.file), w, h)]);
     // Tone changes (lighter, more contrast) are not marked: only what changed
     // shape or detail. Fine detail is compared apart from the tone of each
     // area, so a darker dress is not a change but a redrawn eye is.
@@ -679,17 +693,20 @@ export class Restorations {
     return target;
   }
 
-  list(input: { assetId?: string }): Restoration[] {
+  /** Versions, newest first; `kind` keeps the restoration workshop's or the upscaler's own. */
+  list(input: { assetId?: string; kind?: "restoration" | "upscale" }): Restoration[] {
+    const where = [input.assetId ? "asset_id=?" : "", input.kind === "upscale" ? "task='upscale'" : input.kind === "restoration" ? "task<>'upscale'" : ""].filter(Boolean);
     const rows = this.repo.db
       .prepare(
-        `SELECT id,asset_id assetId,row_id rowId,provider,model,task,prompt,region_json,file,width,height,created_at createdAt,base_id baseId FROM restorations ${input.assetId ? "WHERE asset_id=?" : ""} ORDER BY created_at DESC LIMIT 500`,
+        `SELECT id,asset_id assetId,row_id rowId,provider,model,task,prompt,region_json,params_json,file,width,height,created_at createdAt,base_id baseId FROM restorations ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created_at DESC LIMIT 500`,
       )
       .all(...(input.assetId ? [input.assetId] : [])) as Row[];
     const titles = new Map(this.repo.hydrate([...new Set(rows.map((r) => r.rowId))]).map((r) => [r.id, r.title]));
-    return rows.map(({ region_json, file: _file, ...r }) => ({
+    return rows.map(({ region_json, params_json, file: _file, ...r }) => ({
       ...r,
       title: titles.get(r.rowId) ?? "",
       region: region_json ? JSON.parse(region_json) : null,
+      params: params_json ? JSON.parse(params_json) : null,
     }));
   }
   get(id: string): Restoration {

@@ -265,7 +265,7 @@ export type ModelInfo = {
   experimental?: boolean;
   id: string;
   label: string;
-  task: "embedding" | "vision" | "runtime";
+  task: "embedding" | "vision" | "runtime" | "upscale" | "upscale-runtime";
   repository: string;
   revision: string;
   license: string;
@@ -318,6 +318,23 @@ export type Settings = {
   citationTemplates?: Record<string, string>;
   /** Mark added to restored images when they are downloaded. */
   watermark?: import("./restoration").Watermark;
+  /** Local AI upscaling: the memory profile, the last choices and this computer's timings. */
+  upscale?: UpscaleSettings;
+};
+export type UpscaleSettings = {
+  profile?: import("./upscale").UpscaleProfileChoice;
+  scale?: import("./upscale").UpscaleScale;
+  creativity?: number;
+  fit?: boolean;
+  maxOutputSide?: number;
+  /** Seconds per tile measured here, by profile (a running average). */
+  measured?: Partial<Record<import("./upscale").UpscaleProfile, number>>;
+  /** Where to upscale: this computer or an online service. */
+  engine?: "local" | "api";
+  /** The online model chosen («service|id»), the starred ones and the most a run may cost per image (USD). */
+  apiModel?: string;
+  favorites?: string[];
+  maxPrice?: number | null;
 };
 export type Status = {
   root: string;
@@ -552,6 +569,23 @@ export type Commands = {
   };
   neighbourSuggestionsApply: { input: { items: { rowId: string; columnId: string; value: string }[] }; result: number };
   restorationsList: { input: { assetId?: string }; result: import("./restoration").Restoration[] };
+  /** Local AI upscaling: hardware, recommended profile and what is installed. */
+  upscaleStatus: { input: { refresh?: boolean } | undefined; result: import("./upscale").UpscaleStatus };
+  /** Queues the download of the model and the preparation of its environment. */
+  upscaleInstall: { input: void; result: string };
+  upscaleUninstall: { input: void; result: void };
+  /** Asks PyTorch what it sees (exact GPU memory) once the environment is installed. */
+  upscaleProbe: { input: void; result: import("./upscale").UpscaleStatus };
+  upscaleEnqueue: {
+    input: { items: import("./upscale").UpscaleItem[]; scale: import("./upscale").UpscaleScale; creativity: number; fit: boolean; maxOutputSide: number; engine?: import("./upscale").UpscaleEngine };
+    result: string;
+  };
+  upscalesList: { input: { assetId?: string }; result: import("./restoration").Restoration[] };
+  /** The upscale run still in the queue, if any, so the section can show it again. */
+  upscaleActive: {
+    input: void;
+    result: { id: string; items: import("./upscale").UpscaleItem[]; scale: import("./upscale").UpscaleScale; creativity: number } | null;
+  };
   restorationDelete: { input: { id: string }; result: void };
   /** Handled in the main process, which holds the keys. */
   restorationRun: {
@@ -1089,6 +1123,13 @@ export type Commands = {
     };
   };
   setApiKey: { input: { provider: ApiProvider; key: string }; result: void };
+  /** Online upscaling services (fal.ai, Replicate, Stability AI): which have a key. */
+  upscaleServicesStatus: { input: void; result: Record<import("./upscaleApi").UpscaleService, boolean> };
+  setUpscaleKey: { input: { service: import("./upscaleApi").UpscaleService; key: string }; result: Record<import("./upscaleApi").UpscaleService, boolean> };
+  clearUpscaleKey: { input: { service: import("./upscaleApi").UpscaleService }; result: Record<import("./upscaleApi").UpscaleService, boolean> };
+  /** Tries the key and returns the balance where the service gives it. */
+  checkUpscaleKey: { input: { service: import("./upscaleApi").UpscaleService }; result: { ok: true; balance?: string } };
+  upscaleApiCatalog: { input: { refresh?: boolean } | undefined; result: import("./upscaleApi").ApiUpscaleModel[] };
   clearApiKey: { input: { provider: ApiProvider }; result: void };
   listProviderModels: { input: { provider: ApiProvider }; result: import("./aiConfig").ProviderModel[] };
   /** The image models of the providers with a saved key, read from their catalogues. */
