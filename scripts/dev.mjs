@@ -7,6 +7,7 @@ await build({
     "electron/main.ts",
     "electron/preload.ts",
     "electron/worker.ts",
+    "electron/workshop/renderWorker.ts",
   ],
   outdir: "dist-electron",
   bundle: true,

@@ -139,6 +139,8 @@ export class Upscaler {
   private stderr = "";
   private hardwareCache: { at: number; value: UpscaleHardware } | null = null;
   private probed: Partial<UpscaleHardware> | null = null;
+  /** Seals a new version with SHA-256 (set by the service). */
+  seal?: (id: string) => Promise<void>;
   /** Sends a request to the main process, which holds the keys of the online services. */
   remote?: (input: unknown, signal: AbortSignal) => Promise<unknown>;
   constructor(
@@ -582,6 +584,7 @@ export class Upscaler {
         "INSERT INTO restorations(id,asset_id,row_id,provider,model,task,prompt,region_json,file,width,height,created_at,base_id,params_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       )
       .run(id, item.assetId, asset.row_id, engine.service, engine.model, "upscale", prompt, item.region ? JSON.stringify(item.region) : null, file, meta.width ?? 0, meta.height ?? 0, new Date().toISOString(), item.baseId ?? null, JSON.stringify(params));
+    await this.seal?.(id);
     return id;
   }
 
@@ -684,6 +687,7 @@ export class Upscaler {
           item.baseId ?? null,
           JSON.stringify(params),
         );
+      await this.seal?.(id);
       return id;
     } catch (error) {
       await fsp.rm(output, { force: true }).catch(() => {});

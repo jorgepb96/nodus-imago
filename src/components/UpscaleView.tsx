@@ -19,6 +19,7 @@ import {
   SquareDashed,
   Trash2,
   X,
+  ChevronLeft,
 } from "lucide-react";
 import type { DatabaseSummary } from "../../shared/databases";
 import type { ImageAnnotation, Job, Settings } from "../../shared/imago";
@@ -27,6 +28,7 @@ import {
   TASK_LABELS,
   type Restoration,
   type RestorationCheck,
+  taskLabel,
 } from "../../shared/restoration";
 import {
   CREATIVITY_MAX,
@@ -110,12 +112,16 @@ export function UpscaleView({
   onSettings,
   onOpenSettings,
   onOpenProviders,
+  onBack,
 }: {
   settings: Settings;
   databases: DatabaseSummary[];
   jobs: Job[];
-  seed: string | null;
+  /** An image to open, optionally from one of its versions (from a record or the workshop). */
+  seed: { assetId: string; baseId?: string | null } | null;
   onSeedUsed: () => void;
+  /** Back to the workshop, when it was opened from there. */
+  onBack?: () => void;
   onSettings: (patch: Partial<Settings>) => Promise<void>;
   onOpenSettings: () => void;
   /** Settings › Providers, where remote APIs are allowed and keys kept. */
@@ -294,7 +300,7 @@ export function UpscaleView({
   useEffect(() => {
     if (!seed) return;
     onSeedUsed();
-    void choose([seed]);
+    void choose([seed.assetId]).then(() => seed.baseId && setBaseId(seed.baseId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed, onSeedUsed]);
 
@@ -444,6 +450,12 @@ export function UpscaleView({
   return (
     <div className="restoration-page upscale-page" data-testid="upscale-view">
       <aside className="restoration-side" style={{ width: sideWidth }}>
+        {onBack && (
+          <button type="button" className="link-button workshop-back" onClick={onBack} data-testid="back-to-workshop">
+            <ChevronLeft size={14} />
+            {t("Volver al Taller")}
+          </button>
+        )}
         <h1>
           <ImageUpscale size={18} />
           {t("Escalado IA")}
@@ -654,7 +666,7 @@ export function UpscaleView({
                 <option value="">{t("El original")}</option>
                 {bases.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {`${t(TASK_LABELS[v.task])} · ${when(v.createdAt)}`}
+                    {`${t(taskLabel(v.task))} · ${when(v.createdAt)}`}
                   </option>
                 ))}
               </select>
@@ -1108,12 +1120,13 @@ export function UpscaleView({
             }
           }
           onClose={() => setExporting(null)}
-          onExport={async (format, watermark) => {
+          onExport={async (format, watermark, extra) => {
             await onSettings({ watermark });
             await api.call("restorationExport", {
               id: exporting.id,
               format,
               watermark,
+              ...extra,
             });
             setExporting(null);
           }}

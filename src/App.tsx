@@ -121,6 +121,7 @@ import { DATABASE_VIEWS, combineCriteria, moveViewKey, orderViewKeys, savedIdOf,
 import { VariantsView } from "./components/VariantsView";
 import { RestorationsView } from "./components/RestorationsView";
 import { UpscaleView } from "./components/UpscaleView";
+import { WorkshopView } from "./components/WorkshopView";
 import { SuggestDialog } from "./components/SuggestDialog";
 import { PlatesDialog } from "./components/PlatesDialog";
 import { MethodologyDialog } from "./components/MethodologyDialog";
@@ -207,12 +208,14 @@ function formatDay(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(uiLocale());
 }
 /** The sections of the side menu's «Tools» group. */
-const TOOL_AREAS: string[] = ["compare", "restorations", "upscale"];
+const TOOL_AREAS: string[] = ["compare", "workshop", "restorations", "upscale"];
+/** The image workshop and the AI engines it leads to. */
+const WORKSHOP_AREAS: string[] = ["workshop", "restorations", "upscale"];
 function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
   const t = useT(),
     api = window.imago;
   const [area, setArea] = useState<
-      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "restorations" | "upscale" | "tutorials"
+      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "workshop" | "restorations" | "upscale" | "tutorials"
     >("home"),
     [databases, setDatabases] = useState<DatabaseSummary[]>([]),
     [databaseId, setDatabaseId] = useState(""),
@@ -653,6 +656,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
       area === "home" ||
       area === "chat" ||
       area === "compare" ||
+      area === "workshop" ||
       area === "restorations" ||
       area === "upscale" ||
       area === "tutorials" ||
@@ -786,7 +790,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
     navigate(result.databaseId);
   };
   const [analysisTask, setAnalysisTask] = useState<"describe" | "transcribe">("describe");
-  const [restoreSeed, setRestoreSeed] = useState<string | null>(null);
+  const [restoreSeed, setRestoreSeed] = useState<{ assetId: string; baseId?: string | null; task?: "restore" | "colorize" } | null>(null);
   const clearRestoreSeed = useCallback(() => setRestoreSeed(null), [setRestoreSeed]);
   // The «Tools» group of the side menu folds like Nodus's groups and stays as left.
   const [toolsCollapsed, setToolsCollapsed] = useState(() => {
@@ -808,8 +812,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
   useEffect(() => {
     if (TOOL_AREAS.includes(area)) setToolsCollapsed(false);
   }, [area]);
-  const [upscaleSeed, setUpscaleSeed] = useState<string | null>(null);
+  const [upscaleSeed, setUpscaleSeed] = useState<{ assetId: string; baseId?: string | null } | null>(null);
   const clearUpscaleSeed = useCallback(() => setUpscaleSeed(null), [setUpscaleSeed]);
+  const [workshopSeed, setWorkshopSeed] = useState<{ assetId: string; versionId?: string | null } | null>(null);
+  const clearWorkshopSeed = useCallback(() => setWorkshopSeed(null), [setWorkshopSeed]);
+  /** An AI section opened from the workshop offers the way back to it. */
+  const [fromWorkshop, setFromWorkshop] = useState(false);
+  useEffect(() => {
+    if (!WORKSHOP_AREAS.includes(area)) setFromWorkshop(false);
+  }, [area]);
   const clearCompareSeed = useCallback(() => setCompareSeed(null), [setCompareSeed]);
   const openApiSettings = () => {
     setSettingsTab("api");
@@ -2172,24 +2183,39 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
               <span className="nav-title">{t("Mesa de comparación")}</span>
             </button>
             <button
-              title={t("Restauración IA")}
-              data-tour="nav-restorations"
-              className={area === "restorations" ? "active" : ""}
-              onClick={() => setArea("restorations")}
+              title={t("Taller de imágenes")}
+              data-tour="nav-workshop"
+              data-testid="nav-workshop"
+              className={area === "workshop" ? "active" : WORKSHOP_AREAS.includes(area) ? "active-parent" : ""}
+              onClick={() => setArea("workshop")}
             >
-              <Wand2 size={18} />
-              <span className="nav-title">{t("Restauración IA")}</span>
+              <SlidersHorizontal size={18} />
+              <span className="nav-title">{t("Taller de imágenes")}</span>
             </button>
-            <button
-              title={t("Escalado IA")}
-              data-tour="nav-upscale"
-              data-testid="nav-upscale"
-              className={area === "upscale" ? "active" : ""}
-              onClick={() => setArea("upscale")}
-            >
-              <ImageUpscale size={18} />
-              <span className="nav-title">{t("Escalado IA")}</span>
-            </button>
+            {/* The AI engines, under the workshop: shown while working there. */}
+            {WORKSHOP_AREAS.includes(area) && (
+              <>
+                <button
+                  title={t("Restauración IA")}
+                  data-tour="nav-restorations"
+                  className={`nav-sub ${area === "restorations" ? "active" : ""}`}
+                  onClick={() => setArea("restorations")}
+                >
+                  <Wand2 size={16} />
+                  <span className="nav-title">{t("Restauración IA")}</span>
+                </button>
+                <button
+                  title={t("Escalado IA")}
+                  data-tour="nav-upscale"
+                  data-testid="nav-upscale"
+                  className={`nav-sub ${area === "upscale" ? "active" : ""}`}
+                  onClick={() => setArea("upscale")}
+                >
+                  <ImageUpscale size={16} />
+                  <span className="nav-title">{t("Escalado IA")}</span>
+                </button>
+              </>
+            )}
             </>)}
           </nav>
           <div className="sidebar-databases" data-tour="collections" data-tour-fit="content">
@@ -2344,6 +2370,30 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
                 }}
                 onOpenSettings={openEmbeddingSettings}
                 onOpenProviders={openApiSettings}
+                onBack={fromWorkshop ? () => setArea("workshop") : undefined}
+              />
+            )
+          ) : area === "workshop" ? (
+            status && (
+              <WorkshopView
+                settings={status.settings}
+                databases={databases}
+                seed={workshopSeed}
+                onSeedUsed={clearWorkshopSeed}
+                onSettings={async (patch) => {
+                  await api.call("updateSettings", patch);
+                  refresh();
+                }}
+                onOpenAi={(kind, assetId, versionId) => {
+                  setFromWorkshop(true);
+                  if (kind === "upscale") {
+                    setUpscaleSeed({ assetId, baseId: versionId });
+                    setArea("upscale");
+                  } else {
+                    setRestoreSeed({ assetId, baseId: versionId, task: kind });
+                    setArea("restorations");
+                  }
+                }}
               />
             )
           ) : area === "restorations" ? (
@@ -2358,6 +2408,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
                   refresh();
                 }}
                 onOpenSettings={openApiSettings}
+                onBack={fromWorkshop ? () => setArea("workshop") : undefined}
               />
             )
           ) : area === "compare" ? (
@@ -4872,13 +4923,18 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
           }}
           onRestore={(assetId) => {
             setOpenRow(null);
-            setRestoreSeed(assetId);
+            setRestoreSeed({ assetId });
             setArea("restorations");
           }}
           onUpscale={(assetId) => {
             setOpenRow(null);
-            setUpscaleSeed(assetId);
+            setUpscaleSeed({ assetId });
             setArea("upscale");
+          }}
+          onWorkshop={(assetId, versionId) => {
+            setOpenRow(null);
+            setWorkshopSeed({ assetId, versionId });
+            setArea("workshop");
           }}
           perform={perform}
         />

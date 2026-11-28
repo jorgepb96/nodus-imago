@@ -32,6 +32,13 @@ const name = z.string().trim().min(1).max(300);
 const ids = z.array(id).max(100000);
 const type = z.string().refine(isDatabaseColumnType);
 const value = z.string().max(1_000_000).nullable();
+/** An operation of the image workshop: its tool and plain numeric or point parameters. */
+const workshopPoint = z.tuple([z.number().min(-1).max(2), z.number().min(-1).max(2)]);
+const workshopOp = z
+  .object({
+    tool: z.enum(["adjust", "levels", "curve", "sharpen", "denoise", "descreen", "clahe", "rotate", "crop", "straighten", "invert", "grayscale", "edges", "falsecolor", "channel"]),
+  })
+  .catchall(z.union([z.number().min(-1000).max(1000), z.boolean(), z.string().max(20), z.array(z.union([workshopPoint, z.tuple([z.number().min(0).max(255), z.number().min(0).max(255)]), z.null()])).max(16)]));
 export const providerSchema = z.enum([
   "anthropic",
   "openai",
@@ -594,6 +601,13 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .strict(),
   upscalesList: z.object({ assetId: id.optional() }).strict(),
   upscaleActive: z.undefined(),
+  workshopPreview: z
+    .object({ session: z.string().min(1).max(64), assetId: id, versionId: id.nullable(), ops: z.array(workshopOp).max(60), maxSide: z.number().int().min(256).max(4096).optional() })
+    .strict(),
+  workshopAnalyze: z.object({ assetId: id, versionId: id.nullable() }).strict(),
+  workshopSave: z.object({ assetId: id, versionId: id.nullable(), ops: z.array(workshopOp).min(1).max(60) }).strict(),
+  workshopVersions: z.object({ assetId: id }).strict(),
+  workshopIntegrity: z.object({ assetId: id }).strict(),
   restorationDelete: z.object({ id }).strict(),
   restorationRun: z
     .object({
@@ -769,6 +783,8 @@ export const schemas: Record<string, z.ZodTypeAny> = {
       id,
       format: z.enum(["png", "jpeg"]),
       watermark: z.object({ enabled: z.boolean(), text: z.string().max(80), position: z.enum(["bottom-right", "bottom-left", "top-right", "top-left"]) }).strict(),
+      xmp: z.boolean().optional(),
+      history: z.boolean().optional(),
     })
     .strict(),
   variantsStatus: z.object({ databaseIds: z.array(id).max(50).optional() }).strict(),
@@ -824,6 +840,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   visualTagReview: z.object({ assetId: id, reviewed: z.boolean(), dictionaryId: id.nullable().optional() }).strict(),
   visualTagPending: z.object({ databaseId: id, dictionaryId: id.nullable(), rowIds: z.array(id).max(100) }).strict(),
   visualTagUndo: z.object({ assetId: id, dictionaryId: id.nullable() }).strict(),
+  visualTagRedo: z.object({ assetId: id, dictionaryId: id.nullable() }).strict(),
   visualTagsSummary: z.object({ databaseId: id }).strict(),
   visualTagDictionary: z.object({ databaseId: id, columnId: id.nullable() }).strict(),
   visualTagModels: z.undefined(),

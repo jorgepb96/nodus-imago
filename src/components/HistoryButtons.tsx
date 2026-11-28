@@ -8,6 +8,7 @@ import { Redo2, Undo2 } from "lucide-react";
 import type { HistoryScope, HistoryStep } from "../../shared/imago";
 import { formatNumber, uiLocale, useT } from "../i18n";
 import { Button, Modal } from "./ui";
+import { REDO_KEYS, UNDO_KEYS, useUndoKeys } from "../undoKeys";
 
 type Direction = "undo" | "redo";
 
@@ -82,13 +83,19 @@ export function HistoryButtons({
     else run(direction);
   };
 
+  useUndoKeys({
+    undo: () => state.undo && !confirm && click("undo"),
+    redo: () => state.redo && !confirm && click("redo"),
+  });
+
   return (
     <>
       <Button
         disabled={!state.undo}
+        aria-keyshortcuts="Meta+Z Control+Z"
         data-tooltip={
           state.undo
-            ? `${t("Deshacer")}: ${describe(state.undo)}`
+            ? `${t("Deshacer")} (${UNDO_KEYS}): ${describe(state.undo)}`
             : t("No hay cambios que deshacer.")
         }
         onClick={() => click("undo")}
@@ -98,9 +105,10 @@ export function HistoryButtons({
       </Button>
       <Button
         disabled={!state.redo}
+        aria-keyshortcuts="Meta+Shift+Z Control+Y"
         data-tooltip={
           state.redo
-            ? `${t("Rehacer")}: ${describe(state.redo)}`
+            ? `${t("Rehacer")} (${REDO_KEYS}): ${describe(state.redo)}`
             : t("No hay cambios que rehacer.")
         }
         onClick={() => click("redo")}

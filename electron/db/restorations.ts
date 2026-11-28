@@ -17,6 +17,7 @@ import { checkLevel, type Restoration, type RestorationCheck, type RestorationTa
 import { recordEmbeddingParts } from "../../shared/recordEmbedding";
 import { imagePipeline, orientedImage } from "../import/images";
 import { assetView, shownSize } from "../../shared/imageRotation";
+import { sha256File } from "../workshop/workshop";
 
 /** Longest side sent to a provider. */
 const SEND_MAX = 2048;
@@ -399,6 +400,26 @@ export async function matchTone(source: Buffer, answer: Buffer, width: number, h
   return sharp(out, { raw: { width, height, channels: 3 } }).png().toBuffer();
 }
 
+const xmlEscape = (s: string) => s.replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]!);
+/** XMP describing a derived version: what it is, what was done and from which original (by SHA-256). */
+export function xmpPacket(meta: { label: string; ops: unknown[]; original: string; app: string; sha256: string | null; createdAt: string }) {
+  return `<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:imago="https://nodus.app/ns/imago/1.0/">
+   <dc:description><rdf:Alt><rdf:li xml:lang="x-default">${xmlEscape(meta.label)}</rdf:li></rdf:Alt></dc:description>
+   <xmp:CreatorTool>${xmlEscape(meta.app)}</xmp:CreatorTool>
+   <xmp:ModifyDate>${xmlEscape(meta.createdAt)}</xmp:ModifyDate>
+   <imago:DerivedFrom>${xmlEscape(meta.original)}</imago:DerivedFrom>
+   <imago:VersionSHA256>${xmlEscape(meta.sha256 ?? "")}</imago:VersionSHA256>
+   <imago:Treatment>${xmlEscape(meta.label)}</imago:Treatment>
+   <imago:History>${xmlEscape(JSON.stringify(meta.ops))}</imago:History>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`;
+}
+
 export function watermarkSvg(width: number, height: number, mark: Watermark): Buffer {
   const size = Math.max(12, Math.round(Math.min(width, height) * 0.032)),
     pad = Math.round(size * 0.6),
@@ -602,7 +623,17 @@ export class Restorations {
         new Date().toISOString(),
         input.baseId ?? null,
       );
+    await this.seal(id);
     return { ...this.get(id), notes, check: await this.check(id) };
+  }
+
+  /** Records the SHA-256 of a version's file and of the original it comes from. */
+  async seal(id: string) {
+    const row = this.repo.db.prepare("SELECT r.file,a.content_hash FROM restorations r JOIN image_assets a ON a.id=r.asset_id WHERE r.id=?").get(id) as
+      | { file: string; content_hash: string }
+      | undefined;
+    if (!row) return;
+    this.repo.db.prepare("UPDATE restorations SET sha256=?,source_sha256=? WHERE id=?").run(await sha256File(row.file), row.content_hash, id);
   }
 
   /** What the record of an image says, field by field, to tell the model. */
@@ -721,18 +752,36 @@ export class Restorations {
   }
   async delete(id: string) {
     const file = this.file(id);
+    // A version others were made from keeps their history: delete those first.
+    if (this.repo.db.prepare("SELECT 1 FROM restorations WHERE base_id=? LIMIT 1").get(id))
+      throw new Error("Hay versiones hechas a partir de esta. Elimínalas antes para no romper su historial.");
     this.repo.db.prepare("DELETE FROM restorations WHERE id=?").run(id);
     await fs.rm(file, { force: true });
     await fs.rm(path.join(this.folder, id + ".changes.png"), { force: true });
   }
-  /** Writes a copy, with the watermark when it is on. */
-  async export(input: { id: string; target: string; format: "png" | "jpeg"; watermark: Watermark }) {
+  /**
+   * Writes a copy: with the label drawn on it when asked (only the copy; the
+   * saved version is never touched), XMP metadata saying what was done, and
+   * optionally the whole history as JSON beside it.
+   */
+  async export(input: {
+    id: string;
+    target: string;
+    format: "png" | "jpeg";
+    watermark: Watermark;
+    xmp?: boolean;
+    history?: boolean;
+    meta?: { label: string; ops: unknown[]; original: string; app: string; sha256: string | null; createdAt: string };
+  }) {
     let image = sharp(this.file(input.id));
     if (input.watermark.enabled && input.watermark.text.trim()) {
       const meta = await image.metadata();
       image = image.composite([{ input: watermarkSvg(meta.width!, meta.height!, input.watermark), left: 0, top: 0 }]);
     }
+    if (input.xmp !== false && input.meta) image = image.withXmp(xmpPacket(input.meta));
     const bytes = input.format === "jpeg" ? await image.jpeg({ quality: 92 }).toBuffer() : await image.png().toBuffer();
     await fs.writeFile(input.target, bytes);
+    if (input.history && input.meta)
+      await fs.writeFile(input.target.replace(/\.[a-z]+$/i, "") + ".historial.json", JSON.stringify({ version: input.id, ...input.meta }, null, 2));
   }
 }

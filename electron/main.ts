@@ -482,6 +482,11 @@ app.whenReady().then(async () => {
       const u = new URL(request.url),
         parts = u.pathname.split("/").filter(Boolean);
       // A restored version: imago://restoration/<id>; what changed in it: imago://restoration/<id>/changes.
+      // A workshop preview: imago://workshop/<file>.
+      if (u.hostname === "workshop" && parts.length === 1) {
+        const file = await call("_workshopFile", { name: parts[0] });
+        return new Response(await fs.readFile(file), { headers: { "Content-Type": "image/png", "Cache-Control": "no-store" } });
+      }
       if (u.hostname === "restoration" && (parts.length === 1 || (parts.length === 2 && parts[1] === "changes")) && /^[a-z0-9-]{1,200}$/i.test(parts[0])) {
         const file = await call(parts[1] ? "_restorationDiff" : "_restorationFile", { id: parts[0] });
         return new Response(await fs.readFile(file), {
@@ -1011,7 +1016,7 @@ app.whenReady().then(async () => {
           filters: [data.format === "jpeg" ? { name: "JPEG", extensions: ["jpg", "jpeg"] } : { name: "PNG", extensions: ["png"] }],
         });
         if (result.canceled || !result.filePath) return null;
-        await call("_restorationExport", { id: data.id, target: result.filePath, format: data.format, watermark: data.watermark });
+        await call("_restorationExport", { id: data.id, target: result.filePath, format: data.format, watermark: data.watermark, xmp: data.xmp, history: data.history });
         return result.filePath;
       }
       if (command === "imageModelCatalog") {

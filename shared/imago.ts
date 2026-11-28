@@ -581,6 +581,15 @@ export type Commands = {
     result: string;
   };
   upscalesList: { input: { assetId?: string }; result: import("./restoration").Restoration[] };
+  /** Image workshop: a preview of operations on the original or a version. */
+  workshopPreview: {
+    input: { session: string; assetId: string; versionId: string | null; ops: import("./workshop").WorkshopOp[]; maxSide?: number };
+    result: { name: string; width: number; height: number; histogram: number[]; low: number; high: number; mean: number; ms: number };
+  };
+  workshopAnalyze: { input: { assetId: string; versionId: string | null }; result: import("./workshop").WorkshopAnalysis };
+  workshopSave: { input: { assetId: string; versionId: string | null; ops: import("./workshop").WorkshopOp[] }; result: import("./workshop").ImageVersion };
+  workshopVersions: { input: { assetId: string }; result: import("./workshop").ImageVersion[] };
+  workshopIntegrity: { input: { assetId: string }; result: { ok: boolean; sha256: string | null } };
   /** The upscale run still in the queue, if any, so the section can show it again. */
   upscaleActive: {
     input: void;
@@ -715,7 +724,7 @@ export type Commands = {
     result: import("./commons").CommonsPhoto[];
   };
   restorationExport: {
-    input: { id: string; format: "png" | "jpeg"; watermark: import("./restoration").Watermark };
+    input: { id: string; format: "png" | "jpeg"; watermark: import("./restoration").Watermark; xmp?: boolean; history?: boolean };
     result: string | null;
   };
   variantsStatus: { input: { databaseIds?: string[] }; result: import("./variants").VariantStatus };
@@ -760,6 +769,7 @@ export type Commands = {
       regions: import("./visualTags").VisualTagRegion[];
       reviewed: boolean;
       canUndo: boolean;
+      canRedo: boolean;
       column: import("./databases").DatabaseColumn | null;
       /** Applied options in the active tagging criterion. */
       optionIds: string[];
@@ -782,6 +792,7 @@ export type Commands = {
   visualTagReview: { input: { assetId: string; reviewed: boolean; dictionaryId?: string | null }; result: boolean };
   visualTagPending: { input: { databaseId: string; dictionaryId: string | null; rowIds: string[] }; result: string[] };
   visualTagUndo: { input: { assetId: string; dictionaryId: string | null }; result: { kind: "region" | "review" | "suggestions" } | null };
+  visualTagRedo: { input: { assetId: string; dictionaryId: string | null }; result: { kind: "region" | "review" | "suggestions" } | null };
   visualTagsSummary: {
     input: { databaseId: string };
     result: import("./visualTags").VisualTagsSummary;

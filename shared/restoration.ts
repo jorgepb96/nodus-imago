@@ -86,6 +86,8 @@ export const TASK_LABELS: Record<RestorationTask, string> = {
   custom: "Instrucciones propias",
   upscale: "Escalado IA",
 };
+/** The label of a version's task; versions made in the image workshop share the table. */
+export const taskLabel = (task: string) => TASK_LABELS[task as RestorationTask] ?? "Taller de imágenes";
 export const TASK_HELP: Record<RestorationTask, string> = {
   restore: "Quita polvo, arañazos, manchas y ruido, y corrige el desvanecimiento.",
   repair: "Rellena desconchones, grietas, pliegues, roturas y esquinas perdidas.",

@@ -24,6 +24,7 @@ import {
   X,
   ZoomIn,
   ZoomOut,
+  ChevronLeft,
 } from "lucide-react";
 import type { DatabaseSummary } from "../../shared/databases";
 import type { ImageAnnotation, Settings } from "../../shared/imago";
@@ -45,6 +46,7 @@ import {
   type RestorationTask,
   type Watermark,
   type WatermarkPosition,
+  taskLabel,
 } from "../../shared/restoration";
 import { useT } from "../i18n";
 import { Button, Modal } from "./ui";
@@ -118,13 +120,17 @@ export function RestorationsView({
   onSeedUsed,
   onSettings,
   onOpenSettings,
+  onBack,
 }: {
   settings: Settings;
   databases: DatabaseSummary[];
-  seed: string | null;
+  /** An image to open, optionally from one of its versions and with a task (from a record or the workshop). */
+  seed: { assetId: string; baseId?: string | null; task?: "restore" | "colorize" } | null;
   onSeedUsed: () => void;
   onSettings: (patch: Partial<Settings>) => Promise<void>;
   onOpenSettings: () => void;
+  /** Back to the workshop, when it was opened from there. */
+  onBack?: () => void;
 }) {
   const t = useT();
   const api = window.imago;
@@ -202,7 +208,13 @@ export function RestorationsView({
   useEffect(() => {
     if (!seed) return;
     onSeedUsed();
-    void choose(seed);
+    void choose(seed.assetId).then(() => {
+      if (seed.baseId) setBaseId(seed.baseId);
+      if (seed.task) {
+        setTask(seed.task);
+        setEdited(false);
+      }
+    });
   }, [seed, onSeedUsed, choose]);
   /** Waits for a run, wherever it was started from, and shows its result. */
   const follow = useCallback(
@@ -335,6 +347,12 @@ export function RestorationsView({
   return (
     <div className="restoration-page" data-testid="restorations-view">
       <aside className="restoration-side" style={{ width: sideWidth }}>
+        {onBack && (
+          <button type="button" className="link-button workshop-back" onClick={onBack} data-testid="back-to-workshop">
+            <ChevronLeft size={14} />
+            {t("Volver al Taller")}
+          </button>
+        )}
         <h1>
           <Wand2 size={18} />
           {t("Restauración IA")}
@@ -364,7 +382,7 @@ export function RestorationsView({
                 <option value="">{t("El original")}</option>
                 {versions.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {`${t(TASK_LABELS[v.task])} · ${new Date(v.createdAt).toLocaleString(LANGUAGE_LOCALES[language], { dateStyle: "short", timeStyle: "short" })}`}
+                    {`${t(taskLabel(v.task))} · ${new Date(v.createdAt).toLocaleString(LANGUAGE_LOCALES[language], { dateStyle: "short", timeStyle: "short" })}`}
                   </option>
                 ))}
               </select>
@@ -729,7 +747,7 @@ export function RestorationsView({
                     <button type="button" onClick={() => setCurrent(v)} data-testid="restoration-version">
                       <img src={`imago://restoration/${v.id}`} alt="" />
                       <span>
-                        <strong>{t(TASK_LABELS[v.task])}</strong>
+                        <strong>{t(taskLabel(v.task))}</strong>
                         <small>
                           {v.model} · {new Date(v.createdAt).toLocaleString(LANGUAGE_LOCALES[language], { dateStyle: "short", timeStyle: "short" })}
                         </small>
@@ -781,9 +799,9 @@ export function RestorationsView({
           version={exporting}
           watermark={settings.watermark ?? { enabled: true, text: t("Editada con IA"), position: "bottom-right" }}
           onClose={() => setExporting(null)}
-          onExport={async (format, watermark) => {
+          onExport={async (format, watermark, extra) => {
             await onSettings({ watermark });
-            await api.call("restorationExport", { id: exporting.id, format, watermark });
+            await api.call("restorationExport", { id: exporting.id, format, watermark, ...extra });
             setExporting(null);
           }}
         />
@@ -1127,18 +1145,23 @@ export function ExportDialog({
   version,
   watermark,
   title = "Descargar versión restaurada",
+  generative = true,
   onClose,
   onExport,
 }: {
-  version: Restoration;
+  version: { id: string };
   title?: string;
   watermark: Watermark;
+  /** Made with AI: without a mark, the caption should say so. */
+  generative?: boolean;
   onClose: () => void;
-  onExport: (format: "png" | "jpeg", watermark: Watermark) => Promise<void>;
+  onExport: (format: "png" | "jpeg", watermark: Watermark, extra: { xmp: boolean; history: boolean }) => Promise<void>;
 }) {
   const t = useT();
   const [mark, setMark] = useState(watermark);
   const [format, setFormat] = useState<"png" | "jpeg">("jpeg");
+  const [xmp, setXmp] = useState(true);
+  const [history, setHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
     <Modal icon={Download} title={t(title)} onClose={onClose}>
@@ -1175,7 +1198,15 @@ export function ExportDialog({
             <option value="png">PNG</option>
           </select>
         </label>
-        {!mark.enabled && <p className="hint">{t("Sin marca, conviene indicar en el pie o en la cita que la imagen ha sido modificada con IA.")}</p>}
+        <label className="check-label" data-tooltip={t("Escribe en el propio archivo (XMP) qué se le ha hecho, desde qué original y con qué herramientas: lo leen Lightroom, Bridge, Photoshop y los gestores de archivo.")}>
+          <input type="checkbox" checked={xmp} onChange={(e) => setXmp(e.target.checked)} />
+          {t("Guardar en el archivo cómo se ha obtenido (metadatos XMP)")}
+        </label>
+        <label className="check-label" data-tooltip={t("Un archivo .json junto a la imagen con cada paso, sus valores y las huellas SHA-256 del original y del resultado.")}>
+          <input type="checkbox" checked={history} onChange={(e) => setHistory(e.target.checked)} />
+          {t("Añadir el historial completo en un archivo aparte (JSON)")}
+        </label>
+        {!mark.enabled && generative && <p className="hint">{t("Sin marca, conviene indicar en el pie o en la cita que la imagen ha sido modificada con IA.")}</p>}
       </div>
       <footer>
         <Button onClick={onClose}>{t("Cancelar")}</Button>
@@ -1184,7 +1215,7 @@ export function ExportDialog({
           disabled={busy}
           onClick={() => {
             setBusy(true);
-            void onExport(format, mark).finally(() => setBusy(false));
+            void onExport(format, mark, { xmp, history }).finally(() => setBusy(false));
           }}
         >
           <Download size={14} />

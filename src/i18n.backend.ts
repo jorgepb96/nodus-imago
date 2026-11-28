@@ -500,4 +500,7 @@ export const backendPatterns: [string, string][] = [
   ["Stability AI respondió con un error ({0}).", "Stability AI returned an error ({0})."],
   ["{0} · Enviando a {1}…", "{0} · Sending to {1}…"],
   ["Enviando a {0}…", "Sending to {0}…"],
+  ["Enderezado {0}°", "Straightened {0}°"],
+  ["Canal {0}", "Channel {0}"],
+  ["Escalado ×{0} · IA", "Upscaling ×{0} · AI"],
 ];

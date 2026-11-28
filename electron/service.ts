@@ -55,6 +55,9 @@ import { parseVisualTagSuggestions, regionOverlap, visualTagSuggestionPrompt, ty
 import { modelChoiceLabel } from "../shared/aiConfig";
 import { Restorations } from "./db/restorations";
 import { Upscaler } from "./ai/upscaler";
+import { Workshop } from "./workshop/workshop";
+import { exportLabel } from "../shared/workshop";
+import { version as APP_VERSION } from "../package.json";
 import { UPSCALE_ENV_ID, UPSCALE_MODEL_ID, UPSCALE_RUNTIME_ID } from "../shared/upscale";
 import { NeighbourSuggestions } from "./db/suggest";
 import { DetailSearch } from "./ai/detailSearch";
@@ -80,7 +83,7 @@ const CONTENT_WRITES = new Set([
   "convertColumn", "duplicateColumn", "reorderColumns",
   "deleteImages", "reassignImage", "reassignImages", "relinkImage", "rotateImage", "cropImage", "setPrimary",
   "automationRun", "renameDatabase", "rebuildText", "annotationSave", "annotationDelete", "heritageAddToRows", "neighbourSuggestionsApply", "iiifImport", "_tropyImport",
-  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "visualTagUndo", "visualTagDictionary", "visualTagApplySuggestions", "convertToRelation", "pairRelation", "createWorkFromFamily",
+  "setLinkDetails", "setRelationPlace", "imageOrigin", "visualTagSave", "visualTagDelete", "visualTagReview", "visualTagUndo", "visualTagRedo", "visualTagDictionary", "visualTagApplySuggestions", "convertToRelation", "pairRelation", "createWorkFromFamily",
 ]);
 import { AgreementResearch } from "./research/agreement";
 
@@ -135,6 +138,7 @@ export class Service {
   private heritageTowns = new WeakMap<object, Promise<Towns>>();
   restorations: Restorations;
   upscaler: Upscaler;
+  workshop: Workshop;
   suggestions: NeighbourSuggestions;
   details: DetailSearch;
   chatData: ChatData;
@@ -216,6 +220,9 @@ export class Service {
     // Local AI upscaling: its own Python process, next to the inference script.
     this.upscaler = new Upscaler(this.repo, this.models, path.join(path.dirname(script), "upscale.py"));
     this.upscaler.remote = remote as ((input: unknown, signal: AbortSignal) => Promise<unknown>) | undefined;
+    this.upscaler.seal = (id) => this.restorations.seal(id);
+    // The image workshop renders in a thread of its own (dist-electron/workshop/renderWorker.cjs).
+    this.workshop = new Workshop(this.repo, path.join(__dirname, "workshop", "renderWorker.cjs"));
     this.queue.upscaleOne = async (payload, index, signal, message) => {
       await this.upscaler.runItem(payload, index, signal, message);
       return "imported";
@@ -1358,8 +1365,30 @@ export class Service {
         return this.restorations.store(input);
       case "_restorationFile":
         return this.restorations.file(input.id);
-      case "_restorationExport":
-        return this.restorations.export(input);
+      case "_restorationExport": {
+        // What the version is and how it was made, for the XMP and the JSON history.
+        const assetId = (this.repo.db.prepare("SELECT asset_id FROM restorations WHERE id=?").get(input.id) as { asset_id: string } | undefined)?.asset_id;
+        const version = assetId ? this.workshop.versions(assetId).find((v) => v.id === input.id) : undefined;
+        const asset = assetId ? (this.repo.asset(assetId) as { file_name: string; content_hash: string }) : null;
+        return this.restorations.export({
+          ...input,
+          meta: version && asset
+            ? { label: exportLabel(version.ops), ops: version.ops, original: `${asset.file_name} (SHA-256 ${asset.content_hash})`, app: `Nodus Imago ${APP_VERSION}`, sha256: version.sha256, createdAt: version.createdAt }
+            : undefined,
+        });
+      }
+      case "workshopPreview":
+        return this.workshop.preview(input);
+      case "_workshopFile":
+        return this.workshop.file(input.name);
+      case "workshopAnalyze":
+        return this.workshop.analyze(input.assetId, input.versionId ?? null);
+      case "workshopSave":
+        return this.workshop.save(input);
+      case "workshopVersions":
+        return this.workshop.versions(input.assetId);
+      case "workshopIntegrity":
+        return this.workshop.integrity(input.assetId);
       case "variantsStatus":
         return this.variants.status(input.databaseIds);
       case "variantsPrepare": {
@@ -1420,6 +1449,11 @@ export class Service {
         return this.visualTags.pendingImages(input.databaseId, input.dictionaryId, input.rowIds);
       case "visualTagUndo": {
         const action = this.visualTags.undo(input.assetId, input.dictionaryId);
+        if (action) this.changed();
+        return action;
+      }
+      case "visualTagRedo": {
+        const action = this.visualTags.redo(input.assetId, input.dictionaryId);
         if (action) this.changed();
         return action;
       }
@@ -1541,6 +1575,7 @@ export class Service {
         await this.storageTask?.catch(() => {});
         await this.queue.close();
         this.upscaler.close();
+        this.workshop.close();
         this.engine.close();
         this.repo.close();
         return;

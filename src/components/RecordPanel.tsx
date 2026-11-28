@@ -22,6 +22,7 @@ import {
   Crop,
   ImageOff,
   Tag,
+  SlidersHorizontal,
 } from "lucide-react";
 import type { DatabaseDetail } from "../../shared/databases";
 import type { RecordRow } from "../../shared/imago";
@@ -34,6 +35,8 @@ import { validCrop } from "../../shared/imageRotation";
 import { ImageViewer } from "./ImageViewer";
 import type { BrowseItem, BrowseList } from "./ViewerStrip";
 import { renderCitation } from "../../shared/citation";
+import { opLabel, type ImageVersion } from "../../shared/workshop";
+import { tLabel } from "../workshopLabels";
 export function RecordPanel({
   row,
   detail,
@@ -43,6 +46,7 @@ export function RecordPanel({
   onSimilar,
   onRestore,
   onUpscale,
+  onWorkshop,
   onOpenRecord,
   onCompare,
   citation,
@@ -64,6 +68,8 @@ export function RecordPanel({
   /** Opens the restoration workshop with this image. */
   onRestore?: (assetId: string) => void;
   onUpscale?: (assetId: string) => void;
+  /** Opens the image workshop with this image, or one of its versions. */
+  onWorkshop?: (assetId: string, versionId: string | null) => void;
   onOpenRecord?: (rowId: string) => void;
   onCompare?: (assetIds: string[]) => void;
   /** The database's citation template. */
@@ -152,6 +158,20 @@ export function RecordPanel({
     void window.imago
       .call("imageVariants", { assetId: imageId })
       .then((v) => !cancelled && setVariantCount(v.members.length))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [imageId]);
+  // The image's derived versions (workshop, restorations, upscaling), each with what was done.
+  const [versions, setVersions] = useState<ImageVersion[]>([]);
+  useEffect(() => {
+    setVersions([]);
+    if (!imageId) return;
+    let cancelled = false;
+    void window.imago
+      .call("workshopVersions", { assetId: imageId })
+      .then((v) => !cancelled && setVersions(v))
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -356,6 +376,7 @@ export function RecordPanel({
               onChanged={onChanged}
               onOpenRecord={onOpenRecord}
               onCompare={onCompare}
+              onWorkshop={onWorkshop && ((assetId) => (setViewer(false), onWorkshop(assetId, null)))}
               browse={browse}
               onBrowse={onBrowse}
             />
@@ -407,7 +428,38 @@ export function RecordPanel({
                   {(image.bytes / 1e6).toFixed(2)} MB
                 </span>
               </div>
+              {versions.length > 0 && (
+                <div className="record-versions" data-testid="record-versions">
+                  <span className="record-versions-title">{t("Versiones")}</span>
+                  <ul>
+                    {[...versions].reverse().map((v) => (
+                      <li key={v.id}>
+                        <button
+                          type="button"
+                          data-tooltip={`${tLabel(t, v.label)} · ${v.width}×${v.height} px · ${v.ops.map((o) => t(opLabel(o))).join(" → ")}`}
+                          onClick={() => onWorkshop?.(image.id, v.id)}
+                          disabled={!onWorkshop}
+                        >
+                          <img src={`imago://restoration/${v.id}`} alt="" />
+                          <em className={`workshop-badge ${v.ai ? "is-ai" : ""}`}>{tLabel(t, v.label)}</em>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="row wrap">
+                {onWorkshop && (
+                  <Button
+                    primary
+                    data-testid="record-workshop"
+                    data-tooltip={t("Trata esta imagen con herramientas, recetas o IA. El original no se modifica: el resultado se guarda como una versión.")}
+                    onClick={() => onWorkshop(image.id, null)}
+                  >
+                    <SlidersHorizontal size={15} />
+                    {t("Abrir en el Taller")}
+                  </Button>
+                )}
                 <Button data-tour="record-similar" onClick={() => onSimilar(image.id)}>
                   <ScanSearch size={15} />
                   {t("Buscar imágenes similares")}

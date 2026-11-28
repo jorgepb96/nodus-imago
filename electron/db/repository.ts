@@ -181,6 +181,12 @@ export class Repository {
     // An AI-upscaled version records the parameters of its run (scale, creativity, profile…).
     if (!(this.db.prepare("PRAGMA table_info(restorations)").all() as { name: string }[]).some((c) => c.name === "params_json"))
       this.db.exec("ALTER TABLE restorations ADD COLUMN params_json TEXT");
+    // The image workshop: each version's own operations and the SHA-256 of its file and of the original.
+    {
+      const columns = new Set((this.db.prepare("PRAGMA table_info(restorations)").all() as { name: string }[]).map((c) => c.name));
+      for (const column of ["operations_json", "sha256", "source_sha256"])
+        if (!columns.has(column)) this.db.exec(`ALTER TABLE restorations ADD COLUMN ${column} TEXT`);
+    }
     // Heritage elements placed from OpenStreetMap keep the object they come from.
     if (!(this.db.prepare("PRAGMA table_info(heritage_elements)").all() as { name: string }[]).some((c) => c.name === "osm_ref"))
       this.db.exec("ALTER TABLE heritage_elements ADD COLUMN osm_ref TEXT");
