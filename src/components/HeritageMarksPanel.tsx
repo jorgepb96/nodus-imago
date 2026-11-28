@@ -23,6 +23,9 @@ export function HeritageMarksPanel({
   onChoose,
   onCreate,
   onCancel,
+  target,
+  onMark,
+  onCancelTarget,
   onFocus,
   onDelete,
   onPropagate,
@@ -40,6 +43,11 @@ export function HeritageMarksPanel({
   onChoose: (optionId: string) => void;
   onCreate: (label: string) => void;
   onCancel: () => void;
+  /** The element waiting to be marked on the image, and how. */
+  target: { optionId: string; kind: "point" | "rect" } | null;
+  /** Starts marking this element with a point or a rectangle. */
+  onMark: (optionId: string, kind: "point" | "rect") => void;
+  onCancelTarget: () => void;
   onFocus: (mark: ImageAnnotation) => void;
   onDelete: (mark: ImageAnnotation) => void;
   thumbnail: (mark: ImageAnnotation) => ReactNode;
@@ -104,7 +112,7 @@ export function HeritageMarksPanel({
       )}
       {!inCell.length && !draft && (
         <p className="viewer-empty">
-          {t("Pulsa «Patrimonio» y marca un edificio, monumento u obra con un punto o un rectángulo. También puedes añadirlo en la celda sin marcarlo.")}
+          {t("Esta foto aún no tiene elementos de patrimonio. También puedes añadirlos en la celda sin marcarlos.")}
         </p>
       )}
       {!!inCell.length && <div className="viewer-tag-counts">
@@ -128,11 +136,16 @@ export function HeritageMarksPanel({
                   <HeritageIcon name={iconOf(id)} size={14} />
                   {option?.label ?? id}
                 </span>
-                {!mark && <small className="muted">{t("sin marcar")}</small>}
+                {!mark && (target?.optionId === id ? (
+                  <small className="heritage-mark-hint" role="status">
+                    {t(target.kind === "point" ? "Haz clic sobre el elemento en la imagen." : "Arrastra alrededor del elemento en la imagen.")}
+                    <button type="button" onClick={onCancelTarget}>{t("Cancelar")}</button>
+                  </small>
+                ) : <small className="muted">{t("sin marcar")}</small>)}
               </span>
             );
             return (
-              <li key={mark?.id ?? id} className={selected && selected === mark?.id ? "is-selected" : ""}>
+              <li key={mark?.id ?? id} className={`${selected && selected === mark?.id ? "is-selected" : ""}${mark ? "" : " has-three-actions"}${target?.optionId === id && !mark ? " is-marking" : ""}`}>
                 {mark ? (
                   <button type="button" className="viewer-item" onClick={() => onFocus(mark)}>
                     {mark.kind === "point" ? <Crosshair size={16} className="heritage-card-point" /> : thumbnail(mark)}
@@ -140,6 +153,16 @@ export function HeritageMarksPanel({
                   </button>
                 ) : <div className="viewer-item">{name}</div>}
                 <span className="viewer-item-actions">
+                  {!mark && (["point", "rect"] as const).map((kind) => (
+                    <button key={kind} type="button"
+                      aria-label={t(kind === "point" ? "Marcar con un punto" : "Marcar con un rectángulo")}
+                      aria-pressed={target?.optionId === id && target.kind === kind}
+                      data-tooltip={t(kind === "point" ? "Marcar con un punto: haz clic sobre el elemento en la imagen" : "Marcar con un rectángulo: arrastra alrededor del elemento en la imagen")}
+                      data-testid={`heritage-mark-${kind}`}
+                      onClick={() => onMark(id, kind)}>
+                      {kind === "point" ? <Crosshair size={13} /> : <Square size={13} />}
+                    </button>
+                  ))}
                   <button type="button" aria-label={t("Buscar en otras fotos")}
                     data-tooltip={t("Buscar este elemento en otras fotos")} onClick={() => onPropagate(id, mark?.id)}>
                     <ScanSearch size={13} />

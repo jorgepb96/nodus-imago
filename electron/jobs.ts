@@ -4,6 +4,7 @@ import { Images, type ImageImportPayload, type PreparedImage } from "./import/im
 import { AdaptiveParallelism, importParallelism } from "./import/adaptiveParallelism";
 import { Models } from "./ai/models";
 import { Engine } from "./ai/engine";
+import type { ModelChoice } from "../shared/aiConfig";
 
 type RunningJob = {
   controller: AbortController;
@@ -138,7 +139,7 @@ export class JobQueue {
     )
       throw new Error("Progreso de tarea inválido.");
     if (
-      !["images", "download", "prepare", "index", "analyze", "fingerprints", "heritage"].includes(job.kind)
+      !["images", "download", "prepare", "index", "analyze", "fingerprints", "heritage", "visualTags"].includes(job.kind)
     )
       throw new Error("Tipo de tarea desconocido.");
     const payload = JSON.parse(job.payload_json),
@@ -151,6 +152,7 @@ export class JobQueue {
         prepare: "steps",
         fingerprints: "hashes",
         heritage: "items",
+        visualTags: "assetIds",
       } as Record<string, string>
     )[job.kind];
     // Index jobs carry record texts before images; older ones only images.
@@ -195,6 +197,12 @@ export class JobQueue {
         resources.add("uses:llama-runtime");
       }
     }
+    if (job.kind === "visualTags" && payload.choice?.provider === "local") {
+      resources.add("local-vision");
+      resources.add("uses:" + payload.choice.model);
+      if (this.models.get(payload.choice.model).backend === "llama") resources.add("uses:llama-runtime");
+      else resources.add("python-inference");
+    }
     if (job.kind === "analyze")
       for (const item of payload.items) {
         // Per cell, so a click on one cell is not kept waiting behind a long
@@ -219,6 +227,8 @@ export class JobQueue {
   heritageOne?: (payload: { columnId: string; source: string; items: { optionId: string; label: string }[] }, index: number, signal: AbortSignal) => Promise<"imported" | "skipped">;
   /** Fingerprints one image for the variants view (set by the service). */
   fingerprint?: (payload: { hashes: string[] }, index: number) => Promise<"imported" | "skipped">;
+  /** Suggests the tags of one image of a queued analysis and keeps them for review. */
+  visualTagOne?: (payload: { dictionaryId: string; choice: ModelChoice; assetIds: string[] }, index: number, signal: AbortSignal) => Promise<"imported" | "skipped">;
   /** How many API cells to run together from `from` (1 when local or retrying). */
   private remoteBatch(
     payload: { items?: { choice?: { provider?: string } }[] },
@@ -350,6 +360,8 @@ export class JobQueue {
             outcome = await this.fingerprint(payload, done);
           else if (job.kind === "heritage" && this.heritageOne)
             outcome = await this.heritageOne(payload, done, signal);
+          else if (job.kind === "visualTags" && this.visualTagOne)
+            outcome = await this.visualTagOne(payload, done, signal);
           else if (job.kind === "download" || job.kind === "prepare") {
             const step =
               job.kind === "prepare"

@@ -1009,7 +1009,7 @@ app.whenReady().then(async () => {
           new AbortController().signal,
         );
       }
-      if (command === "visualTagModels" || command === "visualTagSuggest" || command === "heritageSuggest") {
+      if (command === "visualTagModels" || command === "visualTagSuggest" || command === "visualTagQueue" || command === "heritageSuggest") {
         const choice = (safe as { choice: ModelChoice } | undefined)?.choice;
         if (choice?.provider === "local") return call(command, safe);
         const settings = await call("_settings");

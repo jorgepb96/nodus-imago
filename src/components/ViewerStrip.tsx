@@ -180,7 +180,9 @@ export function ViewerStrip({
           >
             <ArrowLeft size={15} aria-hidden="true" />
           </button>
-          <span>{t("Usa las flechas del teclado")}</span>
+          <span data-tooltip={t("← y → cambian de foto; ↑ y ↓ recorren las etiquetas, anotaciones o elementos de patrimonio de la pestaña abierta.")}>
+            {t("Usa las flechas del teclado")}
+          </span>
           <button
             type="button"
             aria-label={t("Foto siguiente")}
