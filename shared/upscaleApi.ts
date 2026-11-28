@@ -47,8 +47,15 @@ export const STYLE_HELP: Record<UpscaleStyle, string> = {
 /** A price: per image, or per megapixels of output (blocks of `per` MP). */
 export type UpscalePrice = { amount: number; per: "image" | "megapixel"; blockMP?: number; source: "service" | "reference" };
 
+/** What a service model is used for in Imago. */
+export type ServiceTask = "upscale" | "restore" | "colorize";
+
 export type ApiUpscaleModel = {
   service: UpscaleService;
+  /** Upscaling when absent. */
+  task?: ServiceTask;
+  /** It reads written instructions (a prompt); otherwise it always does the same thing. */
+  instructed?: boolean;
   /** fal endpoint id, Replicate «owner/name» or Stability «fast|conservative|creative». */
   id: string;
   name: string;
@@ -144,6 +151,71 @@ export const KNOWN_API_MODELS: ApiUpscaleModel[] = [
   { service: "stability", id: "creative", name: "Stability Creative", style: "creative", price: { amount: 0.6, per: "image", source: "reference" }, scales: [] },
 ];
 
+/**
+ * Restoration and colourising models we know (prices published by each
+ * service, checked in November 2026). Specialised ones do one thing and read
+ * no instructions; «instructed» ones follow the prompt.
+ */
+export const KNOWN_EDIT_MODELS: ApiUpscaleModel[] = [
+  // Restoration
+  {
+    service: "replicate",
+    id: "microsoft/bringing-old-photos-back-to-life",
+    task: "restore",
+    name: "Bringing Old Photos Back to Life",
+    style: "faithful",
+    price: { amount: 0.0096, per: "image", source: "reference" },
+    recommended: "Hecho para fotos antiguas: quita arañazos, polvo y manchas sin repintar la escena. Menos de un céntimo.",
+  },
+  {
+    service: "replicate",
+    id: "flux-kontext-apps/restore-image",
+    task: "restore",
+    name: "FLUX Kontext Restore",
+    style: "balanced",
+    price: { amount: 0.04, per: "image", source: "reference" },
+    recommended: "Repara roturas, pliegues y zonas perdidas con mucha calidad. Reconstruye lo que falta: compáralo con el original.",
+  },
+  { service: "replicate", id: "topazlabs/dust-and-scratch-v2", task: "restore", name: "Topaz Dust & Scratch", style: "faithful", price: { amount: 0.08, per: "image", source: "reference" } },
+  { service: "replicate", id: "sczhou/codeformer", task: "restore", name: "CodeFormer (caras)", style: "balanced", price: { amount: 0.005, per: "image", source: "reference" } },
+  { service: "replicate", id: "tencentarc/gfpgan", task: "restore", name: "GFPGAN (caras)", style: "balanced", price: { amount: 0.004, per: "image", source: "reference" } },
+  { service: "replicate", id: "mv-lab/instructir", task: "restore", name: "InstructIR", instructed: true, style: "faithful", price: { amount: 0.027, per: "image", source: "reference" } },
+  {
+    service: "fal",
+    id: "topaz/restore/image",
+    task: "restore",
+    name: "Topaz Restore",
+    style: "balanced",
+    recommended: "Restauración profesional de Topaz para fotos dañadas o de poca calidad.",
+  },
+  { service: "fal", id: "bria/fibo-edit/restore", task: "restore", name: "Bria Restore", style: "balanced" },
+  { service: "fal", id: "fal-ai/image-apps-v2/photo-restoration", task: "restore", name: "Photo Restoration", style: "creative" },
+  { service: "fal", id: "fal-ai/codeformer", task: "restore", name: "CodeFormer (caras)", style: "balanced", price: { amount: 0.0021, per: "megapixel", source: "reference" } },
+  // Colourising
+  {
+    service: "replicate",
+    id: "piddnad/ddcolor",
+    task: "colorize",
+    name: "DDColor",
+    style: "faithful",
+    price: { amount: 0.001, per: "image", source: "reference" },
+    recommended: "Colores naturales y sobrios, sin tocar la imagen. Una décima de céntimo por foto: ideal para probar.",
+  },
+  {
+    service: "replicate",
+    id: "arielreplicate/deoldify_image",
+    task: "colorize",
+    name: "DeOldify",
+    style: "faithful",
+    price: { amount: 0.042, per: "image", source: "reference" },
+    recommended: "El colorizador clásico de fotos antiguas: colores cálidos, de época.",
+  },
+  { service: "replicate", id: "cjwbw/bigcolor", task: "colorize", name: "BigColor", style: "faithful", price: { amount: 0.037, per: "image", source: "reference" } },
+  { service: "replicate", id: "topazlabs/image-colorization", task: "colorize", name: "Topaz Colorization", style: "faithful", price: { amount: 0.08, per: "image", source: "reference" } },
+  { service: "fal", id: "fal-ai/ddcolor", task: "colorize", name: "DDColor", style: "faithful", recommended: "Colores naturales y sobrios, sin tocar la imagen." },
+  { service: "fal", id: "bria/fibo-edit/colorize", task: "colorize", name: "Bria Colorize", style: "balanced" },
+];
+
 /** The cost of one image, in USD, for an output of `outputMP` megapixels; null when unknown. */
 export function estimateCost(price: UpscalePrice | undefined, outputMP: number): number | null {
   if (!price) return null;
@@ -165,6 +237,17 @@ export function looksLikeUpscaler(text: string): boolean {
   return /upscal|super[- ]?res|esrgan|aura-?sr|seedvr|increase[- ]resolution|swinir|\bsr\b|enhance resolution|high-?res/i.test(text);
 }
 
+/** Is this a model for that task? (search results mix in generators and editors of every kind). */
+export function looksLikeTask(task: ServiceTask, text: string): boolean {
+  if (task === "upscale") return looksLikeUpscaler(text);
+  if (/video|depth|sketch|cartoon|anime|try-?on|headshot|hair|eye color|swap|lora|trigger/i.test(text)) return false;
+  // Models that age photographs (the opposite), or only adjust colours already there.
+  if (/into an? old|make (it|them|photos?) (look )?old|vintage (effect|filter|look)|\baging\b|\badjust\b|white balance/i.test(text)) return false;
+  return task === "colorize"
+    ? /coloriz|colouriz|deoldify|ddcolor|bigcolor|black[- ]and[- ]white.*colou?r/i.test(text)
+    : /restor|scratch|old photo|damaged|codeformer|gfpgan|deblur|denois|instructir/i.test(text);
+}
+
 /** What the worker sends to the main process for one API upscale (the image as PNG, base64). */
 export type ApiUpscaleRequest = {
   upscaleApi: true;
@@ -174,5 +257,7 @@ export type ApiUpscaleRequest = {
   width: number;
   height: number;
   scale: number;
+  /** Written instructions, for models that read them (restoring, colourising). */
+  prompt?: string;
 };
 export type ApiUpscaleResult = { image: string; mimeType: string; seconds: number; cost: number | null; note?: string };

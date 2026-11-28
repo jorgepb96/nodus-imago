@@ -12257,3 +12257,25 @@ tr:hover .ai-cell-button,
 .workshop-side .workshop-save { position: sticky; bottom: -24px; z-index: 2; margin: auto -16px -24px; padding: 10px 16px 16px; border-top: 1px solid var(--line); background: var(--canvas); }
 .workshop-notice { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.45; color: var(--accent-ink); background: var(--accent-soft); }
 .workshop-notice .link-button { flex-shrink: 0; margin-left: auto; color: var(--muted); }
+/* Restoration and colourising: kinds of model, recommendations */
+.restoration-model-tools { flex-wrap: wrap; }
+.restoration-side .restoration-model-tools input { flex-basis: 100%; }
+.restoration-side .restoration-model-tools select { flex: 1; width: auto; max-width: none; }
+.restoration-kinds { display: flex; gap: 4px; }
+.restoration-kinds > button { flex: 1; padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--muted); background: var(--panel); white-space: nowrap; }
+.restoration-kinds > button.is-selected { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.restoration-recommended { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10.5px; font-style: normal; font-weight: 600; color: #047857; background: #10b98120; vertical-align: 1px; }
+.restoration-specialised { padding: 8px 10px; border-radius: 8px; background: var(--hover); }
+/* Lists of photographs: every card the same size, whatever its text */
+.workshop-version-picker { grid-auto-rows: 1fr; }
+.workshop-version-picker li { display: flex; min-width: 0; }
+.workshop-version-picker button { height: 100%; }
+.workshop-version-picker img { width: 72px; height: 72px; }
+.workshop-version-picker small { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.restoration-versions ul { grid-auto-rows: 1fr; }
+.restoration-versions li > button { height: 100%; }
+.restoration-versions li > button > span { min-width: 0; }
+.restoration-versions li strong, .restoration-versions li small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record-versions li { display: flex; }
+.record-versions button { height: 100%; }
+.record-versions .workshop-badge { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-height: 2.6em; }

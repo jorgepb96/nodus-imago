@@ -613,7 +613,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
     .object({
       assetId: id,
       region: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0.005).max(1), h: z.number().min(0.005).max(1) }).strict().nullable(),
-      provider: providerSchema,
+      provider: z.union([providerSchema, z.enum(["fal", "replicate"])]),
       model: z.string().trim().min(1).max(300),
       task: z.enum(["restore", "repair", "sharpen", "colorize", "custom"]),
       prompt: z.string().trim().min(1).max(8000),
@@ -1125,7 +1125,7 @@ export const schemas: Record<string, z.ZodTypeAny> = {
   setUpscaleKey: z.object({ service: z.enum(["fal", "replicate", "stability"]), key: z.string().max(10000) }).strict(),
   clearUpscaleKey: z.object({ service: z.enum(["fal", "replicate", "stability"]) }).strict(),
   checkUpscaleKey: z.object({ service: z.enum(["fal", "replicate", "stability"]) }).strict(),
-  upscaleApiCatalog: z.object({ refresh: z.boolean().optional() }).strict().optional(),
+  upscaleApiCatalog: z.object({ refresh: z.boolean().optional(), task: z.enum(["upscale", "restore", "colorize"]).optional() }).strict().optional(),
   listProviderModels: z.object({ provider: providerSchema }).strict(),
   imageModelCatalog: z.object({ refresh: z.boolean().optional() }).strict(),
   savedSearches: z.undefined(),

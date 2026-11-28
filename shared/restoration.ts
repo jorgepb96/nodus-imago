@@ -110,6 +110,33 @@ export function restorationPrompt(task: RestorationTask, language: Language, reg
   return `${TASKS[task][language]} ${FIDELITY[language]}${crop}`;
 }
 
+/** Ways of colourising, for models that read instructions. */
+export type ColorStyle = "period" | "subtle" | "hand" | "custom";
+export const COLOR_STYLES: { id: ColorStyle; label: string; help: string }[] = [
+  { id: "period", label: "Colores de época", help: "Colores verosímiles para el lugar y la fecha de la foto." },
+  { id: "subtle", label: "Discreta", help: "Colores suaves y apagados: la foto sigue pareciendo antigua." },
+  { id: "hand", label: "Iluminada a mano", help: "Como las postales y fotos coloreadas a mano de principios del siglo XX." },
+  { id: "custom", label: "Instrucciones propias", help: "Escribe tú qué colores quieres (la fachada ocre, el uniforme azul marino…)." },
+];
+const COLOR_TEXT: Record<Exclude<ColorStyle, "period" | "custom">, Record<Language, string>> = {
+  subtle: {
+    es: "Colorea esta fotografía en blanco y negro con colores suaves, apagados y poco saturados, verosímiles para su época y su lugar, de modo que siga pareciendo una fotografía antigua. Cambia solo el color: conserva cada detalle, la textura, las luces y las sombras.",
+    en: "Colourise this black-and-white photograph with soft, muted, low-saturation colours, plausible for its period and place, so that it still looks like an old photograph. Change only the colour: keep every detail, the texture, the highlights and the shadows.",
+    fr: "Colorisez cette photographie en noir et blanc avec des couleurs douces, éteintes et peu saturées, vraisemblables pour son époque et son lieu, de sorte qu'elle ait toujours l'air d'une photographie ancienne. Ne changez que la couleur : conservez chaque détail, la texture, les lumières et les ombres.",
+  },
+  hand: {
+    es: "Colorea esta fotografía en blanco y negro como las fotografías y postales iluminadas a mano de principios del siglo XX: aguadas de color transparentes y delicadas sobre la imagen original, pocos tonos, cielos y vegetación suaves. Cambia solo el color: conserva cada detalle, la textura, las luces y las sombras.",
+    en: "Colourise this black-and-white photograph like the hand-coloured photographs and postcards of the early twentieth century: delicate, transparent washes of colour over the original image, few hues, soft skies and vegetation. Change only the colour: keep every detail, the texture, the highlights and the shadows.",
+    fr: "Colorisez cette photographie en noir et blanc comme les photographies et cartes postales coloriées à la main du début du XXe siècle : des lavis de couleur transparents et délicats sur l'image d'origine, peu de teintes, des ciels et une végétation doux. Ne changez que la couleur : conservez chaque détail, la texture, les lumières et les ombres.",
+  },
+};
+/** The instructions for a way of colourising. */
+export function colorPrompt(style: ColorStyle, language: Language, region: boolean): string {
+  if (style === "custom") return "";
+  const base = restorationPrompt("colorize", language, region);
+  return style === "period" ? base : base.replace(TASKS.colorize[language], COLOR_TEXT[style][language]);
+}
+
 /** Most context sent with an image: a long catalogue entry, but bounded. */
 export const RESTORATION_CONTEXT_MAX = 4000;
 

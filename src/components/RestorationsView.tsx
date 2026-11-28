@@ -36,6 +36,8 @@ import {
   TASK_HELP,
   TASK_LABELS,
   RESTORATION_TASKS,
+  COLOR_STYLES,
+  colorPrompt,
   decodeImageModel,
   encodeImageModel,
   restorationContext,
@@ -46,8 +48,10 @@ import {
   type RestorationTask,
   type Watermark,
   type WatermarkPosition,
+  type ColorStyle,
   taskLabel,
 } from "../../shared/restoration";
+import { PRICE_LIMITS, STYLE_LABELS, UPSCALE_SERVICES, estimateCost, formatCost, type ApiUpscaleModel, type UpscaleService } from "../../shared/upscaleApi";
 import { useT } from "../i18n";
 import { Button, Modal } from "./ui";
 import { ImagePicker } from "./CompareView";
@@ -101,17 +105,33 @@ const CHECK_TEXT: Record<RestorationCheck["level"], { label: string; help: strin
  * is open: the request goes on in the main process when the section is left,
  * and coming back shows the same image, the waiting state and then its result.
  */
-const memory: {
+type Memory = {
   assetId: string | null;
   regionId: string;
   drawn: Region | null;
   baseId: string;
   note: string;
   task: Exclude<RestorationTask, "upscale">;
+  colorStyle: ColorStyle;
   currentId: string | null;
   pending: { assetId: string; promise: Promise<Restoration> } | null;
-} = { assetId: null, regionId: "", drawn: null, baseId: "", note: "", task: "restore", currentId: null, pending: null };
-const remember = (patch: Partial<typeof memory>) => void Object.assign(memory, patch);
+};
+const blank = (task: Memory["task"]): Memory => ({ assetId: null, regionId: "", drawn: null, baseId: "", note: "", task, colorStyle: "period", currentId: null, pending: null });
+/** Restoration and colourising are two sections, each with its own session. */
+const memories: Record<"restore" | "colorize", Memory> = { restore: blank("restore"), colorize: blank("colorize") };
+const remember = (mode: "restore" | "colorize", patch: Partial<Memory>) => void Object.assign(memories[mode], patch);
+/** Services (fal.ai, Replicate) share the model list with the AI providers. */
+const SERVICE_PROVIDERS = ["fal", "replicate"] as const;
+type ServiceProvider = (typeof SERVICE_PROVIDERS)[number];
+const isService = (p: string): p is ServiceProvider => (SERVICE_PROVIDERS as readonly string[]).includes(p);
+/** A model of the list: an AI provider's image model or a service's specialised one. */
+function decodeChoice(value: string): { provider: ApiProvider | ServiceProvider; model: string } | null {
+  const [provider, ...rest] = value.split("|");
+  const model = rest.join("|").trim();
+  if (isService(provider) && model) return { provider, model };
+  return decodeImageModel(value);
+}
+const providerLabel = (p: string) => (isService(p) ? UPSCALE_SERVICES[p as UpscaleService].label : PROVIDERS[p as ApiProvider].label);
 
 export function RestorationsView({
   settings,
@@ -121,9 +141,12 @@ export function RestorationsView({
   onSettings,
   onOpenSettings,
   onBack,
+  mode = "restore",
 }: {
   settings: Settings;
   databases: DatabaseSummary[];
+  /** Restoration (restore, repair, sharpen…) or colourising, each a section of its own. */
+  mode?: "restore" | "colorize";
   /** An image to open, optionally from one of its versions and with a task (from a record or the workshop). */
   seed: { assetId: string; baseId?: string | null; task?: "restore" | "colorize" } | null;
   onSeedUsed: () => void;
@@ -134,6 +157,9 @@ export function RestorationsView({
 }) {
   const t = useT();
   const api = window.imago;
+  const memory = memories[mode];
+  const colorMode = mode === "colorize";
+  const store = colorMode ? "imago.colorize" : "imago.restoration";
   const [sideWidth, resizeSide] = useSectionSideWidth();
   const language = asLanguage(settings.language);
   const [source, setSource] = useState<CompareItem | null>(null);
@@ -149,16 +175,21 @@ export function RestorationsView({
   const [keepDetail, setKeepDetail] = useState(() => readBool("imago.restoration.keepDetail", true));
   const [check, setCheck] = useState<RestorationCheck | null>(null);
   const [changes, setChanges] = useState(false);
-  const [task, setTask] = useState<Exclude<RestorationTask, "upscale">>("restore");
+  const [task, setTask] = useState<Exclude<RestorationTask, "upscale">>(colorMode ? "colorize" : "restore");
   const [prompt, setPrompt] = useState(() => restorationPrompt("restore", language, false));
   const [edited, setEdited] = useState(false);
-  const [model, setModel] = useState<string>(() => localStorage.getItem("imago.restoration.model") ?? "");
+  const [model, setModel] = useState<string>(() => localStorage.getItem(`${store}.model`) ?? "");
+  const [colorStyle, setColorStyle] = useState<ColorStyle>(memory.colorStyle);
+  /** The services' models for this use, when they have a key; null while unknown. */
+  const [serviceModels, setServiceModels] = useState<ApiUpscaleModel[] | null>(null);
+  const [kind, setKind] = useState<"all" | "specialised" | "instructed">(() => (localStorage.getItem(`${store}.kind`) as never) ?? "all");
+  const [priceLimit, setPriceLimit] = useState<number | null>(null);
   const [keys, setKeys] = useState<Record<string, boolean>>({});
   /** The image models of the providers with a saved key, from their catalogues; null while unknown. */
   const [catalog, setCatalog] = useState<ImageCatalogModel[] | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
-  const [modelProvider, setModelProvider] = useState<string>(() => localStorage.getItem("imago.restoration.provider") ?? "");
+  const [modelProvider, setModelProvider] = useState<string>(() => localStorage.getItem(`${store}.provider`) ?? "");
   const [versions, setVersions] = useState<Restoration[]>([]);
   const [current, setCurrent] = useState<Restoration | null>(null);
   const [running, setRunning] = useState(false);
@@ -186,6 +217,21 @@ export function RestorationsView({
     [api],
   );
   useEffect(() => loadCatalog(), [loadCatalog]);
+  // The services' restorers or colourisers, for the ones with a key.
+  const loadServices = useCallback(
+    (refresh = false) =>
+      void api
+        .call("upscaleServicesStatus")
+        .then((status) =>
+          status.fal || status.replicate
+            ? api.call("upscaleApiCatalog", { refresh, task: colorMode ? "colorize" : "restore" }).then((list) => list.filter((m) => m.service !== "stability" && status[m.service]))
+            : [],
+        )
+        .then(setServiceModels)
+        .catch(() => setServiceModels([])),
+    [api, colorMode],
+  );
+  useEffect(() => loadServices(), [loadServices]);
   const choose = useCallback(
     async (assetId: string) => {
       const [item] = await api.call("compareItems", { assetIds: [assetId] });
@@ -228,11 +274,11 @@ export function RestorationsView({
         })
         .catch((e) => setError(e instanceof Error ? e.message : String(e)))
         .finally(() => {
-          if (memory.pending === pending) remember({ pending: null });
+          if (memory.pending === pending) remember(mode, { pending: null });
           setRunning(false);
         });
     },
-    [api],
+    [api, memory, mode],
   );
   // Coming back to the section: the same image, choices and run in progress.
   useEffect(() => {
@@ -244,6 +290,7 @@ export function RestorationsView({
       setBaseId(saved.baseId);
       setNote(saved.note);
       setTask(saved.task);
+      setColorStyle(saved.colorStyle);
       const list = await api.call("restorationsList", { assetId: saved.assetId! });
       setCurrent(list.find((v) => v.id === saved.currentId) ?? null);
       if (saved.pending && saved.pending.assetId === saved.assetId) follow(saved.pending);
@@ -252,7 +299,7 @@ export function RestorationsView({
   }, []);
   useEffect(() => {
     if (!source) return;
-    remember({ assetId: source.assetId, regionId, drawn, baseId, note, task, currentId: current?.id ?? null });
+    remember(mode, { assetId: source.assetId, regionId, drawn, baseId, note, task, colorStyle, currentId: current?.id ?? null });
   });
   const region: Region | null = regionId === "drawn" ? drawn : (regions.find((r) => r.id === regionId) ?? null);
   const base = versions.find((v) => v.id === baseId) ?? null;
@@ -273,13 +320,14 @@ export function RestorationsView({
   }, [api, current]);
   // The instructions follow the task until the user writes their own.
   useEffect(() => {
-    if (!edited) setPrompt(restorationPrompt(task, language, !!region));
-  }, [task, language, region, edited]);
+    if (!edited) setPrompt(colorMode ? colorPrompt(colorStyle, language, !!region) : restorationPrompt(task, language, !!region));
+  }, [task, language, region, edited, colorMode, colorStyle]);
 
-  // Only image models: those the catalogues of the providers with a saved key
-  // mark as returning images (their suggested ones while the catalogues are
-  // read), plus the ones added by hand and the favourites. Favourites first,
-  // then by provider and model, alphabetically.
+  // The models: the image models of the AI providers with a saved key (their
+  // suggested ones while the catalogues are read), the ones added by hand,
+  // the favourites, and the services' models made for this use. Favourites
+  // first, then the recommended ones, then by provider and name.
+  const services = useMemo(() => new Map((serviceModels ?? []).map((m) => [`${m.service}|${m.id}`, m])), [serviceModels]);
   const { models, names } = useMemo(() => {
     const favorites = settings.favoriteImageModels ?? [];
     const list = new Set<string>([...favorites, ...(settings.imageModels ?? [])]);
@@ -293,31 +341,51 @@ export function RestorationsView({
     else
       for (const [provider, suggested] of Object.entries(SUGGESTED_IMAGE_MODELS))
         if (keys[provider]) for (const m of suggested ?? []) list.add(encodeImageModel(provider as ApiProvider, m));
-    const label = (value: string) => t(PROVIDERS[decodeImageModel(value)!.provider].label);
+    for (const [value, m] of services) {
+      list.add(value);
+      names.set(value, m.name);
+    }
+    // A service model of the other section (a colouriser in restoration) is left out, favourite or not.
+    for (const value of [...list]) if (isService(value.split("|")[0]) && !services.has(value)) list.delete(value);
+    const label = (value: string) => t(providerLabel(decodeChoice(value)!.provider));
     const models = [...list]
-      .filter((v) => decodeImageModel(v))
+      .filter((v) => decodeChoice(v))
       .sort(
         (a, b) =>
           Number(favorites.includes(b)) - Number(favorites.includes(a)) ||
+          Number(!!services.get(b)?.recommended) - Number(!!services.get(a)?.recommended) ||
           label(a).localeCompare(label(b), undefined, { sensitivity: "base" }) ||
-          decodeImageModel(a)!.model.localeCompare(decodeImageModel(b)!.model, undefined, { sensitivity: "base", numeric: true }),
+          (names.get(a) ?? decodeChoice(a)!.model).localeCompare(names.get(b) ?? decodeChoice(b)!.model, undefined, { sensitivity: "base", numeric: true }),
       );
     return { models, names };
-  }, [settings, keys, catalog, t]);
-  const modelProviders = [...new Set(models.map((v) => decodeImageModel(v)!.provider))].sort((a, b) =>
-    t(PROVIDERS[a].label).localeCompare(t(PROVIDERS[b].label), undefined, { sensitivity: "base" }),
+  }, [settings, keys, catalog, services, t]);
+  const modelProviders = [...new Set(models.map((v) => decodeChoice(v)!.provider))].sort((a, b) =>
+    t(providerLabel(a)).localeCompare(t(providerLabel(b)), undefined, { sensitivity: "base" }),
   );
+  /** Cost of one image with a service model (what is sent: at most about 2 megapixels). */
+  const costOf = (value: string) => {
+    const m = services.get(value);
+    if (!m) return null;
+    const mp = Math.min(2.1, ((source?.width ?? 1200) * (source?.height ?? 1200)) / 1e6);
+    return estimateCost(m.price, mp);
+  };
+  const instructed = (value: string) => !services.has(value) || !!services.get(value)?.instructed;
   const providerFilter = modelProviders.includes(modelProvider as ApiProvider) ? modelProvider : "";
   const query = modelSearch.trim().toLowerCase();
   const visibleModels = models.filter((value) => {
-    const m = decodeImageModel(value)!;
+    const m = decodeChoice(value)!;
+    const cost = costOf(value);
     return (
       (!providerFilter || m.provider === providerFilter) &&
-      (!query || `${m.model} ${names.get(value) ?? ""} ${t(PROVIDERS[m.provider].label)}`.toLowerCase().includes(query))
+      (kind === "all" || (kind === "instructed") === instructed(value)) &&
+      (priceLimit === null || (cost !== null && cost <= priceLimit)) &&
+      (!query || `${m.model} ${names.get(value) ?? ""} ${t(providerLabel(m.provider))}`.toLowerCase().includes(query))
     );
   });
   const chosen = models.includes(model) ? model : (models[0] ?? "");
-  const choice = decodeImageModel(chosen);
+  const choice = decodeChoice(chosen);
+  /** A specialised service model: it restores or colourises on its own and reads no instructions. */
+  const specialised = !!choice && !instructed(chosen);
   const remoteBlocked = !!choice && !settings.remoteEnabled && !["ollama", "lmstudio"].includes(choice.provider) && !(choice.provider === "custom" && /127\.0\.0\.1|localhost/.test(settings.apiProfiles.custom?.baseUrl ?? ""));
   const toggleFavorite = (value: string) => {
     const favorites = settings.favoriteImageModels ?? [];
@@ -334,13 +402,14 @@ export function RestorationsView({
         provider: choice.provider,
         model: choice.model,
         task,
-        prompt: prompt.trim(),
-        context,
+        // A specialised model reads no instructions; the task's own are recorded with the version.
+        prompt: prompt.trim() || (colorMode ? colorPrompt("period", language, !!region) : restorationPrompt(task === "custom" ? "restore" : task, language, !!region)),
+        context: specialised ? undefined : context,
         baseId: base?.id ?? null,
         keepDetail: task === "colorize" ? keepDetail : undefined,
       });
     const pending = { assetId: source.assetId, promise };
-    remember({ pending });
+    remember(mode, { pending });
     follow(pending);
   };
 
@@ -354,11 +423,15 @@ export function RestorationsView({
           </button>
         )}
         <h1>
-          <Wand2 size={18} />
-          {t("Restauración IA")}
+          {colorMode ? <Palette size={18} /> : <Wand2 size={18} />}
+          {t(colorMode ? "Colorización IA" : "Restauración IA")}
         </h1>
         <p className="hint">
-          {t("Crea versiones restauradas o coloreadas con un modelo de imagen. El original no se modifica: cada versión se guarda aparte, con el modelo y las instrucciones que la produjeron.")}
+          {t(
+            colorMode
+              ? "Añade colores verosímiles a una foto en blanco y negro con un modelo de imagen. El original no se modifica: cada versión se guarda aparte, marcada como coloreada con IA."
+              : "Crea versiones restauradas con un modelo de imagen. El original no se modifica: cada versión se guarda aparte, con el modelo y las instrucciones que la produjeron.",
+          )}
         </p>
         <section>
           <h2>{t("1. Imagen")}</h2>
@@ -415,9 +488,34 @@ export function RestorationsView({
               </p>
             </section>
             <section>
-              <h2>{t("3. Tarea")}</h2>
+              <h2>{t(colorMode ? "3. Colores" : "3. Tarea")}</h2>
+              {colorMode ? (
+                <div className="restoration-tasks" role="radiogroup" aria-label={t("Estilo de color")}>
+                  {COLOR_STYLES.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={colorStyle === c.id}
+                      className={colorStyle === c.id ? "is-selected" : ""}
+                      onClick={() => {
+                        setColorStyle(c.id);
+                        setEdited(c.id === "custom");
+                        if (c.id === "custom") setPrompt("");
+                      }}
+                      data-testid={`color-style-${c.id}`}
+                    >
+                      <Palette size={16} />
+                      <span>
+                        <strong>{t(c.label)}</strong>
+                        <small>{t(c.help)}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
               <div className="restoration-tasks" role="radiogroup" aria-label={t("Tarea")}>
-                {RESTORATION_TASKS.map((key) => (
+                {RESTORATION_TASKS.filter((key) => key !== "colorize").map((key) => (
                   <button
                     key={key}
                     type="button"
@@ -438,6 +536,7 @@ export function RestorationsView({
                   </button>
                 ))}
               </div>
+              )}
               {task === "colorize" && (
                 <label className="check-label restoration-keep">
                   <input
@@ -455,6 +554,11 @@ export function RestorationsView({
                   </span>
                 </label>
               )}
+              {specialised ? (
+                <p className="hint restoration-specialised">
+                  {t(colorMode ? "El modelo elegido es un colorizador especializado: colorea siempre a su manera y no lee instrucciones ni contexto." : "El modelo elegido es un restaurador especializado: restaura siempre a su manera y no lee instrucciones ni contexto.")}
+                </p>
+              ) : (
               <label className="restoration-prompt">
                 {t("Instrucciones para el modelo")}
                 <textarea
@@ -467,7 +571,8 @@ export function RestorationsView({
                   }}
                 />
               </label>
-              {edited && task !== "custom" && (
+              )}
+              {edited && !specialised && task !== "custom" && !(colorMode && colorStyle === "custom") && (
                 <button type="button" className="link-button" onClick={() => setEdited(false)}>
                   {t("Volver a las instrucciones de la tarea")}
                 </button>
@@ -537,39 +642,79 @@ export function RestorationsView({
             <section>
               <h2>{t("5. Modelo")}</h2>
               {models.length > 0 && (
-                <div className="restoration-model-tools">
-                  <input
-                    type="search"
-                    aria-label={t("Buscar modelo…")}
-                    placeholder={t("Buscar modelo…")}
-                    value={modelSearch}
-                    onChange={(e) => setModelSearch(e.target.value)}
-                    data-testid="restoration-model-search"
-                  />
-                  <select
-                    aria-label={t("Proveedor")}
-                    value={providerFilter}
-                    onChange={(e) => {
-                      setModelProvider(e.target.value);
-                      localStorage.setItem("imago.restoration.provider", e.target.value);
-                    }}
-                    data-testid="restoration-model-provider"
-                  >
-                    <option value="">{t("Todos los proveedores")}</option>
-                    {modelProviders.map((p) => (
-                      <option key={p} value={p}>
-                        {t(PROVIDERS[p].label)}
-                      </option>
+                <>
+                  <div className="restoration-kinds" role="radiogroup" aria-label={t("Tipo de modelo")}>
+                    {(
+                      [
+                        ["all", "Todos", "Todos los modelos de los proveedores y servicios que has configurado."],
+                        ["specialised", "Especializados", colorMode ? "Modelos hechos solo para colorear: baratos y previsibles, no leen instrucciones." : "Modelos hechos solo para restaurar: baratos y previsibles, no leen instrucciones."],
+                        ["instructed", "Siguen instrucciones", "Modelos generales de imagen que hacen lo que les pides por escrito, con el contexto del registro."],
+                      ] as const
+                    ).map(([k, label, help]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        role="radio"
+                        aria-checked={kind === k}
+                        className={kind === k ? "is-selected" : ""}
+                        data-tooltip={t(help)}
+                        onClick={() => {
+                          setKind(k);
+                          localStorage.setItem(`${store}.kind`, k);
+                        }}
+                      >
+                        {t(label)}
+                      </button>
                     ))}
-                  </select>
-                </div>
+                  </div>
+                  <div className="restoration-model-tools">
+                    <input
+                      type="search"
+                      aria-label={t("Buscar modelo…")}
+                      placeholder={t("Buscar modelo…")}
+                      value={modelSearch}
+                      onChange={(e) => setModelSearch(e.target.value)}
+                      data-testid="restoration-model-search"
+                    />
+                    <select
+                      aria-label={t("Proveedor")}
+                      value={providerFilter}
+                      onChange={(e) => {
+                        setModelProvider(e.target.value);
+                        localStorage.setItem(`${store}.provider`, e.target.value);
+                      }}
+                      data-testid="restoration-model-provider"
+                    >
+                      <option value="">{t("Todos los proveedores")}</option>
+                      {modelProviders.map((p) => (
+                        <option key={p} value={p}>
+                          {t(providerLabel(p))}
+                        </option>
+                      ))}
+                    </select>
+                    {services.size > 0 && (
+                      <select aria-label={t("Precio máximo")} value={priceLimit ?? ""} onChange={(e) => setPriceLimit(e.target.value ? Number(e.target.value) : null)} data-testid="restoration-price">
+                        <option value="">{t("Cualquier precio")}</option>
+                        {PRICE_LIMITS.map((p) => (
+                          <option key={p} value={p}>
+                            {`${t("Hasta")} ${formatCost(p, language)}`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </>
               )}
-              {catalogLoading && <p className="hint">{t("Consultando los catálogos de los proveedores…")}</p>}
+              {(catalogLoading || serviceModels === null) && <p className="hint">{t("Consultando los catálogos de los proveedores…")}</p>}
               {models.length ? (
                 <ul className="restoration-models" role="radiogroup" aria-label={t("Modelo de imagen")}>
-                  {!visibleModels.length && <li className="restoration-models-empty">{t("No hay modelos que coincidan.")}</li>}
+                  {!visibleModels.length && (
+                    <li className="restoration-models-empty">{t(priceLimit !== null ? "Ningún modelo con precio conocido cuesta tan poco. Sube el límite o quítalo." : "No hay modelos que coincidan.")}</li>
+                  )}
                   {visibleModels.map((value) => {
-                    const m = decodeImageModel(value)!,
+                    const m = decodeChoice(value)!,
+                      service = services.get(value),
+                      cost = costOf(value),
                       favorite = (settings.favoriteImageModels ?? []).includes(value);
                     return (
                       <li key={value} className={chosen === value ? "is-selected" : ""}>
@@ -577,16 +722,26 @@ export function RestorationsView({
                           type="button"
                           role="radio"
                           aria-checked={chosen === value}
+                          data-tooltip={service?.recommended ? t(service.recommended) : service?.description}
                           onClick={() => {
                             setModel(value);
-                            localStorage.setItem("imago.restoration.model", value);
+                            localStorage.setItem(`${store}.model`, value);
                           }}
                         >
                           <span>
-                            <strong title={m.model}>{m.model}</strong>
+                            <strong title={m.model}>
+                              {service ? t(service.name) : m.model}
+                              {service?.recommended && <em className="restoration-recommended">{t("Recomendado")}</em>}
+                            </strong>
                             <small>
-                              {t(PROVIDERS[m.provider].label)}
-                              {names.get(value) ? ` · ${names.get(value)}` : ""}
+                              {[
+                                t(providerLabel(m.provider)),
+                                service ? t(service.instructed ? "Sigue instrucciones" : "Especializado") : names.get(value),
+                                service && service.style !== "unknown" ? t(STYLE_LABELS[service.style]) : "",
+                                service ? (cost === null ? t("precio desconocido") : `~${formatCost(cost, language)}`) : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </small>
                           </span>
                         </button>
@@ -605,7 +760,7 @@ export function RestorationsView({
                   })}
                 </ul>
               ) : (
-                <p className="hint">{t("No hay modelos de imagen. Configura la clave de OpenAI, Gemini u OpenRouter en Ajustes, o añade un modelo.")}</p>
+                <p className="hint">{t("No hay modelos de imagen. Configura la clave de OpenAI, Gemini u OpenRouter en Ajustes, o la de fal.ai o Replicate en Escalado IA, o añade un modelo.")}</p>
               )}
               <div className="row">
                 <Button onClick={() => setAdding(true)}>
@@ -618,7 +773,10 @@ export function RestorationsView({
                   aria-label={t("Actualizar modelos")}
                   data-tooltip={t("Actualizar modelos")}
                   disabled={catalogLoading}
-                  onClick={() => loadCatalog(true)}
+                  onClick={() => {
+                    loadCatalog(true);
+                    loadServices(true);
+                  }}
                 >
                   <RefreshCw size={14} />
                 </Button>
@@ -628,7 +786,7 @@ export function RestorationsView({
               {choice && (
                 <p className="restoration-privacy">
                   <ShieldAlert size={14} />
-                  {t(context ? "La imagen (o el recorte) y el contexto se envían a {p} para procesarla." : "La imagen (o el recorte) se envía a {p} para procesarla.").replace("{p}", t(PROVIDERS[choice.provider].label))}
+                  {t(context && !specialised ? "La imagen (o el recorte) y el contexto se envían a {p} para procesarla." : "La imagen (o el recorte) se envía a {p} para procesarla.").replace("{p}", t(providerLabel(choice.provider)))}
                 </p>
               )}
               {remoteBlocked && <p className="restoration-error">{t("Las APIs remotas están desactivadas en Ajustes.")}</p>}
@@ -638,7 +796,7 @@ export function RestorationsView({
                   {t("Detener")}
                 </Button>
               ) : (
-                <Button primary disabled={!choice || !prompt.trim() || remoteBlocked} onClick={() => void run()} data-testid="restoration-run">
+                <Button primary disabled={!choice || (!specialised && !prompt.trim()) || remoteBlocked} onClick={() => void run()} data-testid="restoration-run">
                   <Wand2 size={15} />
                   {t(RUN_LABELS[task][region ? 1 : 0])}
                 </Button>
@@ -652,10 +810,14 @@ export function RestorationsView({
       <section className="restoration-main">
         {!source ? (
           <div className="restoration-empty">
-            <Wand2 size={32} />
-            <h2>{t("Restauración IA")}</h2>
+            {colorMode ? <Palette size={32} /> : <Wand2 size={32} />}
+            <h2>{t(colorMode ? "Colorización IA" : "Restauración IA")}</h2>
             <p>
-              {t("Elige una imagen de cualquier base de datos, o pulsa «Restaurar con IA» en la ficha de un registro. Puedes restaurar la imagen entera o una zona que hayas marcado.")}
+              {t(
+                colorMode
+                  ? "Elige una foto en blanco y negro de cualquier base de datos, o ábrela desde el Taller. Puedes colorear la imagen entera o una zona que hayas marcado."
+                  : "Elige una imagen de cualquier base de datos, o pulsa «Restaurar con IA» en la ficha de un registro. Puedes restaurar la imagen entera o una zona que hayas marcado.",
+              )}
             </p>
             <Button primary onClick={() => setPicking(true)}>
               <ImageIcon size={14} />

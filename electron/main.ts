@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import {
   app,
   BrowserWindow,
@@ -701,7 +702,7 @@ app.whenReady().then(async () => {
         return upscaleServices.keyStatus();
       }
       if (command === "checkUpscaleKey") return upscaleServices.check((safe as any).service);
-      if (command === "upscaleApiCatalog") return upscaleServices.catalog(!!(safe as any)?.refresh);
+      if (command === "upscaleApiCatalog") return upscaleServices.catalog(!!(safe as any)?.refresh, (safe as any)?.task ?? "upscale");
       if (command === "reloadInterface") { setTimeout(() => window?.webContents.reload(), 100); return; }
       // Deterministic banner coverage in the unpackaged E2E profile, as in
       // Nodus; a packaged build never reads this variable.
@@ -844,6 +845,35 @@ app.whenReady().then(async () => {
           const source = await call("_restorationInput", { assetId: data.assetId, region: data.region, baseId: data.baseId });
           // The instructions, then what is known about the photograph.
           const prompt = restorationRequest(data.prompt, data.context ?? "");
+          // A specialised service (fal.ai, Replicate): its models restore or colourise on their own.
+          if (data.provider === "fal" || data.provider === "replicate") {
+            const png = await sharp(Buffer.from(source.image, "base64")).png().toBuffer();
+            const meta = await sharp(png).metadata();
+            const done = await upscaleServices.edit(
+              {
+                service: data.provider,
+                model: data.model,
+                task: data.task === "colorize" ? "colorize" : "restore",
+                image: png,
+                width: meta.width ?? source.sent[0],
+                height: meta.height ?? source.sent[1],
+                prompt,
+              },
+              abort.signal,
+            );
+            return await call("_restorationStore", {
+              assetId: data.assetId,
+              provider: data.provider,
+              model: data.model,
+              task: data.task,
+              prompt,
+              region: data.region,
+              crop: source.crop,
+              result: done.image.toString("base64"),
+              baseId: data.baseId ?? null,
+              keepDetail: data.keepDetail,
+            });
+          }
           const result = await providers.editImage(
             {
               choice: { provider: data.provider, model: data.model },

@@ -601,7 +601,8 @@ export type Commands = {
     input: {
       assetId: string;
       region: { x: number; y: number; w: number; h: number } | null;
-      provider: ApiProvider;
+      /** An AI provider, or a specialised service (fal.ai, Replicate). */
+      provider: ApiProvider | "fal" | "replicate";
       model: string;
       task: import("./restoration").RestorationTask;
       prompt: string;
@@ -1140,7 +1141,7 @@ export type Commands = {
   clearUpscaleKey: { input: { service: import("./upscaleApi").UpscaleService }; result: Record<import("./upscaleApi").UpscaleService, boolean> };
   /** Tries the key and returns the balance where the service gives it. */
   checkUpscaleKey: { input: { service: import("./upscaleApi").UpscaleService }; result: { ok: true; balance?: string } };
-  upscaleApiCatalog: { input: { refresh?: boolean } | undefined; result: import("./upscaleApi").ApiUpscaleModel[] };
+  upscaleApiCatalog: { input: { refresh?: boolean; task?: import("./upscaleApi").ServiceTask } | undefined; result: import("./upscaleApi").ApiUpscaleModel[] };
   clearApiKey: { input: { provider: ApiProvider }; result: void };
   listProviderModels: { input: { provider: ApiProvider }; result: import("./aiConfig").ProviderModel[] };
   /** The image models of the providers with a saved key, read from their catalogues. */

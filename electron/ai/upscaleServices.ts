@@ -5,9 +5,11 @@
 import type { Secrets } from "../secrets/store";
 import {
   KNOWN_API_MODELS,
+  KNOWN_EDIT_MODELS,
   UPSCALE_SERVICE_IDS,
   estimateCost,
-  looksLikeUpscaler,
+  looksLikeTask,
+  type ServiceTask,
   type ApiUpscaleModel,
   type ApiUpscaleRequest,
   type ApiUpscaleResult,
@@ -16,8 +18,27 @@ import {
 } from "../../shared/upscaleApi";
 
 const MAX_DOWNLOAD = 200 * 2 ** 20;
-const known = new Map(KNOWN_API_MODELS.map((m) => [`${m.service}|${m.id}`, m]));
-type Schema = { image: string; scale?: { name: string; min?: number; max?: number; values?: (number | string)[]; integer?: boolean }; format?: { name: string; png: string } };
+const KNOWN = [...KNOWN_API_MODELS, ...KNOWN_EDIT_MODELS];
+const known = new Map(KNOWN.map((m) => [`${m.service}|${m.id}`, m]));
+const taskOf = (m: ApiUpscaleModel): ServiceTask => m.task ?? "upscale";
+/** What each task looks for in the services' catalogues. */
+const SEARCHES: Record<ServiceTask, { fal: string[]; replicate: { collections: string[]; queries: string[] } }> = {
+  upscale: { fal: ["upscale", "super resolution"], replicate: { collections: ["super-resolution"], queries: [] } },
+  restore: { fal: ["restoration", "restore photo", "scratch"], replicate: { collections: ["ai-image-restoration"], queries: ["old photo restoration"] } },
+  colorize: { fal: ["colorize", "colorization"], replicate: { collections: [], queries: ["colorize", "colorization"] } },
+};
+/** Inputs some models need to do their job well (the rest keep their defaults). */
+const MODEL_INPUTS: Record<string, Record<string, unknown>> = {
+  "replicate|microsoft/bringing-old-photos-back-to-life": { with_scratch: true, HR: false },
+  "replicate|sczhou/codeformer": { background_enhance: false, face_upsample: false, codeformer_fidelity: 0.7 },
+};
+type Schema = {
+  image: string;
+  scale?: { name: string; min?: number; max?: number; values?: (number | string)[]; integer?: boolean };
+  format?: { name: string; png: string };
+  /** The field that takes written instructions, when the model reads them. */
+  prompt?: string;
+};
 
 class ServiceError extends Error {
   fatal = false;
@@ -30,7 +51,7 @@ const wait = (ms: number, signal: AbortSignal) =>
   });
 
 export class UpscaleServices {
-  private cache: { at: number; signature: string; models: ApiUpscaleModel[] } | null = null;
+  private caches = new Map<ServiceTask, { at: number; signature: string; models: ApiUpscaleModel[] }>();
   private schemas = new Map<string, Schema>();
   constructor(
     public secrets: Secrets,
@@ -98,33 +119,37 @@ export class UpscaleServices {
   }
 
   // ------------------------------------------------------------------ catalog
-  /** Every upscaler of the services, with the price where it is known; cached for an hour. */
-  async catalog(refresh = false): Promise<ApiUpscaleModel[]> {
+  /** Every model of the services for a task, with the price where it is known; cached for an hour. */
+  async catalog(refresh = false, task: ServiceTask = "upscale"): Promise<ApiUpscaleModel[]> {
     const status = this.keyStatus();
     const signature = JSON.stringify(status);
-    if (!refresh && this.cache && this.cache.signature === signature && Date.now() - this.cache.at < 3_600_000) return this.cache.models;
-    const found = new Map<string, ApiUpscaleModel>(KNOWN_API_MODELS.map((m) => [`${m.service}|${m.id}`, { ...m }]));
-    await Promise.all([this.falCatalog(found, status.fal).catch(() => {}), status.replicate ? this.replicateCatalog(found).catch(() => {}) : Promise.resolve()]);
+    const cached = this.caches.get(task);
+    if (!refresh && cached && cached.signature === signature && Date.now() - cached.at < 3_600_000) return cached.models;
+    const found = new Map<string, ApiUpscaleModel>(KNOWN.filter((m) => taskOf(m) === task).map((m) => [`${m.service}|${m.id}`, { ...m }]));
+    await Promise.all([this.falCatalog(found, status.fal, task).catch(() => {}), status.replicate ? this.replicateCatalog(found, task).catch(() => {}) : Promise.resolve()]);
     const models = [...found.values()];
-    this.cache = { at: Date.now(), signature, models };
+    this.caches.set(task, { at: Date.now(), signature, models });
     return models;
   }
-  private async falCatalog(found: Map<string, ApiUpscaleModel>, withKey: boolean) {
+  private async falCatalog(found: Map<string, ApiUpscaleModel>, withKey: boolean, task: ServiceTask) {
     const key = withKey ? this.secrets.get("fal") : null;
     const headers: Record<string, string> = key ? { Authorization: `Key ${key}` } : {};
     const seen = new Set<string>();
-    for (const q of ["upscale", "super resolution"]) {
+    for (const q of SEARCHES[task].fal) {
       const body = await this.json(`https://api.fal.ai/v1/models?q=${encodeURIComponent(q)}&category=image-to-image&status=active&limit=100`, { headers });
       for (const m of body?.models ?? []) {
         const id = String(m.endpoint_id ?? "");
         const meta = m.metadata ?? {};
         const text = `${id} ${meta.display_name ?? ""} ${(meta.tags ?? []).join(" ")} ${meta.description ?? ""}`;
-        if (!id || seen.has(id) || !looksLikeUpscaler(text) || /video/i.test(id)) continue;
+        if (!id || seen.has(id) || !looksLikeTask(task, text) || /video/i.test(id)) continue;
+        // A model listed for another task stays there (an upscaler is not a restorer).
+        const other = known.get(`fal|${id}`);
+        if (other && taskOf(other) !== task) continue;
         seen.add(id);
         const k = `fal|${id}`;
         const base = found.get(k);
         found.set(k, {
-          ...(base ?? { service: "fal", id, style: "unknown" }),
+          ...(base ?? { service: "fal", id, style: "unknown", ...(task === "upscale" ? {} : { task }) }),
           name: base?.name ?? meta.display_name ?? id,
           description: String(meta.description ?? "").slice(0, 400) || base?.description,
         } as ApiUpscaleModel);
@@ -143,20 +168,36 @@ export class UpscaleServices {
       }
     }
   }
-  private async replicateCatalog(found: Map<string, ApiUpscaleModel>) {
+  private async replicateCatalog(found: Map<string, ApiUpscaleModel>, task: ServiceTask) {
     const key = this.key("replicate");
-    const body = await this.json("https://api.replicate.com/v1/collections/super-resolution", { headers: { Authorization: `Bearer ${key}` } });
-    for (const m of body?.models ?? []) {
-      const id = `${m.owner}/${m.name}`;
-      if (!m.owner || !m.name || /video/i.test(id)) continue;
+    const headers = { Authorization: `Bearer ${key}` };
+    const add = (m: any) => {
+      const id = `${m?.owner}/${m?.name}`;
+      if (!m?.owner || !m?.name || /video/i.test(id)) return;
+      const other = known.get(`replicate|${id}`);
+      if (other && taskOf(other) !== task) return;
+      // Collections are curated; search results are checked against the task.
+      if (!other && task !== "upscale" && !looksLikeTask(task, `${id} ${m.description ?? ""}`)) return;
       const k = `replicate|${id}`;
       const base = found.get(k);
       found.set(k, {
-        ...(base ?? { service: "replicate", id, style: "unknown" }),
+        ...(base ?? { service: "replicate", id, style: "unknown", ...(task === "upscale" ? {} : { task }) }),
         name: base?.name ?? m.name,
         description: String(m.description ?? "").slice(0, 400) || base?.description,
         runs: typeof m.run_count === "number" ? m.run_count : undefined,
       } as ApiUpscaleModel);
+    };
+    for (const c of SEARCHES[task].replicate.collections) {
+      const body = await this.json(`https://api.replicate.com/v1/collections/${c}`, { headers });
+      for (const m of body?.models ?? []) add(m);
+    }
+    // Search results: only models in real use (little-used ones may be wrappers that pass the image on elsewhere).
+    for (const q of SEARCHES[task].replicate.queries) {
+      const body = await this.json(`https://api.replicate.com/v1/search?query=${encodeURIComponent(q)}&limit=25`, { headers }).catch(() => null);
+      for (const m of body?.models ?? []) {
+        const model = m.model ?? m;
+        if (known.has(`replicate|${model?.owner}/${model?.name}`) || (model?.run_count ?? 0) >= 5000) add(model);
+      }
     }
   }
 
@@ -164,12 +205,36 @@ export class UpscaleServices {
   async run(request: ApiUpscaleRequest, signal: AbortSignal): Promise<ApiUpscaleResult> {
     const started = Date.now();
     const png = Buffer.from(request.image, "base64");
-    const model = known.get(`${request.service}|${request.model}`) ?? this.cache?.models.find((m) => m.service === request.service && m.id === request.model);
+    const model = known.get(`${request.service}|${request.model}`) ?? this.caches.get("upscale")?.models.find((m) => m.service === request.service && m.id === request.model);
     const url =
       request.service === "fal" ? await this.runFal(request, png, signal) : request.service === "replicate" ? await this.runReplicate(request, png, signal) : null;
     const result = url ? await this.download(url, request.service, signal) : await this.runStability(request, png, signal);
     const outputMP = (request.width * request.height * request.scale * request.scale) / 1e6;
     return { ...result, seconds: Math.round((Date.now() - started) / 100) / 10, cost: estimateCost(model?.price, outputMP) };
+  }
+
+  /** Restores or colourises one image with a service model, at its own size; the prompt goes to models that read one. */
+  async edit(
+    request: { service: UpscaleService; model: string; task: Exclude<ServiceTask, "upscale">; image: Buffer; width: number; height: number; prompt: string },
+    signal: AbortSignal,
+  ): Promise<{ image: Buffer; cost: number | null; seconds: number }> {
+    if (request.service === "stability") throw fail("Stability AI no tiene modelos de restauración ni de color; elige uno de fal.ai o de Replicate.", true);
+    const started = Date.now();
+    const png = request.image;
+    const upscale: ApiUpscaleRequest = {
+      upscaleApi: true,
+      service: request.service,
+      model: request.model,
+      image: png.toString("base64"),
+      width: request.width,
+      height: request.height,
+      scale: 1,
+      prompt: request.prompt,
+    };
+    const url = request.service === "fal" ? await this.runFal(upscale, png, signal) : await this.runReplicate(upscale, png, signal);
+    const result = await this.download(url, request.service, signal);
+    const model = known.get(`${request.service}|${request.model}`) ?? this.caches.get(request.task)?.models.find((m) => m.service === request.service && m.id === request.model);
+    return { image: Buffer.from(result.image, "base64"), cost: estimateCost(model?.price, (request.width * request.height) / 1e6), seconds: Math.round((Date.now() - started) / 100) / 10 };
   }
 
   private async download(url: string, service: UpscaleService, signal: AbortSignal): Promise<{ image: string; mimeType: string }> {
@@ -217,7 +282,8 @@ export class UpscaleServices {
     const fmt = ["output_format", "format"].find((n) => names.includes(n));
     const enumValues: string[] = (fmt && (properties[fmt].enum ?? properties[fmt].allOf?.[0]?.enum)) || [];
     const png = enumValues.find((v) => /png/i.test(v));
-    return { image, scale, format: fmt && png ? { name: fmt, png } : undefined };
+    const prompt = ["prompt", "instruction", "instructions", "edit_instruction"].find((n) => names.includes(n) && properties[n].type !== "array");
+    return { image, scale, format: fmt && png ? { name: fmt, png } : undefined, prompt };
   }
   private scaleValue(schema: Schema, scale: number): number | string | undefined {
     const s = schema.scale;
@@ -266,10 +332,11 @@ export class UpscaleServices {
     } catch {
       /* Falls back to the data URI. */
     }
-    const input: Record<string, unknown> = { [schema.image]: imageUrl };
+    const input: Record<string, unknown> = { ...MODEL_INPUTS[`fal|${request.model}`], [schema.image]: imageUrl };
     const scale = this.scaleValue(schema, request.scale);
     if (schema.scale && scale !== undefined) input[schema.scale.name] = scale;
     if (schema.format) input[schema.format.name] = schema.format.png;
+    if (schema.prompt && request.prompt) input[schema.prompt] = request.prompt;
     const job = await this.json(
       `https://queue.fal.run/${request.model}`,
       { method: "POST", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify(input) },
@@ -312,10 +379,11 @@ export class UpscaleServices {
     } catch {
       /* Falls back to the data URL. */
     }
-    const input: Record<string, unknown> = { [schema.image]: imageUrl };
+    const input: Record<string, unknown> = { ...MODEL_INPUTS[`replicate|${request.model}`], [schema.image]: imageUrl };
     const scale = this.scaleValue(schema, request.scale);
     if (schema.scale && scale !== undefined) input[schema.scale.name] = scale;
     if (schema.format) input[schema.format.name] = schema.format.png;
+    if (schema.prompt && request.prompt) input[schema.prompt] = request.prompt;
     const prediction = await this.json(
       version ? "https://api.replicate.com/v1/predictions" : `https://api.replicate.com/v1/models/${request.model}/predictions`,
       { method: "POST", headers: { ...auth, "Content-Type": "application/json", Prefer: "wait=30" }, body: JSON.stringify(version ? { version, input } : { input }) },

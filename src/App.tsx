@@ -31,6 +31,7 @@ import {
   FolderInput,
   ImagePlus,
   ArrowUpRight,
+  Palette,
   Maximize2,
   Download,
   X,
@@ -209,14 +210,14 @@ function formatDay(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(uiLocale());
 }
 /** The sections of the side menu's «Tools» group. */
-const TOOL_AREAS: string[] = ["compare", "workshop", "restorations", "upscale"];
+const TOOL_AREAS: string[] = ["compare", "workshop", "restorations", "colorize", "upscale"];
 /** The image workshop and the AI engines it leads to. */
-const WORKSHOP_AREAS: string[] = ["workshop", "restorations", "upscale"];
+const WORKSHOP_AREAS: string[] = ["workshop", "restorations", "colorize", "upscale"];
 function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
   const t = useT(),
     api = window.imago;
   const [area, setArea] = useState<
-      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "workshop" | "restorations" | "upscale" | "tutorials"
+      "home" | "databases" | "search" | "settings" | "chat" | "compare" | "workshop" | "restorations" | "colorize" | "upscale" | "tutorials"
     >("home"),
     [databases, setDatabases] = useState<DatabaseSummary[]>([]),
     [databaseId, setDatabaseId] = useState(""),
@@ -659,6 +660,7 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
       area === "compare" ||
       area === "workshop" ||
       area === "restorations" ||
+      area === "colorize" ||
       area === "upscale" ||
       area === "tutorials" ||
       (area === "databases" && !databaseId) ||
@@ -793,6 +795,8 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
   const [analysisTask, setAnalysisTask] = useState<"describe" | "transcribe">("describe");
   const [restoreSeed, setRestoreSeed] = useState<{ assetId: string; baseId?: string | null; task?: "restore" | "colorize" } | null>(null);
   const clearRestoreSeed = useCallback(() => setRestoreSeed(null), [setRestoreSeed]);
+  const [colorSeed, setColorSeed] = useState<{ assetId: string; baseId?: string | null } | null>(null);
+  const clearColorSeed = useCallback(() => setColorSeed(null), [setColorSeed]);
   // The «Tools» group of the side menu folds like Nodus's groups and stays as left.
   const [toolsCollapsed, setToolsCollapsed] = useState(() => {
     try {
@@ -2209,6 +2213,15 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
                   <span className="nav-title">{t("Restauración IA")}</span>
                 </button>
                 <button
+                  title={t("Colorización IA")}
+                  data-testid="nav-colorize"
+                  className={`nav-sub ${area === "colorize" ? "active" : ""}`}
+                  onClick={() => setArea("colorize")}
+                >
+                  <Palette size={16} />
+                  <span className="nav-title">{t("Colorización IA")}</span>
+                </button>
+                <button
                   title={t("Escalado IA")}
                   data-tour="nav-upscale"
                   data-testid="nav-upscale"
@@ -2393,6 +2406,9 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
                   if (kind === "upscale") {
                     setUpscaleSeed({ assetId, baseId: versionId });
                     setArea("upscale");
+                  } else if (kind === "colorize") {
+                    setColorSeed({ assetId, baseId: versionId });
+                    setArea("colorize");
                   } else {
                     setRestoreSeed({ assetId, baseId: versionId, task: kind });
                     setArea("restorations");
@@ -2400,9 +2416,27 @@ function Workspace({ onLanguage }: { onLanguage: (v: Language) => void }) {
                 }}
               />
             )
+          ) : area === "colorize" ? (
+            status && (
+              <RestorationsView
+                key="colorize"
+                mode="colorize"
+                settings={status.settings}
+                databases={databases}
+                seed={colorSeed}
+                onSeedUsed={clearColorSeed}
+                onSettings={async (patch) => {
+                  await api.call("updateSettings", patch);
+                  refresh();
+                }}
+                onOpenSettings={openApiSettings}
+                onBack={fromWorkshop ? () => setArea("workshop") : undefined}
+              />
+            )
           ) : area === "restorations" ? (
             status && (
               <RestorationsView
+                key="restore"
                 settings={status.settings}
                 databases={databases}
                 seed={restoreSeed}
