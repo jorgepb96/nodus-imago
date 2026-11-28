@@ -165,16 +165,16 @@ export const KNOWN_EDIT_MODELS: ApiUpscaleModel[] = [
     name: "Bringing Old Photos Back to Life",
     style: "faithful",
     price: { amount: 0.0096, per: "image", source: "reference" },
-    recommended: "Hecho para fotos antiguas: quita arañazos, polvo y manchas sin repintar la escena. Menos de un céntimo.",
+    recommended: "Hecho para fotos antiguas: quita arañazos, polvo y manchas sin repintar la escena. Discreto y fiel; menos de un céntimo.",
   },
   {
     service: "replicate",
     id: "flux-kontext-apps/restore-image",
     task: "restore",
     name: "FLUX Kontext Restore",
-    style: "balanced",
+    style: "creative",
     price: { amount: 0.04, per: "image", source: "reference" },
-    recommended: "Repara roturas, pliegues y zonas perdidas con mucha calidad. Reconstruye lo que falta: compáralo con el original.",
+    description: "Repara y además colorea siempre, y puede reinventar la escena (la hora del día, edificios, vegetación). Vistoso para divulgar; no sirve como documento.",
   },
   { service: "replicate", id: "topazlabs/dust-and-scratch-v2", task: "restore", name: "Topaz Dust & Scratch", style: "faithful", price: { amount: 0.08, per: "image", source: "reference" } },
   { service: "replicate", id: "sczhou/codeformer", task: "restore", name: "CodeFormer (caras)", style: "balanced", price: { amount: 0.005, per: "image", source: "reference" } },
@@ -199,7 +199,7 @@ export const KNOWN_EDIT_MODELS: ApiUpscaleModel[] = [
     name: "DDColor",
     style: "faithful",
     price: { amount: 0.001, per: "image", source: "reference" },
-    recommended: "Colores naturales y sobrios, sin tocar la imagen. Una décima de céntimo por foto: ideal para probar.",
+    recommended: "Una décima de céntimo por foto: ideal para probar. Colores vivos; a veces tiñe de más (morados, azules).",
   },
   {
     service: "replicate",
@@ -208,7 +208,7 @@ export const KNOWN_EDIT_MODELS: ApiUpscaleModel[] = [
     name: "DeOldify",
     style: "faithful",
     price: { amount: 0.042, per: "image", source: "reference" },
-    recommended: "El colorizador clásico de fotos antiguas: colores cálidos, de época.",
+    recommended: "El colorizador clásico de fotos antiguas: colores sobrios y naturales. Deja un pequeño logotipo en una esquina.",
   },
   { service: "replicate", id: "cjwbw/bigcolor", task: "colorize", name: "BigColor", style: "faithful", price: { amount: 0.037, per: "image", source: "reference" } },
   { service: "replicate", id: "topazlabs/image-colorization", task: "colorize", name: "Topaz Colorization", style: "faithful", price: { amount: 0.08, per: "image", source: "reference" } },
@@ -259,5 +259,7 @@ export type ApiUpscaleRequest = {
   scale: number;
   /** Written instructions, for models that read them (restoring, colourising). */
   prompt?: string;
+  /** The image as a data URL, sent inside the request instead of uploaded. */
+  inline?: string;
 };
 export type ApiUpscaleResult = { image: string; mimeType: string; seconds: number; cost: number | null; note?: string };

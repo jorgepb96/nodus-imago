@@ -722,7 +722,7 @@ export function RestorationsView({
                           type="button"
                           role="radio"
                           aria-checked={chosen === value}
-                          data-tooltip={service?.recommended ? t(service.recommended) : service?.description}
+                          data-tooltip={service?.recommended ? t(service.recommended) : service?.description ? t(service.description) : undefined}
                           onClick={() => {
                             setModel(value);
                             localStorage.setItem(`${store}.model`, value);

@@ -2,6 +2,7 @@
 // main process, which holds the keys. Each service has its own way of
 // listing models, receiving the image and returning the result; this file
 // hides those differences behind catalog() and run().
+import sharp from "sharp";
 import type { Secrets } from "../secrets/store";
 import {
   KNOWN_API_MODELS,
@@ -31,6 +32,8 @@ const SEARCHES: Record<ServiceTask, { fal: string[]; replicate: { collections: s
 const MODEL_INPUTS: Record<string, Record<string, unknown>> = {
   "replicate|microsoft/bringing-old-photos-back-to-life": { with_scratch: true, HR: false },
   "replicate|sczhou/codeformer": { background_enhance: false, face_upsample: false, codeformer_fidelity: 0.7 },
+  // «Stable» leaves fewer grey patches on people than «Artistic».
+  "replicate|arielreplicate/deoldify_image": { model_name: "Stable" },
 };
 type Schema = {
   image: string;
@@ -38,6 +41,8 @@ type Schema = {
   format?: { name: string; png: string };
   /** The field that takes written instructions, when the model reads them. */
   prompt?: string;
+  /** Required choices without a default: the first one (a model refuses the request without them). */
+  fill?: Record<string, unknown>;
 };
 
 class ServiceError extends Error {
@@ -231,7 +236,19 @@ export class UpscaleServices {
       scale: 1,
       prompt: request.prompt,
     };
-    const url = request.service === "fal" ? await this.runFal(upscale, png, signal) : await this.runReplicate(upscale, png, signal);
+    if (request.service === "replicate") {
+      const jpeg = await sharp(png).jpeg({ quality: 95 }).toBuffer();
+      if (jpeg.length < 8 * 2 ** 20) upscale.inline = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+    }
+    const attempt = (plain: boolean) => (request.service === "fal" ? this.runFal(upscale, png, signal, plain) : this.runReplicate(upscale, png, signal, plain));
+    let url: string;
+    try {
+      url = await attempt(false);
+    } catch (error) {
+      // Our settings for a model may not suit every image: once more with the model's own.
+      if (signal.aborted || (error as ServiceError).fatal || !MODEL_INPUTS[`${request.service}|${request.model}`]) throw error;
+      url = await attempt(true);
+    }
     const result = await this.download(url, request.service, signal);
     const model = known.get(`${request.service}|${request.model}`) ?? this.caches.get(request.task)?.models.find((m) => m.service === request.service && m.id === request.model);
     return { image: Buffer.from(result.image, "base64"), cost: estimateCost(model?.price, (request.width * request.height) / 1e6), seconds: Math.round((Date.now() - started) / 100) / 10 };
@@ -283,7 +300,13 @@ export class UpscaleServices {
     const enumValues: string[] = (fmt && (properties[fmt].enum ?? properties[fmt].allOf?.[0]?.enum)) || [];
     const png = enumValues.find((v) => /png/i.test(v));
     const prompt = ["prompt", "instruction", "instructions", "edit_instruction"].find((n) => names.includes(n) && properties[n].type !== "array");
-    return { image, scale, format: fmt && png ? { name: fmt, png } : undefined, prompt };
+    const fill: Record<string, unknown> = {};
+    for (const n of required) {
+      const p = properties[n];
+      const choices = p?.enum ?? p?.allOf?.[0]?.enum;
+      if (n !== image && p && p.default === undefined && Array.isArray(choices) && choices.length) fill[n] = choices[0];
+    }
+    return { image, scale, format: fmt && png ? { name: fmt, png } : undefined, prompt, fill };
   }
   private scaleValue(schema: Schema, scale: number): number | string | undefined {
     const s = schema.scale;
@@ -301,7 +324,7 @@ export class UpscaleServices {
     return s.integer ? Math.round(v) : v;
   }
 
-  private async runFal(request: ApiUpscaleRequest, png: Buffer, signal: AbortSignal): Promise<string> {
+  private async runFal(request: ApiUpscaleRequest, png: Buffer, signal: AbortSignal, plain = false): Promise<string> {
     const key = this.key("fal");
     const auth = { Authorization: `Key ${key}` };
     let schema = this.schemas.get(`fal|${request.model}`);
@@ -332,7 +355,7 @@ export class UpscaleServices {
     } catch {
       /* Falls back to the data URI. */
     }
-    const input: Record<string, unknown> = { ...MODEL_INPUTS[`fal|${request.model}`], [schema.image]: imageUrl };
+    const input: Record<string, unknown> = { ...schema.fill, ...(plain ? {} : MODEL_INPUTS[`fal|${request.model}`]), [schema.image]: imageUrl };
     const scale = this.scaleValue(schema, request.scale);
     if (schema.scale && scale !== undefined) input[schema.scale.name] = scale;
     if (schema.format) input[schema.format.name] = schema.format.png;
@@ -362,24 +385,27 @@ export class UpscaleServices {
     }
   }
 
-  private async runReplicate(request: ApiUpscaleRequest, png: Buffer, signal: AbortSignal): Promise<string> {
+  private async runReplicate(request: ApiUpscaleRequest, png: Buffer, signal: AbortSignal, plain = false): Promise<string> {
     const key = this.key("replicate");
     const auth = { Authorization: `Bearer ${key}` };
     const model = await this.json(`https://api.replicate.com/v1/models/${request.model}`, { headers: auth }, signal);
     const version: string | undefined = model?.latest_version?.id;
     const inputSchema = model?.latest_version?.openapi_schema?.components?.schemas?.Input;
     const schema = this.schemaOf(inputSchema?.properties ?? {}, inputSchema?.required ?? [], model?.latest_version?.openapi_schema?.components?.schemas ?? {});
-    // Files go up first; a data URL is the fallback (Replicate advises it only for small files).
-    let imageUrl = `data:image/png;base64,${request.image}`;
-    try {
-      const form = new FormData();
-      form.append("content", new Blob([new Uint8Array(png)], { type: "image/png" }), "imago.png");
-      const file = await this.json("https://api.replicate.com/v1/files", { method: "POST", headers: auth, body: form }, signal);
-      if (file?.urls?.get) imageUrl = file.urls.get;
-    } catch {
-      /* Falls back to the data URL. */
-    }
-    const input: Record<string, unknown> = { ...MODEL_INPUTS[`replicate|${request.model}`], [schema.image]: imageUrl };
+    // Restoring and colourising: the image goes inside the request (older models
+    // find their input by its file extension, which uploaded files lack).
+    // Otherwise files go up first, and a data URL is the fallback.
+    let imageUrl = request.inline ?? `data:image/png;base64,${request.image}`;
+    if (!request.inline)
+      try {
+        const form = new FormData();
+        form.append("content", new Blob([new Uint8Array(png)], { type: "image/png" }), "imago.png");
+        const file = await this.json("https://api.replicate.com/v1/files", { method: "POST", headers: auth, body: form }, signal);
+        if (file?.urls?.get) imageUrl = file.urls.get;
+      } catch {
+        /* Falls back to the data URL. */
+      }
+    const input: Record<string, unknown> = { ...schema.fill, ...(plain ? {} : MODEL_INPUTS[`replicate|${request.model}`]), [schema.image]: imageUrl };
     const scale = this.scaleValue(schema, request.scale);
     if (schema.scale && scale !== undefined) input[schema.scale.name] = scale;
     if (schema.format) input[schema.format.name] = schema.format.png;
